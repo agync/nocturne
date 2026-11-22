@@ -683,6 +683,10 @@ impl RemoteHub {
                 drop(rt);
                 self.refresh();
             }
+            TransportState::Renewing { .. } => {
+                self.rt().down_since.get_or_insert(now);
+                self.refresh();
+            }
             TransportState::Failed { error } => {
                 self.problem(problem_for(&error));
             }
