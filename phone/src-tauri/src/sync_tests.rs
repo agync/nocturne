@@ -460,6 +460,43 @@ fn every_calendar_starts_on() {
 }
 
 #[test]
+fn a_work_calendar_flows_like_any_other() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    *d.calendars.lock().unwrap() = vec![cal("1"), cal("enterprise:1")];
+    *d.entries.lock().unwrap() = vec![
+        entry("a", "2026-11-21", "1"),
+        entry("w", "2026-11-22", "enterprise:1"),
+    ];
+    let link = FakeLink::new(Mode::Take);
+    sync(&s, &d, &link);
+    assert_eq!(
+        ids(&link.calendar_changes()),
+        vec![("a".into(), true), ("w".into(), true)]
+    );
+    match &link.calls.lock().unwrap()[0] {
+        RemoteCall::SendCalendar { batch } => {
+            assert_eq!(batch.calendars, vec![cal("1"), cal("enterprise:1")]);
+        }
+        other => panic!("not a calendar send: {other:?}"),
+    }
+    assert_eq!(s.sources(&d, &BOTH).calendars, 2);
+
+    // Turned off like any other, only that calendar's entries are let go.
+    s.ledger.update(|l| {
+        l.calendar
+            .settings
+            .calendars
+            .insert("enterprise:1".into(), false)
+    });
+    link.clear();
+    sync(&s, &d, &link);
+    assert_eq!(s.sources(&d, &BOTH).calendars, 1);
+    assert!(link.calendar_changes().is_empty());
+}
+
+#[test]
 fn a_calendar_turned_off_is_let_go_without_removing() {
     let (_dir, s) = syncer();
     bring_calendar(&s);

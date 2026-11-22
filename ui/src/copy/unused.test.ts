@@ -137,7 +137,12 @@ const BUILT_AT_RUN_TIME: Array<{ prefix: string; why: string; producible: string
   },
 ];
 
-const producible = new Set(BUILT_AT_RUN_TIME.flatMap((family) => family.producible));
+/** Keys the phone's Rust side reads from the deck, which no screen names. */
+const NAMED_IN_RUST = ["phone.calendar.work", "phone.calendar.workN"];
+
+const producible = new Set(
+  NAMED_IN_RUST.concat(BUILT_AT_RUN_TIME.flatMap((family) => family.producible)),
+);
 
 const text = Object.values(sources).join("\n");
 
