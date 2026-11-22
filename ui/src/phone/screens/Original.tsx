@@ -187,6 +187,7 @@ export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps
   }
 
   const { item } = load;
+  const hint = kept ? keptHint(kept, item.keptAt) : null;
   const meta = t("phone.original.meta", {
     kind:
       item.kind === "audio" && item.durationMs !== null
@@ -287,9 +288,9 @@ export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps
             }}
           />
         ) : null}
-        {alone && kept && keptHint(kept, item.keptAt) ? (
+        {alone && hint ? (
           <Group>
-            <Row label={t("phone.alone.kept")} hint={keptHint(kept, item.keptAt) ?? undefined} />
+            <Row label={t("phone.alone.kept")} hint={hint} />
           </Group>
         ) : null}
         {alone?.onForget ? (
