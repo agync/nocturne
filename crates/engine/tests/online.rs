@@ -91,7 +91,7 @@ fn fresh_store_is_off() {
     let f = fixture();
     let row = f.engine.online_state().unwrap();
     assert!(!row.wanted_on && !row.set_up);
-    assert!(row.phones && !row.send_sensitive);
+    assert!(row.phones);
     assert_eq!(row.limit, OnlineLimit::default());
     assert_eq!(row.limit.kind, LimitKind::None);
     assert_eq!(row.limit.questions, 200);

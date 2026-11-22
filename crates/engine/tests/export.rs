@@ -559,7 +559,7 @@ fn delete_everything_resets_online_and_reindex() {
         let conn = rusqlite::Connection::open(dir.join("nocturne.db")).unwrap();
         conn.execute_batch(
             "UPDATE online_state SET wanted_on = 1, set_up = 1, base_url = 'https://a.example/v1', \
-               model = 'm', send_sensitive = 1, sent_bytes = 42, key_storage = 'file'; \
+               model = 'm', sent_bytes = 42, key_storage = 'file'; \
              INSERT INTO online_sends(at, kind, host, model, question, template, result) \
                VALUES ('2026-11-13T07:00:00.000Z', 'question', 'a.example', 'm', \
                  'When are the bins?', '[]', 'answered'); \
@@ -582,7 +582,7 @@ fn delete_everything_resets_online_and_reindex() {
         sql_count(
             dir,
             "SELECT COUNT(*) FROM online_state WHERE wanted_on = 0 AND set_up = 0 \
-             AND base_url IS NULL AND model IS NULL AND send_sensitive = 0 AND phones = 1 \
+             AND base_url IS NULL AND model IS NULL AND phones = 1 \
              AND sent_bytes = 0 AND key_storage IS NULL AND limit_questions = 200"
         ),
         1,
