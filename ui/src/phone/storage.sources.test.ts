@@ -23,7 +23,12 @@ describe("what the phone app keeps and where", () => {
 
   it("IndexedDB is reached by the key store, the queue and their helper only", () => {
     expect(using(/indexedDB/)).toEqual(["./idb.ts", "./support.ts"]);
-    expect(using(/openDb\(/)).toEqual(["./idb.ts", "./keys.ts", "./queue.ts"]);
+    expect(using(/openDb\(/)).toEqual([
+      "./alone/reminder.ts",
+      "./idb.ts",
+      "./keys.ts",
+      "./queue.ts",
+    ]);
   });
 
   it("no secret or session value is written to a log", () => {

@@ -1,11 +1,13 @@
-// A thin promise layer over IndexedDB for the two things the phone keeps: its device record
-// (the key, the id, the computer's key and address) and the keeps waiting to go across.
-// Session keys, counters and ids are never written here or anywhere else.
+// A thin promise layer over IndexedDB for what the phone keeps: its device record (the key, the
+// id, the computer's key and address), the keeps waiting to go across, and a phone alone's own
+// notes (when keeping began, that the lost-phone reminder was shown). Session keys, counters
+// and ids are never written here or anywhere else.
 
 export const DB_NAME = "nocturne-phone";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const STORE_DEVICE = "device";
 export const STORE_QUEUE = "queue";
+export const STORE_NOTES = "notes";
 
 export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -16,6 +18,7 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_QUEUE)) {
         db.createObjectStore(STORE_QUEUE, { keyPath: "clientId" });
       }
+      if (!db.objectStoreNames.contains(STORE_NOTES)) db.createObjectStore(STORE_NOTES);
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error ?? new Error("could not open storage"));
