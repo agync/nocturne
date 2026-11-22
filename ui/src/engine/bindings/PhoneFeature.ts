@@ -4,4 +4,4 @@
  * What a computer takes, told to the phone in its hello. A phone hides an offer the computer
  * does not list.
  */
-export type PhoneFeature = "calendar" | "health" | "holdsMemory";
+export type PhoneFeature = "calendar" | "health" | "holdsMemory" | "unknown";

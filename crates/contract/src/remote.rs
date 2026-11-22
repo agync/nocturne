@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, Holdings,
-    ItemKind, JournalDay, MemoryCounts, PageSummary, PageView, Period, PhoneFeature,
-    QuestionChoice, ReadingBatch, ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
+    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind,
+    JournalDay, MemoryCounts, PageSummary, PageView, Period, PhoneFeature, QuestionChoice,
+    ReadingBatch, ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -546,10 +546,12 @@ pub enum RemoteCall {
         /// The store's schema version, so a computer that is older says so before any bytes move.
         schema: u32,
     },
-    /// The backup file of the offered memory is all uploaded: its SHA-256 (lower-case hex) and
-    /// the one-time passphrase it is locked with. Answered with `MemoryArrived` once checked
-    /// and in place.
+    /// The backup file of the offered memory goes up as the chunks of this call, `size` bytes
+    /// in all (at most `MAX_MEMORY_BYTES`), after `OfferMemory` was accepted. `sha256` is the
+    /// file's digest (lower-case hex) and `passphrase` the one-time passphrase it is locked
+    /// with. Answered with `MemoryArrived` once checked and in place.
     MemoryDone {
+        size: f64,
         sha256: String,
         passphrase: String,
     },
@@ -620,7 +622,7 @@ pub enum RemoteAnswer {
     /// The offer is welcome. `here` is what this computer already holds, so the phone can say
     /// so before the upload; none when it holds nothing.
     MemoryAccepted {
-        here: Option<Holdings>,
+        here: Option<MemoryCounts>,
     },
     /// The memory is checked and in place on this computer.
     MemoryArrived {

@@ -830,6 +830,18 @@ mod tests {
         };
         assert_eq!(needs_build(&keep(false)), MIN_PHONE_BUILD);
         assert_eq!(needs_build(&keep(true)), WEB_KEEP_BUILD);
+        let offer = RemoteCall::OfferMemory {
+            counts: Default::default(),
+            bytes: 0.0,
+            schema: 1,
+        };
+        let done = RemoteCall::MemoryDone {
+            size: 0.0,
+            sha256: String::new(),
+            passphrase: String::new(),
+        };
+        assert_eq!(needs_build(&offer), MEMORY_MOVE_BUILD);
+        assert_eq!(needs_build(&done), MEMORY_MOVE_BUILD);
         let answer = RemoteCall::AnswerJournalQuestion {
             page_date: "2026-11-13".into(),
             choice: nocturne_contract::QuestionChoice::Fine,
