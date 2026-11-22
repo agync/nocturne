@@ -200,6 +200,9 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub struct LedgerFile {
     dir: PathBuf,
     ledger: Mutex<Ledger>,
+    /// Which sources went to the computer since the app started: the calendar, then health.
+    /// One that did not goes once anyway, empty, so a computer that lost what it had can say so.
+    went: Mutex<(bool, bool)>,
 }
 
 fn read<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
@@ -220,6 +223,7 @@ impl LedgerFile {
         LedgerFile {
             dir: dir.to_path_buf(),
             ledger: Mutex::new(ledger),
+            went: Mutex::new((false, false)),
         }
     }
 
@@ -266,6 +270,13 @@ impl LedgerFile {
     /// nothing is brought again until they start again and choose.
     pub fn reset(&self) {
         self.update(|l| *l = Ledger::default());
+    }
+
+    /// Whether a source already went since the app started, noting that it goes now.
+    pub fn went_this_run(&self, health: bool) -> bool {
+        let mut went = self.went.lock().unwrap_or_else(|e| e.into_inner());
+        let flag = if health { &mut went.1 } else { &mut went.0 };
+        std::mem::replace(flag, true)
     }
 
     /// True once after the computer asked for a source again, clearing the flag.
