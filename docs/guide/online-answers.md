@@ -35,8 +35,7 @@ tidy and your morning page never use it.
    of your memories. If the check fails, it says why in plain words, and nothing was sent for an
    address it refuses.
 4. Choose which questions may go online (the ones you ask here, and, when Away from home is on,
-   **Questions from your phones**), whether details about health, money or ID may go with them (they stay out unless you allow them, and the check can miss some), and a monthly
-   limit.
+   **Questions from your phones**), and a monthly limit.
 5. Read what will be sent, then press **Turn on online answers**. Until you do, nothing is saved and the
    key is forgotten, and leaving the setup drops what you entered.
 
@@ -57,14 +56,19 @@ answer here and still checks that every line it shows leads back to something yo
 
 - Anything marked private.
 - Your check-ins, reflections and recaps. They are written and kept on this computer.
-- Health, money and ID memories, unless you turn that on. It is off by default.
 - Anything while Online answers is off, and nothing at all from reading, the tidy or the page.
 - Questions from a paired phone, unless Away from home is on and **Questions from your phones** is
   on. That switch is on by default when Away from home is on during setup, and you can turn it off
   later in **Online answers**.
 
-Journal entries and good things can't be marked private, so while Online answers is on, a line from
-one can go with a question it helps answer.
+Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a
+question it helps answer like any other. Mark anything you never want sent as private. Journal
+entries and good things can't be marked private, so while Online answers is on, a line from one can
+go with a question it helps answer.
+
+If you turned Online answers on before it worked this way, Nocturne says so once, in place of the
+answer, before your next question goes online. Continue sends it; Online answers settings is where
+you can turn it off.
 
 When Nocturne leaves something out, the answer says so, and you can ask again on this computer to
 include it.

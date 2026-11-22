@@ -1218,7 +1218,7 @@
                     "type": "control"
                   },
                   {
-                    "text": "), whether details about health, money or ID may go with them (they stay out unless you allow them, and the check can miss some), and a monthly limit.",
+                    "text": "), and a monthly limit.",
                     "type": "text"
                   }
                 ],
@@ -1321,12 +1321,6 @@
                 ],
                 [
                   {
-                    "text": "Health, money and ID memories, unless you turn that on. It is off by default.",
-                    "type": "text"
-                  }
-                ],
-                [
-                  {
                     "text": "Anything while Online answers is off, and nothing at all from reading, the tidy or the page.",
                     "type": "text"
                   }
@@ -1361,7 +1355,16 @@
             {
               "parts": [
                 {
-                  "text": "Journal entries and good things can't be marked private, so while Online answers is on, a line from one can go with a question it helps answer.",
+                  "text": "Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a question it helps answer like any other. Mark anything you never want sent as private. Journal entries and good things can't be marked private, so while Online answers is on, a line from one can go with a question it helps answer.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If you turned Online answers on before it worked this way, Nocturne says so once, in place of the answer, before your next question goes online. Continue sends it; Online answers settings is where you can turn it off.",
                   "type": "text"
                 }
               ],
