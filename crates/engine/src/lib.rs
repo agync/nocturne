@@ -44,8 +44,8 @@ pub mod process;
 pub mod store;
 
 pub use backup::{
-    BACKUP_EXT, BackupRun, MIN_PASSPHRASE_CHARS, check_backup, probe_backup, store_has_data,
-    unpack_backup,
+    BACKUP_EXT, BackupRun, MIN_PASSPHRASE_CHARS, check_backup, check_backup_counted, probe_backup,
+    store_has_data, store_kept_counts, unpack_backup,
 };
 pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_title, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};

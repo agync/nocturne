@@ -40,6 +40,14 @@ impl Home {
         write_private(&self.path(MODE), &bytes)
     }
 
+    /// The phone has not chosen where its memory lives: Welcome shows again.
+    pub(crate) fn forget_mode(&self) -> std::io::Result<()> {
+        match std::fs::remove_file(self.path(MODE)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
+    }
+
     /// Where the memory lives. `paired`: the phone holds a pairing with a computer.
     pub fn mode(&self, paired: bool) -> Option<PhoneMode> {
         match self.mode_file() {

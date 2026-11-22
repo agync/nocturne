@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use nocturne_contract::{
     BackupPhase, BackupProgress, EVENT_BACKUP, HomeAnswer, HomeCall, HomeError, PhoneError,
-    PhoneMode, RemoteAnswer, RemoteCall,
+    PhoneMode, PhoneSource, RemoteAnswer, RemoteCall,
 };
 use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -16,6 +16,7 @@ use super::files::{ChosenBackup, INBOX, OUTBOX, Sheets};
 use super::voice::{Heard, Reader};
 use super::{Home, dispatch};
 use crate::state::AppState;
+use crate::sync::LedgerFile;
 
 /// Sent with the new mode whenever where the memory lives changes.
 pub const EVENT_MODE: &str = "mode_changed";
@@ -131,11 +132,18 @@ pub async fn home_original<R: Runtime>(
 #[tauri::command]
 pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAnswer {
     let paired = paired(&app);
-    let changes_mode = matches!(call, HomeCall::RestoreBackup { .. });
-    let changes_store = matches!(
+    let swaps = matches!(
         call,
-        HomeCall::RestoreBackup { .. } | HomeCall::DeleteEverything { .. }
+        HomeCall::RestoreBackup { .. } | HomeCall::BringBack { .. }
     );
+    let restores = matches!(call, HomeCall::RestoreBackup { .. });
+    let deletes = matches!(call, HomeCall::DeleteEverything { .. });
+    let source = match &call {
+        HomeCall::DeleteSource {
+            source, also_stop, ..
+        } => Some((*source, *also_stop)),
+        _ => None,
+    };
     let worker = app.clone();
     let answer = blocking(move || {
         let progress = progress(worker.clone());
@@ -145,19 +153,43 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     .unwrap_or(HomeAnswer::Error {
         code: HomeError::Failed,
     });
-    let done = matches!(answer, HomeAnswer::Restored | HomeAnswer::Deleted);
-    if changes_mode && done {
-        let_go_backup_file(app.clone());
+    let ledger = &app.state::<AppState>().syncer.ledger;
+    if matches!(answer, HomeAnswer::Restored) {
+        if restores {
+            let_go_backup_file(app.clone());
+        }
+        if swaps {
+            // What was sent before went into the store that is gone: send it all again.
+            ledger.forget_sends();
+            emit_mode(&app);
+            hear_soon(&app);
+        }
     }
-    if changes_store && done {
-        // What was sent before went into the store that is gone: send it all again.
-        app.state::<AppState>().syncer.ledger.forget_sends();
-    }
-    if changes_mode && done {
+    if deletes && matches!(answer, HomeAnswer::Deleted) {
+        // Nothing comes back until the person starts again and chooses what the phone brings.
+        ledger.reset();
         emit_mode(&app);
-        hear_soon(&app);
+    }
+    if let (Some((source, also_stop)), HomeAnswer::SourceDeleted) = (source, &answer) {
+        forget_source_sends(ledger, source, also_stop);
     }
     answer
+}
+
+/// After what a source brought was deleted: stop it, or have the calendar's next two weeks
+/// brought again the next time it is read. Health readings are not brought again.
+pub(crate) fn forget_source_sends(ledger: &LedgerFile, source: PhoneSource, also_stop: bool) {
+    if source != PhoneSource::Calendar {
+        return;
+    }
+    ledger.update(|l| {
+        if also_stop {
+            l.calendar.settings.bring = false;
+        }
+        l.calendar.sent.clear();
+        l.calendar.pending.clear();
+        l.calendar.calendars_sent = None;
+    });
 }
 
 /// A progress callback for the engine: at most one event every [`PROGRESS_EVERY`], always when

@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use age::secrecy::SecretString;
-use nocturne_contract::{BackupPhase, BackupReport, BackupSummary, Holdings};
+use nocturne_contract::{BackupPhase, BackupReport, BackupSummary, Holdings, KeptCounts};
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -354,6 +354,11 @@ impl Engine {
             kept_after_backup,
             bytes: self.backup_estimate()? as f64,
         }))
+    }
+
+    /// What this store holds, in the columns a phone shows before a restore.
+    pub fn kept_counts(&self) -> Result<KeptCounts> {
+        self.read(kept_counts_in)
     }
 }
 
@@ -749,6 +754,41 @@ fn count(conn: &Connection, sql: &str) -> Result<u32> {
     Ok(n as u32)
 }
 
+/// The columns a phone shows before a restore: things kept apart from the journal, check-ins,
+/// the calendar and readings; journal entries and good things as they stand now; photos and
+/// recordings with their files.
+pub(crate) fn kept_counts_in(conn: &Connection) -> Result<KeptCounts> {
+    let things = count(
+        conn,
+        "SELECT COUNT(*) FROM items WHERE kind NOT IN ('checkin', 'calendar', 'reading') \
+         AND json_extract(metadata, '$.journal') IS NULL",
+    )?;
+    let journal_entries = count(
+        conn,
+        "SELECT COUNT(*) FROM items i WHERE json_extract(i.metadata, '$.journal') IN ('entry', 'good') \
+         AND NOT EXISTS (SELECT 1 FROM items n WHERE json_extract(n.metadata, '$.replaces') = i.id)",
+    )?;
+    let photos_and_recordings = count(
+        conn,
+        "SELECT COUNT(*) FROM items WHERE kind IN ('image', 'audio') AND file_name IS NOT NULL",
+    )?;
+    Ok(KeptCounts {
+        things,
+        journal_entries,
+        photos_and_recordings,
+    })
+}
+
+/// [`Engine::kept_counts`] for a store folder that is not open, such as one put aside. Read
+/// only; a store that cannot be read is an error.
+pub fn store_kept_counts(dir: &Path) -> Result<KeptCounts> {
+    let conn = Connection::open_with_flags(
+        dir.join(crate::DB_FILE),
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    kept_counts_in(&conn)
+}
+
 /// The backup file, counted as age reads it, so progress can report bytes of the file itself.
 struct CountingFile {
     file: std::fs::File,
@@ -928,6 +968,17 @@ pub fn check_backup(
     progress: &dyn Fn(BackupPhase, u64, u64),
     cancel: &AtomicBool,
 ) -> Result<BackupSummary> {
+    check_backup_counted(file, passphrase, scratch, progress, cancel).map(|(summary, _)| summary)
+}
+
+/// [`check_backup`], with what the backup holds in the columns a phone shows.
+pub fn check_backup_counted(
+    file: &Path,
+    passphrase: &str,
+    scratch: &Path,
+    progress: &dyn Fn(BackupPhase, u64, u64),
+    cancel: &AtomicBool,
+) -> Result<(BackupSummary, KeptCounts)> {
     read_backup(
         file,
         passphrase,
@@ -956,6 +1007,7 @@ pub fn unpack_backup(
         progress,
         cancel,
     )
+    .map(|(summary, _)| summary)
 }
 
 /// The one reader both checking and unpacking use: `keep_originals` says whether the files are
@@ -968,7 +1020,7 @@ fn read_backup(
     phase: BackupPhase,
     progress: &dyn Fn(BackupPhase, u64, u64),
     cancel: &AtomicBool,
-) -> Result<BackupSummary> {
+) -> Result<(BackupSummary, KeptCounts)> {
     let input = std::fs::File::open(file)?;
     let size = input.metadata()?.len();
     let counter = Rc::new(Cell::new(0u64));
@@ -1155,6 +1207,7 @@ fn read_backup(
     .map_err(|_| Error::BackupDamaged)?;
     let items = count(&conn, "SELECT COUNT(*) FROM items").map_err(|_| Error::BackupDamaged)?;
     let pages = count(&conn, "SELECT COUNT(*) FROM pages").map_err(|_| Error::BackupDamaged)?;
+    let kept = kept_counts_in(&conn).map_err(|_| Error::BackupDamaged)?;
     let _: i64 = conn
         .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
         .map_err(|_| Error::BackupDamaged)?;
@@ -1167,7 +1220,7 @@ fn read_backup(
 
     let found = manifest.ok_or(Error::BackupDamaged)?;
     guard.keep = keep_originals;
-    Ok(BackupSummary {
+    let summary = BackupSummary {
         made_at: found.made_at,
         app_version: found.app_version,
         store_version: found.store_version,
@@ -1178,7 +1231,8 @@ fn read_backup(
         online_used: found.online_used,
         away_used: found.away_used,
         bytes: size as f64,
-    })
+    };
+    Ok((summary, kept))
 }
 
 fn read_small(entry: &mut tar::Entry<'_, Payload>, reading: &Reading) -> Result<Vec<u8>> {
@@ -1235,6 +1289,34 @@ mod tests {
     use super::*;
 
     const PASS: &str = "a long enough passphrase";
+
+    #[test]
+    fn kept_counts_split_things_the_journal_and_files() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE items(id TEXT, kind TEXT, file_name TEXT, metadata TEXT);
+             INSERT INTO items VALUES
+               ('n', 'text', NULL, '{}'),
+               ('p', 'image', 'p.jpg', '{}'),
+               ('v', 'audio', 'v.m4a', '{}'),
+               ('d', 'document', 'd.pdf', '{}'),
+               ('e1', 'text', NULL, '{\"journal\":\"entry\"}'),
+               ('e2', 'text', NULL, '{\"journal\":\"entry\",\"replaces\":\"e1\"}'),
+               ('g', 'text', NULL, '{\"journal\":\"good\"}'),
+               ('c', 'checkin', NULL, '{\"journal\":\"checkin\"}'),
+               ('a', 'calendar', NULL, '{}'),
+               ('r', 'reading', NULL, '{}');",
+        )
+        .unwrap();
+        assert_eq!(
+            kept_counts_in(&conn).unwrap(),
+            KeptCounts {
+                things: 4,
+                journal_entries: 2,
+                photos_and_recordings: 2,
+            }
+        );
+    }
 
     fn manifest() -> Vec<u8> {
         serde_json::to_vec(&Manifest {

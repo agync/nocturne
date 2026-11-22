@@ -8,8 +8,8 @@ use std::sync::atomic::AtomicBool;
 use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::MAX_QUESTION;
 use nocturne_contract::{
-    BackupPhase, BackupReport, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, MemoryCounts,
-    PhoneMode, RestoreCheck,
+    BackupPhase, BackupReport, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, KeptCounts,
+    MemoryCounts, MemoryFilter, PhoneDeleteScope, PhoneMode, PhoneSource, RestoreCheck,
 };
 use nocturne_engine::{BackupRun, DELETE_PHRASE, Engine, FIND_CAP};
 
@@ -98,6 +98,23 @@ impl Home {
             }),
             HomeCall::Stats => self.stats().map(|stats| HomeAnswer::Stats { stats }),
             HomeCall::SetPrivate { id, private } => self.set_private(&id, private),
+            HomeCall::PutAside => Ok(HomeAnswer::PutAside {
+                memories: self.put_aside_memories(),
+            }),
+            HomeCall::BringBack { id } => self.bring_back(&id),
+            HomeCall::DeletePutAside { id } => self.delete_put_aside(&id),
+            HomeCall::PreviewSourceDelete { source } => self.preview_source_delete(source),
+            HomeCall::DeleteSource { token, .. } => self.using().and_then(|(_use, o)| {
+                // The phone stops bringing a source by its own switch, never by the store's:
+                // the store would turn away what the phone brings once it is on again.
+                o.engine
+                    .delete_phone_data(&token, false)
+                    .map(|_| HomeAnswer::SourceDeleted)
+                    .map_err(|e| code(&e))
+            }),
+            HomeCall::PreviewForgetItem { id, with_original } => {
+                self.preview_forget_item(&id, with_original)
+            }
         };
         result.unwrap_or_else(error)
     }
@@ -165,6 +182,14 @@ impl Home {
         }
     }
 
+    /// What the phone holds now in the replace columns; zero where the store cannot be read.
+    fn here_counts(&self) -> KeptCounts {
+        match self.open_store() {
+            Ok(open) => open.engine.kept_counts().unwrap_or_default(),
+            Err(_) => nocturne_engine::store_kept_counts(&self.store_dir()).unwrap_or_default(),
+        }
+    }
+
     /// A backup may come back on a phone that is alone or has not chosen yet; a companion's
     /// memory is on its computer.
     fn may_restore(&self, paired: bool) -> Result<(), HomeError> {
@@ -189,19 +214,24 @@ impl Home {
         let cancel = AtomicBool::new(false);
         let scratch = self.check_dir();
         clear(&scratch);
-        let checked = nocturne_engine::check_backup(file, passphrase, &scratch, &progress, &cancel);
+        let checked =
+            nocturne_engine::check_backup_counted(file, passphrase, &scratch, &progress, &cancel);
         clear(&scratch);
-        let summary = checked.map_err(|e| code(&e))?;
-        let here = {
+        let (summary, backup) = checked.map_err(|e| code(&e))?;
+        let (here, here_counts) = {
             let _use = self.gate.read().unwrap_or_else(|e| e.into_inner());
-            self.here(Some(&summary.made_at))
+            let here = self.here(Some(&summary.made_at));
+            let counts = here.as_ref().map(|_| self.here_counts());
+            (here, counts)
         };
         Ok(HomeAnswer::BackupChecked {
             check: Box::new(RestoreCheck {
                 summary,
                 here,
-                put_aside: None,
+                put_aside: self.newest_put_aside(),
             }),
+            backup,
+            here: here_counts,
         })
     }
 
@@ -286,7 +316,8 @@ impl Home {
     }
 
     /// Everything kept goes, and so does every store put aside and what a restore left. The
-    /// phone stays alone, with an empty memory and its own row made again.
+    /// store itself is removed and the phone has not chosen where its memory lives, so it opens
+    /// on Welcome as a new phone would. The caller resets what the phone brings.
     fn delete_everything(&self, phrase: &str) -> Result<HomeAnswer, HomeError> {
         if phrase != DELETE_PHRASE {
             return Err(HomeError::WrongPhrase);
@@ -297,20 +328,22 @@ impl Home {
         open.engine
             .delete_everything(phrase)
             .map_err(|e| code(&e))?;
+        drop(open);
+        self.close();
+        self.forget_mode().map_err(|e| {
+            tracing::warn!("could not forget where the memory lives: {e}");
+            HomeError::Failed
+        })?;
+        clear(&self.store_dir());
         for name in self.put_aside_names() {
             clear(&self.path(&name));
         }
         clear(&self.stage_dir());
         clear(&self.check_dir());
         clear(&self.keeping_dir());
+        self.clear_damaged();
         self.forget_backup_note();
         self.forget_fading_note();
-        // The phone's own row went with the rest: made again, the store left open.
-        let device = open
-            .engine
-            .ensure_local_device(&self.name_for_store(None))
-            .map_err(|e| code(&e))?;
-        self.set_device(device);
         Ok(HomeAnswer::Deleted)
     }
 
@@ -328,6 +361,54 @@ impl Home {
         Ok(HomeAnswer::PrivateSet {
             item: super::dispatch::phone_item(&item),
         })
+    }
+
+    fn preview_source_delete(&self, source: PhoneSource) -> Result<HomeAnswer, HomeError> {
+        let (_use, open) = self.using()?;
+        open.engine
+            .preview_phone_delete(PhoneDeleteScope {
+                device_id: open.device.clone(),
+                source,
+                kinds: None,
+                before: None,
+                item_id: None,
+            })
+            .map(|preview| HomeAnswer::SourceDeletePreview { preview })
+            .map_err(|e| code(&e))
+    }
+
+    /// "Forget…" takes what was learned from a thing and keeps the thing; "Delete…" takes the
+    /// thing and its original too. `NotFound` when there is nothing to take.
+    fn preview_forget_item(&self, id: &str, with_original: bool) -> Result<HomeAnswer, HomeError> {
+        if check_id(id).is_err() {
+            return Err(HomeError::Invalid);
+        }
+        let (_use, open) = self.using()?;
+        let e = &open.engine;
+        e.get_item(id).map_err(|x| code(&x))?;
+        let learned: Vec<String> = e
+            .memories(MemoryFilter {
+                entity_id: None,
+                item_id: Some(id.to_string()),
+                status: None,
+                query: None,
+                limit: None,
+            })
+            .map_err(|x| code(&x))?
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+        let also = if with_original {
+            vec![id.to_string()]
+        } else {
+            Vec::new()
+        };
+        if learned.is_empty() && also.is_empty() {
+            return Err(HomeError::NotFound);
+        }
+        e.preview_delete(&learned, with_original, &also, false)
+            .map(|preview| HomeAnswer::ForgetPreview { preview })
+            .map_err(|x| code(&x))
     }
 
     fn stats(&self) -> Result<HomeStats, HomeError> {

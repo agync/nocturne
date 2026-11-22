@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use nocturne_contract::{
     BackupPhase, CheckInInput, Feeling, FeelingPart, FeelingPoint, ForgetScope, HeardBy,
-    HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, PhoneError, PhoneMode, RemoteAnswer,
-    RemoteCall,
+    HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, KeptCounts, PhoneError, PhoneMode,
+    PhoneSource, RemoteAnswer, RemoteCall,
 };
 use nocturne_engine::{Candidate, DecayReport, ManualClock, Predicate};
 
@@ -531,17 +531,31 @@ fn a_backup_comes_back_on_another_phone() {
             code: HomeError::WrongPassphrase
         }
     );
-    let HomeAnswer::BackupChecked { check } = local(
+    let HomeAnswer::BackupChecked {
+        check,
+        backup,
+        here,
+    } = local(
         &other,
         HomeCall::CheckBackup {
             file: file.to_string_lossy().into(),
             passphrase: PASS.into(),
         },
-    ) else {
+    )
+    else {
         panic!("not checked")
     };
     assert_eq!(check.here, None, "nothing here to replace");
+    assert_eq!(here, None);
     assert_eq!(check.summary.originals, 1);
+    assert_eq!(
+        backup,
+        KeptCounts {
+            things: 3,
+            journal_entries: 0,
+            photos_and_recordings: 1,
+        }
+    );
     // A companion's memory is on its computer.
     assert_eq!(
         other.local_call(
@@ -605,6 +619,19 @@ fn a_backup_comes_back_on_another_phone() {
     assert_eq!(other.put_aside_names().len(), 1);
     assert!(found(&other, "restore").is_empty());
     assert_eq!(stats(&other).counts, before.counts);
+
+    // A second check says what is here in the same columns, and that something is put aside.
+    let HomeAnswer::BackupChecked { check, here, .. } = local(
+        &other,
+        HomeCall::CheckBackup {
+            file: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("not checked")
+    };
+    assert_eq!(here.map(|h| h.things), Some(3));
+    assert_eq!(check.put_aside.as_deref(), Some(NOW));
 }
 
 #[test]
@@ -716,10 +743,11 @@ fn a_damaged_store_is_put_aside() {
 }
 
 #[test]
-fn delete_everything_needs_the_phrase_and_takes_copies_too() {
+fn delete_everything_needs_the_phrase_and_leaves_a_new_phone() {
     let dir = tempfile::tempdir().unwrap();
     let (home, _) = alone(dir.path());
     call(&home, note("Bins go out on Thursday", "c-1"));
+    home.note_backup(10.0);
     std::fs::create_dir_all(dir.path().join("store-put-aside-2026-01-01-000000")).unwrap();
     assert_eq!(
         local(
@@ -732,6 +760,7 @@ fn delete_everything_needs_the_phrase_and_takes_copies_too() {
             code: HomeError::WrongPhrase
         }
     );
+    assert_eq!(home.mode(false), Some(PhoneMode::Alone));
     assert_eq!(
         local(
             &home,
@@ -741,13 +770,360 @@ fn delete_everything_needs_the_phrase_and_takes_copies_too() {
         ),
         HomeAnswer::Deleted
     );
-    assert_eq!(stats(&home).counts.items, 0);
+    assert_eq!(home.mode(false), None, "Welcome, as on a new phone");
+    assert!(!dir.path().join("store").exists());
+    assert!(!dir.path().join("mode.json").exists());
     assert!(home.put_aside_names().is_empty());
+    assert!(home.with_local(|_| ()).is_none(), "nothing opens it again");
+    assert_eq!(
+        local(&home, HomeCall::Stats),
+        HomeAnswer::Error {
+            code: HomeError::NotReady
+        }
+    );
+    // A restart agrees.
+    assert_eq!(home_at(dir.path(), clock()).mode(false), None);
+
+    // Starting again makes an empty memory with this phone's own row.
+    home.start_alone("Pixel", false).unwrap();
+    assert_eq!(stats(&home).counts.items, 0);
+    assert_eq!(stats(&home).last_backup, None);
+    assert!(found(&home, "bins").is_empty());
     let (device, row) = home
         .with_local(|o| (o.device.clone(), o.engine.local_device().unwrap()))
         .unwrap();
-    assert_eq!(row.map(|r| r.id), Some(device), "its own row, made again");
+    assert_eq!(row.map(|r| r.id), Some(device));
     kept_id(&call(&home, note("A fresh start", "c-1")));
+}
+
+#[test]
+fn delete_everything_forgets_what_the_phone_brings_and_its_choices() {
+    let dir = tempfile::tempdir().unwrap();
+    let ledger = crate::sync::LedgerFile::open(dir.path());
+    ledger.update(|l| {
+        l.calendar.settings.bring = true;
+        l.health.settings.bring = true;
+        l.calendar.sent.insert(
+            "a".into(),
+            crate::sync::ledger::SentEntry {
+                hash: "h".into(),
+                day: "2026-11-22".into(),
+                calendar: "1".into(),
+            },
+        );
+    });
+    ledger.reset();
+    let again = crate::sync::LedgerFile::open(dir.path()).get();
+    assert!(!again.calendar.settings.bring);
+    assert!(!again.health.settings.bring);
+    assert!(again.calendar.sent.is_empty());
+}
+
+fn put_aside(home: &Home) -> Vec<nocturne_contract::PutAsideMemory> {
+    match local(home, HomeCall::PutAside) {
+        HomeAnswer::PutAside { memories } => memories,
+        other => panic!("not listed: {other:?}"),
+    }
+}
+
+#[test]
+fn what_was_put_aside_is_listed_brought_back_and_deleted() {
+    let one = tempfile::tempdir().unwrap();
+    let (home, clock) = alone(one.path());
+    call(&home, note("Before the backup", "c-1"));
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("b.nocturne");
+    let HomeAnswer::BackupSaved { .. } = local(
+        &home,
+        HomeCall::SaveBackup {
+            dest: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("no backup")
+    };
+    call(&home, note("After the backup", "c-2"));
+    assert!(put_aside(&home).is_empty());
+
+    let restore = |home: &Home| {
+        local(
+            home,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: true,
+            },
+        )
+    };
+    assert_eq!(restore(&home), HomeAnswer::Restored);
+    let listed = put_aside(&home);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].at, NOW);
+    assert!(listed[0].bytes > 0.0);
+    assert_eq!(listed[0].counts.map(|c| c.things), Some(2));
+    assert!(found(&home, "after").is_empty());
+
+    // Bringing it back puts the restored memory aside in turn.
+    clock.set_str("2026-11-22T10:00:00Z");
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::BringBack {
+                id: "store-put-aside-../store".into()
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::BringBack {
+                id: listed[0].id.clone()
+            }
+        ),
+        HomeAnswer::Restored
+    );
+    assert_eq!(found(&home, "after").len(), 1);
+    let now = put_aside(&home);
+    assert_eq!(now.len(), 1, "the restored one, put aside");
+    assert_ne!(now[0].id, listed[0].id);
+    assert_eq!(now[0].counts.map(|c| c.things), Some(1));
+
+    // A memory that cannot be read stays where it is.
+    let broken = one.path().join("store-put-aside-2026-01-01-000000");
+    std::fs::create_dir_all(&broken).unwrap();
+    std::fs::write(broken.join("nocturne.db"), vec![0x5au8; 8192]).unwrap();
+    let listed = put_aside(&home);
+    assert_eq!(listed.len(), 2);
+    assert_eq!(
+        listed[1].id, "store-put-aside-2026-01-01-000000",
+        "newest first"
+    );
+    assert_eq!(listed[1].counts, None);
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::BringBack {
+                id: listed[1].id.clone()
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::DamagedBackup
+        }
+    );
+    assert!(broken.is_dir());
+
+    for gone in &listed {
+        assert_eq!(
+            local(
+                &home,
+                HomeCall::DeletePutAside {
+                    id: gone.id.clone()
+                }
+            ),
+            HomeAnswer::PutAsideDeleted
+        );
+    }
+    assert!(put_aside(&home).is_empty());
+    assert_eq!(found(&home, "after").len(), 1, "what is here stays");
+}
+
+#[test]
+fn what_the_phone_brought_is_previewed_then_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let entry = |id: &str| nocturne_contract::CalendarEntry {
+        phone_id: id.into(),
+        calendar_id: "1".into(),
+        title: format!("Dentist {id}"),
+        start: "2026-11-23T09:00:00Z".into(),
+        end: "2026-11-23T09:30:00Z".into(),
+        time_zone: Some("Europe/London".into()),
+        all_day: false,
+        place: None,
+        people: vec![],
+        repeats: false,
+        notes: None,
+        repeat_rule: None,
+    };
+    let took = home
+        .with_local(|o| {
+            o.engine.take_calendar(
+                &o.device,
+                nocturne_contract::CalendarBatch {
+                    sync_id: "s".into(),
+                    seq: 0,
+                    last: true,
+                    window_from: "2026-11-20".into(),
+                    window_to: "2026-12-06".into(),
+                    calendars: vec![],
+                    changes: vec![
+                        nocturne_contract::CalendarChange::Upsert { entry: entry("a") },
+                        nocturne_contract::CalendarChange::Upsert { entry: entry("b") },
+                    ],
+                },
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(took.taken, 2);
+    call(&home, note("Kept by hand", "c-1"));
+
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::PreviewSourceDelete {
+                source: PhoneSource::Health
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
+    let HomeAnswer::SourceDeletePreview { preview } = local(
+        &home,
+        HomeCall::PreviewSourceDelete {
+            source: PhoneSource::Calendar,
+        },
+    ) else {
+        panic!("no preview")
+    };
+    assert_eq!(preview.items, 2);
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::DeleteSource {
+                token: preview.token.clone(),
+                source: PhoneSource::Calendar,
+                also_stop: true,
+            }
+        ),
+        HomeAnswer::SourceDeleted
+    );
+    assert!(found(&home, "dentist").is_empty());
+    assert_eq!(found(&home, "hand").len(), 1, "what was kept by hand stays");
+    // The store still takes the calendar: only the phone's own switch stops it.
+    let again = home
+        .with_local(|o| {
+            o.engine.take_calendar(
+                &o.device,
+                nocturne_contract::CalendarBatch {
+                    sync_id: "t".into(),
+                    seq: 0,
+                    last: true,
+                    window_from: "2026-11-20".into(),
+                    window_to: "2026-12-06".into(),
+                    calendars: vec![],
+                    changes: vec![nocturne_contract::CalendarChange::Upsert { entry: entry("a") }],
+                },
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.taken, 1);
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::DeleteSource {
+                token: preview.token,
+                source: PhoneSource::Calendar,
+                also_stop: false,
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::TooLate
+        }
+    );
+}
+
+#[test]
+fn a_deleted_calendar_comes_back_unless_it_is_stopped() {
+    let dir = tempfile::tempdir().unwrap();
+    let ledger = crate::sync::LedgerFile::open(dir.path());
+    let fill = || {
+        ledger.update(|l| {
+            l.calendar.settings.bring = true;
+            l.calendar.sent.insert(
+                "a".into(),
+                crate::sync::ledger::SentEntry {
+                    hash: "h".into(),
+                    day: "2026-11-23".into(),
+                    calendar: "1".into(),
+                },
+            );
+            l.health.sent.insert(
+                "sleep/1".into(),
+                crate::sync::ledger::SentReading {
+                    hash: "h".into(),
+                    day: "2026-11-22".into(),
+                },
+            );
+        })
+    };
+    fill();
+    super::commands::forget_source_sends(&ledger, PhoneSource::Health, false);
+    assert_eq!(
+        ledger.get().health.sent.len(),
+        1,
+        "readings are not brought again"
+    );
+    super::commands::forget_source_sends(&ledger, PhoneSource::Calendar, false);
+    let l = ledger.get();
+    assert!(l.calendar.settings.bring);
+    assert!(l.calendar.sent.is_empty(), "the next two weeks come back");
+    fill();
+    super::commands::forget_source_sends(&ledger, PhoneSource::Calendar, true);
+    assert!(!ledger.get().calendar.settings.bring);
+}
+
+#[test]
+fn an_item_is_forgotten_or_deleted_from_its_page() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let id = kept_id(&call(&home, note("The purple giraffe", "c-1")));
+    let preview = |with_original: bool| {
+        local(
+            &home,
+            HomeCall::PreviewForgetItem {
+                id: id.clone(),
+                with_original,
+            },
+        )
+    };
+    // Nothing was learned from it with no mind: Forget has nothing to take.
+    assert_eq!(
+        preview(false),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::PreviewForgetItem {
+                id: "nope".into(),
+                with_original: true,
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
+    let HomeAnswer::ForgetPreview { preview } = preview(true) else {
+        panic!("no preview")
+    };
+    assert_eq!(preview.originals.len(), 1);
+    let HomeAnswer::Forgotten { .. } = local(
+        &home,
+        HomeCall::Forget {
+            token: preview.token,
+        },
+    ) else {
+        panic!("not forgotten")
+    };
+    assert!(found(&home, "giraffe").is_empty());
 }
 
 struct Scripted {
@@ -1144,6 +1520,8 @@ fn fading_waits_for_a_memory_and_starts_again_with_a_new_one() {
         ),
         HomeAnswer::Deleted
     );
+    assert_eq!(home.fade_if_due(), None, "no memory until it starts again");
+    home.start_alone("Pixel", false).unwrap();
     assert!(
         home.fade_if_due().is_some(),
         "a fresh memory has its own days"
