@@ -247,6 +247,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
             setDeleted(true);
             void home();
           }}
+          onScan={() => void scan()}
         />
       );
     case "welcome":
