@@ -11,6 +11,7 @@
 mod ask;
 mod events;
 mod guide;
+mod home;
 mod item;
 mod journal;
 mod memory;
@@ -24,6 +25,7 @@ mod system;
 pub use ask::*;
 pub use events::*;
 pub use guide::*;
+pub use home::*;
 pub use item::*;
 pub use journal::*;
 pub use memory::*;
