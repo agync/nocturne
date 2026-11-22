@@ -530,6 +530,7 @@ mod tests {
             journal: None,
             checkin: None,
             calendar: None,
+            heard_by: None,
         }
     }
 

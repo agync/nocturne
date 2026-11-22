@@ -117,6 +117,7 @@ pub fn phone_item(v: &ItemView) -> PhoneItem {
         truncated,
         private: v.private,
         journal: v.journal,
+        heard_by: None,
     }
 }
 
@@ -708,6 +709,7 @@ impl<R: Runtime> Call<R> {
             truncated,
             private: false,
             journal: None,
+            heard_by: None,
         };
         self.core
             .remember_made_up(&self.device.id, made.clone(), client_id, now);

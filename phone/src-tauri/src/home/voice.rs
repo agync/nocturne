@@ -207,7 +207,7 @@ impl Home {
                     duration_ms,
                     segments: Vec::new(),
                 };
-                match e.record_transcript(id, &leased.lease, t) {
+                match e.record_phone_transcript(id, &leased.lease, t) {
                     Ok(_) => kept = true,
                     Err(x) => {
                         // Not tried again this run: a note that outlasts its lease would be

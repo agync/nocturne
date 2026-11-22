@@ -37,7 +37,8 @@ pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.
     (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
      ON rd.id = rk.device_id AND rd.connection != 'local' \
      WHERE rk.item_id = i.id), \
-    json_extract(i.metadata, '$.journal')";
+    json_extract(i.metadata, '$.journal'), \
+    json_extract(i.metadata, '$.heardBy')";
 
 /// Builds an `ItemView` from an `ITEM_COLS` row. `originals` is the directory the stored files
 /// live in; the view names the original only while that file exists.
@@ -81,6 +82,7 @@ fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         journal: de_opt(row.get(20)?)?,
         checkin: None,
         calendar: None,
+        heard_by: de_opt(row.get(21)?)?,
     })
 }
 

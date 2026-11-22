@@ -80,6 +80,7 @@ pub fn phone_item(v: &ItemView) -> PhoneItem {
         truncated: false,
         private: v.private,
         journal: v.journal,
+        heard_by: v.heard_by,
     }
 }
 

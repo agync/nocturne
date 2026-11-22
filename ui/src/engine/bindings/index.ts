@@ -79,6 +79,7 @@ export type { GuidePage } from "./GuidePage";
 export type { GuideSection } from "./GuideSection";
 export type { GuideView } from "./GuideView";
 export type { HealthSeries } from "./HealthSeries";
+export type { HeardBy } from "./HeardBy";
 export type { HelpKind } from "./HelpKind";
 export type { HelpView } from "./HelpView";
 export type { Highlight } from "./Highlight";

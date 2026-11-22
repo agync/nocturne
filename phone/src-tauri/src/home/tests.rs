@@ -2,8 +2,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use nocturne_contract::{
-    BackupPhase, CheckInInput, Feeling, FeelingPart, FeelingPoint, ForgetScope, HomeAnswer,
-    HomeCall, HomeError, ItemKind, ItemStatus, PhoneError, PhoneMode, RemoteAnswer, RemoteCall,
+    BackupPhase, CheckInInput, Feeling, FeelingPart, FeelingPoint, ForgetScope, HeardBy,
+    HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, PhoneError, PhoneMode, RemoteAnswer,
+    RemoteCall,
 };
 use nocturne_engine::ManualClock;
 
@@ -802,12 +803,19 @@ fn a_voice_note_gets_its_words_and_stays_waiting_for_a_mind() {
     assert_eq!(item.text.as_deref(), Some("the purple giraffe"));
     assert_eq!(item.duration_ms, Some(1000));
     assert_eq!(item.status, ItemStatus::Kept, "still waiting for a mind");
+    assert_eq!(item.heard_by, Some(HeardBy::Phone));
+    assert_eq!(
+        item_of(&home, &id).heard_by,
+        Some(HeardBy::Phone),
+        "the screens say who heard it"
+    );
     assert_eq!(found(&home, "giraffe"), vec![id.clone()]);
     assert_eq!(
         open.engine.get_item(&other).unwrap().text,
         None,
         "a webm waits"
     );
+    assert_eq!(open.engine.get_item(&other).unwrap().heard_by, None);
     assert_eq!(home.hear_waiting(&words), 0, "read once");
 }
 

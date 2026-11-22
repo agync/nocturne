@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use jiff::SignedDuration;
 use jiff::civil::Date;
-use nocturne_contract::{CouldntReadReason, ItemFilter, ItemKind, ItemView, Kept, Source, Trust};
+use nocturne_contract::{
+    CouldntReadReason, HeardBy, ItemFilter, ItemKind, ItemView, Kept, Source, Trust,
+};
 use rusqlite::{OptionalExtension, Transaction, params};
 use sha2::{Digest, Sha256};
 
@@ -694,14 +696,39 @@ impl Engine {
     }
 
     /// Store a transcript for an audio item. A recording over two hours is kept but not read
-    /// (`RecordOutcome::TooLong`, status `couldntRead`).
+    /// (`RecordOutcome::TooLong`, status `couldntRead`). Words a mind made replace any the phone
+    /// heard, and the phone's mark with them.
     pub fn record_transcript(
         &self,
         item: &str,
         lease: &str,
         t: Transcript,
     ) -> Result<RecordOutcome> {
-        let meta = serde_json::json!({ "segments": t.segments });
+        self.record_words(item, lease, t, None)
+    }
+
+    /// Store the words a phone's own speech reader made of a voice note, marked as heard by the
+    /// phone. Words are all it stores: the item stays waiting for a mind, apart from a recording
+    /// over two hours, which is flagged as `record_transcript` does. [`Engine::record_transcript`]
+    /// replaces these words and the mark.
+    pub fn record_phone_transcript(
+        &self,
+        item: &str,
+        lease: &str,
+        t: Transcript,
+    ) -> Result<RecordOutcome> {
+        self.record_words(item, lease, t, Some(HeardBy::Phone))
+    }
+
+    fn record_words(
+        &self,
+        item: &str,
+        lease: &str,
+        t: Transcript,
+        heard_by: Option<HeardBy>,
+    ) -> Result<RecordOutcome> {
+        // A null in a merge patch takes the key away.
+        let meta = serde_json::json!({ "segments": t.segments, "heardBy": heard_by });
         self.write(|tx| {
             check_lease(tx, item, lease)?;
             if t.duration_ms > MAX_AUDIO_MS {
