@@ -225,16 +225,6 @@ impl MemRow {
         }
     }
 
-    pub fn is_safety(&self) -> bool {
-        self.predicate == "takes"
-            || self.tags.iter().any(|t| {
-                matches!(
-                    t.to_lowercase().as_str(),
-                    "health" | "allergy" | "medication"
-                )
-            })
-    }
-
     pub fn view(&self, receipts: Vec<Receipt>) -> MemoryView {
         MemoryView {
             id: self.id.clone(),

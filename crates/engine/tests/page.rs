@@ -659,7 +659,8 @@ fn page_one_asks_for_the_page_time_and_earlier_or_later_moves_it() {
 #[test]
 fn the_daily_question_picks_by_the_rules() {
     let f = fixture();
-    // One-source memory A, two-source memory B, a safety memory, a keep-forever memory.
+    // One-source memory A, two-source memory B, a medicine memory (kept forever by default), a
+    // keep-forever memory.
     let (_, a) = learn(
         &f.engine,
         "a",
@@ -701,7 +702,7 @@ fn the_daily_question_picks_by_the_rules() {
     assert!(q.receipt.is_some());
     f.engine.save_page(&p2).unwrap();
 
-    // Not asked again for 14 days; never a safety or keep-forever memory.
+    // Not asked again for 14 days; never a keep-forever memory.
     f.clock.set_str("2026-11-15T20:00:00Z");
     let q3 = compose(&f, "2026-11-16").question.unwrap();
     assert_eq!(q3.memory_id.as_deref(), Some(b.as_str()));
@@ -723,6 +724,25 @@ fn the_daily_question_picks_by_the_rules() {
             .as_deref(),
         Some(a.as_str())
     );
+}
+
+/// What a memory is about never keeps it out of the daily question: a medicine memory is asked
+/// about like any other once it is not kept forever.
+#[test]
+fn the_daily_question_does_not_skip_a_memory_for_its_subject() {
+    let f = fixture();
+    let (_, dose) = learn(
+        &f.engine,
+        "c",
+        cand("Leo", Predicate::Takes, "metformin", "Leo takes metformin."),
+    );
+    assert!(f.engine.get_memory(&dose).unwrap().keep_forever);
+    f.engine.set_keep_forever(&dose, false).unwrap();
+    save_day(&f, "2026-11-14");
+    f.clock.set_str("2026-11-14T20:00:00Z");
+    let q = compose(&f, "2026-11-15").question.unwrap();
+    assert_eq!(q.kind, QuestionKind::YesNo);
+    assert_eq!(q.memory_id.as_deref(), Some(dose.as_str()));
 }
 
 #[test]

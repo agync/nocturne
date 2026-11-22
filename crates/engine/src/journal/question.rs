@@ -191,9 +191,6 @@ fn qualify(
     undated: bool,
     mut blocked: Option<&mut Vec<Blocked>>,
 ) -> Result<Option<(String, Chosen)>> {
-    if m.is_safety() {
-        return Ok(None);
-    }
     if is_private_chain(conn, &m.id)? || asked_before(conn, &m.id)? {
         return Ok(None);
     }

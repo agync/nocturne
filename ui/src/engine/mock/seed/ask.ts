@@ -7,7 +7,7 @@ export const ASK_EXAMPLES: readonly string[] = [
   "When does my passport run out?",
 ];
 
-/** Never about a safety memory: those are kept forever and not re-asked. */
+/** Never about a memory kept forever: those are not re-asked. */
 export function dailyQuestion(memories: MemoryView[]): Question {
   const memory = memories.find((m) => m.id === "mem-coach");
   if (!memory) throw new Error("Seed memory missing: mem-coach");
