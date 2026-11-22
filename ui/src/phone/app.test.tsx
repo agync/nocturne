@@ -577,6 +577,48 @@ describe("keep", () => {
     }
   });
 
+  describe("a recorder that cannot open the microphone", () => {
+    const keepWith = (error: Error) => (
+      <Keep
+        engine={engineWith()}
+        queue={memoryQueue()}
+        connection={{
+          kind: "connected",
+          agreed: 2,
+          hello: {
+            computerName: "Home computer",
+            deviceName: "Pixel",
+            connection: "simple",
+            version: "0.1.0",
+            minPhoneBuild: 1,
+          },
+        }}
+        deviceName="Pixel"
+        now={() => Date.now()}
+        onHome={() => undefined}
+        onQueued={() => undefined}
+        recorder={async () => {
+          throw error;
+        }}
+      />
+    );
+
+    it("blames the phone's settings only for a real refusal", async () => {
+      render(keepWith(new DOMException("denied", "NotAllowedError")));
+      await userEvent.click(button("Record"));
+      expect(await screen.findByText(/microphone isn.t available/i)).toBeInTheDocument();
+    });
+
+    it("says the keep did not happen for any other failure", async () => {
+      render(keepWith(new DOMException("busy", "NotReadableError")));
+      await userEvent.click(button("Record"));
+      expect(
+        await screen.findByRole("heading", { name: "That didn’t go across." }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/microphone/i)).toBeNull();
+    });
+  });
+
   it("recording with no microphone says so", async () => {
     render(
       <Keep
