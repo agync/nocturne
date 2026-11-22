@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress, BackupReport, KeptCounts } from "../../../engine/bindings";
+import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
 import { useHeading } from "../../native/screens/parts";
 import { Button, Icon, Page } from "../../screens/ui";
 import { type Checked, HomeRequestError, type PickedFile, type Progress } from "../api";
@@ -43,9 +44,27 @@ function BackOnly({ onBack }: { onBack(): void }) {
   );
 }
 
-/** A backup or a restore running: its phase, and how far it is. */
-export function Running({ title, progress }: { title: string; progress: BackupProgress | null }) {
+/** A backup or a restore running: its phase, how far it is, and Stop while it can be stopped. */
+export function Running({
+  title,
+  label,
+  progress,
+  body,
+  final = false,
+  onStop,
+}: {
+  title: string;
+  label?: string;
+  progress: BackupProgress | null;
+  body?: string;
+  /** The last step, which cannot be stopped. */
+  final?: boolean;
+  /** Without it, the screen only waits: there is nothing to stop. */
+  onStop?(): Promise<void>;
+}) {
   const heading = useHeading(title);
+  const eta = useProgressEta(progress);
+  const [stopping, setStopping] = useState(false);
   const share = progress && progress.total > 0 ? progress.done / progress.total : 0;
   return (
     <Page bar={null}>
@@ -55,10 +74,15 @@ export function Running({ title, progress }: { title: string; progress: BackupPr
             {title}
           </h1>
         </div>
+        {label ? (
+          <p className="ph-lbl" role="status">
+            {label}
+          </p>
+        ) : null}
         <div
           className="ph-progress"
           role="progressbar"
-          aria-label={title}
+          aria-label={label ?? title}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(share * 100)}
@@ -66,12 +90,25 @@ export function Running({ title, progress }: { title: string; progress: BackupPr
           <span style={{ width: `${Math.round(share * 100)}%` }} />
         </div>
         {progress && progress.total > 0 ? (
-          <p className="ph-small">
-            {t("backup.progress.plain", {
-              done: formatBytes(progress.done),
-              total: formatBytes(progress.total),
-            })}
-          </p>
+          <p className="ph-small">{progressDetail(progress, final ? null : eta)}</p>
+        ) : null}
+        {body ? <p className="ph-body ph-ink2">{body}</p> : null}
+        <div className="ph-spacer" />
+        {onStop ? (
+          <div className="ph-stack">
+            <Button
+              disabled={final || stopping || progress === null}
+              onClick={() => {
+                setStopping(true);
+                void onStop().catch(() => setStopping(false));
+              }}
+            >
+              {t("backup.stop")}
+            </Button>
+            {final ? (
+              <p className="ph-small ph-center">{t("restore.restoring.finalNote")}</p>
+            ) : null}
+          </div>
         ) : null}
       </main>
     </Page>
@@ -152,6 +189,7 @@ function Passphrase({
 type SaveStep =
   | { name: "form"; error: "mismatch" | "failed" | "full" | null }
   | { name: "saving"; progress: BackupProgress | null }
+  | { name: "stopped" }
   | { name: "saved"; report: BackupReport; at: Date };
 
 /**
@@ -160,11 +198,13 @@ type SaveStep =
  */
 export function SaveBackup({
   save,
+  stop,
   now,
   onClose,
 }: {
   /** Makes the backup, then the save sheet; null when the person chose nowhere. */
   save(passphrase: string, onProgress: Progress): Promise<BackupReport | null>;
+  stop(): Promise<void>;
   now(): number;
   onClose(): void;
 }) {
@@ -189,6 +229,8 @@ export function SaveBackup({
         report ? { name: "saved", report, at: new Date(now()) } : { name: "form", error: null },
       );
     } catch (e) {
+      if (e instanceof HomeRequestError && e.code === "stopped")
+        return setStep({ name: "stopped" });
       const full = e instanceof HomeRequestError && e.code === "full";
       setStep({ name: "form", error: full ? "full" : "failed" });
     }
@@ -197,12 +239,24 @@ export function SaveBackup({
   if (step.name === "saving")
     return (
       <Running
-        title={
+        title={t("backup.making.title")}
+        label={
           step.progress?.phase === "checking"
             ? t("backup.phase.checking")
-            : t("backup.making.title")
+            : t("backup.phase.saving")
         }
         progress={step.progress}
+        body={t("phone.alone.backup.making.body")}
+        onStop={stop}
+      />
+    );
+  if (step.name === "stopped")
+    return (
+      <Done
+        title={t("backup.stopped.title")}
+        body={t("backup.stopped.body")}
+        button={t("phone.sources.ok")}
+        onDone={onClose}
       />
     );
   if (step.name === "saved")
@@ -286,6 +340,7 @@ type RestoreStep =
   | { name: "form"; error: RestoreError | null }
   | { name: "replace"; checked: Checked }
   | { name: "running"; phase: "checking" | "restoring"; progress: BackupProgress | null }
+  | { name: "stopped" }
   | { name: "done"; count: number };
 
 /**
@@ -296,6 +351,7 @@ export function Restore({
   pickFile,
   check,
   restore,
+  stop,
   letGo,
   onBack,
   onDone,
@@ -305,6 +361,7 @@ export function Restore({
   pickFile(): Promise<PickedFile | null>;
   check(file: string, passphrase: string, onProgress: Progress): Promise<Checked>;
   restore(file: string, passphrase: string, replace: boolean, onProgress: Progress): Promise<void>;
+  stop(): Promise<void>;
   letGo(): Promise<void>;
   onBack(): void;
   onDone(): void;
@@ -342,7 +399,10 @@ export function Restore({
     (progress: BackupProgress): void =>
       setStep({ name: "running", phase, progress });
 
-  const failed = (e: unknown) => setStep({ name: "form", error: restoreError(e) });
+  const failed = (e: unknown) =>
+    e instanceof HomeRequestError && e.code === "stopped"
+      ? setStep({ name: "stopped" })
+      : setStep({ name: "form", error: restoreError(e) });
 
   const bringIn = async (checked: Checked, replace: boolean) => {
     if (!file) return;
@@ -368,13 +428,35 @@ export function Restore({
     }
   };
 
-  if (step.name === "running")
+  if (step.name === "running") {
+    const { progress } = step;
     return (
       <Running
         title={
           step.phase === "checking" ? t("restore.checking.title") : t("restore.restoring.title")
         }
-        progress={step.progress}
+        label={
+          step.phase === "checking" ? t("backup.phase.checking") : t("restore.restoring.label")
+        }
+        progress={progress}
+        body={t("phone.alone.restore.running.body")}
+        final={
+          step.phase === "restoring" &&
+          progress !== null &&
+          progress.total > 0 &&
+          progress.done >= progress.total
+        }
+        onStop={stop}
+      />
+    );
+  }
+  if (step.name === "stopped")
+    return (
+      <Done
+        title={t("backup.stopped.title")}
+        body={t("phone.alone.restore.stopped")}
+        button={t("phone.sources.ok")}
+        onDone={onBack}
       />
     );
   if (step.name === "replace")

@@ -491,7 +491,14 @@ export function HomeApp({
       screen = <GiveMind backLabel={t("phone.back")} onBack={back} onScan={onScan} />;
       break;
     case "backup":
-      screen = <SaveBackup save={home.saveBackupFile} now={services.now} onClose={back} />;
+      screen = (
+        <SaveBackup
+          save={home.saveBackupFile}
+          stop={home.stopBackup}
+          now={services.now}
+          onClose={back}
+        />
+      );
       break;
     case "restore":
       screen = (
@@ -500,6 +507,7 @@ export function HomeApp({
           pickFile={home.chooseBackupFile}
           check={home.checkBackup}
           restore={home.restoreBackup}
+          stop={home.stopBackup}
           letGo={home.letGoBackupFile}
           onBack={back}
           onDone={() => {
