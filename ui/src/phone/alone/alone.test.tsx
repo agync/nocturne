@@ -163,6 +163,34 @@ describe("Today on a phone alone", () => {
   });
 });
 
+describe("Back on Android", () => {
+  const current = () => within(nav()).getByRole("button", { current: "page" }).textContent;
+
+  it("goes from Journal or Ask to Today, and Today is where Back leaves", async () => {
+    await app("m=fresh");
+    await screen.findByText("Your memory is on this phone");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Journal" }));
+    await waitFor(() => expect(current()).toBe("Journal"));
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(current()).toBe("Ask"));
+    const length = history.length;
+    history.back();
+    await waitFor(() => expect(current()).toBe("Today"));
+    expect(history.length).toBe(length);
+    expect(history.state.view).toEqual({ name: "tab", tab: "today" });
+  });
+
+  it("does not stack the tabs when Today is chosen again", async () => {
+    await app("m=fresh");
+    await screen.findByText("Your memory is on this phone");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(current()).toBe("Ask"));
+    fireEvent.click(within(nav()).getByRole("button", { name: "Today" }));
+    await waitFor(() => expect(current()).toBe("Today"));
+    expect(history.state.view).toEqual({ name: "tab", tab: "today" });
+  });
+});
+
 describe("Ask finds by words", () => {
   it("says what it does before typing, and when nothing is kept", async () => {
     await app("m=fresh");
