@@ -7,9 +7,11 @@
 //!
 //! The reader takes raw sound (16-bit, mono, 16 kHz, no header). A note kept as such a WAV file
 //! is read as it is; any other recording is decoded by the phone first, and waits where the phone
-//! cannot decode it.
+//! cannot decode it. A note longer than [`PIECE`] is read in pieces, each cut where it is
+//! quietest near its end, and its words are kept only when every piece could be read.
 
 use std::collections::HashSet;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,7 +24,16 @@ use super::{Home, lock};
 
 /// How long reading a note may take beyond three times its length before the lease runs out.
 const LEASE: Duration = Duration::from_secs(120);
+/// Lease time for each piece beyond the first, for the reader's checks around each read.
+const PER_PIECE: Duration = Duration::from_secs(10);
 const RATE: u32 = 16_000;
+const BYTES_PER_SECOND: u64 = RATE as u64 * 2;
+/// The longest stretch the reader is given at once: an iPhone stops at about a minute.
+pub const PIECE: Duration = Duration::from_secs(50);
+/// How far back from a piece's end a quiet place to cut it is looked for.
+const LOOK_BACK: Duration = Duration::from_secs(5);
+/// The stretch whose loudness is weighed when looking for a quiet place: 20 ms.
+const FRAME: usize = RATE as usize / 50;
 /// The longest language tag the screens may send.
 const MAX_TAG: usize = 35;
 
@@ -115,6 +126,92 @@ pub fn pcm_from_wav(src: &Path, dest: &Path) -> Option<u32> {
     None
 }
 
+/// The start of the quietest whole frame of `samples`, in samples.
+fn quietest(samples: &[i16]) -> usize {
+    samples
+        .as_chunks::<FRAME>()
+        .0
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, frame)| frame.iter().map(|&s| i64::from(s).pow(2)).sum::<i64>())
+        .map_or(0, |(i, _)| i * FRAME)
+}
+
+/// The byte ranges of raw sound `len` bytes long to read one at a time: none longer than
+/// [`PIECE`], each ending in the middle of the quietest frame of its last [`LOOK_BACK`].
+/// `window(at, bytes)` gives the samples from byte `at`.
+fn pieces(
+    len: u64,
+    mut window: impl FnMut(u64, usize) -> std::io::Result<Vec<i16>>,
+) -> std::io::Result<Vec<(u64, u64)>> {
+    let piece = PIECE.as_secs() * BYTES_PER_SECOND;
+    let back = LOOK_BACK.as_secs() * BYTES_PER_SECOND;
+    let mut out = Vec::new();
+    let mut start = 0;
+    while len - start > piece {
+        let from = start + piece - back;
+        let samples = window(from, back as usize)?;
+        let cut = from + ((quietest(&samples) + FRAME / 2) * 2) as u64;
+        out.push((start, cut));
+        start = cut;
+    }
+    out.push((start, len));
+    Ok(out)
+}
+
+fn samples_at(file: &mut std::fs::File, at: u64, bytes: usize) -> std::io::Result<Vec<i16>> {
+    let mut buf = vec![0u8; bytes];
+    file.seek(SeekFrom::Start(at))?;
+    file.read_exact(&mut buf)?;
+    Ok(buf
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&b| i16::from_le_bytes(b))
+        .collect())
+}
+
+/// Bytes `range` of `src`, written to `dest`.
+fn copy_range(src: &mut std::fs::File, range: (u64, u64), dest: &Path) -> std::io::Result<()> {
+    src.seek(SeekFrom::Start(range.0))?;
+    let mut out = std::fs::File::create(dest)?;
+    std::io::copy(&mut src.take(range.1 - range.0), &mut out)?;
+    out.flush()
+}
+
+/// Read raw sound in pieces; words only when every piece could be read.
+fn read_in_pieces(reader: &dyn Reader, pcm: &Path, language: &str) -> Heard {
+    let Ok(mut file) = std::fs::File::open(pcm) else {
+        return Heard::Waits;
+    };
+    let len = file.metadata().map_or(0, |m| m.len());
+    let Ok(ranges) = pieces(len, |at, bytes| samples_at(&mut file, at, bytes)) else {
+        return Heard::Waits;
+    };
+    if ranges.len() == 1 {
+        return reader.read(pcm, language);
+    }
+    let mut words: Vec<String> = Vec::new();
+    for (i, range) in ranges.into_iter().enumerate() {
+        let part = pcm.with_extension(format!("{i}.pcm"));
+        let heard = match copy_range(&mut file, range, &part) {
+            Ok(()) => reader.read(&part, language),
+            Err(_) => Heard::Waits,
+        };
+        let _ = std::fs::remove_file(&part);
+        match heard {
+            Heard::Words(text) if !text.trim().is_empty() => words.push(text.trim().to_string()),
+            Heard::Words(_) | Heard::Nothing => {}
+            Heard::Waits => return Heard::Waits,
+        }
+    }
+    if words.is_empty() {
+        Heard::Nothing
+    } else {
+        Heard::Words(words.join(" "))
+    }
+}
+
 impl Home {
     /// The language voice notes are read in, from the screens. Answers whether it was taken.
     pub fn set_language(&self, tag: &str) -> bool {
@@ -203,13 +300,15 @@ impl Home {
             lock(&self.voice.nothing).insert(id.to_string());
             return false;
         };
-        let lease = LEASE + Duration::from_millis(u64::from(duration_ms) * 3);
+        let more = u64::from(duration_ms) / PIECE.as_millis() as u64;
+        let lease =
+            LEASE + Duration::from_millis(u64::from(duration_ms) * 3) + PER_PIECE * more as u32;
         let Ok(leased) = e.lease_item(id, lease) else {
             let _ = std::fs::remove_file(&pcm);
             return false;
         };
         let mut kept = false;
-        match reader.read(&pcm, language) {
+        match read_in_pieces(reader, &pcm, language) {
             Heard::Words(text) if !text.trim().is_empty() => {
                 let t = Transcript {
                     text,
@@ -243,6 +342,116 @@ impl Home {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tone(n: usize, loud: i16) -> Vec<i16> {
+        (0..n)
+            .map(|i| if i % 2 == 0 { loud } else { -loud })
+            .collect()
+    }
+
+    #[test]
+    fn the_quietest_frame_is_found() {
+        let mut samples = tone(FRAME * 10, 8000);
+        samples[FRAME * 6..FRAME * 7].fill(3);
+        assert_eq!(quietest(&samples), FRAME * 6);
+        assert_eq!(quietest(&[]), 0);
+    }
+
+    #[test]
+    fn a_short_note_is_one_piece() {
+        let len = 30 * BYTES_PER_SECOND;
+        let got = pieces(len, |_, _| panic!("no cut needed")).unwrap();
+        assert_eq!(got, vec![(0, len)]);
+        let exact = PIECE.as_secs() * BYTES_PER_SECOND;
+        assert_eq!(
+            pieces(exact, |_, _| unreachable!()).unwrap(),
+            vec![(0, exact)]
+        );
+    }
+
+    #[test]
+    fn a_long_note_is_cut_where_it_is_quiet() {
+        let secs = 130;
+        let mut sound = tone(secs * RATE as usize, 6000);
+        // A pause at 47.5 s, inside the first look-back; none inside the second.
+        let pause = 47 * RATE as usize + RATE as usize / 2;
+        sound[pause..pause + FRAME].fill(0);
+        let len = sound.len() as u64 * 2;
+        let got = pieces(len, |at, bytes| {
+            let at = at as usize / 2;
+            Ok(sound[at..at + bytes / 2].to_vec())
+        })
+        .unwrap();
+        let piece = PIECE.as_secs() * BYTES_PER_SECOND;
+        assert_eq!(got.len(), 3, "{got:?}");
+        assert_eq!(got[0].0, 0);
+        assert_eq!(got[0].1, (pause + FRAME / 2) as u64 * 2, "cut in the pause");
+        for (a, b) in &got {
+            assert!(b - a <= piece, "{a}..{b}");
+            assert_eq!(a % 2, 0);
+        }
+        for pair in got.windows(2) {
+            assert_eq!(pair[0].1, pair[1].0, "no sound lost or read twice");
+        }
+        assert_eq!(got.last().unwrap().1, len);
+    }
+
+    struct Pieces(std::sync::Mutex<Vec<Heard>>, std::sync::Mutex<Vec<u64>>);
+
+    impl Reader for Pieces {
+        fn ready(&self, _: &str) -> bool {
+            true
+        }
+
+        fn read(&self, pcm: &Path, _: &str) -> Heard {
+            lock(&self.1).push(std::fs::metadata(pcm).unwrap().len());
+            lock(&self.0).remove(0)
+        }
+    }
+
+    fn long_pcm(dir: &Path, secs: u64) -> PathBuf {
+        let pcm = dir.join("n.pcm");
+        let bytes: Vec<u8> = tone((secs * u64::from(RATE)) as usize, 4000)
+            .into_iter()
+            .flat_map(i16::to_le_bytes)
+            .collect();
+        std::fs::write(&pcm, bytes).unwrap();
+        pcm
+    }
+
+    #[test]
+    fn the_words_of_every_piece_are_joined() {
+        let dir = tempfile::tempdir().unwrap();
+        let pcm = long_pcm(dir.path(), 110);
+        let reader = Pieces(
+            std::sync::Mutex::new(vec![
+                Heard::Words(" first part ".into()),
+                Heard::Nothing,
+                Heard::Words("last part".into()),
+            ]),
+            std::sync::Mutex::default(),
+        );
+        assert_eq!(
+            read_in_pieces(&reader, &pcm, "en-GB"),
+            Heard::Words("first part last part".into())
+        );
+        let sizes = lock(&reader.1).clone();
+        assert_eq!(sizes.len(), 3);
+        assert_eq!(sizes.iter().sum::<u64>(), 110 * BYTES_PER_SECOND);
+        let left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
+        assert_eq!(left.len(), 1, "only the note itself is left");
+    }
+
+    #[test]
+    fn one_piece_that_cannot_be_read_leaves_the_note_waiting() {
+        let dir = tempfile::tempdir().unwrap();
+        let pcm = long_pcm(dir.path(), 70);
+        let reader = Pieces(
+            std::sync::Mutex::new(vec![Heard::Words("half".into()), Heard::Waits]),
+            std::sync::Mutex::default(),
+        );
+        assert_eq!(read_in_pieces(&reader, &pcm, "en-GB"), Heard::Waits);
+    }
 
     #[test]
     fn only_plain_language_tags_are_taken() {
