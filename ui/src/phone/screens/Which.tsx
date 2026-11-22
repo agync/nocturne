@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatTime12 } from "../../copy/format";
+import { formatTimeOfDay } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
 import type { SameNameAnswer, SameNameAnswered, SameNameQuestion } from "../../engine/bindings";
 import { weekdayDay } from "../../screens/lookback/text";
@@ -25,7 +25,7 @@ interface WhichProps {
 }
 
 function whenText(question: SameNameQuestion, today: boolean): string {
-  const time = formatTime12(question.receipt.keptAt);
+  const time = formatTimeOfDay(question.receipt.keptAt);
   return today
     ? t("phone.journal.which.when.today", { time })
     : t("phone.journal.which.when.day", { day: weekdayDay(question.receipt.keptAt), time });

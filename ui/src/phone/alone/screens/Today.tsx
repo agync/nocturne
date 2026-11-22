@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { formatLongDay, formatTime12, isAfterMidnight } from "../../../copy/format";
+import { formatLongDay, formatTimeOfDay, isAfterMidnight } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, JournalDay, PageView, TimelineRow } from "../../../engine/bindings";
 import type { PhoneEngine } from "../../engine";
@@ -157,7 +157,7 @@ export function HomeToday(p: HomeTodayProps) {
                     className="ph-kept-row"
                     onClick={() => p.onItem(row.item.id)}
                   >
-                    <span className="ph-kept-at">{formatTime12(row.item.keptAt)}</span>
+                    <span className="ph-kept-at">{formatTimeOfDay(row.item.keptAt)}</span>
                     <KeptLine row={row} />
                   </button>
                 </li>

@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { richText } from "../../components/PageLine/richText";
-import { addDays, formatDuration, formatTime12, formatWeekday } from "../../copy/format";
+import { addDays, formatDuration, formatTimeOfDay, formatWeekday } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
 import type {
   CheckIn,
@@ -91,7 +91,7 @@ function chipText(receipt: Receipt, withDay: boolean): string {
   if (isEntry && !withDay) return receipt.label;
   return withDay
     ? t("journal.lookback.chip.day", { day: weekdayDay(receipt.keptAt), kind })
-    : t("journal.lookback.chip.time", { time: formatTime12(receipt.keptAt), kind });
+    : t("journal.lookback.chip.time", { time: formatTimeOfDay(receipt.keptAt), kind });
 }
 
 /** Text with `**spans**`; each span stands for the receipt in its place and opens the original. */
@@ -183,12 +183,12 @@ function FeltSentences({ felt, onItem }: { felt: readonly CheckIn[]; onItem(id: 
       {felt.map((c) => {
         const text = c.line
           ? t("journal.lookback.felt.sentenceLine", {
-              time: formatTime12(c.keptAt),
+              time: formatTimeOfDay(c.keptAt),
               words: wordsOf(c),
               line: c.line,
             })
           : t("journal.lookback.felt.sentence", {
-              time: formatTime12(c.keptAt),
+              time: formatTimeOfDay(c.keptAt),
               words: wordsOf(c),
             });
         return (
@@ -299,7 +299,7 @@ function Written({
         {r.written === "overnight"
           ? t("phone.journal.footer.overnight", { count: r.fromCount })
           : t("phone.journal.footer.onDemand", {
-              time: formatTime12(r.writtenAt),
+              time: formatTimeOfDay(r.writtenAt),
               count: r.fromCount,
             })}
       </p>
@@ -319,7 +319,7 @@ function togetherLine(item: Together): string {
 
 function whenWritten(recap: Recap): string {
   if (recap.written === "onDemand") {
-    return t("journal.lookback.when.onDemand", { time: formatTime12(recap.writtenAt) });
+    return t("journal.lookback.when.onDemand", { time: formatTimeOfDay(recap.writtenAt) });
   }
   const night = new Date(recap.writtenAt);
   if (night.getHours() < 12) night.setDate(night.getDate() - 1);
@@ -389,7 +389,7 @@ function CheckinTable({ checkins }: { checkins: readonly CheckIn[] }) {
         {checkins.map((c) => (
           <tr key={c.id}>
             <td>{weekdayDay(c.day)}</td>
-            <td>{formatTime12(c.keptAt)}</td>
+            <td>{formatTimeOfDay(c.keptAt)}</td>
             <td>{partName(c.feeling.part)}</td>
             <td>{wordsOf(c)}</td>
           </tr>
@@ -540,7 +540,7 @@ function GlanceBody({ glance }: { glance: Glance }) {
                 .map((c) =>
                   t("journal.glance.feltItem", {
                     words: wordsOf(c),
-                    time: formatTime12(c.keptAt),
+                    time: formatTimeOfDay(c.keptAt),
                   }),
                 )
                 .join(", "),
@@ -696,15 +696,15 @@ export function LookBack(p: LookBackProps) {
     : t(`journal.recap.title.${period.kind as "week" | "month" | "year"}`);
   let eyebrow: string;
   if (written?.soFar) {
-    eyebrow = t("journal.reflection.eyebrow.soFar", { time: formatTime12(written.writtenAt) });
+    eyebrow = t("journal.reflection.eyebrow.soFar", { time: formatTimeOfDay(written.writtenAt) });
   } else if (isDay) {
     eyebrow = isToday
-      ? t("journal.reflection.eyebrow.soFar", { time: formatTime12(new Date(p.now())) })
+      ? t("journal.reflection.eyebrow.soFar", { time: formatTimeOfDay(new Date(p.now())) })
       : t("journal.reflection.eyebrow.finished", day ?? {});
   } else {
     eyebrow = periodText(period);
     if (recap?.soFar) {
-      eyebrow = `${eyebrow} · ${t("journal.recap.soFar", { time: formatTime12(recap.writtenAt) })}`;
+      eyebrow = `${eyebrow} · ${t("journal.recap.soFar", { time: formatTimeOfDay(recap.writtenAt) })}`;
     }
   }
 

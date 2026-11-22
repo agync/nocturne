@@ -1,8 +1,10 @@
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { setHourClock } from "../../copy/format";
 import type { HomeStats } from "../../engine/bindings";
 import { PhoneRequestError } from "../engine";
+import { CLOCK_CHANGED, phoneIs24Hour } from "../native/clock";
 import { NativeRoot } from "../native/NativeRoot";
 import { nativeMockServices } from "../testing/nativeMock";
 import { createHomeApi, HomeRequestError } from "./api";
@@ -16,6 +18,7 @@ afterEach(async () => {
   cleanup();
   clearMocks();
   scriptedNoteRows.clear();
+  setHourClock(null);
   history.replaceState(null, "", "/");
 });
 
@@ -499,6 +502,30 @@ describe("keeping and an item on a phone alone", () => {
     expect(screen.getByText("Changed your mind?")).toBeInTheDocument();
     expect(screen.queryByText(/computer/)).toBeNull();
   });
+
+  it("shows the time as the phone's clock is set", async () => {
+    await app("m=fresh&h=24");
+    setHourClock(await phoneIs24Hour());
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    fireEvent.change(await screen.findByLabelText(/Type something to keep/), {
+      target: { value: "Bins go out on Tuesday" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(await screen.findByText(/^Note · \d{2}:\d{2}$/)).toBeInTheDocument();
+  }, 15_000);
+
+  it("draws the times again when the phone's clock setting changes while away", async () => {
+    await app("m=kept");
+    setHourClock(false);
+    await screen.findByRole("heading", { name: "Kept today · 2" });
+    expect(screen.getAllByText(/^\d{1,2}:\d{2} (am|pm)$/).length).toBeGreaterThan(0);
+    setHourClock(true);
+    act(() => {
+      window.dispatchEvent(new Event(CLOCK_CHANGED));
+    });
+    await waitFor(() => expect(screen.getAllByText(/^\d{2}:\d{2}$/).length).toBeGreaterThan(0));
+    expect(screen.queryAllByText(/^\d{1,2}:\d{2} (am|pm)$/)).toHaveLength(0);
+  }, 15_000);
 
   it("says a saved check-in is on the phone, with no name and no time to change its mind", async () => {
     await app("m=fresh");

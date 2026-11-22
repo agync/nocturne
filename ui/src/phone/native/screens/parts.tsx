@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Children, type ReactNode, useEffect, useRef } from "react";
+import { formatTimeOfDay } from "../../../copy/format";
 import { type CopyId, type CopyValues, t, tParts } from "../../../copy/t";
 
 /** The privacy policy, in the phone's browser. */
@@ -83,11 +84,7 @@ export function Switch({
 /** "7:42 am", or "Tuesday 7:42 am" for an earlier day. */
 export function sentAt(iso: string, now = new Date()): string {
   const at = new Date(iso);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(at);
+  const time = formatTimeOfDay(at);
   if (at.toDateString() === now.toDateString()) return time;
   const day = new Intl.DateTimeFormat("en-GB", { weekday: "long" }).format(at);
   return `${day} ${time}`;

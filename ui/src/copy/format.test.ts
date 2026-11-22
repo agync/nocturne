@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   addDays,
   formatBytes,
@@ -9,10 +9,12 @@ import {
   formatEta,
   formatLongDay,
   formatTime,
+  formatTimeOfDay,
   isAfterMidnight,
   isDay,
   journalDay,
   localDay,
+  setHourClock,
 } from "./format";
 
 describe("format", () => {
@@ -97,5 +99,38 @@ describe("the journal day on a phone alone", () => {
     expect(isAfterMidnight(new Date(2026, 10, 23, 3, 59))).toBe(true);
     expect(isAfterMidnight(new Date(2026, 10, 23, 4, 0))).toBe(false);
     expect(isAfterMidnight("nonsense")).toBe(false);
+  });
+});
+
+describe("the time on the phone's screens", () => {
+  const evening = new Date(2026, 10, 23, 18, 10);
+  const small = new Date(2026, 10, 23, 0, 9);
+
+  afterEach(() => setHourClock(null));
+
+  it("reads in twelve hours until the phone says otherwise", () => {
+    expect(formatTimeOfDay(evening)).toBe("6:10 pm");
+    expect(formatTimeOfDay(small)).toBe("12:09 am");
+  });
+
+  it("follows the phone's 24-hour setting, and its 12-hour one", () => {
+    setHourClock(true);
+    expect(formatTimeOfDay(evening)).toBe("18:10");
+    expect(formatTimeOfDay(small)).toBe("00:09");
+    setHourClock(false);
+    expect(formatTimeOfDay(evening)).toBe("6:10 pm");
+  });
+
+  it("is empty for what is not a time", () => {
+    expect(formatTimeOfDay("nonsense")).toBe("");
+  });
+});
+
+describe("a time before the phone says how its clock is set", () => {
+  const evening = new Date(2026, 10, 23, 18, 10);
+
+  it("reads as it always did", () => {
+    expect(formatTimeOfDay(evening)).toBe("6:10 pm");
+    expect(formatTimeOfDay(evening, "locale")).toBe("18:10");
   });
 });

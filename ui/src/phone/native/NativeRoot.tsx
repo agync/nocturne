@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
 import { Restore } from "../alone/screens/Backup";
@@ -10,6 +10,7 @@ import { cleanDeviceName } from "../crypto";
 import type { PairedDevice } from "../engine";
 import { Pair } from "../screens/Pair";
 import type { PairingLike } from "../services";
+import { CLOCK_CHANGED } from "./clock";
 import { AddressStep, CameraOff, CodeStep, NativeWelcome } from "./Entry";
 import { watchLaunch } from "./launch";
 import { NativeApp } from "./NativeApp";
@@ -59,6 +60,12 @@ const openSite = () => void invoke("plugin:opener|open_url", { url: SITE }).catc
 export function NativeRoot({ services }: { services: NativeServices }) {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [waiting, setWaiting] = useState(0);
+  // A changed 12 or 24-hour setting draws the times again.
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    window.addEventListener(CLOCK_CHANGED, redraw);
+    return () => window.removeEventListener(CLOCK_CHANGED, redraw);
+  }, []);
   const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
   // Just after Delete everything, Welcome says so until the person goes on.

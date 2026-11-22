@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { duration, workoutText } from "../../components/health/sentence";
 import { choiceText } from "../../components/PageSheet/questionWords";
-import { formatDuration, formatTime12 } from "../../copy/format";
+import { formatDuration, formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
   EntryBlock,
@@ -165,7 +165,7 @@ function Row({
   afterSleep: string | null;
   onOpen(id: string): void;
 }) {
-  const time = formatTime12(row.item.keptAt);
+  const time = formatTimeOfDay(row.item.keptAt);
   const checkin = row.checkin;
   const quote = checkin?.line ? `“${checkin.line}”` : null;
   const body =
@@ -274,7 +274,7 @@ function Waiting({ keeps }: { keeps: readonly PendingKeep[] }) {
           const feeling = k.checkIn?.feeling ?? k.feeling;
           return (
             <li key={k.clientId} className="ph-trow ph-trow--still">
-              <span className="ph-rc ph-tcol">{formatTime12(new Date(k.createdAt))}</span>
+              <span className="ph-rc ph-tcol">{formatTimeOfDay(new Date(k.createdAt))}</span>
               <span className="ph-tbody">
                 {feeling ? <Feel part={feeling.part} words={feeling.words} /> : null}
                 {text ? <span>{text}</span> : null}

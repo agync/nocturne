@@ -7,6 +7,7 @@ import android.os.StatFs
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.text.format.DateFormat
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
 import androidx.core.content.IntentCompat
@@ -117,6 +118,14 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         val name = Settings.Global.getString(activity.contentResolver, Settings.Global.DEVICE_NAME)
         val out = JSObject()
         out.put("name", name)
+        invoke.resolve(out)
+    }
+
+    /** Whether the phone is set to 24-hour time, as its settings say. */
+    @Command
+    fun hourClock(invoke: Invoke) {
+        val out = JSObject()
+        out.put("is24", DateFormat.is24HourFormat(activity))
         invoke.resolve(out)
     }
 

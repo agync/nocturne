@@ -1,6 +1,7 @@
 const COMMANDS: &[&str] = &[
     "insets",
     "device_name",
+    "hour_clock",
     "open_app_settings",
     "take_launch",
     "take_shared",

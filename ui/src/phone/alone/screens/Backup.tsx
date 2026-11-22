@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress, BackupReport, KeptCounts } from "../../../engine/bindings";
 import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
@@ -265,7 +265,7 @@ export function SaveBackup({
         title={t("backup.saved.title")}
         body={t("phone.alone.backup.made", {
           size: formatBytes(step.report.bytes),
-          time: formatTime12(step.at),
+          time: formatTimeOfDay(step.at),
         })}
         button={t("phone.sources.ok")}
         onDone={onClose}

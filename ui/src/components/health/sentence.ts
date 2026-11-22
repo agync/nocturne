@@ -1,7 +1,7 @@
 // The sentence of every health chart: what a screen reader hears as the chart's name, and what
 // shows under the chart. Plain numbers and the person's own units; never a judgement.
 
-import { formatLongDay, formatTime12, formatWeekday } from "../../copy/format";
+import { formatLongDay, formatTimeOfDay, formatWeekday } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
 import type { Band, NightLine, ReadingKind, Versus } from "../../engine/bindings";
 
@@ -20,7 +20,7 @@ export function duration(minutes: number): string {
 }
 
 /** "11:50 pm", from an instant. */
-export const clock = (instant: string): string => formatTime12(instant);
+export const clock = (instant: string): string => formatTimeOfDay(instant);
 
 /** "Sat 7": the weekday and the day of the month, as the nights strip and its list label a night. */
 export function dayLabel(day: string): string {

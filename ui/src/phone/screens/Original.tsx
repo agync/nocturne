@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatDay, formatDuration, formatLongDay, formatTime12 } from "../../copy/format";
+import { formatDay, formatDuration, formatLongDay, formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ItemKept, KeptHow, PhoneItem } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
@@ -71,7 +71,7 @@ const HOW: Record<KeptHow, Parameters<typeof t>[0]> = {
  * when its device's name travelled with it; with neither, "{day}, {time}" alone.
  */
 export function keptHint(kept: ItemKept, at: string): string {
-  const when = { day: formatLongDay(at), time: formatTime12(at) };
+  const when = { day: formatLongDay(at), time: formatTimeOfDay(at) };
   const how = kept.how
     ? t(HOW[kept.how])
     : kept.device

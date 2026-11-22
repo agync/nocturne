@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { FeelingField, middleOf } from "../../components/FeelingField/FeelingField";
 import { duration } from "../../components/health/sentence";
-import { formatTime12 } from "../../copy/format";
+import { formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
   CheckInInput,
@@ -401,7 +401,7 @@ export function CheckIn({
           </div>
           <p className="ph-body">{t("phone.keep.waiting.body")}</p>
           <p className="ph-rc" style={{ color: "var(--ink2)" }}>
-            {t("phone.journal.checkin.waitingFrom", { time: formatTime12(new Date(state.at)) })}
+            {t("phone.journal.checkin.waitingFrom", { time: formatTimeOfDay(new Date(state.at)) })}
           </p>
           <div className="ph-spacer ph-stack">
             <Button kind="primary" onClick={onBack}>
@@ -436,9 +436,9 @@ export function CheckIn({
           <p className="ph-body">{t("journal.quick.keptMessage")}</p>
           <p className="ph-rc" style={{ color: "var(--ink2)" }}>
             {alone
-              ? t("phone.alone.checkin.from", { time: formatTime12(checkin.keptAt) })
+              ? t("phone.alone.checkin.from", { time: formatTimeOfDay(checkin.keptAt) })
               : t("phone.journal.checkin.from", {
-                  time: formatTime12(checkin.keptAt),
+                  time: formatTimeOfDay(checkin.keptAt),
                   name: deviceName,
                 })}
           </p>
@@ -458,7 +458,7 @@ export function CheckIn({
                 <span className="ph-card-title">
                   {alone
                     ? t("phone.alone.keep.undo")
-                    : t("phone.keep.undo", { time: formatTime12(until) })}
+                    : t("phone.keep.undo", { time: formatTimeOfDay(until) })}
                 </span>
                 <Button
                   kind="quiet"

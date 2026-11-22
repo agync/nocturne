@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { tc } from "../../components/ControlChip/copy";
-import { formatDay, formatTime } from "../../copy/format";
+import { formatDay, formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { Connection, PairedDevice } from "../engine";
 import { BackBar, Bar, Button, Icon, type IconName, Page } from "./ui";
@@ -11,7 +11,9 @@ export function whenText(at: number | null, now: number): string | null {
   const then = new Date(at);
   const today = new Date(now);
   const sameDay = then.toDateString() === today.toDateString();
-  return sameDay ? formatTime(then) : `${formatDay(then)}, ${formatTime(then)}`;
+  return sameDay
+    ? formatTimeOfDay(then, "locale")
+    : `${formatDay(then)}, ${formatTimeOfDay(then, "locale")}`;
 }
 
 function computerName(device: PairedDevice, connection: Connection): string {

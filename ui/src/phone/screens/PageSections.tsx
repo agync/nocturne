@@ -1,6 +1,6 @@
 import { NightBar } from "../../components/health/NightBar";
 import { clock, duration, nightSentence, versusText } from "../../components/health/sentence";
-import { formatTime12 } from "../../copy/format";
+import { formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { CalendarLine, NightLine } from "../../engine/bindings";
 import { calendarMeta, sleepMeta } from "../labels";
@@ -50,7 +50,7 @@ export function LastNight({ night, onOpen }: { night: NightLine; onOpen(itemId: 
 
 function at(line: CalendarLine): string {
   if (line.allDay) return t("page.calendar.allDay");
-  const time = formatTime12(line.start);
+  const time = formatTimeOfDay(line.start);
   return line.zone ? t("page.calendar.zone", { time, place: line.zone }) : time;
 }
 
