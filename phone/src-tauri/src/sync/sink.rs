@@ -3,6 +3,7 @@
 //! the other keeps what it already sent.
 
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use nocturne_channel::client::{CallError, Reach};
@@ -25,7 +26,7 @@ pub trait Sink: Send + Sync {
     fn pause(&self, how_long: Duration) -> impl Future<Output = ()> + Send;
 }
 
-/// The paired computer, over the channel: today's path, unchanged.
+/// The paired computer, over the channel.
 pub struct ChannelSink<L: Link>(pub L);
 
 impl<L: Link> ChannelSink<L> {
@@ -57,27 +58,41 @@ impl<L: Link> Sink for ChannelSink<L> {
     }
 }
 
-/// This phone's own store, as the engine takes batches from a device. The app implements it for
-/// its engine handle; the sends call it with the batches as they are.
-pub trait LocalStore: Send + Sync {
+/// This phone's own store, as the engine takes batches from a device. A call does the whole
+/// batch before it returns and may block, so [`EngineSink`] runs it off the async workers.
+/// `Busy` says the store is not there to take it right now: the send waits and tries again.
+pub trait LocalStore: Send + Sync + 'static {
     fn take_calendar(&self, batch: CalendarBatch) -> Result<SyncReceipt, PhoneError>;
     fn take_readings(&self, batch: ReadingBatch) -> Result<SyncReceipt, PhoneError>;
 }
 
 /// This phone's own store, with no computer between.
-pub struct EngineSink<S: LocalStore>(pub S);
+pub struct EngineSink<S: LocalStore>(Arc<S>);
+
+impl<S: LocalStore> EngineSink<S> {
+    pub fn new(store: S) -> EngineSink<S> {
+        EngineSink(Arc::new(store))
+    }
+
+    async fn blocking(
+        &self,
+        f: impl FnOnce(&S) -> Result<SyncReceipt, PhoneError> + Send + 'static,
+    ) -> Result<SyncReceipt, CallError> {
+        let store = self.0.clone();
+        tokio::task::spawn_blocking(move || f(&store))
+            .await
+            .unwrap_or(Err(PhoneError::Invalid))
+            .map_err(|code| CallError::Phone { code })
+    }
+}
 
 impl<S: LocalStore> Sink for EngineSink<S> {
     async fn send_calendar(&self, batch: CalendarBatch) -> Result<SyncReceipt, CallError> {
-        self.0
-            .take_calendar(batch)
-            .map_err(|code| CallError::Phone { code })
+        self.blocking(move |s| s.take_calendar(batch)).await
     }
 
     async fn send_readings(&self, batch: ReadingBatch) -> Result<SyncReceipt, CallError> {
-        self.0
-            .take_readings(batch)
-            .map_err(|code| CallError::Phone { code })
+        self.blocking(move |s| s.take_readings(batch)).await
     }
 
     async fn pause(&self, how_long: Duration) {
