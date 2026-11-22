@@ -24,8 +24,8 @@ use super::{Home, lock};
 
 /// How long reading a note may take beyond three times its length before the lease runs out.
 const LEASE: Duration = Duration::from_secs(120);
-/// Lease time for each piece beyond the first, for the reader's checks around each read.
-const PER_PIECE: Duration = Duration::from_secs(10);
+/// Lease time for each piece, for the reader's checks around each read.
+const PER_PIECE: Duration = Duration::from_secs(15);
 const RATE: u32 = 16_000;
 const BYTES_PER_SECOND: u64 = RATE as u64 * 2;
 /// The longest stretch the reader is given at once: an iPhone stops at about a minute.
@@ -179,22 +179,35 @@ fn copy_range(src: &mut std::fs::File, range: (u64, u64), dest: &Path) -> std::i
     out.flush()
 }
 
-/// Read raw sound in pieces; words only when every piece could be read.
-fn read_in_pieces(reader: &dyn Reader, pcm: &Path, language: &str) -> Heard {
+/// The pieces raw sound at `pcm` is read in.
+fn pieces_of(pcm: &Path) -> std::io::Result<Vec<(u64, u64)>> {
+    let mut file = std::fs::File::open(pcm)?;
+    let len = file.metadata()?.len();
+    pieces(len, |at, bytes| samples_at(&mut file, at, bytes))
+}
+
+/// Read raw sound in `ranges`; words only when every piece could be read. Before each piece,
+/// `stop` may say to leave it waiting.
+fn read_in_pieces(
+    reader: &dyn Reader,
+    pcm: &Path,
+    ranges: &[(u64, u64)],
+    language: &str,
+    stop: &dyn Fn() -> bool,
+) -> Heard {
+    if let [_] = ranges {
+        return reader.read(pcm, language);
+    }
     let Ok(mut file) = std::fs::File::open(pcm) else {
         return Heard::Waits;
     };
-    let len = file.metadata().map_or(0, |m| m.len());
-    let Ok(ranges) = pieces(len, |at, bytes| samples_at(&mut file, at, bytes)) else {
-        return Heard::Waits;
-    };
-    if ranges.len() == 1 {
-        return reader.read(pcm, language);
-    }
     let mut words: Vec<String> = Vec::new();
-    for (i, range) in ranges.into_iter().enumerate() {
+    for (i, range) in ranges.iter().enumerate() {
+        if stop() {
+            return Heard::Waits;
+        }
         let part = pcm.with_extension(format!("{i}.pcm"));
-        let heard = match copy_range(&mut file, range, &part) {
+        let heard = match copy_range(&mut file, *range, &part) {
             Ok(()) => reader.read(&part, language),
             Err(_) => Heard::Waits,
         };
@@ -209,6 +222,16 @@ fn read_in_pieces(reader: &dyn Reader, pcm: &Path, language: &str) -> Heard {
         Heard::Nothing
     } else {
         Heard::Words(words.join(" "))
+    }
+}
+
+/// Raw sound left behind by a pass the app was stopped in.
+fn sweep_sound(scratch: &Path) {
+    for entry in std::fs::read_dir(scratch).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|x| x == "pcm") {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -268,7 +291,13 @@ impl Home {
             if std::fs::create_dir_all(&scratch).is_err() {
                 break;
             }
+            if seen.is_empty() {
+                sweep_sound(&scratch);
+            }
             for (id, original) in waiting {
+                if self.store_wanted() {
+                    return heard;
+                }
                 seen.insert(id.clone());
                 // One note at a time holds the store, so a restore waits for a note, not a pass.
                 let Ok((_use, open)) = self.using() else {
@@ -300,15 +329,19 @@ impl Home {
             lock(&self.voice.nothing).insert(id.to_string());
             return false;
         };
-        let more = u64::from(duration_ms) / PIECE.as_millis() as u64;
-        let lease =
-            LEASE + Duration::from_millis(u64::from(duration_ms) * 3) + PER_PIECE * more as u32;
+        let Ok(ranges) = pieces_of(&pcm) else {
+            let _ = std::fs::remove_file(&pcm);
+            return false;
+        };
+        let lease = LEASE
+            + Duration::from_millis(u64::from(duration_ms) * 3)
+            + PER_PIECE * ranges.len() as u32;
         let Ok(leased) = e.lease_item(id, lease) else {
             let _ = std::fs::remove_file(&pcm);
             return false;
         };
         let mut kept = false;
-        match read_in_pieces(reader, &pcm, language) {
+        match read_in_pieces(reader, &pcm, &ranges, language, &|| self.store_wanted()) {
             Heard::Words(text) if !text.trim().is_empty() => {
                 let t = Transcript {
                     text,
@@ -431,8 +464,9 @@ mod tests {
             ]),
             std::sync::Mutex::default(),
         );
+        let ranges = pieces_of(&pcm).unwrap();
         assert_eq!(
-            read_in_pieces(&reader, &pcm, "en-GB"),
+            read_in_pieces(&reader, &pcm, &ranges, "en-GB", &|| false),
             Heard::Words("first part last part".into())
         );
         let sizes = lock(&reader.1).clone();
@@ -450,7 +484,40 @@ mod tests {
             std::sync::Mutex::new(vec![Heard::Words("half".into()), Heard::Waits]),
             std::sync::Mutex::default(),
         );
-        assert_eq!(read_in_pieces(&reader, &pcm, "en-GB"), Heard::Waits);
+        let ranges = pieces_of(&pcm).unwrap();
+        assert_eq!(
+            read_in_pieces(&reader, &pcm, &ranges, "en-GB", &|| false),
+            Heard::Waits
+        );
+    }
+
+    #[test]
+    fn a_read_stops_between_pieces_when_the_store_is_wanted() {
+        let dir = tempfile::tempdir().unwrap();
+        let pcm = long_pcm(dir.path(), 70);
+        let reader = Pieces(
+            std::sync::Mutex::new(vec![Heard::Words("half".into())]),
+            std::sync::Mutex::default(),
+        );
+        let ranges = pieces_of(&pcm).unwrap();
+        let asked = std::sync::atomic::AtomicUsize::new(0);
+        let stop = || asked.fetch_add(1, Ordering::SeqCst) >= 1;
+        assert_eq!(
+            read_in_pieces(&reader, &pcm, &ranges, "en-GB", &stop),
+            Heard::Waits
+        );
+        assert_eq!(lock(&reader.1).len(), 1, "the second piece is never read");
+    }
+
+    #[test]
+    fn sound_left_by_a_stopped_pass_is_swept() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.pcm"), b"x").unwrap();
+        std::fs::write(dir.path().join("a.1.pcm"), b"x").unwrap();
+        std::fs::write(dir.path().join("note.webm"), b"x").unwrap();
+        sweep_sound(dir.path());
+        let left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().collect();
+        assert_eq!(left.len(), 1);
     }
 
     #[test]
