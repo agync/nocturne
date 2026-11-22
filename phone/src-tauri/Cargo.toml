@@ -1,6 +1,6 @@
 [package]
 name = "nocturne-phone"
-description = "Nocturne on the phone: the app shell around the phone screens and the sealed channel"
+description = "Nocturne on the phone: the app shell around the phone screens, the sealed channel and a memory of its own"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,6 +21,9 @@ tauri-build = { workspace = true }
 [dependencies]
 nocturne-channel = { workspace = true, features = ["client"] }
 nocturne-contract.workspace = true
+nocturne-engine.workspace = true
+rusqlite.workspace = true
+dunce.workspace = true
 tauri.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-nocturne-system = { path = "../plugins/system" }

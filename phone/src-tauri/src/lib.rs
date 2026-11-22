@@ -1,7 +1,9 @@
-//! Nocturne on the phone: the phone screens in a web view, and the sealed channel to the
-//! person's computer in Rust. The web view reaches nothing on the network itself.
+//! Nocturne on the phone: the phone screens in a web view, and in Rust either the sealed channel
+//! to the person's computer or a memory of the phone's own. The web view reaches nothing on the
+//! network itself.
 
 pub mod commands;
+pub mod home;
 pub mod sources;
 pub mod state;
 pub mod store;
@@ -25,7 +27,12 @@ pub fn run() {
     builder
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            app.manage(state::AppState::new(dir));
+            app.manage(state::AppState::new(dir.clone()));
+            app.manage(home::Home::new(
+                dir,
+                std::sync::Arc::new(nocturne_engine::SystemClock),
+                exclude_from_backup(app.handle()),
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -61,6 +68,13 @@ pub fn run() {
             sources::last_sent,
             sources::launch_route,
             sources::phone_platform,
+            home::commands::mode,
+            home::commands::memory_damaged,
+            home::commands::start_alone,
+            home::commands::home_call,
+            home::commands::home_keep_end,
+            home::commands::home_original,
+            home::commands::home_local,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
@@ -70,4 +84,10 @@ pub fn run() {
                 sources::start(app);
             }
         });
+}
+
+/// The store stays out of the phone's own backup. Android's backup rules already leave out every
+/// folder of the app.
+fn exclude_from_backup<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> home::ExcludeFromBackup {
+    Box::new(|_: &std::path::Path| {})
 }
