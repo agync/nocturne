@@ -10,7 +10,7 @@ use std::time::Duration;
 use common::{Sandbox, argv, env_keys, until, wait_state};
 use nocturne_helpers::{
     CloudflaredOptions, CloudflaredTransport, HelperError, HelperKind, LaunchSpec, Origin,
-    Transport, TransportState,
+    Transport, TransportState, group_members,
 };
 use serde_json::json;
 
@@ -22,6 +22,9 @@ fn options() -> CloudflaredOptions {
         ready_within: Duration::from_secs(20),
         backoff: Some(vec![Duration::from_millis(50)]),
         grace: Some(Duration::from_secs(2)),
+        health_every: Duration::from_millis(50),
+        renew_backoff: vec![Duration::from_millis(50)],
+        steady: Duration::from_secs(600),
     }
 }
 
@@ -358,4 +361,195 @@ async fn argv_never_holds_a_secret() {
             assert!(!line.contains("9f8e7d"), "{line}");
         }
     }
+}
+
+fn with(sb: &Sandbox, opts: CloudflaredOptions) -> CloudflaredTransport {
+    let installed = sb.install("c", FAKE, "cloudflared", HelperKind::Cloudflared);
+    CloudflaredTransport::with_options(&sb.dirs(), &installed, opts)
+}
+
+/// The runs of the stand-in, oldest first.
+fn runs(sb: &Sandbox) -> Vec<serde_json::Value> {
+    sb.records("c")
+        .into_iter()
+        .filter(|r| r.get("argv").is_some())
+        .collect()
+}
+
+fn is_renewing(s: &TransportState) -> bool {
+    matches!(s, TransportState::Renewing { .. })
+}
+
+#[tokio::test]
+async fn a_deleted_tunnel_is_renewed_with_a_new_address() {
+    let sb = Sandbox::new("deleted");
+    let t = with(
+        &sb,
+        CloudflaredOptions {
+            renew_backoff: vec![Duration::from_millis(300)],
+            ..options()
+        },
+    );
+    sb.control("c", json!({"drop_after_ms": 300, "drop_runs": 1}));
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    let first = address(wait_state(&mut rx, "first up", 180, is_up).await);
+    let old_pid = t.info().unwrap().pid.unwrap();
+    wait_state(&mut rx, "renewing", 180, is_renewing).await;
+    let second = address(wait_state(&mut rx, "up on a new name", 180, is_up).await);
+    assert_ne!(first, second, "a deleted name never comes back");
+    assert!(
+        group_members(old_pid).is_empty(),
+        "the helper that kept retrying the dead name is gone"
+    );
+    let info = t.info().unwrap();
+    assert_ne!(info.pid, Some(old_pid));
+    assert_eq!(info.restarts, 1);
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(runs(&sb).len(), 2, "one new tunnel, no more");
+    assert_eq!(
+        *rx.borrow(),
+        TransportState::Up {
+            address: second,
+            route: None
+        }
+    );
+    t.stop().await.unwrap();
+    assert_eq!(*rx.borrow(), TransportState::Stopped);
+    assert!(t.info().is_none());
+}
+
+#[tokio::test]
+async fn a_short_drop_keeps_the_address() {
+    let sb = Sandbox::new("blip");
+    let t = transport(&sb);
+    sb.control("c", json!({"drop_after_ms": 300, "deleted": false}));
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    let first = address(wait_state(&mut rx, "up", 180, is_up).await);
+    let log = sb.dirs().root.join("logs/helper-cloudflared.log");
+    until("the drop", 20, || {
+        std::fs::read_to_string(&log).is_ok_and(|l| l.contains("Failed to dial a quic connection"))
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(
+        *rx.borrow(),
+        TransportState::Up {
+            address: first,
+            route: None
+        }
+    );
+    assert_eq!(
+        runs(&sb).len(),
+        1,
+        "the helper rode it out on the same name"
+    );
+    t.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_refusal_while_still_connected_keeps_the_address() {
+    let sb = Sandbox::new("refused-connected");
+    let t = transport(&sb);
+    sb.control(
+        "c",
+        json!({"drop_after_ms": 300, "deleted": true, "still_ready": true}),
+    );
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    let first = address(wait_state(&mut rx, "up", 180, is_up).await);
+    let log = sb.dirs().root.join("logs/helper-cloudflared.log");
+    until("the refusals", 20, || {
+        std::fs::read_to_string(&log).is_ok_and(|l| l.contains("Tunnel not found"))
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(
+        *rx.borrow(),
+        TransportState::Up {
+            address: first,
+            route: None
+        }
+    );
+    assert_eq!(
+        runs(&sb).len(),
+        1,
+        "a connection is still up, so the name lives"
+    );
+    t.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn renewals_in_a_row_wait_longer() {
+    let sb = Sandbox::new("renew-backoff");
+    let t = with(
+        &sb,
+        CloudflaredOptions {
+            renew_backoff: vec![Duration::from_millis(300), Duration::from_millis(3000)],
+            ..options()
+        },
+    );
+    sb.control("c", json!({"drop_after_ms": 200}));
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    // When each renewal was announced, by the same clock the stand-in records its runs with.
+    let mut announced = Vec::new();
+    for attempt in 1..=2 {
+        wait_state(
+            &mut rx,
+            "a renewal",
+            180,
+            |s| matches!(s, TransportState::Renewing { attempt: a } if *a == attempt),
+        )
+        .await;
+        announced.push(nocturne_helpers::fake::now_ms());
+    }
+    until("a third run", 30, || runs(&sb).len() >= 3).await;
+    let at: Vec<u64> = runs(&sb)
+        .iter()
+        .map(|r| r["at_ms"].as_u64().unwrap())
+        .collect();
+    assert!(
+        at[1] > announced[0],
+        "the first renewal starts after it is announced: {at:?} {announced:?}"
+    );
+    assert!(
+        at[2].saturating_sub(announced[1]) >= 2500,
+        "the second renewal in a row waits the second step: {at:?} {announced:?}"
+    );
+    t.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn stopping_while_waiting_to_renew() {
+    let sb = Sandbox::new("renew-stop");
+    let t = with(
+        &sb,
+        CloudflaredOptions {
+            renew_backoff: vec![Duration::from_secs(600)],
+            ..options()
+        },
+    );
+    sb.control("c", json!({"drop_after_ms": 200}));
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    wait_state(&mut rx, "up", 180, is_up).await;
+    wait_state(&mut rx, "renewing", 180, is_renewing).await;
+    tokio::time::timeout(Duration::from_secs(10), t.stop())
+        .await
+        .expect("a stop does not wait out the backoff")
+        .unwrap();
+    assert_eq!(*rx.borrow(), TransportState::Stopped);
+    assert_eq!(runs(&sb).len(), 1);
 }

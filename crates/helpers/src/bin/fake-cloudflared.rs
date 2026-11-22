@@ -1,8 +1,11 @@
 //! A stand-in for `cloudflared` used by tests: a quick tunnel that answers its metrics port, names
 //! an address and forwards a loopback "public" port to the origin it was given. With
-//! `spoof_metrics` another process answers the metrics port, naming another address.
+//! `spoof_metrics` another process answers the metrics port, naming another address. With
+//! `drop_after_ms` its connection drops and, unless `deleted` is false, the edge deletes it.
 
 use std::net::TcpListener;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use nocturne_helpers::HelperKind;
 use nocturne_helpers::fake;
@@ -29,13 +32,14 @@ fn main() {
         String::from,
     );
     let metrics = fake::flag_value(&args, "--metrics");
+    let ready = Arc::new(AtomicBool::new(true));
     let metrics_port = match (
         control.get("spoof_metrics").and_then(|v| v.as_str()),
         control.get("no_metrics").and_then(|v| v.as_bool()) == Some(true),
         metrics,
     ) {
         (Some(other), _, Some(addr)) => fake::spawn_spoofer(&addr, other),
-        (None, false, Some(addr)) => fake::serve_metrics(&addr, host.clone()),
+        (None, false, Some(addr)) => fake::serve_metrics(&addr, host.clone(), ready.clone()),
         _ => None,
     };
     if let Some(port) = metrics_port {
@@ -83,5 +87,6 @@ fn main() {
     eprintln!("INF |  https://{host}  |");
     eprintln!("INF Registered tunnel connection connIndex=0");
     fake::behave(&control, index);
+    fake::drop_connection(&control, index, &ready);
     fake::sleep_forever();
 }
