@@ -18,6 +18,14 @@ Status: proposed, with the owner's decisions folded in. Nothing here is built. B
 ships first, after a phone alone and online ([decision 11](phone-parity.md#decisions)). A household
 computer as someone's home follows.
 
+| Phase 3: borrowing the mind | Phase 4: a household computer as someone's home |
+|---|---|
+| Household page, Add someone with no choice of way (borrowing only), Allow, Pause, Remove | Add someone gains "How should this computer help them?" |
+| Joining, What {runner} can see, three words, Joined | Found for a home, the home's What {runner} can see, the passphrase, the move |
+| This phone, borrowing | This phone, its home; "Keep my memory on {household}…" on a borrowing phone |
+
+Nothing from phase 4 shows before it ships.
+
 ## Mockups
 
 In `docs/design/mockups/phone-parity/`.
@@ -42,7 +50,7 @@ which. They are not two settings of one thing: borrowing never turns into a home
 | How it starts | The owner invites the person to borrow the mind; the phone joins with the code | The owner invites the person to keep their memory there; the person pairs and their memory moves ([Moving](moving-memory.md#to-a-household-computer)) |
 | Interface words | "Borrow its mind" / "Your memory stays on this phone. {household} reads and answers for you, and keeps nothing." | "Keep my memory on {household}" / "{household} becomes your memory’s home, locked with a key this phone holds. This phone then works with it." |
 | Where the memory lives | On the phone | On the household computer, one store per person |
-| What travels | What each request in flight needs: a thing to read, a question with its few lines, the lines a page or tidy step needs; sealed | Everything kept, sealed |
+| What travels | What each request in flight needs: a thing to read, a question with its few lines, the lines a page, reflection or tidy step needs, check-ins included; sealed | Everything kept, sealed |
 | What the household computer keeps | The phone's name and the key it was invited with, so it can let it in. No memory, file, copy, log or count | That person's memory, locked |
 | Needs | A phone that keeps its own memory ([Phone first](phone-first.md)) | Nothing new on the phone: it works as a companion of that store |
 | Overnight | The phone drives its own tidy when it is charging and can reach the household | The household computer tidies overnight, with the key the phone leaves for the night ([decision 13](phone-parity.md#decisions)) |
@@ -276,7 +284,7 @@ the phone acts for its owner, not for the household's runner.
 | Back | Nothing; reading resumes | Toast "{household} is back. {count} went across." Today: "Your page is updated once they’re read." |
 | Paused by the runner | "{runner} has paused this phone in {household}’s household. What you keep is safe on this phone." | "{runner} has paused this phone in {household}’s household. What you keep waits here." |
 | Removed | "{household}’s household removed this phone." / "Your memory is on this phone and wasn’t touched. Choose another mind when you’re ready." / "Choose a mind" · "OK" | "{household}’s household removed this phone." / "Your memory is still on {household}, locked. Bring it to this phone before {date}. After that, {runner} may delete it." / "Bring my memory to this phone" · "Later" |
-| Household no longer lends its mind | As removed, with "{household} stopped lending its mind." | As removed, with "{household} stopped lending its mind." |
+| Household no longer lends its mind | As removed, with "{household} stopped lending its mind." | Not affected: a home carries on when lending stops |
 | New address (Simple) | The approved re-link, inside the app | The same |
 | Versions apart | The approved "Please update", naming {household} | The same |
 
@@ -292,8 +300,8 @@ on it.
 invitation, so it can let it in, and whether it is paused. Nothing else, ever: what a request
 carries is held in memory until the answer is sent, recordings and photos are never written to a
 file, and nothing is logged, cached or counted per phone. The name and key are deleted when the
-phone leaves or is removed. The owner's activity list records only the owner's own acts (invited,
-allowed, paused, removed).
+phone leaves or is removed. The owner's activity list has no line about a borrowing phone, so
+nothing about it outlives its name and key.
 
 **Overnight for a borrowing phone.** The phone runs its own tidy and calls the household's mind for
 each step, when it is charging and can reach the household, as the phone allows. A morning page is
@@ -378,6 +386,7 @@ The code appears once a way is chosen; changing the way makes a new code.
 | Its home | "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." |
 | Buttons | "Remove" (careful) · "Cancel" |
 | After, its home | Row "{name} · removed {day}" / "Their memory waits here, locked · {size}" / from the 30th day: "Delete their memory…" |
+| Taking it home | Until the date, the removed phone may still connect for one thing only: bringing the memory to itself or to a computer of its own ([Back to the phone](moving-memory.md#back-to-the-phone)). It can't keep, ask or read the page there |
 | Delete their memory | "Delete {name}’s memory from this computer?" / "They were told on {day}. If they haven’t taken it, it is gone for good." / "Delete" · "Keep it" |
 
 ### Turning it off
@@ -385,16 +394,20 @@ The code appears once a way is chosen; changing the way makes a new code.
 | Part | Copy |
 |---|---|
 | Title | "Stop lending this computer’s mind?" |
-| Body | "Every household phone stops at once. Memories kept here stay, locked, until their people take them home." |
+| Body | "Phones that borrow this computer’s mind stop at once. People whose memory is kept here carry on." |
 | Buttons | "Stop lending" (careful) · "Keep lending" |
+
+Stopping lending never cuts off a person whose home is here. To stop being someone's home, the owner
+removes their phone, which keeps their memory locked until they take it or the 30 days' notice
+ends.
 
 ### Elsewhere on the computer
 
 - **Privacy screen.** Under Away from home: "Household phones can use this computer’s mind, in the
   same locked messages. Nothing they send is kept, unless their memory’s home is here." Bytes to
   household phones are counted with the rest, never per phone.
-- **Activity list.** The owner's own acts only: "Invited {name} to borrow the mind", "Allowed
-  {name}", "Removed {name}". Nothing a household phone sent, and no line when it used the mind.
+- **Activity list.** Nothing about a phone that borrows the mind. For a person whose home is here:
+  "Allowed {name} to keep their memory here", "Removed {name}". Never what anyone sent.
 - **Rail status.** "Uses the internet for" lists "Away from home and Household" while both are on.
 - **Export and Delete everything.** The owner's export never includes household memories. Delete
   everything asks first: "{count} household memories are kept here. They stay, locked, until their
@@ -459,9 +472,9 @@ The code appears once a way is chosen; changing the way makes a new code.
 | Remove | "Remove {name} from your household?" / "It stops at once, and this computer forgets it. Its memory is on its phone and isn’t touched." / "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." / "Remove" / "Cancel" |
 | Removed row | "{name} · removed {day}" / "Their memory waits here, locked · {size}" / "Delete their memory…" |
 | Delete their memory | "Delete {name}’s memory from this computer?" / "They were told on {day}. If they haven’t taken it, it is gone for good." / "Delete" / "Keep it" |
-| Turn off | "Stop lending this computer’s mind?" / "Every household phone stops at once. Memories kept here stay, locked, until their people take them home." / "Stop lending" / "Keep lending" |
+| Turn off | "Stop lending this computer’s mind?" / "Phones that borrow this computer’s mind stop at once. People whose memory is kept here carry on." / "Stop lending" / "Keep lending" |
 | Privacy screen | "Household phones can use this computer’s mind, in the same locked messages. Nothing they send is kept, unless their memory’s home is here." |
-| Activity | "Invited {name} to borrow the mind" / "Invited {name} to keep their memory here" / "Allowed {name}" / "Removed {name}" |
+| Activity | "Allowed {name} to keep their memory here" / "Removed {name}" |
 | Rail status | "Away from home and Household" |
 | Delete everything, household | "{count} household memories are kept here. They stay, locked, until their people take them home, or you delete them after telling them." |
 

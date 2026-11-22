@@ -30,12 +30,14 @@ it their home. The design is [A household computer](/design/household-server.md)
 - **Nothing kept.** The computer keeps the phone's name, its public key and whether it is paused, so
   it can let it in, and deletes them when the phone leaves or is removed. What a request carries is
   held in memory until the answer is sent. Recordings and photos are never written to a file.
-  Nothing is logged, cached or counted per phone; the owner sees who is invited and a live mark while
-  a request is worked on.
+  Nothing is logged, cached or counted per phone, and the owner's activity list has no line about it;
+  the owner sees who is invited and a live mark while a request is worked on.
 - **Never a home by the back door.** No borrowing call writes anything for later. A household
   computer holds a person's memory only after a separate invitation to keep it there and a move by
   pairing, which a later record covers with the per-person store and its key.
-- **Private stays home.** Things marked private never go to a borrowed mind.
+- **Private stays home.** Things marked private never go to a borrowed mind. Check-ins may, sealed,
+  so it can write reflections: the journal's rule ([0015](0015-journal-privacy-class.md)) is about
+  online minds (to confirm with the owner).
 - **In turn.** The owner's own asks first, then household asks, then everyone's reading in turn, one
   thing at a time per phone. Taking turns needs only what is waiting now. The owner can pause a phone.
 - **Simple only, at first.** Household phones connect through Simple. Most private keeps admitting

@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: "0020 An online mind on a phone"
-description: "Proposed: a phone that is its own home can choose an online service with the person's own key, or Apple's servers on iPhone after a trial, to read the words of what it keeps, write its page and answer; called by the phone's core, opt-in, never photos, recordings, check-ins or anything marked private, and keeping nothing on the service's side beyond what it is sent."
+description: "Proposed: a phone that is its own home can choose an online service with the person's own key, or Apple's servers on iPhone after a trial, to read the words of what it keeps, write its page and answer; called by the phone's core, opt-in, never photos, recordings, check-ins or anything marked private."
 status: draft
 tags: [adr, phone, online, privacy, mind]
 ---

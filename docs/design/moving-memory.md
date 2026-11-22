@@ -37,7 +37,7 @@ sequenceDiagram
     participant O as Old home
     participant N as New home
     O->>O: a last copy, everything waiting written in
-    O->>N: the copy and its originals, sealed (or N opens the locked copy online)
+    O->>N: the copy and its originals, sealed
     N->>N: the backup checks from 0013; anything already here is put aside
     N-->>O: arrived, every count matches
     O->>O: its memory is put aside, read only
@@ -48,7 +48,7 @@ sequenceDiagram
 |---|---|
 | What moves | Everything: what was kept, what Nocturne remembers and what is fading, every page, the journal, check-ins, settings that belong to the memory, things marked private (locked like the rest). The same as a backup ([Back up and restore](backup-and-restore.md#what-is-in-a-backup)) |
 | What stays | The old home's own settings: its mind, its connection, its phones list |
-| How it travels | Over the sealed channel between the two, using the backup format; or, when the old home is a phone with a locked copy online, the new home may open that copy with the passphrase instead |
+| How it travels | Over the sealed channel between the two, using the backup format. The locked copy online is never read by a computer: it is for restoring on a phone |
 | Nothing read again | When both homes find things the same way, nothing is read again. When they don't, the new home gets each thing ready again in the background, and finding by words works meanwhile |
 | Nothing deleted early | The old home's memory is put aside, read only, once the new home has it and every count matches. It is deleted only when the person confirms |
 | No merging | A home that already holds a memory is offered 0013's choice: put what is here aside and take the new one, or keep this one and move nothing |

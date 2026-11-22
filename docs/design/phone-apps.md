@@ -385,7 +385,7 @@ settings screen, grouped as each platform groups settings.
 | Hint | "Two days back to two weeks ahead, read only." |
 | List heading | "Which calendars" |
 | Each row | The calendar's name and colour dot as the phone shows them, with a switch |
-| Note under the list | "Holidays and birthdays start off, because they fill the page without saying much." |
+| Note under the list | "Every calendar starts on. Turn off any you don’t want on your page." |
 | Notes switch | "Notes on each appointment" / "Usually call links and dial-in numbers. Off keeps your page tidy." |
 | Last sent | "Last sent {time} · {count} appointments" |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |
@@ -695,7 +695,7 @@ New strings only; everything marked "Phone page" above is reused as it is.
 | What it can do | "What this phone can do" |
 | Calendar screen, switch | "Bring my calendar" / "Two days back to two weeks ahead, read only." |
 | Which calendars | "Which calendars" |
-| Calendars note | "Holidays and birthdays start off, because they fill the page without saying much." |
+| Calendars note | "Every calendar starts on. Turn off any you don’t want on your page." |
 | Notes switch | "Notes on each appointment" / "Usually call links and dial-in numbers. Off keeps your page tidy." |
 | Calendar last sent | "Last sent {time} · {count, plural, one {# appointment} other {# appointments}}" |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |
@@ -781,7 +781,7 @@ things marked private.
 | 3 | Order of the two apps | A: Android and iPhone together. B: Android first, iPhone after it has proved out | A gives everyone the same thing at once but waits for a Mac, an Apple developer account and App Review. B ships sooner and learns from real use; iPhone people keep the phone page meanwhile | **B**, with this design covering both so the iPhone app follows the same screens |
 | 4 | The phone page in the browser | A: keep it alongside the apps, without calendar or health. B: retire it once both apps exist. C: keep it only for Most private | A keeps a way in for people who will not install an app and for phones the apps do not support, but keeps the Simple limitation for those people. B removes that limitation entirely but leaves those people out. C keeps the limitation away from Simple but is harder to explain | **A**, and look again a year after the iPhone app ships |
 | 5 | Getting the Android app | A: Google Play only. B: Google Play and a signed file on the project's site. C: B and F-Droid | A is the easiest for most people and updates itself. B adds a way for phones without Google Play, at the cost of a second update path. C reaches people who avoid Google entirely, but F-Droid builds the app itself and has its own rules | **B** |
-| 6 | Which calendars start on | A: all of them. B: all but holiday and birthday calendars. C: none until chosen | A is fewest taps but fills the page with bank holidays and distant birthdays. B keeps the page useful with one extra screen to change. C makes the person choose every calendar before anything works | **B** |
+| 6 | Which calendars start on | A: all of them. B: all but holiday and birthday calendars. C: none until chosen | A is fewest taps but fills the page with bank holidays and distant birthdays. B keeps the page useful with one extra screen to change. C makes the person choose every calendar before anything works | **B**, changed to **A** by the rule against judging data ([phone parity decision 20](phone-parity.md#decisions)) |
 | 7 | Appointment notes | A: left out, with a switch to bring them. B: always brought | A keeps call links and dial-in numbers off the page and out of memory; a person who writes real notes there turns it on once. B brings everything, mostly noise | **A** |
 | 8 | The calendar window | A: two days back to two weeks ahead. B: a week back to a month ahead. C: everything | A covers today's journal, yesterday's reflection and the page's This week, with the least sent. B helps planning further ahead and sends more each time. C sends years of entries with little use | **A** |
 | 9 | A removed phone's calendar and health | A: they stay, like keeps; the remove dialog offers an unticked "Also delete what it brought". B: they go with the phone | A follows "deletion is explicit" and matches what happens to a removed phone's keeps. B is tidier but deletes without a separate choice | **A** |

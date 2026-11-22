@@ -74,10 +74,13 @@ web-view interface); on a computer it ships and supervises a private, embedded L
 > sealed traffic between their phone and that household's computer through the connection its owner
 > chose, carrying only what the request in flight needs and never anything marked private, plus, on
 > that computer while its owner lends its mind, the same sealed traffic to the phones they invited
-> (0021). A household computer keeps nothing of a phone that only borrows its mind beyond the name
-> and key it was invited with. A memory is held by another machine only when its person pairs to
+> (0021). A household computer keeps nothing of a phone that only borrows its mind beyond the name,
+> key and paused mark it was invited with. A memory is held by another machine only when its person pairs to
 > make that machine its home. The phone app is held to the same rule. The embedded `lemond` binds
 > loopback with a per-launch key.
+
+A household computer as someone's home, entered by pairing, needs one more clause for that person's
+sealed traffic; its own record adds it.
 
 **Invariant 4, Receipts,** adds: "A thing waiting to go across has a receipt on the phone until its
 home has it."

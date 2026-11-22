@@ -138,7 +138,7 @@ flowchart TD
     T1 -->|a week later, This phone| CP[A locked copy online: why, then a passphrase]
     CP --> T1
     T1 -->|Choose a mind| CM{Where should its mind be?}
-    CM -->|An online service you choose| SV[Service details, then what goes, then agree]
+    CM -->|An online service you choose| SV[What goes, then its details, a limit, then agree]
     CM -->|iPhone: Apple Intelligence| AP[What goes, then agree]
     CM -->|A computer at home| HH[Borrow a household's mind, by invitation]
     SV --> FP[Reading what you kept, then the first page next morning]
@@ -160,7 +160,7 @@ flowchart TD
 4. **A locked copy online.** From that card or This phone: what goes (one locked file), where (her
    own Google Drive), who can open it (only someone with her passphrase), then the passphrase.
 5. **Choosing a mind.** She chooses an online service with her own key. The steps follow Online
-   answers: the details, then what goes, then agreeing. Nocturne reads what she kept, in turn, and
+   answers: what goes, then its details, a monthly limit, then agreeing. Nocturne reads what she kept, in turn, and
    her first page comes the next morning.
 6. **A laptop of her own.** She installs Nocturne on a laptop, which offers "Already use Nocturne on
    your phone?". Pairing as today, then "Move your memory to this computer?" with its size. When
@@ -270,7 +270,7 @@ Rules that hold in every mode:
   everything, private things included. A household mind that is only borrowed never receives
   private things ([decision 15](#decisions)).
 - Nothing is held back by what it seems to be about. Only what the person marked private is held
-  back from an online or borrowed mind, and check-ins stay home by the journal's agreed rule
+  back from an online or borrowed mind, and check-ins never go to an online mind, by the journal's agreed rule
   ([decision 10](#decisions), [decision 20](#decisions)).
 - Notifications, the lock screen, reading aloud and the tray follow today's rules in every mode.
 
@@ -285,14 +285,14 @@ Stated plainly, for each person and company that can be involved.
 | **The online service, or Apple** | Nothing | Nothing | Each question with the few lines that answer it, and the words of each thing it reads. Never photos, recordings themselves, check-ins, reflections or things marked private | Nothing | Nothing |
 | **The person who runs the household computer** | Nothing | Nothing | Nothing | In Nocturne: the phone's name, that it borrows the mind, and whether it is using it right now. No record of when or how much, and never what was read or asked | In Nocturne: the phone's name, that the memory is kept there, how much room it takes and when the phone last connected. Never its contents. Someone with full control of that computer could still get at it while it is being read or tidied |
 | **Others in the household** | Nothing | Nothing | Nothing | Nothing: no one in a household sees another's phone, memory or use | Nothing |
-| **The connection's company (Cloudflare or Tailscale)** | Nothing | Nothing | Nothing | As Away from home: when the phone connects, from where, sizes and timing. Never content | As Away from home |
+| **The connection's company (Cloudflare for household phones, Cloudflare or Tailscale otherwise)** | Nothing | Nothing | Nothing | As Away from home: when the phone connects, from where, sizes and timing. Never content | As Away from home |
 | **The Nocturne project** | Nothing | Nothing | Nothing | Nothing | Nothing |
 
 The household line is the one most easily over-promised, so the joining screens use exactly these
 words ([What the person who runs it can see](household-server.md#what-the-person-who-runs-it-can-see)).
 Nocturne on the household computer works on a borrowed thing only in its memory while it reads or
 answers, and keeps nothing: no memory, no file, no copy and no history of that phone beyond the
-name and key it was invited with. A memory whose person made that computer their home is locked with a key this phone holds, so it can't
+name and key it was invited with. A memory whose person made that computer their home is locked with a key their phone holds, so it can't
 be browsed, copied or backed up readable. While it is read or tidied it is open in that computer's
 memory, and someone with full control of that computer could change Nocturne or read that memory.
 Nocturne can't prevent that, and says so.
@@ -337,7 +337,9 @@ each clause takes effect only with the record it names.
 | [0018 A phone as its own home](/adr/0018-a-phone-as-its-own-home.md), proposed | The phone app keeps its own memory with the engine's store, no mind on the phone in the first release, moving between homes by the backup format over the sealed channel, only by pairing, one home at a time enforced at pairing. Reverses "a phone that works without a computer" in [Nocturne on Android and iPhone](phone-apps.md#goals) |
 | [0019 A locked copy online](/adr/0019-a-locked-copy-online.md), proposed | The phone writes numbered copies, never overwritten, sealed with a key that is itself locked with the person's passphrase (the [0013](/adr/0013-passphrase-backup.md) format), to iCloud Drive on iPhone or the app's hidden Google Drive folder on Android, or a storage address the person runs. Originals go once each. The last seven copies are kept, and forgetting for good prunes older ones at once, so forgetting reaches the copy. This is the online backup; the phone's own device backup is out of scope, and the memory stays out of it. Triggers 0013's "revisit when kept somewhere other than a file they chose" |
 | [0020 An online mind on a phone](/adr/0020-an-online-mind-on-a-phone.md), proposed, amending [0011 Online answers](/adr/0011-online-answers.md) | On a phone alone the phone's own core calls the service, not `lemond`. The service also reads the words of what is kept and writes the page. A named second route on iPhone, Apple Intelligence on Apple's servers, with no key, against "one generic form" and "no provider-specific code". The health, money and ID check stops holding things back, on the computer too: only things marked private are held back ([decision 20](#decisions)) |
-| [0021 A household mind for invited phones](/adr/0021-a-household-mind-for-invited-phones.md), proposed; a later record for a household computer as someone's home | A role per paired phone, fixed by the owner's invitation: companion, borrows the mind (keeps nothing: only its name and key, to let it in), or keeps its memory here (one store and key per person, entered by pairing). A separate typed set of calls for borrowing with no handle on any store, a scheduler that takes turns without counting per phone |
+| [0021 A household mind for invited phones](/adr/0021-a-household-mind-for-invited-phones.md), proposed | A role per paired phone, fixed by the owner's invitation: companion, or borrows the mind (keeps nothing: only its name and key, to let it in). A separate typed set of calls for borrowing with no handle on any store, a scheduler that takes turns without counting per phone |
+| Later: a household computer as someone's home | The third role, keeps its memory here: one store and key per person, entered only by an invitation and the person's own pairing, with its own Local only clause |
+| [Nocturne on Android and iPhone](phone-apps.md#decisions-for-the-owner), decision 6 | Every calendar starts on for companions too ([decision 20](#decisions)) |
 | [0010 Away from home](/adr/0010-away-from-home.md), amended | Household phones connect through Simple. Most private keeps admitting only the owner's own devices; named other people later, as an advanced choice |
 | [0012 Run as a server](/adr/0012-server-mode.md), amended | "One server is one person" becomes one owner and the people who keep their memory there; Away from home is made to run without a window so the server can host phones |
 | 0017 Native phone apps, on the phone app branches today | The app is one app, `is.nocturne.phone`, published by Nocturne, for every mode; the store listing loses "needs a computer" |
@@ -425,8 +427,8 @@ depends on. Every person-facing part works from the phone unless a reason is wri
 
 | Open | Options | Recommendation |
 |---|---|---|
-| A daily share per phone, without keeping counts | A: none; the owner pauses a phone. B: a count kept only in memory, gone at midnight or a restart. C: a stored count | **A**: B is still a record of use, and C breaks correction 1 |
-| The live "Using the mind now" mark on the owner's screen | A: show it, from requests in flight only. B: show nothing | **A**: it tells the owner why their own answer is slow, and nothing is kept |
+| Check-ins and reflections with a borrowed household mind | A: check-ins go to it, sealed and kept nothing, so it writes reflections; the journal's rule is about online minds. B: they stay on the phone, and reflections wait as with an online mind | **A**: a household mind is not online, and holding check-ins back from it would be a new rule |
+| Keeping the name and key of an invited phone while it stays invited | A: keep them, as letting it in needs. B: a new code each time it connects | **A**, as written in correction 1; B makes borrowing unusable |
 
 ### Household: hosting on a computer of one's own
 
@@ -535,7 +537,8 @@ where they differ:
 1. **A household's mind is only a mind for the phones its owner invites.** A phone that only borrows
    it is never stored there: no memory, no files, no copy, and no history of it beyond what answering
    the request in flight needs. A phone joins only when the household's owner invites it, by a code
-   or a QR code.
+   or a QR code. It keeps only the name, key and paused mark of an invited phone, which letting it in
+   needs, until the phone leaves or is removed (to confirm with the owner).
 2. **A memory moves only by pairing.** Using a mind never puts a memory on the mind's machine. The
    only time another machine holds a memory is when its person pairs with it to make it their home:
    their own computer, or a household computer they choose.
