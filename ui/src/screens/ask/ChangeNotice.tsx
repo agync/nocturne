@@ -13,12 +13,14 @@ export function ChangeNotice({
   busy,
   failed,
   onContinue,
+  onThisComputer,
   onSettings,
 }: {
   question: string;
   busy: boolean;
   failed: boolean;
   onContinue: () => void;
+  onThisComputer: () => void;
   onSettings: () => void;
 }) {
   const title = useRef<HTMLHeadingElement>(null);
@@ -45,6 +47,9 @@ export function ChangeNotice({
         <div className={styles.changedButtons}>
           <Button variant="primary" disabled={busy} onClick={onContinue}>
             {t("ask.changed.continue")}
+          </Button>
+          <Button variant="quiet" disabled={busy} onClick={onThisComputer}>
+            {t("ask.changed.computer")}
           </Button>
           <Button variant="quiet" onClick={onSettings}>
             {t("ask.changed.settings")}
