@@ -331,6 +331,9 @@ export class HttpEngine implements EngineClient {
     this.call("update_remote_settings", { patch });
   openRemoteSignIn: EngineClient["openRemoteSignIn"] = () => this.call("open_remote_sign_in");
   newComputerKey: EngineClient["newComputerKey"] = () => this.call("new_computer_key");
+  getMove: EngineClient["getMove"] = () => this.call("get_move");
+  answerMove: EngineClient["answerMove"] = (choice) => this.call("answer_move", { choice });
+  finishMove: EngineClient["finishMove"] = () => this.call("finish_move");
 
   getOnline: EngineClient["getOnline"] = () => this.call("get_online");
   checkOnline: EngineClient["checkOnline"] = (form) => this.call("check_online", { form });
