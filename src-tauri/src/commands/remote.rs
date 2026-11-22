@@ -155,20 +155,31 @@ pub async fn answer_move<R: Runtime>(
     app: AppHandle<R>,
     choice: MoveChoice,
 ) -> Result<(), CommandError> {
-    if moving::decide(&app, &hub(&app)?.core, choice) {
+    if moving::decide(&app, &hub(&app)?.core, choice).await {
         Ok(())
     } else {
         Err(CommandError::not_found("there is no offer to answer"))
     }
 }
 
-/// "Open today's page" once a phone's memory is here: the person has seen it.
+/// "Open today's page" once a phone's memory is here, or "OK" on a move that changed nothing:
+/// the person has seen it.
 #[tauri::command]
 pub async fn finish_move<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     let data = app.state::<crate::state::AppState>().data_dir.clone();
-    if moving::seen(&data) {
+    if moving::finish(&hub(&app)?.core, &data) {
         Ok(())
     } else {
         Err(CommandError::not_found("no memory is waiting"))
+    }
+}
+
+/// "Stop moving" while a phone's memory arrives: nothing changes here, and the phone keeps it.
+#[tauri::command]
+pub async fn stop_move<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    if moving::stop(&app, &hub(&app)?.core) {
+        Ok(())
+    } else {
+        Err(CommandError::not_found("there is no move to stop"))
     }
 }

@@ -1120,6 +1120,7 @@ fn remote_commands_refused_from_quick_capture() {
         "get_move",
         "answer_move",
         "finish_move",
+        "stop_move",
     ] {
         assert_eq!(h.code_from(&quick, cmd, json!({})), "invalid", "{cmd}");
     }

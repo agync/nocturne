@@ -4,8 +4,22 @@
 //! one move, as the chunks of `memoryDone`. It is checked and unpacked into the restore stage,
 //! takes this computer's own settings and paired phones, and the phone's own row becomes the
 //! phone as it is paired here, all before the store in use is touched. The store changes places
-//! at the next start, as a restore does; until then phones are asked to wait, so nothing they
-//! send lands in a store that is about to be put aside.
+//! at the next start, as a restore does: Nocturne says so and starts again by itself a moment
+//! after the phone is told every count matched. Until then phones are asked to wait, so nothing
+//! they send lands in a store that is about to be put aside. The phone puts its memory aside only
+//! once it asks again after the restart and hears that the memory opened.
+//!
+//! What a phone hears, besides the answers named in the contract:
+//!
+//! | Answer | To | Means |
+//! |---|---|---|
+//! | `TooLarge` | `offerMemory` | not enough room here yet; the person frees some, the phone tries again |
+//! | `TooLarge` | `memoryDone` | room ran out while it was written out; nothing changed |
+//! | `Busy` | either | wait and ask again: a check or the restart is under way, or a backup runs |
+//! | `MemoryArrived` | `offerMemory` | the memory opened here after the restart |
+//! | `NotFound` | `offerMemory` | the memory could not be opened after the restart; nothing changed |
+//! | `Paused` | `memoryDone` | the person here stopped the move; nothing changed |
+//! | `Revoked` | either | the person kept what is here, or removed the phone |
 //!
 //! One move at a time. Nothing here keeps the passphrase: it goes into the unpack and is gone.
 
@@ -49,6 +63,9 @@ const MAX_PASSPHRASE: usize = 256;
 pub const MEMORY_SESSION_SECS: u64 = 6 * 60 * 60;
 /// Where a finished move is remembered, so a phone that missed the answer is told again.
 const MOVED: &str = "moved.json";
+/// Room a move needs besides twice its size: the upload and the unpacked stage both sit here
+/// before the upload goes.
+const ROOM_MARGIN: u64 = 64 * 1024 * 1024;
 
 /// The move as the window shows it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -59,11 +76,13 @@ const MOVED: &str = "moved.json";
 )]
 pub enum MoveView {
     /// "{name} has its own memory. Move it here?" `here`: this computer already holds one.
+    /// `room`: not enough free room yet, and the move button waits.
     Offered {
         name: String,
         items: u32,
         bytes: f64,
         here: bool,
+        room: Option<Room>,
     },
     Arriving {
         name: String,
@@ -73,11 +92,38 @@ pub enum MoveView {
     Checking {
         name: String,
     },
-    /// "The memory from {name} is here." `online`: Online answers is already set up here.
+    /// "Nocturne restarts to open the memory from {name}." for the moment before it does.
+    Restarting {
+        name: String,
+    },
+    /// "The memory from {name} is here." after the start that opened it. `online`: Online
+    /// answers is already set up here.
     Arrived {
         name: String,
         online: bool,
     },
+    /// The move ended and nothing changed: room ran out, or the memory did not open after the
+    /// restart. `room` says how much it needs, for the first.
+    Failed {
+        name: String,
+        why: FailedWhy,
+        room: Option<Room>,
+    },
+}
+
+/// How much room a move needs here and how much there is, in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Room {
+    pub need: f64,
+    pub free: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FailedWhy {
+    NoRoom,
+    NotOpened,
 }
 
 /// The person's answer to an offer: move it here (putting aside what is here, if anything),
@@ -93,9 +139,14 @@ pub enum MoveChoice {
 enum Phase {
     Offered(Option<oneshot::Sender<MoveChoice>>),
     Accepted,
-    Arriving { done: u64, size: u64 },
+    Arriving {
+        done: u64,
+        size: u64,
+    },
     Checking,
     Arrived(MemoryCounts),
+    /// Ended with nothing changed; shown until the person says OK. It holds no place.
+    Failed(FailedWhy),
 }
 
 /// Each move's own id. What it stages and what it notes carry it, so letting go of one move
@@ -117,6 +168,10 @@ struct Move {
     /// Its phone was removed while the memory was being checked: it stays, unseen, until the
     /// check ends and lets its stage go, so no other move starts under it.
     gone: bool,
+    /// The person stopped it here: its phone hears so.
+    stopped: bool,
+    /// Room short when it was offered.
+    room: Option<Room>,
     /// The conversation carrying the memory, while it is on its way or being checked.
     conv: Option<ConvId>,
     shown: Option<Instant>,
@@ -141,6 +196,8 @@ impl Move {
             phase: Phase::Accepted,
             data: data.to_path_buf(),
             gone: false,
+            stopped: false,
+            room: None,
             conv: None,
             shown: None,
             idle_since: Instant::now(),
@@ -162,6 +219,7 @@ impl Move {
                 items: self.offer.items,
                 bytes: self.bytes,
                 here: self.here.is_some(),
+                room: self.room,
             },
             Phase::Accepted => MoveView::Arriving {
                 name,
@@ -174,9 +232,14 @@ impl Move {
                 size: *size as f64,
             },
             Phase::Checking => MoveView::Checking { name },
-            Phase::Arrived(_) => MoveView::Arrived {
+            Phase::Arrived(_) => MoveView::Restarting { name },
+            Phase::Failed(why) => MoveView::Failed {
                 name,
-                online: self.online,
+                why: *why,
+                room: (*why == FailedWhy::NoRoom).then(|| Room {
+                    need: room_needed(self.bytes as u64) as f64,
+                    free: 0.0,
+                }),
             },
         }
     }
@@ -192,9 +255,15 @@ struct Moved {
     #[serde(default)]
     name: String,
     counts: MemoryCounts,
-    /// The person has seen that it is here.
+    /// The person has seen that it is here, or that it did not open.
     #[serde(default)]
     seen: bool,
+    /// It did not open after the restart; nothing changed (set by the start that tried).
+    #[serde(default)]
+    failed: bool,
+    /// Its phone has heard that it did not open.
+    #[serde(default)]
+    told: bool,
 }
 
 /// The one move under way, if any. Every change of phase is one method here, under one lock:
@@ -213,6 +282,10 @@ struct Moved {
 pub struct Moves {
     slot: Mutex<Option<Move>>,
     settled: Notify,
+    /// A phone whose agreed move the person stopped before its upload began: it hears so once.
+    stopped_for: Mutex<Option<String>>,
+    /// One change to the note of a move at a time.
+    note: Mutex<()>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -314,6 +387,12 @@ impl Moves {
     fn claim(&self, new: Move) -> Option<Option<MoveView>> {
         let mut slot = lock(&self.slot);
         expire_idle(&mut slot);
+        if slot
+            .as_ref()
+            .is_some_and(|m| matches!(m.phase, Phase::Failed(_)))
+        {
+            *slot = None;
+        }
         let busy = slot.as_ref().is_some_and(|m| {
             m.device != new.device
                 || m.gone
@@ -329,22 +408,94 @@ impl Moves {
         Some(shown(&slot))
     }
 
-    /// The person's answer: true when it reached the offer waiting for it.
-    fn decide(&self, choice: MoveChoice) -> (bool, Option<MoveView>) {
+    /// The person's answer to the question on screen. `free` is the room here now. Answers
+    /// whether it was taken, and the phone to unpair when the answer was "not now" and no offer
+    /// was waiting to carry it (the phone tried, heard there was no room, and waits to try
+    /// again). Moving waits while there is not room.
+    fn decide(
+        &self,
+        choice: MoveChoice,
+        free: impl Fn(&Path) -> Option<u64>,
+    ) -> (bool, Option<String>, Option<MoveView>) {
         let mut slot = lock(&self.slot);
         let Some(m) = slot.as_mut().filter(|m| !m.gone) else {
-            return (false, shown(&slot));
+            return (false, None, shown(&slot));
         };
         let Phase::Offered(tx) = &mut m.phase else {
-            return (false, shown(&slot));
+            return (false, None, shown(&slot));
         };
-        let sent = tx.take().is_some_and(|tx| tx.send(choice).is_ok());
-        if sent && choice == MoveChoice::Move {
+        if choice == MoveChoice::Move && short(m.bytes as u64, free(&m.data)).is_some() {
+            return (false, None, shown(&slot));
+        }
+        let waiting = tx.take();
+        let carried = waiting.is_some_and(|tx| tx.send(choice).is_ok());
+        let unpair = (!carried && choice == MoveChoice::NotNow).then(|| m.device.clone());
+        if choice == MoveChoice::Move {
+            m.room = None;
             m.agreed_again();
         } else {
             *slot = None;
         }
-        (sent, shown(&slot))
+        (true, unpair, shown(&slot))
+    }
+
+    /// The room line as it stands: while the question waits for room, how much there is now.
+    fn refresh_room(&self, free: impl Fn(&Path) -> Option<u64>) {
+        let mut slot = lock(&self.slot);
+        if let Some(m) = slot
+            .as_mut()
+            .filter(|m| matches!(m.phase, Phase::Offered(_)) && m.room.is_some())
+        {
+            m.room = short(m.bytes as u64, free(&m.data));
+        }
+    }
+
+    /// "Stop moving" on this computer, until the restart. Answers the phone whose upload, if
+    /// one is coming, ends now with `Paused`.
+    pub fn stop(&self) -> Option<String> {
+        let mut slot = lock(&self.slot);
+        let m = slot.as_mut().filter(|m| !m.gone)?;
+        let device = m.device.clone();
+        match m.phase {
+            Phase::Accepted | Phase::Arriving { .. } => {
+                if m.conv.is_none() {
+                    *lock(&self.stopped_for) = Some(device.clone());
+                }
+                *slot = None;
+            }
+            // The check lets go of what it staged once it ends, and its phone hears why.
+            Phase::Checking => {
+                m.gone = true;
+                m.stopped = true;
+            }
+            _ => return None,
+        }
+        drop(slot);
+        self.settled.notify_waiters();
+        Some(device)
+    }
+
+    /// The person stopped this phone's move before its upload began: true once.
+    fn was_stopped(&self, device: &str) -> bool {
+        let mut stopped = lock(&self.stopped_for);
+        if stopped.as_deref() == Some(device) {
+            *stopped = None;
+            return true;
+        }
+        false
+    }
+
+    /// "OK" on a move that ended with nothing changed.
+    fn dismiss(&self) -> bool {
+        let mut slot = lock(&self.slot);
+        if slot
+            .as_ref()
+            .is_some_and(|m| matches!(m.phase, Phase::Failed(_)))
+        {
+            *slot = None;
+            return true;
+        }
+        false
     }
 
     /// An offer nobody answered, or whose phone went, is let go.
@@ -425,16 +576,25 @@ impl Moves {
                 m.agreed_again();
                 (shown(&slot), err(PhoneError::Busy))
             }
+            // Room ran out: said on both sides, and nothing is tried again by itself.
+            (Err(PhoneError::TooLarge), Some(m)) if !m.gone && !removed => {
+                m.phase = Phase::Failed(FailedWhy::NoRoom);
+                m.conv = None;
+                (shown(&slot), err(PhoneError::TooLarge))
+            }
             (checked, ours) => {
                 // Whatever this check staged goes, found or not; nothing of another move does.
                 if checked.is_ok() {
                     unstage(data, owner);
                 }
+                let stopped = ours.as_ref().is_some_and(|m| m.stopped);
                 if ours.is_some() {
                     *slot = None;
                 }
                 let answer = match checked {
+                    Ok(_) if stopped => err(PhoneError::Paused),
                     Ok(_) => err(PhoneError::Revoked),
+                    Err(_) if stopped => err(PhoneError::Paused),
                     // Nothing changed: the phone may offer it again.
                     Err(code) => err(code),
                 };
@@ -462,7 +622,8 @@ impl Moves {
         true
     }
 
-    /// Where this phone's memory stands, for a phone asking again.
+    /// Where this phone's memory stands, for a phone asking again: being checked, or staged
+    /// for the restart (`Ok`); neither is an answer yet.
     fn state_of(&self, device: &str) -> Option<Result<MemoryCounts, ()>> {
         let slot = lock(&self.slot);
         match slot
@@ -485,6 +646,50 @@ fn emit<R: Runtime>(app: &AppHandle<R>, view: Option<MoveView>) {
 
 fn err(code: PhoneError) -> RemoteAnswer {
     RemoteAnswer::Error { code }
+}
+
+/// The room a move of `bytes` needs here: the upload and the unpacked stage, and a margin.
+fn room_needed(bytes: u64) -> u64 {
+    bytes.saturating_mul(2).saturating_add(ROOM_MARGIN)
+}
+
+/// The room line for a move of `bytes`, when `free` is short of it. Room that cannot be read is
+/// never short: the write itself says when it runs out.
+fn short(bytes: u64, free: Option<u64>) -> Option<Room> {
+    let need = room_needed(bytes);
+    free.filter(|f| *f < need).map(|f| Room {
+        need: need as f64,
+        free: f as f64,
+    })
+}
+
+#[cfg(debug_assertions)]
+static PRETEND_FREE: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
+
+/// Tests: the room this data folder has, whatever the disk says.
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub fn pretend_free(data: &Path, bytes: Option<u64>) {
+    let mut all = lock(&PRETEND_FREE);
+    all.retain(|(d, _)| d != data);
+    if let Some(bytes) = bytes {
+        all.push((data.to_path_buf(), bytes));
+    }
+}
+
+/// Free bytes on the disk that holds the data folder.
+fn free_here(data: &Path) -> Option<u64> {
+    #[cfg(debug_assertions)]
+    if let Some((_, b)) = lock(&PRETEND_FREE).iter().find(|(d, _)| d == data) {
+        return Some(*b);
+    }
+    let probe = dunce::canonicalize(data).ok()?;
+    let disks = sysinfo::Disks::new_with_refreshed_list().ok()?;
+    disks
+        .iter()
+        .filter(|d| probe.starts_with(d.mount_point()))
+        .max_by_key(|d| d.mount_point().as_os_str().len())
+        .map(|d| d.available_space())
 }
 
 /// What a store holds of the person's: none when nothing was kept, read or made.
@@ -542,12 +747,6 @@ fn read_moved(data: &Path) -> Option<Moved> {
     read_note(&moved_path(data))
 }
 
-fn moved_here(data: &Path, device: &str) -> Option<MemoryCounts> {
-    read_moved(data)
-        .filter(|m| m.device == device)
-        .map(|m| m.counts)
-}
-
 fn write_note(path: &Path, moved: &Moved) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         crate::fsutil::create_private_dir(dir)?;
@@ -563,9 +762,16 @@ pub fn arrived_here(data: &Path, online: bool) -> Option<MoveView> {
     if restore::marker_path(data).exists() {
         return None;
     }
-    Some(MoveView::Arrived {
-        name: moved.name,
-        online,
+    Some(match moved.failed {
+        true => MoveView::Failed {
+            name: moved.name,
+            why: FailedWhy::NotOpened,
+            room: None,
+        },
+        false => MoveView::Arrived {
+            name: moved.name,
+            online,
+        },
     })
 }
 
@@ -635,17 +841,31 @@ pub async fn offer<R: Runtime>(
     if restore::marker_path(&data).exists() {
         return Some(err(PhoneError::Busy));
     }
+    let room = {
+        let data = data.clone();
+        tokio::task::spawn_blocking(move || free_here(&data))
+            .await
+            .ok()
+            .flatten()
+    };
+    let room = short(bytes as u64, room);
     let (tx, rx) = oneshot::channel();
     let mut new = Move::new(device, &data, counts, bytes);
     new.here = here;
     new.online = online;
-    new.phase = Phase::Offered(Some(tx));
+    new.room = room;
+    // Short of room, the question shows with its room line and the phone hears so at once: it
+    // tries again once the person here has freed some.
+    new.phase = Phase::Offered(room.is_none().then_some(tx));
     let owner = new.owner.clone();
     let Some(view) = core.moves.claim(new) else {
         return Some(err(PhoneError::Busy));
     };
     emit(app, view);
     crate::window::show_main(app);
+    if room.is_some() {
+        return Some(err(PhoneError::TooLarge));
+    }
     let choice = tokio::select! {
         choice = rx => Some(choice),
         () = out.closed() => None,
@@ -656,17 +876,8 @@ pub async fn offer<R: Runtime>(
         Some(Ok(MoveChoice::NotNow)) => {
             // Keep what is here: the phone stays as it was, alone and unpaired. It is told
             // first, then its sessions end.
-            let id = device.id.clone();
-            if let Ok(e) = state.engine()
-                && crate::error::blocking(move || e.revoke_device(&id))
-                    .await
-                    .is_err()
-            {
-                tracing::warn!("could not undo a pairing the person declined");
-            }
             out.error(PhoneError::Revoked);
-            core.drop_device(&device.id);
-            core.shell.changed();
+            unpair(app, core, &device.id).await;
             None
         }
         // A newer offer from the same phone took this one's place.
@@ -679,26 +890,77 @@ pub async fn offer<R: Runtime>(
     }
 }
 
+/// Undo the pairing of a phone whose memory stays where it is.
+async fn unpair<R: Runtime>(app: &AppHandle<R>, core: &Core, device: &str) {
+    if let Some(state) = app.try_state::<AppState>()
+        && let Ok(e) = state.engine()
+    {
+        let id = device.to_string();
+        if crate::error::blocking(move || e.revoke_device(&id))
+            .await
+            .is_err()
+        {
+            tracing::warn!("could not undo a pairing the person declined");
+        }
+    }
+    core.drop_device(device);
+    core.shell.changed();
+}
+
 /// A memory being checked is waited for; one already here is answered from what arrived.
 async fn already(core: &Arc<Core>, device: &str, data: &Path) -> Option<RemoteAnswer> {
     loop {
         let settled = core.moves.settled.notified();
         match core.moves.state_of(device) {
-            Some(Ok(counts)) => return Some(RemoteAnswer::MemoryArrived { counts }),
+            // Staged, and Nocturne is about to start again: the phone asks once it has.
+            Some(Ok(_)) => return Some(err(PhoneError::Busy)),
             Some(Err(())) => settled.await,
-            None => {
-                return moved_here(data, device)
-                    .map(|counts| RemoteAnswer::MemoryArrived { counts });
-            }
+            None => return opened_here(core, data, device),
         }
     }
 }
 
-/// The person's answer on this computer.
-pub fn decide<R: Runtime>(app: &AppHandle<R>, core: &Core, choice: MoveChoice) -> bool {
-    let (sent, view) = core.moves.decide(choice);
+/// What the start after a move found: the memory opened (`MemoryArrived`, as often as the phone
+/// asks), or it did not and nothing changed (`NotFound`, once; after that the phone is free to
+/// offer it again).
+fn opened_here(core: &Core, data: &Path, device: &str) -> Option<RemoteAnswer> {
+    let _one = lock(&core.moves.note);
+    let mut moved = read_moved(data).filter(|m| m.device == device)?;
+    if !moved.failed {
+        return Some(RemoteAnswer::MemoryArrived {
+            counts: moved.counts,
+        });
+    }
+    if moved.told {
+        return None;
+    }
+    moved.told = true;
+    if let Err(e) = write_note(&moved_path(data), &moved) {
+        tracing::warn!("could not note that the phone heard: {e}");
+    }
+    Some(err(PhoneError::NotFound))
+}
+
+/// The person's answer on this computer. False when there was nothing to answer, or no room
+/// yet to move it here.
+pub async fn decide<R: Runtime>(app: &AppHandle<R>, core: &Core, choice: MoveChoice) -> bool {
+    let (taken, unpair_now, view) = core.moves.decide(choice, free_here);
     emit(app, view);
-    sent
+    if let Some(device) = unpair_now {
+        unpair(app, core, &device).await;
+    }
+    taken
+}
+
+/// "Stop moving" on this computer: the phone's upload ends, and the phone hears the move was
+/// stopped. False when there is nothing to stop.
+pub fn stop<R: Runtime>(app: &AppHandle<R>, core: &Core) -> bool {
+    let Some(device) = core.moves.stop() else {
+        return false;
+    };
+    core.incoming.fail(&device, PhoneError::Paused);
+    emit(app, core.moves.view());
+    true
 }
 
 /// What the phone sent with `memoryDone`.
@@ -737,6 +999,10 @@ pub async fn done<R: Runtime>(
     {
         core.incoming.cancel_call(&device.id, conv, call);
         return Some(err(PhoneError::Invalid));
+    }
+    if core.moves.was_stopped(&device.id) {
+        core.incoming.cancel_call(&device.id, conv, call);
+        return Some(err(PhoneError::Paused));
     }
     let Some((owner, view)) = core.moves.carry(&device.id, conv) else {
         core.incoming.cancel_call(&device.id, conv, call);
@@ -860,9 +1126,20 @@ async fn wait_upload(
 fn transient(e: &nocturne_engine::Error) -> PhoneError {
     use nocturne_engine::Error;
     match e {
+        Error::Io(io) if no_room(io) => PhoneError::TooLarge,
         Error::Io(_) | Error::Busy | Error::LeaseLost => PhoneError::Busy,
         _ => PhoneError::Invalid,
     }
+}
+
+/// The disk is full, or this file would not fit on it.
+fn no_room(io: &std::io::Error) -> bool {
+    matches!(
+        io.kind(),
+        std::io::ErrorKind::StorageFull
+            | std::io::ErrorKind::QuotaExceeded
+            | std::io::ErrorKind::FileTooLarge
+    )
 }
 
 /// Where a checked memory is staged, and for whom.
@@ -912,7 +1189,7 @@ fn settle(
         .map_err(|e| match e {
             nocturne_engine::Error::BackupTooNew => PhoneError::ComputerOutdated,
             // This computer could not write it out: no room, or its disk said no.
-            nocturne_engine::Error::Io(_) => PhoneError::Busy,
+            nocturne_engine::Error::Io(_) => transient(&e),
             _ => PhoneError::Invalid,
         })?;
         // The unpack checked every part against what the phone wrote, and counted what is in it.
@@ -937,6 +1214,8 @@ fn settle(
             name: name.clone(),
             counts,
             seen: false,
+            failed: false,
+            told: false,
         };
         write_note(&staged_note(data), &moved).map_err(|_| PhoneError::Busy)?;
         let aside = here.map(|h| Aside {
@@ -976,9 +1255,10 @@ fn digest(file: &Path) -> std::io::Result<String> {
         .collect())
 }
 
-/// The move as the window shows it: one under way, or one put in place at the last start that
-/// the person has not seen yet.
+/// The move as the window shows it: one under way, or what the start after one found that the
+/// person has not seen yet.
 pub fn view<R: Runtime>(app: &AppHandle<R>, core: &Core) -> Option<MoveView> {
+    core.moves.refresh_room(free_here);
     if let Some(view) = core.moves.view() {
         return Some(view);
     }
@@ -989,6 +1269,12 @@ pub fn view<R: Runtime>(app: &AppHandle<R>, core: &Core) -> Option<MoveView> {
         .and_then(|e| e.online_state().ok())
         .is_some_and(|o| o.set_up);
     arrived_here(&state.data_dir, online)
+}
+
+/// "Open today's page" or "OK": the person has seen how the move ended. False when nothing
+/// waits to be seen.
+pub fn finish(core: &Core, data: &Path) -> bool {
+    core.moves.dismiss() || seen(data)
 }
 
 #[cfg(test)]
@@ -1042,6 +1328,8 @@ mod tests {
             name: device.into(),
             counts: counts(3),
             seen: false,
+            failed: false,
+            told: false,
         };
         write_note(&staged_note(data), &moved).unwrap();
         std::fs::write(restore::marker_path(data), b"{}").unwrap();
@@ -1061,12 +1349,11 @@ mod tests {
         assert!(moves.holding());
         stage_as(dir.path(), &owner, "a");
         let (view, answer) = moves.conclude(dir.path(), &owner, false, Ok(counts(3)));
-        assert!(matches!(view, Some(MoveView::Arrived { .. })));
+        assert!(matches!(view, Some(MoveView::Restarting { .. })));
         assert_eq!(answer, RemoteAnswer::MemoryArrived { counts: counts(3) });
         assert!(staged(dir.path()));
-        assert_eq!(
-            moved_here(dir.path(), "a"),
-            None,
+        assert!(
+            read_moved(dir.path()).is_none(),
             "not before it is in place"
         );
         assert!(read_note(&staged_note(dir.path())).is_some());
@@ -1089,7 +1376,7 @@ mod tests {
         moves.claim(m).unwrap();
         assert!(moves.forget("a"));
         assert_eq!(moves.view(), None);
-        assert!(!moves.decide(MoveChoice::Move).0);
+        assert!(!moves.decide(MoveChoice::Move, |_| None).0);
     }
 
     #[test]
@@ -1121,7 +1408,7 @@ mod tests {
         let (view, answer) = moves.conclude(dir.path(), &owner, false, Ok(counts(3)));
         assert_eq!((view, answer), (None, err(PhoneError::Revoked)));
         assert!(!staged(dir.path()));
-        assert_eq!(moved_here(dir.path(), "a"), None);
+        assert!(read_moved(dir.path()).is_none());
         assert!(lock(&moves.slot).is_none());
     }
 
@@ -1148,7 +1435,7 @@ mod tests {
         moves.conclude(dir.path(), &owner, false, Ok(counts(3)));
         assert!(moves.forget("a"));
         assert!(!staged(dir.path()));
-        assert_eq!(moved_here(dir.path(), "a"), None);
+        assert!(read_moved(dir.path()).is_none());
         assert_eq!(moves.view(), None);
     }
 
@@ -1265,5 +1552,136 @@ mod tests {
             None,
             "once seen, never again"
         );
+    }
+
+    fn in_place(data: &Path, failed: bool) {
+        stage_as(data, "o1", "a");
+        let mut note = read_note(&staged_note(data)).unwrap();
+        note.failed = failed;
+        write_note(&moved_path(data), &note).unwrap();
+        std::fs::remove_file(restore::marker_path(data)).unwrap();
+        restore::clear_staging(data);
+    }
+
+    #[test]
+    fn a_phone_asking_after_the_restart_hears_whether_the_memory_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        in_place(dir.path(), false);
+        let opened = read_moved(dir.path()).unwrap();
+        assert_eq!(opened.counts, counts(3));
+        assert!(matches!(
+            arrived_here(dir.path(), false),
+            Some(MoveView::Arrived { .. })
+        ));
+
+        let failed = tempfile::tempdir().unwrap();
+        in_place(failed.path(), true);
+        assert!(matches!(
+            arrived_here(failed.path(), false),
+            Some(MoveView::Failed {
+                why: FailedWhy::NotOpened,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn short_of_room_the_question_waits_and_moving_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        let mut m = Move::new(&phone("a"), dir.path(), counts(1), 1000.0);
+        m.room = short(1000, Some(10));
+        m.phase = Phase::Offered(None);
+        moves.claim(m).unwrap();
+        assert!(matches!(
+            moves.view(),
+            Some(MoveView::Offered { room: Some(_), .. })
+        ));
+        assert!(
+            !moves.decide(MoveChoice::Move, |_| Some(10)).0,
+            "no room yet"
+        );
+        moves.refresh_room(|_| Some(u64::MAX));
+        assert!(matches!(
+            moves.view(),
+            Some(MoveView::Offered { room: None, .. })
+        ));
+        // No offer is waiting: moving agrees for the phone's next try.
+        let (taken, unpair, _) = moves.decide(MoveChoice::Move, |_| Some(u64::MAX));
+        assert!(taken && unpair.is_none());
+        assert_eq!(moves.agreed("a"), Some((None, false)));
+    }
+
+    #[test]
+    fn not_now_with_no_offer_waiting_unpairs_the_phone() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        let mut m = Move::new(&phone("a"), dir.path(), counts(1), 1000.0);
+        m.phase = Phase::Offered(None);
+        moves.claim(m).unwrap();
+        let (taken, unpair, view) = moves.decide(MoveChoice::NotNow, |_| None);
+        assert!(taken);
+        assert_eq!(unpair.as_deref(), Some("a"));
+        assert_eq!(view, None);
+    }
+
+    #[test]
+    fn stopping_here_ends_the_move_and_its_phone_hears_so() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        // Agreed, nothing sent yet: the phone hears it once, when it sends.
+        agreed(&moves, dir.path(), "a");
+        if let Some(m) = lock(&moves.slot).as_mut() {
+            m.agreed_again();
+        }
+        assert_eq!(moves.stop().as_deref(), Some("a"));
+        assert_eq!(moves.view(), None);
+        assert!(moves.was_stopped("a"));
+        assert!(!moves.was_stopped("a"));
+
+        // Being checked: what it stages goes, and the phone hears it was stopped.
+        let owner = agreed(&moves, dir.path(), "a");
+        moves.begin_check(&owner, 1).unwrap();
+        assert_eq!(moves.stop().as_deref(), Some("a"));
+        assert!(
+            moves
+                .claim(Move::new(&phone("b"), dir.path(), counts(1), 1.0))
+                .is_none()
+        );
+        stage_as(dir.path(), &owner, "a");
+        let (_, answer) = moves.conclude(dir.path(), &owner, false, Ok(counts(3)));
+        assert_eq!(answer, err(PhoneError::Paused));
+        assert!(!staged(dir.path()));
+
+        // Nothing to stop once it waits for the restart.
+        let owner = agreed(&moves, dir.path(), "a");
+        moves.begin_check(&owner, 1).unwrap();
+        moves.conclude(dir.path(), &owner, false, Ok(counts(3)));
+        assert_eq!(moves.stop(), None);
+    }
+
+    #[test]
+    fn room_running_out_is_said_and_holds_no_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        let owner = agreed(&moves, dir.path(), "a");
+        moves.begin_check(&owner, 1).unwrap();
+        let (view, answer) = moves.conclude(dir.path(), &owner, false, Err(PhoneError::TooLarge));
+        assert_eq!(answer, err(PhoneError::TooLarge));
+        assert!(matches!(
+            view,
+            Some(MoveView::Failed {
+                why: FailedWhy::NoRoom,
+                room: Some(_),
+                ..
+            })
+        ));
+        assert!(!moves.holding());
+        assert!(
+            moves
+                .claim(Move::new(&phone("b"), dir.path(), counts(1), 1.0))
+                .is_some()
+        );
+        assert!(!moves.dismiss(), "the new offer took its place");
     }
 }
