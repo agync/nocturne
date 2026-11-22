@@ -66,8 +66,8 @@ pub async fn start_alone<R: Runtime>(app: AppHandle<R>, name: String) -> Result<
 pub async fn home_call<R: Runtime>(app: AppHandle<R>, call: RemoteCall) -> RemoteAnswer {
     blocking(move || {
         let home = app.state::<Home>();
-        match home.open_store() {
-            Ok(open) => dispatch::answer(&open, call),
+        match home.using() {
+            Ok((_use, open)) => dispatch::answer(&open, call),
             Err(_) => RemoteAnswer::Error {
                 code: PhoneError::NotReady,
             },
@@ -91,8 +91,8 @@ pub async fn home_keep_end<R: Runtime>(app: AppHandle<R>, handle: u32) -> Remote
     let worker = app.clone();
     let answer = blocking(move || {
         let home = worker.state::<Home>();
-        match home.open_store() {
-            Ok(open) => dispatch::keep_bytes(&open, call, &bytes, &home.keeping_dir()),
+        match home.using() {
+            Ok((_use, open)) => dispatch::keep_bytes(&open, call, &bytes, &home.keeping_dir()),
             Err(_) => RemoteAnswer::Error {
                 code: PhoneError::NotReady,
             },
@@ -116,7 +116,7 @@ pub async fn home_original<R: Runtime>(
 ) -> Result<Response, PhoneError> {
     let (mime, bytes) = blocking(move || {
         let home = app.state::<Home>();
-        let open = home.open_store().map_err(|_| PhoneError::NotReady)?;
+        let (_use, open) = home.using().map_err(|_| PhoneError::NotReady)?;
         dispatch::original(&open, &id)
     })
     .await

@@ -3,9 +3,11 @@
 //! touches the network, and there is no mind: what is kept waits to be read.
 //!
 //! The way in for the sync (calendar entries and health readings into this store) is
-//! [`Home::local`]: the open engine and this phone's own device id, the source what the phone
-//! brings belongs to. It opens the store when it is not open yet, so call it off the async
-//! workers. It answers `None` while the phone is not alone or its memory cannot be opened.
+//! [`Home::with_local`]: it runs a closure with the open engine and this phone's own device id,
+//! the source what the phone brings belongs to. It opens the store when it is not open yet, so
+//! call it off the async workers. It answers `None` while the phone is not alone or its memory
+//! cannot be opened. Keep no `Open` past the closure: a restore or a fresh start waits for every
+//! use to end, then changes the store under it.
 //!
 //! A store that SQLite says is damaged is put aside whole, as `store-put-aside-{time}`, never
 //! deleted, and nothing opens again until a backup is brought back or the phone starts over.
@@ -20,7 +22,7 @@ pub mod voice;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use nocturne_contract::{HomeError, PhoneMode};
 use nocturne_engine::{Clock, Engine};
@@ -61,9 +63,11 @@ pub struct Home {
     dir: PathBuf,
     clock: Arc<dyn Clock>,
     open: Mutex<Option<Open>>,
+    /// Held to read while the store is used, to write while it is swapped, reopened or emptied,
+    /// so no work runs on an engine whose files are changing places.
+    gate: RwLock<()>,
     /// A backup, check or restore under way: one at a time.
     job: AtomicBool,
-    exclude: ExcludeFromBackup,
     pub(crate) voice: voice::Voice,
     /// The passphrase work a backup asks of whoever opens it; `None` is what Nocturne writes.
     work_factor: Option<u8>,
@@ -94,12 +98,18 @@ impl Drop for Job<'_> {
 
 impl Home {
     pub fn new(dir: PathBuf, clock: Arc<dyn Clock>, exclude: ExcludeFromBackup) -> Home {
+        // Everything of the app's stays out of the phone's own backup: the store, and the
+        // copies a restore or a keep makes on the way.
+        match std::fs::create_dir_all(&dir) {
+            Ok(()) => exclude(&dir),
+            Err(e) => tracing::warn!("the app's folder could not be made: {e}"),
+        }
         Home {
             dir,
             clock,
             open: Mutex::new(None),
+            gate: RwLock::new(()),
             job: AtomicBool::new(false),
-            exclude,
             voice: voice::Voice::default(),
             work_factor: None,
         }
@@ -124,9 +134,22 @@ impl Home {
         Ok(Job(&self.job))
     }
 
-    /// The open store and this phone's row in it, for the sync. See the module notes.
-    pub fn local(&self) -> Option<Open> {
-        self.open_store().ok()
+    /// Run `f` with the open store and this phone's row in it, for the sync. See the module
+    /// notes.
+    pub fn with_local<T>(&self, f: impl FnOnce(&Open) -> T) -> Option<T> {
+        self.using().ok().map(|(_use, open)| f(&open))
+    }
+
+    /// The open store, held for use until the guard goes.
+    pub(crate) fn using(&self) -> Result<(RwLockReadGuard<'_, ()>, Open), HomeError> {
+        let guard = self.gate.read().unwrap_or_else(|e| e.into_inner());
+        let open = self.open_store()?;
+        Ok((guard, open))
+    }
+
+    /// No use of the store until the guard goes: for what swaps, reopens or empties it.
+    pub(crate) fn exclusive(&self) -> RwLockWriteGuard<'_, ()> {
+        self.gate.write().unwrap_or_else(|e| e.into_inner())
     }
 
     /// The store, opened now if it is not open yet. Only while the phone is alone.
@@ -154,7 +177,6 @@ impl Home {
                 return Err(HomeError::NotReady);
             }
         };
-        (self.exclude)(&store);
         let device = engine.ensure_local_device(&file.name).map_err(|e| {
             tracing::warn!("this phone's own row could not be made: {e}");
             HomeError::Failed
@@ -164,7 +186,14 @@ impl Home {
         Ok(open)
     }
 
-    /// Let go of the open store. A call already holding it finishes on the files it had.
+    /// This phone's row in the open store is now `device`.
+    pub(crate) fn set_device(&self, device: String) {
+        if let Some(open) = lock(&self.open).as_mut() {
+            open.device = device;
+        }
+    }
+
+    /// Let go of the open store. Only under [`Home::exclusive`].
     pub(crate) fn close(&self) {
         lock(&self.open).take();
     }
@@ -185,6 +214,12 @@ impl Home {
                 None
             }
         };
+        self.mark_damaged(put_aside);
+    }
+
+    /// Nothing opens until a backup comes back or the phone starts over; the screens show what
+    /// can be done.
+    pub(crate) fn mark_damaged(&self, put_aside: Option<String>) {
         let bytes = serde_json::to_vec(&Damaged { put_aside }).expect("the mark serialises");
         if let Err(e) = write_private(&self.path(DAMAGED), &bytes) {
             tracing::warn!("could not mark the memory as damaged: {e}");

@@ -19,8 +19,8 @@ use nocturne_engine::Transcript;
 
 use super::{Home, lock};
 
-/// How long one note may take to read before the lease runs out.
-const LEASE: Duration = Duration::from_secs(600);
+/// How long reading a note may take beyond three times its length before the lease runs out.
+const LEASE: Duration = Duration::from_secs(120);
 const RATE: u32 = 16_000;
 /// The longest language tag the screens may send.
 const MAX_TAG: usize = 35;
@@ -46,7 +46,7 @@ pub trait Reader {
 pub struct Voice {
     language: Mutex<Option<String>>,
     running: AtomicBool,
-    /// Notes read this run with no words found: not read again until the app starts again.
+    /// Notes read this run that gave no words to keep: not read again until the app starts.
     nothing: Mutex<HashSet<String>>,
 }
 
@@ -129,10 +129,6 @@ impl Home {
             return 0;
         }
         let _running = Running(&self.voice.running);
-        let Ok(open) = self.open_store() else {
-            return 0;
-        };
-        let e = &open.engine;
         let mut seen: HashSet<String> = HashSet::new();
         let mut asked = false;
         let mut heard = 0;
@@ -143,7 +139,11 @@ impl Home {
                 status: Some(ItemStatus::Kept),
                 limit: None,
             };
-            let waiting: Vec<_> = match e.items(kept) {
+            let listed = match self.using() {
+                Ok((_use, open)) => open.engine.items(kept),
+                Err(_) => break,
+            };
+            let waiting: Vec<_> = match listed {
                 Ok(items) => items
                     .into_iter()
                     .filter(|v| v.kind == ItemKind::Audio && v.text.is_none())
@@ -167,7 +167,11 @@ impl Home {
             }
             for (id, original) in waiting {
                 seen.insert(id.clone());
-                if self.hear_one(e, reader, &language, &id, &original, &scratch) {
+                // One note at a time holds the store, so a restore waits for a note, not a pass.
+                let Ok((_use, open)) = self.using() else {
+                    return heard;
+                };
+                if self.hear_one(&open.engine, reader, &language, &id, &original, &scratch) {
                     heard += 1;
                 }
             }
@@ -189,7 +193,8 @@ impl Home {
         let Some(duration_ms) = pcm_from_wav(original, &pcm) else {
             return false;
         };
-        let Ok(leased) = e.lease_item(id, LEASE) else {
+        let lease = LEASE + Duration::from_millis(u64::from(duration_ms) * 3);
+        let Ok(leased) = e.lease_item(id, lease) else {
             let _ = std::fs::remove_file(&pcm);
             return false;
         };
@@ -204,7 +209,12 @@ impl Home {
                 };
                 match e.record_transcript(id, &leased.lease, t) {
                     Ok(_) => kept = true,
-                    Err(x) => tracing::warn!("a voice note's words were not kept: {x}"),
+                    Err(x) => {
+                        // Not tried again this run: a note that outlasts its lease would be
+                        // read on every return to the front.
+                        tracing::warn!("a voice note's words were not kept: {x}");
+                        lock(&self.voice.nothing).insert(id.to_string());
+                    }
                 }
             }
             Heard::Words(_) | Heard::Nothing => {
