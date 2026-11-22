@@ -1689,3 +1689,104 @@ impl Fx {
         self.engine.phone_sources().unwrap().phones[0].in_browser
     }
 }
+
+/// A big first send stored in one go, with every title sharing words: prints the time of each
+/// batch. Run by hand: `cargo test --release -p nocturne-engine --lib first_send_timing -- --ignored --nocapture`.
+#[test]
+#[ignore = "a measurement, not a check"]
+fn first_send_timing() {
+    let f = fx();
+    let start = std::time::Instant::now();
+    for b in 0..5 {
+        let changes = (0..100)
+            .map(|i| b * 100 + i)
+            .filter(|n| *n < 450)
+            .map(|n| {
+                let day = 18 + (n % 14);
+                upsert(entry(
+                    &format!("e{n}"),
+                    &format!("Meeting {n} with Priya at the Harbour Cafe"),
+                    &format!("2026-11-{day:02}T10:00:00Z"),
+                    &format!("2026-11-{day:02}T11:00:00Z"),
+                ))
+            })
+            .collect();
+        let mut cb = batch("big", changes);
+        cb.seq = b as u32;
+        let t = std::time::Instant::now();
+        f.engine.take_calendar(&f.phone, cb).unwrap();
+        eprintln!("batch {b}: {:?}", t.elapsed());
+    }
+    eprintln!("450 entries: {:?}", start.elapsed());
+}
+
+#[test]
+fn a_calendar_entry_still_asks_about_an_appointment_a_note_filed_elsewhere() {
+    let f = fx();
+    let note = match f
+        .engine
+        .keep_text(
+            "Dr Okafor, dentist appointment on Thursday at nine",
+            Source::QuickCapture,
+        )
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let lease = f
+        .engine
+        .lease_item(&note, std::time::Duration::from_secs(60))
+        .unwrap()
+        .lease;
+    let mut c = crate::Candidate::new(
+        "Dr Okafor",
+        crate::Predicate::Scheduled,
+        "Thursday 26 November at 9:00",
+        "Dentist appointment with Dr Okafor is on Thursday 26 November at 9:00.",
+        0.9,
+    );
+    c.due = Some(date("2026-11-26"));
+    c.valid_from = Some(date("2026-11-26"));
+    c.tags = vec!["appointment".to_string()];
+    f.engine.apply_candidates(&note, &lease, vec![c]).unwrap();
+    f.engine
+        .take_calendar(
+            &f.phone,
+            batch(
+                "s1",
+                vec![upsert(entry(
+                    "ev9",
+                    "Dentist appointment with Dr Okafor",
+                    "2026-11-25T09:00:00Z",
+                    "2026-11-25T09:30:00Z",
+                ))],
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM conflicts"),
+        1,
+        "the note says Thursday and the calendar Wednesday: that is still a question"
+    );
+}
+
+#[test]
+fn calendar_entries_sharing_words_are_never_a_question() {
+    let f = fx();
+    let changes = (0..30)
+        .map(|n| {
+            upsert(entry(
+                &format!("e{n}"),
+                &format!("Meeting {n} with Priya at the Harbour Cafe"),
+                &format!("2026-11-{:02}T10:00:00Z", 18 + (n % 14)),
+                &format!("2026-11-{:02}T11:00:00Z", 18 + (n % 14)),
+            ))
+        })
+        .collect();
+    f.engine
+        .take_calendar(&f.phone, batch("s1", changes))
+        .unwrap();
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM conflicts"), 0);
+}

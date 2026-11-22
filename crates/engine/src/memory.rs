@@ -608,12 +608,17 @@ fn about_other_subject(
 /// between memories of the same privacy, and only when the candidate points at one other
 /// subject. A memory the person re-filed is where they want it and is never linked. A missed
 /// link costs a question; a wrong one asks about the wrong thing.
+///
+/// A calendar entry never disputes another calendar entry: the phone's calendar says which are
+/// separate, so what only calendar entries say is not looked at (`from_calendar`), and their
+/// subjects do not count towards the "one other subject" test either.
 fn appointments_elsewhere(
     tx: &Transaction<'_>,
     c: &Candidate,
     values: &Values,
     subject_key: &str,
     private: bool,
+    from_calendar: bool,
     current: &[MemRow],
 ) -> Result<Vec<MemRow>> {
     let is_value = |w: &str| {
@@ -642,9 +647,11 @@ fn appointments_elsewhere(
              AND m.superseded_at IS NULL AND m.status IN ('active', 'fading') \
              AND m.moved_from_key IS NULL AND m.private = ?2 \
              AND m.rowid IN (SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?3) \
+             AND (?4 = 0 OR EXISTS (SELECT 1 FROM memory_sources s JOIN items i ON i.id = s.item_id \
+                  WHERE s.memory_id = m.id AND i.kind != 'calendar')) \
              ORDER BY m.recorded_at, m.id",
         )?;
-        stmt.query_map(params![subject_key, private, shared], |r| {
+        stmt.query_map(params![subject_key, private, shared, from_calendar], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })?
         .collect::<rusqlite::Result<_>>()?
@@ -1697,7 +1704,15 @@ fn apply_one(
     let mut moves_seen: Vec<(String, String, bool, &'static str)> = Vec::new();
     if status == MemoryStatus::Active {
         let elsewhere = if predicate == "scheduled" {
-            appointments_elsewhere(tx, c, &values, &subject_key, item.private, &current)?
+            appointments_elsewhere(
+                tx,
+                c,
+                &values,
+                &subject_key,
+                item.private,
+                item.calendar,
+                &current,
+            )?
         } else {
             Vec::new()
         };
