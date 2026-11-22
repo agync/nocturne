@@ -160,6 +160,8 @@ pub enum HomeError {
     Full,
     /// The phrase to delete everything was not typed exactly.
     WrongPhrase,
+    /// The person stopped a backup or a restore before it finished. Nothing changed.
+    Stopped,
     Failed,
 }
 

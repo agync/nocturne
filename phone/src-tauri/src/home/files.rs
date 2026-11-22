@@ -50,7 +50,7 @@ impl Home {
         if self.sheet.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return Err(HomeError::NotReady);
         }
-        Ok(Job(&self.sheet))
+        Ok(Job(&self.sheet, &self.stop))
     }
 
     /// Make a backup in `outbox` and offer it on the save sheet. `None` when the person closed the
@@ -246,6 +246,31 @@ mod tests {
         assert_eq!(answer, None);
         assert!(!tmp.path().join(OUTBOX).exists());
         assert!(home.last_backup().is_none());
+    }
+
+    #[test]
+    fn a_stopped_backup_saves_nothing_and_says_it_was_stopped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = alone(tmp.path());
+        let fake = Fake::new(tmp.path());
+        let stop = |_: BackupPhase, _: u64, _: u64| home.stop_job();
+        let answer = home.save_backup_file(&tmp.path().join(OUTBOX), PASS, &fake, &stop);
+        assert_eq!(
+            answer,
+            Some(HomeAnswer::Error {
+                code: HomeError::Stopped
+            })
+        );
+        assert!(!tmp.path().join("drive").exists());
+        assert!(home.last_backup().is_none());
+        // A stop with nothing running does not wait for the next job.
+        home.stop_job();
+        // The next job starts without the stop.
+        let again = home.save_backup_file(&tmp.path().join(OUTBOX), PASS, &fake, &no_progress);
+        assert!(
+            matches!(again, Some(HomeAnswer::BackupSaved { .. })),
+            "{again:?}"
+        );
     }
 
     #[test]

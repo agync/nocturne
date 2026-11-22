@@ -85,6 +85,7 @@ pub fn run() {
             home::commands::voice_access,
             home::commands::voice_request,
             home::commands::save_backup_file,
+            home::commands::backup_stop,
             home::commands::choose_backup_file,
             home::commands::let_go_backup_file,
             home::commands::free_space,

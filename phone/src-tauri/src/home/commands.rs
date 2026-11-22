@@ -379,6 +379,12 @@ pub async fn save_backup_file<R: Runtime>(
     }))
 }
 
+/// "Stop" on a backup, a check or a restore: it ends where it can be ended, and answers `stopped`.
+#[tauri::command]
+pub fn backup_stop<R: Runtime>(app: AppHandle<R>) {
+    app.state::<Home>().stop_job();
+}
+
 /// "Choose the file": the phone's open sheet. The file is copied into the app's cache and
 /// checked to be a Nocturne backup; its `file` then goes to `checkBackup` and `restoreBackup`.
 /// `None` when the sheet was closed. `NotABackup` for any other file.

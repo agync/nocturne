@@ -72,6 +72,8 @@ pub struct Home {
     gate: RwLock<()>,
     /// A backup, check or restore under way: one at a time.
     job: AtomicBool,
+    /// The person pressed Stop on the job under way.
+    pub(crate) stop: AtomicBool,
     /// One of the phone's save or open sheets is up, or its file is on the way: one at a time.
     pub(crate) sheet: AtomicBool,
     /// Callers waiting to swap, reopen or empty the store; long reads let go for them.
@@ -118,10 +120,11 @@ pub(crate) fn io_full(e: &std::io::Error) -> bool {
 }
 
 /// Releases the one job however the call ends.
-pub(crate) struct Job<'a>(&'a AtomicBool);
+pub(crate) struct Job<'a>(&'a AtomicBool, &'a AtomicBool);
 
 impl Drop for Job<'_> {
     fn drop(&mut self) {
+        self.1.store(false, Ordering::SeqCst);
         self.0.store(false, Ordering::SeqCst);
     }
 }
@@ -140,6 +143,7 @@ impl Home {
             open: Mutex::new(None),
             gate: RwLock::new(()),
             job: AtomicBool::new(false),
+            stop: AtomicBool::new(false),
             sheet: AtomicBool::new(false),
             writers: AtomicUsize::new(0),
             voice: voice::Voice::default(),
@@ -164,7 +168,14 @@ impl Home {
         if self.job.swap(true, Ordering::SeqCst) {
             return Err(HomeError::NotReady);
         }
-        Ok(Job(&self.job))
+        Ok(Job(&self.job, &self.stop))
+    }
+
+    /// Stop the backup, check or restore under way, where it still can be stopped.
+    pub fn stop_job(&self) {
+        if self.job.load(Ordering::SeqCst) {
+            self.stop.store(true, Ordering::SeqCst);
+        }
     }
 
     /// Run `f` with the open store and this phone's row in it, for the sync. See the module
