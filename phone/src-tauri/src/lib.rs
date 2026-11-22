@@ -18,7 +18,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_nocturne_system::init())
         .plugin(tauri_plugin_nocturne_calendar::init())
-        .plugin(tauri_plugin_nocturne_health::init());
+        .plugin(tauri_plugin_nocturne_health::init())
+        .plugin(tauri_plugin_nocturne_speech::init());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     builder

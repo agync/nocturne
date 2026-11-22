@@ -3861,6 +3861,7 @@ dependencies = [
  "tauri-plugin-barcode-scanner",
  "tauri-plugin-nocturne-calendar",
  "tauri-plugin-nocturne-health",
+ "tauri-plugin-nocturne-speech",
  "tauri-plugin-nocturne-system",
  "tauri-plugin-opener",
  "tempfile",
@@ -6542,6 +6543,16 @@ name = "tauri-plugin-nocturne-health"
 version = "0.7.2"
 dependencies = [
  "nocturne-contract",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-nocturne-speech"
+version = "0.7.2"
+dependencies = [
  "serde",
  "serde_json",
  "tauri",

@@ -26,6 +26,7 @@ tauri-plugin-opener.workspace = true
 tauri-plugin-nocturne-system = { path = "../plugins/system" }
 tauri-plugin-nocturne-calendar = { path = "../plugins/calendar" }
 tauri-plugin-nocturne-health = { path = "../plugins/health" }
+tauri-plugin-nocturne-speech = { path = "../plugins/speech" }
 jiff.workspace = true
 sha2.workspace = true
 serde.workspace = true
