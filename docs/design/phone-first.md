@@ -101,7 +101,7 @@ The screens above, with these differences in the first release. Every other word
 | This phone, Your memory | "Where it is", "Its mind" ("None yet"); no locked copy row |
 | This phone, This phone | "Version" / "Nocturne {version}". No "Name" row: a phone alone shows its name nowhere, and pairing asks for one if it is ever needed |
 | This phone, Help | "Privacy policy" (opens the policy page in the phone's browser) · "What this phone can do" · "Your phone’s permissions" (the permissions help in the copy table, with "Open phone settings") |
-| This phone, actions | "Move my memory…", "Save a backup…", "Delete everything…". "Move my memory…" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release), the one place a memory can move to in this release |
+| This phone, actions | "Move my memory…", "Save a backup…", "Restore a backup…", "Delete everything…". "Move my memory…" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release), the one place a memory can move to in this release |
 | This phone, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
 
 ### Giving it a mind, in the first release
@@ -127,17 +127,20 @@ should Nocturne's mind be?](#where-should-nocturnes-mind-be) with this as its la
 | Part | Copy |
 |---|---|
 | This phone row | "Save a backup…" / hint "Last backup {day}" or "No backup yet" |
+| This phone row, restore | "Restore a backup…" / hint "What’s on this phone now is put aside first, never deleted." Opens Bring back your memory; after the checks, "Replace what’s on this phone?" always follows, since this phone holds a memory |
 | Form title | "Save a backup" |
 | Form lead | "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
 | Passphrase | 0013's fields, hint, note and tick. The note body is 0013's, word for word: "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Button | "Save the backup…" / under it "Next, choose where to save it." |
 | Saving | The phone's own save sheet, so the person chooses where: their files, a drive app, a computer |
+| Making it | 0013's progress, on the phone: title "Making your backup", label "Saving" then "Checking the backup", a bar with "{done} of {total} · about {eta} left" (no estimate until it is known: "{done} of {total}"), body "You can keep using Nocturne. Anything you keep from now on goes in your next backup.", and "Stop" ("Stopped." / "Nothing was saved, and nothing in Nocturne changed.") |
 | Done | "Your backup is saved." / "{size}, made {time}." / "OK" |
 | Welcome link | "I have a backup" |
 | Restore title | "Bring back your memory" |
 | Restore lead | "Choose your backup file and type its passphrase." |
 | Restore file card | The file's name and "{size}". No date: the backup's own date is locked until the passphrase opens it, and the file's date on the phone changes when it is copied, so it would mislead. 0013's checks show the backup's date once it opens |
 | Restore button | "Choose the file" then "Bring it back" |
+| Checking and restoring | The same bar: "Checking the backup", then "Restoring", each "{done} of {total} · about {eta} left"; body "Keep Nocturne open until this finishes. If it closes, nothing on this phone changes and you can start again."; "Stop" until the last step, then "Almost done. This last step can't be stopped." (0013) |
 | Restore done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
 
 A restore runs 0013's checks before anything shows. On a phone that already holds a memory, 0013's
@@ -171,6 +174,25 @@ aside on the same day, each label adds its time: "Put aside {day}, {time}…".
 ships, "I have a backup" offers both: "A locked copy online" and "A backup file".
 
 ### Behaviour
+
+**Back, on Android.** On Journal or Ask, Back goes to Today; on Today, Back leaves the app, as
+Android does with bottom tabs. Inside a screen, Back goes to the screen it came from. iPhone has no
+Back button; its screens go back with their own back control and swipe.
+
+**What day it is.** As in the journal: a day runs from 4 in the morning to 4 the next morning, so a
+note kept at half past midnight belongs to the evening it was written in, and the timeline says
+"after midnight" ([What a day is](journaling.md#what-a-day-is)). A phone alone has no page time, so
+the boundary is always 4 am; with a mind and a page, it follows the page time as on the computer.
+Today, the journal and "In your calendar today" all use that day. Between midnight and 4 am, Today's
+date line adds ", after midnight", so "Sunday 22 November, after midnight" is not read as a mistake.
+
+**Times.** Every time follows the phone's own 12 or 24-hour setting, on every screen: the Keep
+sheet, Today, the journal, items, backups. The am and pm in these pages are examples.
+
+**A voice note's title.** Recorded in Nocturne: "Voice note" until the phone has heard its words,
+then its first words, cut at a word before about 60 characters, as a note's title is. Shared from
+another app: the file's name without its ending ("Interview 3"), since the person chose that file.
+Never the file name Nocturne made, such as "Voice note.wav".
 
 **The memory.** One store on the phone, the same as a computer's: what was kept and its originals,
 the journal, check-ins, calendar and health readings, forgetting and fading. It
@@ -271,6 +293,9 @@ the line has no meaning when the phone is the home. Keys are the companion's.
 | Calendar and Health screens, delete | (new) | | The delete screens in the copy table: "Delete what Nocturne kept from your calendar?" or "Delete the health readings Nocturne kept?", with an "Also stop…" tick, on by default as on the computer, and the line that the phone's own calendar or Health isn't touched |
 | Calendar and Health screens | `phone.sources.already` | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." | "What Nocturne already kept stays until you delete it." with "Delete what was kept…", opening the computer's From your phones delete preview worded for this phone |
 | Calendar screen | `phone.calendar.stoppedOnComputer.*` | "Your computer isn’t taking your calendar from this phone." | Not shown |
+| Journal | `phone.journal.empty.body` | "Anything you keep, here or on your computer, shows up here." | "Anything you keep shows up here." |
+| Check-in saved | `phone.journal.checkin.from` | "Check-in · {time} · kept from {name}" | "Check-in · {time}" |
+| Check-in saved | `phone.keep.undo` and the late line | "Changed your mind? Until {time}" / "It’s too late to take that back from the phone…" | "Changed your mind?" with no time; no late line |
 
 The companion's other computer lines (pairing, Ask's answer marks, the journal's footers, "Please
 update") belong to screens a phone alone does not show.
@@ -315,7 +340,7 @@ settings" with "Open phone settings". The voice note itself is always kept first
 | A keep that doesn't fit | On the Keep sheet, instead of "Kept.": "There wasn’t room to keep this. Free some room and try again." with "Try again". Nothing is half-kept |
 | Start can't make the memory | On "Your memory lives on this phone", under the button: "Nocturne couldn’t make your memory on this phone. Free some room, then try again." with "Try again". Nothing is made until it works |
 | The memory can’t be opened (damaged) | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." with "I have a backup" and "Get help". "Get help" opens the help page for this case on Nocturne's site in the phone's browser; nothing is sent with it. The damaged store is put aside, never deleted |
-| After Delete everything | Decided by the owner: the app goes back to Welcome as on a new phone, with one line above the buttons: "Everything was deleted from this phone.", and under it "Your phone still lets Nocturne read your calendar and Health until you take that back." with "How to take that back", which opens the permissions help below. The phone's own permissions stay as the person set them |
+| After Delete everything | Decided by the owner: the app goes back to Welcome as on a new phone, with one line above the buttons: "Everything was deleted from this phone.", and under it, only when the phone still grants something, "Your phone still lets Nocturne {what} until you take that back." with "How to take that back", which opens the permissions help below. {what} lists only what is still granted: "read your calendar", "read Health", "use the microphone", or two or three of them joined as a list ("read your calendar and Health", "read your calendar and Health, and use the microphone"). With nothing granted there is no line and no link. The phone's own permissions stay as the person set them |
 | Calendar or health off in the phone's settings | As approved, worded "stays on this phone" |
 | A backup from a newer Nocturne | 0013's words |
 
@@ -810,7 +835,8 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | This phone, memory | "Your memory" / "Where it is" / "On this phone" / "Its mind" / "None yet" / "{service}, online" / "Apple Intelligence" / "{household}, at home" |
 | This phone, copy row | "A locked copy online" / "Off" / "Last copy {time}" |
 | This phone, can do, alone | "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
-| This phone, actions | "Move my memory…" / "Save a backup…" / "Delete everything…" |
+| This phone, actions | "Move my memory…" / "Save a backup…" / "Restore a backup…" / "Delete everything…" |
+| This phone, restore hint | "What’s on this phone now is put aside first, never deleted." |
 | Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Type “delete everything” to go ahead" / "Delete everything" / "Keep everything" |
 | Item, kept | "Kept" / "{how} · {day}, {time}" / "Typed on this phone" / "Taken on this phone" / "Chosen from your photos" / "Recorded on this phone" / "Shared from another app" / "From your calendar" / "From Health" / "Kept on {device}" |
 | Item, private | "Private" / "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest." / "Journal entries can’t be marked private." |
@@ -892,7 +918,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Delete what was kept, Health | "Delete the health readings Nocturne kept?" / "They go from this phone for good." / "{count} health readings" / "Also stop bringing health readings into Nocturne" / "If you leave this off, new readings keep coming in. The ones you delete aren’t brought in again." / "Health on your phone isn’t touched, and nor is a backup you saved." / "Delete" / "Keep them" |
 | Phone full banner | "This phone is nearly full." / "Free some room so Nocturne can keep more." |
 | Permissions help | "Your phone’s permissions" / Android: "Nocturne reads your calendar and Health, and uses the microphone, only while your phone allows it. To take that back: your calendar and the microphone in Settings, then Apps, then Nocturne, then Permissions; Health in Health Connect, then App permissions, then Nocturne." / iPhone: "Nocturne reads your calendar and Health, and uses the microphone and speech recognition, only while your iPhone allows it. To take that back: your calendar, the microphone and speech recognition in Settings, then Nocturne; Health in the Health app, then Sharing, then Apps, then Nocturne." / "Open phone settings" |
-| Deleted, Welcome link | "Your phone still lets Nocturne read your calendar and Health until you take that back." / "How to take that back" |
+| Deleted, Welcome link | "Your phone still lets Nocturne {what} until you take that back." / {what}: "read your calendar" / "read Health" / "use the microphone" / "read your calendar and Health" / "read your calendar and use the microphone" / "read Health and use the microphone" / "read your calendar and Health, and use the microphone" / "How to take that back". No line when nothing is granted |
 | Keep, no room | "There wasn’t room to keep this. Free some room and try again." / "Try again" |
 | Start failed | "Nocturne couldn’t make your memory on this phone. Free some room, then try again." / "Try again" |
 | After Delete everything (pending) | "Everything was deleted from this phone." |
