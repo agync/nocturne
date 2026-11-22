@@ -1145,31 +1145,79 @@ async fn the_night_tidy_clears_every_entry_hold_so_the_night_reads_held_blocks()
 
 // ---- decisions in shadow ----
 
-const NOTES: [(&str, &str, &str); 4] = [
-    ("Gran lives in Leeds", "Gran", "Leeds"),
-    ("Priya lives in York", "Priya", "York"),
-    ("Sam lives in Hull", "Sam", "Hull"),
-    ("Leo lives in Bath", "Leo", "Bath"),
+/// Four appointments, each kept twice on different days: the second of each is logged as a move
+/// the rule did not see.
+const NOTES: [(&str, &str, &str, &str); 8] = [
+    (
+        "Dentist on Monday 16 November at 10:00",
+        "Dentist",
+        "Monday 16 November at 10:00",
+        "2026-11-16",
+    ),
+    (
+        "Dentist on Tuesday 24 November at 09:00",
+        "Dentist",
+        "Tuesday 24 November at 09:00",
+        "2026-11-24",
+    ),
+    (
+        "Optician on Monday 16 November at 11:00",
+        "Optician",
+        "Monday 16 November at 11:00",
+        "2026-11-16",
+    ),
+    (
+        "Optician on Tuesday 24 November at 12:00",
+        "Optician",
+        "Tuesday 24 November at 12:00",
+        "2026-11-24",
+    ),
+    (
+        "Physio on Wednesday 18 November at 15:00",
+        "Physio",
+        "Wednesday 18 November at 15:00",
+        "2026-11-18",
+    ),
+    (
+        "Physio on Thursday 26 November at 16:00",
+        "Physio",
+        "Thursday 26 November at 16:00",
+        "2026-11-26",
+    ),
+    (
+        "Vet on Wednesday 18 November at 17:00",
+        "Vet",
+        "Wednesday 18 November at 17:00",
+        "2026-11-18",
+    ),
+    (
+        "Vet on Thursday 26 November at 08:00",
+        "Vet",
+        "Thursday 26 November at 08:00",
+        "2026-11-26",
+    ),
 ];
 
-fn lives(subject: &str, place: &str) -> nocturne_engine::Candidate {
-    nocturne_engine::Candidate::new(
-        subject,
-        nocturne_engine::Predicate::LivesIn,
-        place,
-        &format!("{subject} lives in {place}."),
-        0.8,
-    )
+fn appointment(subject: &str, object: &str, due: &str) -> nocturne_engine::Candidate {
+    let mut c = nocturne_engine::Candidate::new(
+        &format!("{subject} appointment"),
+        nocturne_engine::Predicate::Scheduled,
+        object,
+        &format!("The {subject} appointment is on {object}."),
+        0.9,
+    );
+    c.due = Some(date(due));
+    c
 }
 
-/// Four notes kept in the evening, each read into its own memory, and the clock at 03:00.
+/// Eight notes kept in the evening, each read into its own memory, and the clock at 03:00.
 fn world_of_notes(mind: FakeMind) -> World {
-    let mut mind = mind.with_headline("A quiet night", "Four things kept.");
-    for (text, subject, place) in NOTES {
-        mind = mind.with_extract(text, vec![lives(subject, place)]);
+    let mut mind = mind.with_headline("A quiet night", "Eight things kept.");
+    for (text, subject, object, due) in NOTES {
+        mind = mind.with_extract(text, vec![appointment(subject, object, due)]);
     }
     let w = world_at("2026-11-12T20:00:00Z", mind);
-    for (text, _, _) in NOTES {
+    for (text, ..) in NOTES {
         keep(&w, text);
     }
     at(&w, "2026-11-13T03:00:00Z");
@@ -1178,7 +1226,7 @@ fn world_of_notes(mind: FakeMind) -> World {
 
 #[tokio::test]
 async fn the_night_tidy_asks_the_mind_in_shadow_once_the_page_is_saved() {
-    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    let w = world_of_notes(FakeMind::new().with_decision("Kept appointment", "same"));
     assert_eq!(
         w.scheduler.tick().await,
         SchedStep::Started(TidyKind::Night)
@@ -1188,8 +1236,8 @@ async fn the_night_tidy_asks_the_mind_in_shadow_once_the_page_is_saved() {
     let log = w.engine.decision_log().unwrap();
     assert_eq!(log.len(), 4, "{log:?}");
     for row in &log {
-        assert!(!row.rule, "the rules see no health, money or ID detail");
-        assert_eq!(row.label.as_deref(), Some("no"));
+        assert!(!row.rule, "the rule saw no move");
+        assert_eq!(row.label.as_deref(), Some("same"));
         assert_eq!(row.verdict, Some(false));
         assert!(row.asked_at.is_some());
         assert!(row.error.is_none());
@@ -1256,7 +1304,7 @@ async fn a_catch_up_tidy_asks_no_decider() {
 
 #[tokio::test]
 async fn shadow_asking_waits_for_another_night_when_the_person_is_back() {
-    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    let w = world_of_notes(FakeMind::new().with_decision("Kept appointment", "same"));
     assert_eq!(
         w.scheduler.tick().await,
         SchedStep::Started(TidyKind::Night)
@@ -1270,7 +1318,7 @@ async fn shadow_asking_waits_for_another_night_when_the_person_is_back() {
 
 #[tokio::test]
 async fn shadow_asking_stops_short_of_the_page_time() {
-    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    let w = world_of_notes(FakeMind::new().with_decision("Kept appointment", "same"));
     at(&w, "2026-11-13T06:57:00Z");
     assert_eq!(
         w.scheduler.tick().await,

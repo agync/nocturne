@@ -30,7 +30,6 @@ mod reindex;
 mod remote;
 mod retrieve;
 mod rows;
-mod sensitive;
 mod settings;
 mod types;
 mod util;
