@@ -361,7 +361,24 @@ impl Drop for Busy<'_> {
     }
 }
 
+/// No send runs while this is held: for changes to the store and the ledger that a send in the
+/// middle would undo.
+pub struct Hold<'a> {
+    _busy: Busy<'a>,
+}
+
 impl Syncer {
+    /// Wait for a send under way to end, then keep the next from starting until the hold goes.
+    /// It blocks: call it off the async workers.
+    pub fn hold(&self) -> Hold<'_> {
+        while self.busy.swap(true, Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        Hold {
+            _busy: Busy(&self.busy),
+        }
+    }
+
     pub fn new(ledger: LedgerFile) -> Syncer {
         Syncer {
             ledger,

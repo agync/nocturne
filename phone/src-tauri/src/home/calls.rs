@@ -311,7 +311,11 @@ impl Home {
             name,
         })
         .map_err(|_| HomeError::Failed)?;
-        self.open_store()?;
+        // The memory has changed places: say so even if it does not open, and the next open
+        // shows what is wrong.
+        if let Err(code) = self.open_store() {
+            tracing::warn!("the memory brought back did not open: {code:?}");
+        }
         Ok(HomeAnswer::Restored)
     }
 
@@ -330,10 +334,6 @@ impl Home {
             .map_err(|e| code(&e))?;
         drop(open);
         self.close();
-        self.forget_mode().map_err(|e| {
-            tracing::warn!("could not forget where the memory lives: {e}");
-            HomeError::Failed
-        })?;
         clear(&self.store_dir());
         for name in self.put_aside_names() {
             clear(&self.path(&name));
@@ -341,9 +341,17 @@ impl Home {
         clear(&self.stage_dir());
         clear(&self.check_dir());
         clear(&self.keeping_dir());
-        self.clear_damaged();
         self.forget_backup_note();
         self.forget_fading_note();
+        if self.store_dir().exists() || !self.put_aside_names().is_empty() {
+            return Err(HomeError::Failed);
+        }
+        self.clear_damaged();
+        // Last, so a stop part way through still opens on what is left, never on Welcome.
+        self.forget_mode().map_err(|e| {
+            tracing::warn!("could not forget where the memory lives: {e}");
+            HomeError::Failed
+        })?;
         Ok(HomeAnswer::Deleted)
     }
 
