@@ -113,7 +113,11 @@ impl Home {
         self.clear_damaged();
         self.forget_backup_note();
         self.forget_fading_note();
-        self.open_store()?;
+        // The memory has changed places: say so even if it does not open, and the next open
+        // shows what is wrong.
+        if let Err(code) = self.open_store() {
+            tracing::warn!("the memory brought back did not open: {code:?}");
+        }
         Ok(HomeAnswer::Restored)
     }
 

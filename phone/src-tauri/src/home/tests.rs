@@ -819,6 +819,29 @@ fn delete_everything_forgets_what_the_phone_brings_and_its_choices() {
     assert!(again.calendar.sent.is_empty());
 }
 
+#[test]
+fn no_send_runs_while_a_delete_holds_the_syncer() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let dir = tempfile::tempdir().unwrap();
+    let syncer = Arc::new(crate::sync::Syncer::new(crate::sync::LedgerFile::open(
+        dir.path(),
+    )));
+    let held = syncer.hold();
+    let got = Arc::new(AtomicBool::new(false));
+    let waiter = {
+        let (syncer, got) = (syncer.clone(), got.clone());
+        std::thread::spawn(move || {
+            let _hold = syncer.hold();
+            got.store(true, Ordering::SeqCst);
+        })
+    };
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    assert!(!got.load(Ordering::SeqCst), "waits for the first hold");
+    drop(held);
+    waiter.join().unwrap();
+    assert!(got.load(Ordering::SeqCst));
+}
+
 fn put_aside(home: &Home) -> Vec<nocturne_contract::PutAsideMemory> {
     match local(home, HomeCall::PutAside) {
         HomeAnswer::PutAside { memories } => memories,

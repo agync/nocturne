@@ -61,6 +61,8 @@ pub async fn start_alone<R: Runtime>(app: AppHandle<R>, name: String) -> Result<
     blocking(move || handle.state::<Home>().start_alone(&name, paired))
         .await
         .unwrap_or(Err(HomeError::Failed))?;
+    // What was sent before went into a store that is not this one.
+    app.state::<AppState>().syncer.ledger.forget_sends();
     emit_mode(&app);
     Ok(())
 }
@@ -147,7 +149,22 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     let worker = app.clone();
     let answer = blocking(move || {
         let progress = progress(worker.clone());
-        worker.state::<Home>().local_call(call, paired, &progress)
+        let syncer = &worker.state::<AppState>().syncer;
+        // What the phone brings and the store change together: no send runs in between.
+        let _hold = (deletes || source.is_some()).then(|| syncer.hold());
+        if let Some((PhoneSource::Calendar, true)) = source {
+            // Stopped first, so nothing read meanwhile comes back after the delete.
+            syncer.ledger.update(|l| l.calendar.settings.bring = false);
+        }
+        let answer = worker.state::<Home>().local_call(call, paired, &progress);
+        match (&answer, source) {
+            (HomeAnswer::Deleted, _) if deletes => syncer.ledger.reset(),
+            (HomeAnswer::SourceDeleted, Some((source, also_stop))) => {
+                forget_source_sends(&syncer.ledger, source, also_stop)
+            }
+            _ => {}
+        }
+        answer
     })
     .await
     .unwrap_or(HomeAnswer::Error {
@@ -167,11 +184,7 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     }
     if deletes && matches!(answer, HomeAnswer::Deleted) {
         // Nothing comes back until the person starts again and chooses what the phone brings.
-        ledger.reset();
         emit_mode(&app);
-    }
-    if let (Some((source, also_stop)), HomeAnswer::SourceDeleted) = (source, &answer) {
-        forget_source_sends(ledger, source, also_stop);
     }
     answer
 }
