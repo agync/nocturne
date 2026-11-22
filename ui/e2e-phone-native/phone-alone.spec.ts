@@ -177,6 +177,10 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("button", { name: "Start on this phone" })).toBeVisible();
       await clean(page);
       await shot(page, `after-deleted-${scheme}`);
+      await page.getByRole("button", { name: "How to take that back" }).click();
+      await expect(page.getByRole("heading", { name: "Your phone’s permissions" })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-permissions-${scheme}`);
     });
 
     test("Today, Keep and This phone when the phone is nearly full", async ({ page }) => {
@@ -196,6 +200,13 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-this-phone-full-${scheme}`);
     });
 
+    test("two put aside on one day", async ({ page }) => {
+      await page.goto("/?m=aside&twice=1&v=thisPhone");
+      await expect(page.getByRole("button", { name: /5:10 pm…$/ })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-this-phone-aside-twice-${scheme}`);
+    });
+
     test("what was put aside, brought back or deleted", async ({ page }) => {
       await toThisPhone(page, "aside");
       await expect(page.getByRole("button", { name: /^Put aside .*…$/ })).toBeVisible();
@@ -207,13 +218,15 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-put-aside-${scheme}`);
       await page.getByRole("button", { name: "Bring it back…" }).click();
       await expect(
-        page.getByRole("heading", { name: "Go back to what was here before?" }),
+        page.getByRole("heading", { name: /^Bring back what was put aside .*\?$/ }),
       ).toBeVisible();
       await clean(page);
       await shot(page, `after-bring-back-${scheme}`);
-      await page.getByRole("button", { name: "Not now" }).click();
+      await page.getByRole("button", { name: "Cancel" }).click();
       await page.getByRole("button", { name: "Delete it…" }).click();
-      await expect(page.getByRole("heading", { name: "Delete what was put aside?" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: /^Delete what was put aside .*\?$/ }),
+      ).toBeVisible();
       await clean(page);
       await shot(page, `after-delete-put-aside-${scheme}`);
     });
@@ -224,12 +237,17 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByText(/6 appointments from your calendar/)).toBeVisible();
       await clean(page);
       await shot(page, `after-delete-kept-${scheme}`);
+      await page.getByLabel("Health").check();
+      await expect(page.getByText("412 health readings")).toBeVisible();
+      await clean(page);
+      await shot(page, `after-delete-kept-health-${scheme}`);
     });
 
     test("Forget and Delete from an item's page", async ({ page }) => {
       await page.goto("/?m=kept");
       await page.getByRole("button", { name: /Ask about the swap/ }).click();
-      await expect(page.getByRole("button", { name: "Forget…" })).toBeVisible();
+      await expect(page.getByText(/^Typed on this phone · /)).toBeVisible();
+      await expect(page.getByRole("button", { name: "Forget…" })).toHaveCount(0);
       await page.getByRole("button", { name: "Delete…" }).click();
       await expect(page.getByRole("heading", { name: "Delete 1 thing?" })).toBeVisible();
       await clean(page);

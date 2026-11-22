@@ -50,7 +50,7 @@ describe("saving a backup through the phone's sheet", () => {
 });
 
 describe("bringing back a backup file", () => {
-  it("shows the file's size, made {day} only when known, and lets go of it on leaving", async () => {
+  it("shows the file's name and size with no date, and lets go of it on leaving", async () => {
     const services = await app("m=first&s=welcome");
     const letGo = vi.spyOn(services.home, "letGoBackupFile");
     const choose = vi
@@ -62,7 +62,8 @@ describe("bringing back a backup file", () => {
     expect(screen.getByText("2 MB")).toBeInTheDocument();
     expect(screen.queryByText(/made/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    expect(await screen.findByText(/^412 MB · made /)).toBeInTheDocument();
+    expect(await screen.findByText("412 MB")).toBeInTheDocument();
+    expect(screen.queryByText(/made/)).toBeNull();
     expect(choose).toHaveBeenCalledTimes(2);
     const [back] = screen.getAllByRole("button", { name: "Back" });
     if (back) fireEvent.click(back);
@@ -93,11 +94,13 @@ describe("what was put aside", () => {
     const row = await within(memory).findByRole("button", { name: /^Put aside .*20 November…$/ });
     fireEvent.click(row);
     expect(await screen.findByRole("heading", { name: /^Put aside .*20 November$/ })).toBeVisible();
-    expect(screen.getByText("388 MB")).toBeInTheDocument();
+    expect(
+      screen.getByText("What was on this phone before a backup was brought back. 388 MB."),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete it…" }));
     expect(
-      await screen.findByRole("heading", { name: "Delete what was put aside?" }),
+      await screen.findByRole("heading", { name: /^Delete what was put aside .*20 November\?$/ }),
     ).toBeVisible();
     expect(
       screen.getByText(
@@ -108,7 +111,9 @@ describe("what was put aside", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Bring it back…" }));
     expect(
-      await screen.findByRole("heading", { name: "Go back to what was here before?" }),
+      await screen.findByRole("heading", {
+        name: /^Bring back what was put aside .*20 November\?$/,
+      }),
     ).toBeVisible();
     expect(
       screen.getByText(
@@ -123,7 +128,7 @@ describe("what was put aside", () => {
 
     fireEvent.click(within(back).getByRole("button", { name: /^Put aside/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete it…" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     const after = await screen.findByRole("region", { name: "Your memory" });
     await waitFor(() =>
       expect(within(after).queryByRole("button", { name: /^Put aside/ })).toBeNull(),
@@ -138,24 +143,31 @@ describe("deleting what the calendar brought", () => {
     await thisPhone();
     fireEvent.click(await screen.findByRole("button", { name: "Delete what was kept…" }));
     expect(
-      await screen.findByRole("heading", { name: "Delete the calendar kept in Nocturne?" }),
+      await screen.findByRole("heading", { name: "Delete what Nocturne kept from your calendar?" }),
     ).toBeVisible();
     expect(screen.getByText("It goes from this phone for good.")).toBeInTheDocument();
     expect(
       await screen.findByText("6 appointments from your calendar, and their earlier versions"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Also stop showing your calendar in Nocturne/)).toBeChecked();
+    expect(
+      screen.getByText("Your phone’s calendar isn’t touched, and nor is a backup you saved."),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Health"));
     expect(
-      await screen.findByRole("heading", { name: "Delete the health readings kept in Nocturne?" }),
+      await screen.findByRole("heading", { name: "Delete the health readings Nocturne kept?" }),
     ).toBeVisible();
-    expect(await screen.findByText("There is nothing left to delete here.")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Also stop/)).toBeNull();
+    expect(screen.getByText("They go from this phone for good.")).toBeInTheDocument();
+    expect(await screen.findByText("412 health readings")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Also stop bringing health readings into Nocturne/)).toBeChecked();
+    expect(
+      screen.getByText("Health on your phone isn’t touched, and nor is a backup you saved."),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Your calendar"));
     await screen.findByText(/6 appointments/);
     fireEvent.click(screen.getByLabelText(/Also stop showing/));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(remove).toHaveBeenCalledWith("kept-token", "calendar", false));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("kept-calendar", "calendar", false));
     expect(await screen.findByRole("heading", { name: "Deleted." })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     expect(await screen.findByRole("region", { name: "Your memory" })).toBeInTheDocument();
@@ -195,15 +207,46 @@ describe("a phone that is nearly full", () => {
   }, 15_000);
 });
 
+describe("This phone's help and two put aside on one day", () => {
+  it("opens the phone's permissions and tells same-day put asides apart by time", async () => {
+    await app("m=aside&twice=1");
+    await thisPhone();
+    fireEvent.click(await screen.findByRole("button", { name: "Your phone’s permissions" }));
+    expect(await screen.findByRole("button", { name: "Open phone settings" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back to home" }));
+    const memory = await screen.findByRole("region", { name: "Your memory" });
+    expect(
+      await within(memory).findByRole("button", { name: /^Put aside .*20 November, 8:15 am…$/ }),
+    ).toBeVisible();
+    fireEvent.click(within(memory).getByRole("button", { name: /20 November, 5:10 pm…$/ }));
+    expect(
+      await screen.findByRole("heading", { name: /^Put aside .*20 November, 5:10 pm$/ }),
+    ).toBeVisible();
+  }, 15_000);
+});
+
+describe("how a thing was kept", () => {
+  it("notes a typed note for its page", async () => {
+    await app("m=fresh");
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    fireEvent.change(await screen.findByLabelText(/Type something to keep/), {
+      target: { value: "Bins go out on Tuesday" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await screen.findByText("It’s on today’s journal, and Ask can find it by its words.");
+    fireEvent.click(screen.getByRole("button", { name: "Back to home" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Bins go out on Tuesday/ }));
+    expect(await screen.findByText(/^Typed on this phone · /)).toBeInTheDocument();
+  }, 15_000);
+});
+
 describe("forgetting and deleting from a thing's page", () => {
-  it("has nothing to forget with no mind, and deletes the thing", async () => {
+  it("says how it was kept, offers no Forget with nothing worked out, and deletes it", async () => {
     await app("m=kept");
     fireEvent.click(await screen.findByRole("button", { name: /Ask about the swap/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Forget…" }));
-    expect(
-      await screen.findByRole("heading", { name: "There is nothing left to delete here." }),
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(await screen.findByText(/^Typed on this phone · .*, 7:05 am$/)).toBeInTheDocument();
+    expect(screen.getByText("Kept")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Forget…" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
     expect(await screen.findByRole("heading", { name: "Delete 1 thing?" })).toBeVisible();
     expect(
