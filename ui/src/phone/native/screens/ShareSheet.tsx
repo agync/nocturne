@@ -61,6 +61,16 @@ function textToKeep(shared: Shared, note: string): string {
   return parts.join("\n\n");
 }
 
+/** A shared file's name without its ending: "Interview 3.m4a" is "Interview 3". */
+function titleOf(shown: string): string | undefined {
+  const stem = shown
+    .replace(/\.[A-Za-z0-9]{1,5}$/, "")
+    .trim()
+    .slice(0, 100)
+    .trim();
+  return stem === "" ? undefined : stem;
+}
+
 /**
  * What a share keeps, each file checked for its kind and size first, one at a time; or why
  * nothing can be kept. Throws when a file can no longer be read.
@@ -96,6 +106,7 @@ export async function sharedKeeps(
       kind,
       blob,
       caption: kind === "photo" ? caption : undefined,
+      ...(kind === "recording" ? { name: titleOf(file.shown) } : {}),
       ...marks,
       size: blob.size,
       createdAt: now(),
@@ -202,7 +213,7 @@ export function ShareSheet({
           k.kind === "text"
             ? engine.keepText(k.text ?? "", k.clientId, marks)
             : k.kind === "recording"
-              ? engine.keepRecording(k.blob as Blob, k.clientId, marks)
+              ? engine.keepRecording(k.blob as Blob, k.clientId, { ...marks, name: k.name })
               : engine.keepBytes(k.blob as Blob, k.clientId, k.caption, marks),
         );
         await queue.remove(k.clientId);

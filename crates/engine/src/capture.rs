@@ -779,6 +779,17 @@ impl Engine {
         })
     }
 
+    /// Give an item a new title, only while it still has the one it was given; anything the
+    /// person or a mind has changed since is left alone. Answers whether the title changed.
+    pub fn retitle(&self, item: &str, from: &str, to: &str) -> Result<bool> {
+        self.write(|tx| {
+            Ok(tx.execute(
+                "UPDATE items SET title = ?3 WHERE id = ?1 AND title = ?2",
+                params![item, from, to],
+            )? > 0)
+        })
+    }
+
     /// Mark an item as one the mind could not read, with the reason.
     pub fn fail_item(&self, item: &str, lease: &str, reason: CouldntReadReason) -> Result<()> {
         self.write(|tx| {

@@ -18,6 +18,7 @@ use nocturne_contract::{
 };
 use nocturne_engine::{Engine, KeepPlace};
 
+use super::voice::VOICE_NOTE;
 use super::{Open, io_full, is_full};
 
 /// The longest word of a feeling the screens may send. Nocturne's own words are far shorter.
@@ -413,9 +414,9 @@ pub fn keep_bytes(open: &Open, call: RemoteCall, bytes: &[u8], scratch: &Path) -
     }
     let ext = extension_for(&mime).unwrap_or("bin");
     let base = match (recording, mime.as_str()) {
-        (true, _) => "Voice note",
+        (true, _) => VOICE_NOTE,
         (_, m) if m.starts_with("image/") => "Photo",
-        (_, m) if m.starts_with("audio/") => "Voice note",
+        (_, m) if m.starts_with("audio/") => VOICE_NOTE,
         _ => "Document",
     };
     let name = caption
@@ -446,7 +447,17 @@ pub fn keep_bytes(open: &Open, call: RemoteCall, bytes: &[u8], scratch: &Path) -
             day: Some(day),
             phone: Some((me, &client_id)),
         };
-        let kept = e.keep_file(&file, Source::Phone)?;
+        let mut kept = e.keep_file(&file, Source::Phone)?;
+        // A voice note is titled "Voice note", or by the name of the file it was shared as,
+        // never by the file name Nocturne gave it.
+        if base == VOICE_NOTE {
+            let (Kept::New { item } | Kept::Duplicate { item }) = &mut kept;
+            match e.retitle(&item.id, &format!("{name}.{ext}"), &name) {
+                Ok(true) => item.title.clone_from(&name),
+                Ok(false) => {}
+                Err(x) => tracing::warn!("a voice note's title was not changed: {x}"),
+            }
+        }
         let (Kept::New { item } | Kept::Duplicate { item }) = &kept;
         if matches!(kept, Kept::New { .. }) {
             e.link_remote_keep(&item.id, me, &client_id)?;

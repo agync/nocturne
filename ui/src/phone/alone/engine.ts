@@ -133,8 +133,19 @@ export function createLocalEngine(options: {
       if (blob.size < 1) throw new PhoneRequestError("invalid");
       if (blob.size > P.MAX_ITEM) throw new PhoneRequestError("tooLarge");
       const mime = await mimeOf(blob);
+      // A shared voice note goes in under its own name, which titles it.
+      const title = marks?.name?.trim();
       const kept = await keepWith(
-        { cmd: "keepRecording", mime, size: blob.size, clientId, ...marked(marks) },
+        title
+          ? {
+              cmd: "keepBytes",
+              mime,
+              size: blob.size,
+              clientId,
+              caption: title,
+              ...marked(marks),
+            }
+          : { cmd: "keepRecording", mime, size: blob.size, clientId, ...marked(marks) },
         blob,
       );
       return noted(kept, marks);
