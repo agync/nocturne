@@ -76,6 +76,8 @@ export interface HomeApi {
   stats(): Promise<HomeStats>;
   /** Makes the backup, then the phone's save sheet; null when the sheet was closed. */
   saveBackupFile(passphrase: string, onProgress: Progress): Promise<BackupReport | null>;
+  /** Stops the backup, check or restore under way, where it can still be stopped. */
+  stopBackup(): Promise<void>;
   /** The phone's open sheet; null when it was closed. */
   chooseBackupFile(): Promise<PickedFile | null>;
   /** The chosen file's copy goes, when the restore is left. */
@@ -190,6 +192,7 @@ export function createHomeApi(notes: NoteStore = idbNotes()): HomeApi {
         stop();
       }
     },
+    stopBackup: () => invoke<void>("backup_stop").catch(() => undefined),
     async chooseBackupFile() {
       let chosen: ChosenBackup | null;
       try {

@@ -234,6 +234,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           pickFile={services.home.chooseBackupFile}
           check={services.home.checkBackup}
           restore={services.home.restoreBackup}
+          stop={services.home.stopBackup}
           letGo={services.home.letGoBackupFile}
           onBack={() => void home()}
           onDone={() => void home()}
