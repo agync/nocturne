@@ -28,6 +28,8 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
+    // The app has it through Tauri; only the activity result type is needed here.
+    compileOnly("androidx.activity:activity:1.6.0")
     testImplementation("junit:junit:4.13.2")
     implementation(project(":tauri-android"))
 }

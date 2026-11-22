@@ -16,6 +16,7 @@ pub mod calls;
 pub mod commands;
 pub mod dispatch;
 pub mod fading;
+pub mod files;
 pub mod mode;
 #[cfg(test)]
 mod tests;

@@ -10,7 +10,9 @@ use nocturne_contract::{
 use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_nocturne_speech::{Access, SpeechExt};
+use tauri_plugin_nocturne_system::{Sheet, SystemExt};
 
+use super::files::{ChosenBackup, INBOX, OUTBOX, Sheets};
 use super::voice::{Heard, Reader};
 use super::{Home, dispatch};
 use crate::state::AppState;
@@ -144,6 +146,9 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
         code: HomeError::Failed,
     });
     let done = matches!(answer, HomeAnswer::Restored | HomeAnswer::Deleted);
+    if changes_mode && done {
+        let_go_backup_file(app.clone());
+    }
     if changes_store && done {
         // What was sent before went into the store that is gone: send it all again.
         app.state::<AppState>().syncer.ledger.forget_sends();
@@ -257,4 +262,87 @@ pub async fn voice_request<R: Runtime>(app: AppHandle<R>) -> Access {
     blocking(move || app.speech().request().unwrap_or(Access::Denied))
         .await
         .unwrap_or(Access::Denied)
+}
+
+/// A folder of the app's cache, for copies that never outlive their use.
+fn cache_dir<R: Runtime>(app: &AppHandle<R>, name: &str) -> Option<std::path::PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join(name))
+}
+
+/// Copies an earlier run left behind, when it stopped while a sheet was open.
+pub fn clear_backup_copies<R: Runtime>(app: &AppHandle<R>) {
+    for name in [OUTBOX, INBOX] {
+        if let Some(dir) = cache_dir(app, name) {
+            super::calls::clear(&dir);
+        }
+    }
+}
+
+/// The phone's sheets, through the system plugin.
+struct PhoneSheets<R: Runtime>(AppHandle<R>);
+
+impl<R: Runtime> Sheets for PhoneSheets<R> {
+    fn save(&self, src: &std::path::Path, name: &str) -> Sheet {
+        self.0.system().save_file(src, name).unwrap_or_else(|e| {
+            tracing::warn!("the save sheet failed: {e:?}");
+            Sheet::Failed
+        })
+    }
+
+    fn choose(&self, dir: &std::path::Path) -> Sheet {
+        self.0.system().choose_file(dir).unwrap_or_else(|e| {
+            tracing::warn!("the open sheet failed: {e:?}");
+            Sheet::Failed
+        })
+    }
+}
+
+/// "Save the backup…": the backup is made, with `backup-progress` events, then the phone's save
+/// sheet lets the person choose where it goes. `None` when they closed the sheet: nothing was
+/// saved and the last backup stays as it was.
+#[tauri::command]
+pub async fn save_backup_file<R: Runtime>(
+    app: AppHandle<R>,
+    passphrase: String,
+) -> Option<HomeAnswer> {
+    let Some(outbox) = cache_dir(&app, OUTBOX) else {
+        return Some(HomeAnswer::Error {
+            code: HomeError::Failed,
+        });
+    };
+    blocking(move || {
+        let progress = progress(app.clone());
+        let sheets = PhoneSheets(app.clone());
+        app.state::<Home>()
+            .save_backup_file(&outbox, &passphrase, &sheets, &progress)
+    })
+    .await
+    .unwrap_or(Some(HomeAnswer::Error {
+        code: HomeError::Failed,
+    }))
+}
+
+/// "Choose the file": the phone's open sheet. The file is copied into the app's cache and
+/// checked to be a Nocturne backup; its `file` then goes to `checkBackup` and `restoreBackup`.
+/// `None` when the sheet was closed. `NotABackup` for any other file.
+#[tauri::command]
+pub async fn choose_backup_file<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<ChosenBackup>, HomeError> {
+    let inbox = cache_dir(&app, INBOX).ok_or(HomeError::Failed)?;
+    blocking(move || {
+        let sheets = PhoneSheets(app.clone());
+        app.state::<Home>().choose_backup_file(&inbox, &sheets)
+    })
+    .await
+    .unwrap_or(Err(HomeError::Failed))
+}
+
+/// The chosen backup's copy goes, when the person leaves the restore without bringing it back.
+/// A restore that worked lets go of it itself.
+#[tauri::command]
+pub fn let_go_backup_file<R: Runtime>(app: AppHandle<R>) {
+    if let Some(dir) = cache_dir(&app, INBOX) {
+        super::calls::clear(&dir);
+    }
 }

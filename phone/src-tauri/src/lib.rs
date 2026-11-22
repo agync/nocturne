@@ -35,6 +35,7 @@ pub fn run() {
             ));
             sources::start(app.handle());
             home::commands::fade_soon(app.handle());
+            home::commands::clear_backup_copies(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -80,6 +81,9 @@ pub fn run() {
             home::commands::hear_voice_notes,
             home::commands::voice_access,
             home::commands::voice_request,
+            home::commands::save_backup_file,
+            home::commands::choose_backup_file,
+            home::commands::let_go_backup_file,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
