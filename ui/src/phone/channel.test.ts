@@ -1025,6 +1025,35 @@ describe("the engine's calls", () => {
       });
       engine.close();
     });
+
+    it("online answers' notice: the question waits, is kept on the computer, or is cleared", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const calls: unknown[] = [];
+      let seen = false;
+      computer.handler = async (ctx) => {
+        const call = ctx.request.call;
+        calls.push(call);
+        if (call.cmd === "ask" && !seen && call.place !== "thisComputer") {
+          return ctx.reply({ type: "error", code: "onlineChanged" });
+        }
+        if (call.cmd === "seeOnlineChange") seen = true;
+        return computer.defaultHandler(ctx);
+      };
+      await expect(engine.ask("Swimming?", () => undefined)).rejects.toMatchObject({
+        code: "onlineChanged",
+      });
+      await engine.ask("Swimming?", () => undefined, "thisComputer");
+      await engine.seeOnlineChange();
+      await engine.ask("Swimming?", () => undefined);
+      expect(calls).toEqual([
+        { cmd: "ask", question: "Swimming?" },
+        { cmd: "ask", question: "Swimming?", place: "thisComputer" },
+        { cmd: "seeOnlineChange" },
+        { cmd: "ask", question: "Swimming?" },
+      ]);
+      engine.close();
+    });
   });
 
   it("reads an original from chunks and refuses one whose bytes are not its type", async () => {

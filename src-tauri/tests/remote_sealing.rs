@@ -184,6 +184,7 @@ fn run(path: u8) {
         };
         let ask = block(c.request(RemoteCall::Ask {
             question: "When is the heron feeder refilled?".into(),
+            place: None,
         }))
         .unwrap();
         let mut answer = String::new();

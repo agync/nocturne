@@ -383,7 +383,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("turn_on_online", Never),
         ("turn_off_online", Never),
         ("abandon_online_setup", Never),
-        ("see_online_change", Never),
+        ("see_online_change", Allow),
         ("update_online_settings", Never),
         ("list_online_sends", Never),
         ("get_models", Never),
@@ -487,7 +487,10 @@ mod tests {
                 captured_at: None,
             },
             RemoteCall::Unkeep { id: s() },
-            RemoteCall::Ask { question: s() },
+            RemoteCall::Ask {
+                question: s(),
+                place: None,
+            },
             RemoteCall::CancelAsk { ask_id: s() },
             RemoteCall::GetPage { date: None },
             RemoteCall::ListPages,
@@ -524,6 +527,7 @@ mod tests {
                 line: None,
                 client_id: s(),
             },
+            RemoteCall::SeeOnlineChange,
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -545,7 +549,8 @@ mod tests {
                 | RemoteCall::LookBack { .. }
                 | RemoteCall::KeepCheckIn { .. }
                 | RemoteCall::AnswerSameName { .. }
-                | RemoteCall::AnswerJournalQuestion { .. } => {}
+                | RemoteCall::AnswerJournalQuestion { .. }
+                | RemoteCall::SeeOnlineChange => {}
             }
         }
         let snake = |camel: &str| {
@@ -600,6 +605,7 @@ mod tests {
             "get_journal_day",
             "keep_check_in",
             "answer_same_name",
+            "see_online_change",
         ]
         .into_iter()
         .collect();

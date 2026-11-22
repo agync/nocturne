@@ -833,6 +833,19 @@ impl<R: Runtime> OnlineHub<R> {
         Ok(self.view_now())
     }
 
+    /// Whether a question from a phone that would go online waits for the one-time notice:
+    /// Online answers is on, phones may use it, and the person has not seen what changed.
+    pub fn phone_notice_due(&self) -> bool {
+        self.load();
+        let Ok(engine) = self.engine() else {
+            return false;
+        };
+        let Ok(row) = engine.online_state() else {
+            return false;
+        };
+        row.wanted_on && row.phones && !engine.online_change_seen().unwrap_or(false)
+    }
+
     /// Turns Online answers off at once: questions on their way online stop and are answered
     /// here, then the engine is relaunched without the route. With `forget`, the key is
     /// removed and Online answers is no longer set up.

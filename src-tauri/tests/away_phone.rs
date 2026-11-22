@@ -85,6 +85,7 @@ async fn run(s: Value) -> Result<Value, String> {
     let ask_id = c
         .request(RemoteCall::Ask {
             question: "When is swimming?".into(),
+            place: None,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;

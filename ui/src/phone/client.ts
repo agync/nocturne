@@ -389,7 +389,7 @@ export function createPhoneEngine(
       checkItemId(id);
       await once({ cmd: "unkeep", id }, "done");
     },
-    async ask(question, onDelta): Promise<string> {
+    async ask(question, onDelta, place): Promise<string> {
       if (utf8(question).length > P.MAX_QUESTION) throw new PhoneRequestError("invalid");
       if (question.trim() === "") throw new PhoneRequestError("invalid");
       return call(async (s) => {
@@ -401,7 +401,8 @@ export function createPhoneEngine(
           return e;
         };
         let askId = "";
-        const { result } = s.request({ cmd: "ask", question }, (answer) => {
+        const request: RemoteCall = { cmd: "ask", question, ...(place ? { place } : {}) };
+        const { result } = s.request(request, (answer) => {
           if (answer.type === "askStarted") askId = answer.askId;
           if (answer.type === "askDelta") {
             const delta: AskDelta = answer.delta;
@@ -415,6 +416,9 @@ export function createPhoneEngine(
         });
         return askId || id;
       }, false);
+    },
+    async seeOnlineChange() {
+      await once({ cmd: "seeOnlineChange" }, "done");
     },
     async cancelAsk(askId) {
       checkClientId(askId);

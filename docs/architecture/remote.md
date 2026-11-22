@@ -76,7 +76,10 @@ Ten calls and two phone verbs, each a typed match: see readiness, keep text, kee
 or voice note, take back a recent keep, ask and cancel, read today's page and the last seven, and
 open a cited original. The journal adds its own calls: read a day and a look back, keep a check-in,
 answer "Which {name} is this?", and answer the page's question from the journal, which is kept once
-per client id like a keep. A keep that waited on the phone says when it was made, and the computer
+per client id like a keep. Online answers adds one: say that the person has seen what changed
+when only what they mark private began to be held back. A phone question that would go online
+while that notice waits is not started; the phone shows the notice, and may ask again with the
+computer chosen. A keep that waited on the phone says when it was made, and the computer
 files it on that journal day, never in the future and never more than a week back. A phone cannot
 delete, forget, export, change settings, pair or remove phones, or browse memories. Asks leave
 private memories out, pages use the phone edition, and an outbound filter drops any payload naming

@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    AskDelta, AskPhase, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, Period,
+    AskDelta, AskPhase, AskPlace, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, Period,
     PeriodKind, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice,
     QuestionKind, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall, RemoteResult,
     SameNameAnswer, Source,
@@ -332,7 +332,9 @@ impl<R: Runtime> Call<R> {
                     .await
             }
             RemoteCall::Unkeep { id } => self.unkeep(id).await,
-            RemoteCall::Ask { question } => self.ask(question).await,
+            RemoteCall::Ask { question, place } => {
+                self.ask(question, place.unwrap_or_default()).await
+            }
             RemoteCall::CancelAsk { ask_id } => {
                 if crypto::check_id(&ask_id).is_err() {
                     return err(PhoneError::Invalid);
@@ -381,6 +383,13 @@ impl<R: Runtime> Call<R> {
                 self.journal_answer(page_date, choice, line, client_id)
                     .await
             }
+            RemoteCall::SeeOnlineChange => match crate::online::hub(&self.app) {
+                Some(h) => match h.see_change().await {
+                    Ok(_) => Some(RemoteAnswer::Done),
+                    Err(_) => err(PhoneError::NotReady),
+                },
+                None => err(PhoneError::NotReady),
+            },
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;
@@ -853,13 +862,20 @@ impl<R: Runtime> Call<R> {
         Some(RemoteAnswer::Done)
     }
 
-    async fn ask(&self, question: String) -> Option<RemoteAnswer> {
+    async fn ask(&self, question: String, place: AskPlace) -> Option<RemoteAnswer> {
         let question = question.trim().to_string();
         if question.is_empty() {
             return err(PhoneError::Invalid);
         }
         if question.len() > MAX_QUESTION {
             return err(PhoneError::TooLarge);
+        }
+        // Agreed to Online answers before only what is marked private was held back: the
+        // question waits on the phone, which shows the notice, and nothing is started.
+        if place == AskPlace::Auto
+            && crate::online::hub(&self.app).is_some_and(|h| h.phone_notice_due())
+        {
+            return err(PhoneError::OnlineChanged);
         }
         if !self.core.limits.take(Bucket::Asks, &self.device.id) {
             self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
@@ -874,7 +890,7 @@ impl<R: Runtime> Call<R> {
                 public_only: true,
                 lane: lane.clone(),
                 sink: AskSink::Channel(tx),
-                place: nocturne_contract::AskPlace::Auto,
+                place,
                 help: false,
             },
         );
