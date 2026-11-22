@@ -1,0 +1,539 @@
+use std::path::Path;
+use std::sync::Arc;
+
+use nocturne_contract::{
+    BackupPhase, CheckInInput, Feeling, FeelingPart, FeelingPoint, ForgetScope, HomeAnswer,
+    HomeCall, HomeError, ItemKind, ItemStatus, PhoneError, PhoneMode, RemoteAnswer, RemoteCall,
+};
+use nocturne_engine::ManualClock;
+
+use super::{Home, dispatch};
+
+const PASS: &str = "a long enough passphrase";
+const NOW: &str = "2026-11-22T09:00:00Z";
+
+fn home_at(dir: &Path, clock: Arc<ManualClock>) -> Home {
+    let mut home = Home::new(dir.to_path_buf(), clock, Box::new(|_: &Path| {}));
+    home.set_work_factor(10);
+    home
+}
+
+fn clock() -> Arc<ManualClock> {
+    Arc::new(ManualClock::at(NOW, "Europe/London"))
+}
+
+fn alone(dir: &Path) -> (Home, Arc<ManualClock>) {
+    let clock = clock();
+    let home = home_at(dir, clock.clone());
+    home.start_alone("Pixel", false).unwrap();
+    (home, clock)
+}
+
+fn call(home: &Home, call: RemoteCall) -> RemoteAnswer {
+    dispatch::answer(&home.open_store().unwrap(), call)
+}
+
+fn no_progress(_: BackupPhase, _: u64, _: u64) {}
+
+fn local(home: &Home, c: HomeCall) -> HomeAnswer {
+    home.local_call(c, false, &no_progress)
+}
+
+fn note(text: &str, client_id: &str) -> RemoteCall {
+    RemoteCall::KeepText {
+        text: text.into(),
+        client_id: client_id.into(),
+        feeling: None,
+        good: None,
+        captured_at: None,
+        web: false,
+    }
+}
+
+fn kept_id(answer: &RemoteAnswer) -> String {
+    match answer {
+        RemoteAnswer::Kept { kept } => kept.item.id.clone(),
+        other => panic!("not kept: {other:?}"),
+    }
+}
+
+fn feeling() -> Feeling {
+    Feeling {
+        part: FeelingPart::Settled,
+        point: FeelingPoint {
+            pleasant: 0.5,
+            energy: -0.3,
+        },
+        words: vec!["calm".into()],
+    }
+}
+
+fn found(home: &Home, query: &str) -> Vec<String> {
+    match local(
+        home,
+        HomeCall::Find {
+            query: query.into(),
+        },
+    ) {
+        HomeAnswer::Found { items } => items.into_iter().map(|f| f.receipt.item_id).collect(),
+        other => panic!("not found: {other:?}"),
+    }
+}
+
+fn stats(home: &Home) -> nocturne_contract::HomeStats {
+    match local(home, HomeCall::Stats) {
+        HomeAnswer::Stats { stats } => stats,
+        other => panic!("no stats: {other:?}"),
+    }
+}
+
+#[test]
+fn a_phone_starts_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = home_at(dir.path(), clock());
+    assert_eq!(home.mode(false), None);
+    assert_eq!(home.mode(true), Some(PhoneMode::Companion));
+    assert!(home.local().is_none(), "nothing opens before the choice");
+    assert_eq!(home.start_alone("   ", false), Err(HomeError::Invalid));
+    assert_eq!(home.start_alone("Pixel", true), Err(HomeError::NotReady));
+
+    home.start_alone("  Pixel  ", false).unwrap();
+    assert_eq!(home.mode(false), Some(PhoneMode::Alone));
+    assert_eq!(home.mode(true), Some(PhoneMode::Alone));
+    assert!(dir.path().join("store").join("nocturne.db").is_file());
+    let open = home.local().expect("the sync gets the open store");
+    let row = open.engine.local_device().unwrap().unwrap();
+    assert_eq!(row.id, open.device);
+    assert_eq!(row.name, "Pixel");
+
+    // Again, after a restart: the same row.
+    let again = home_at(dir.path(), clock());
+    assert_eq!(again.local().unwrap().device, open.device);
+}
+
+#[test]
+fn keeps_journal_and_check_ins_round_trip() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, clock) = alone(dir.path());
+
+    let first = call(&home, note("Bins go out on Thursday", "c-1"));
+    let id = kept_id(&first);
+    let RemoteAnswer::Kept { kept } = &first else {
+        unreachable!()
+    };
+    assert!(!kept.duplicate);
+    assert_eq!(kept.item.text.as_deref(), Some("Bins go out on Thursday"));
+    assert_eq!(kept.take_back_until, "2026-11-22T09:10:00.000Z");
+
+    // Sent twice from the offline queue: kept once.
+    let again = call(&home, note("Bins go out on Thursday", "c-1"));
+    assert_eq!(kept_id(&again), id);
+    assert!(matches!(again, RemoteAnswer::Kept { kept } if kept.duplicate));
+
+    let RemoteAnswer::JournalDay { day } = call(&home, RemoteCall::GetJournalDay { date: None })
+    else {
+        panic!("no journal day")
+    };
+    assert_eq!(day.day, "2026-11-22");
+    assert!(
+        day.rows.iter().any(|r| r.item.id == id),
+        "on today's journal"
+    );
+    assert_eq!(
+        day.rows
+            .iter()
+            .find(|r| r.item.id == id)
+            .unwrap()
+            .item
+            .status,
+        ItemStatus::Kept
+    );
+
+    let check_in = RemoteCall::KeepCheckIn {
+        input: CheckInInput {
+            feeling: feeling(),
+            line: Some("a quiet morning".into()),
+            urge: None,
+            replaces: None,
+        },
+        client_id: "c-2".into(),
+        captured_at: None,
+    };
+    let RemoteAnswer::CheckIn { checkin } = call(&home, check_in.clone()) else {
+        panic!("no check-in")
+    };
+    let RemoteAnswer::CheckIn { checkin: twice } = call(&home, check_in) else {
+        panic!("no check-in again")
+    };
+    assert_eq!(twice.id, checkin.id, "kept once");
+    let RemoteAnswer::JournalDay { day } = call(
+        &home,
+        RemoteCall::GetJournalDay {
+            date: Some("2026-11-22".into()),
+        },
+    ) else {
+        panic!("no journal day")
+    };
+    assert_eq!(day.checkins.len(), 1);
+
+    let RemoteAnswer::Item { item } = call(&home, RemoteCall::GetItem { id: id.clone() }) else {
+        panic!("no item")
+    };
+    assert_eq!(item.title, "Bins go out on Thursday");
+
+    // A photo, its bytes put together from the screens' slices.
+    let photo = RemoteCall::KeepBytes {
+        mime: "image/png".into(),
+        size: 4.0,
+        client_id: "c-3".into(),
+        caption: Some("Receipt / ../x".into()),
+        feeling: None,
+        good: None,
+        captured_at: None,
+    };
+    let open = home.open_store().unwrap();
+    let answer = dispatch::keep_bytes(&open, photo, b"\x89PNG", &home.keeping_dir());
+    let photo_id = kept_id(&answer);
+    let RemoteAnswer::Kept { kept } = &answer else {
+        unreachable!()
+    };
+    assert_eq!(kept.item.kind, ItemKind::Image);
+    assert!(kept.item.has_original);
+    let (mime, bytes) = dispatch::original(&open, &photo_id).unwrap();
+    assert_eq!(mime, "image/png");
+    assert_eq!(bytes, b"\x89PNG");
+    assert!(
+        std::fs::read_dir(home.keeping_dir())
+            .unwrap()
+            .next()
+            .is_none(),
+        "the scratch copy goes"
+    );
+
+    let RemoteAnswer::Page { page } = call(&home, RemoteCall::GetPage { date: None }) else {
+        panic!("no page")
+    };
+    assert_eq!(page.date, "2026-11-22");
+    assert!(
+        matches!(call(&home, RemoteCall::ListPages), RemoteAnswer::Pages { pages } if pages.is_empty())
+    );
+    assert!(matches!(
+        call(
+            &home,
+            RemoteCall::Ask {
+                question: "when are bins?".into(),
+                place: None,
+            }
+        ),
+        RemoteAnswer::Error {
+            code: PhoneError::NotReady
+        }
+    ));
+
+    // Taken back within its window; not after it.
+    assert_eq!(
+        call(&home, RemoteCall::Unkeep { id: photo_id }),
+        RemoteAnswer::Done
+    );
+    clock.set_str("2026-11-22T09:11:00Z");
+    assert_eq!(
+        call(&home, RemoteCall::Unkeep { id }),
+        RemoteAnswer::Error {
+            code: PhoneError::TooLate
+        }
+    );
+}
+
+#[test]
+fn finds_by_words_but_never_a_check_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    assert!(found(&home, "giraffe").is_empty());
+    let id = kept_id(&call(
+        &home,
+        note("The purple giraffes bought lemons", "c-1"),
+    ));
+    call(
+        &home,
+        RemoteCall::KeepCheckIn {
+            input: CheckInInput {
+                feeling: feeling(),
+                line: Some("thinking of giraffes".into()),
+                urge: None,
+                replaces: None,
+            },
+            client_id: "c-2".into(),
+            captured_at: None,
+        },
+    );
+    assert_eq!(found(&home, "giraffe"), vec![id]);
+    assert!(found(&home, "   ").is_empty());
+}
+
+#[test]
+fn forgets_after_a_preview() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let id = kept_id(&call(&home, note("A secret about the lemons", "c-1")));
+    let HomeAnswer::ForgetPreview { preview } = local(
+        &home,
+        HomeCall::PreviewForget {
+            scope: ForgetScope {
+                ids: Vec::new(),
+                include_originals: true,
+                also: Some(vec![id.clone()]),
+                pick: None,
+            },
+        },
+    ) else {
+        panic!("no preview")
+    };
+    assert_eq!(preview.originals.len(), 1);
+    assert_eq!(preview.originals[0].item_id, id);
+    let token = preview.token.clone();
+    let HomeAnswer::Forgotten { report } = local(
+        &home,
+        HomeCall::Forget {
+            token: token.clone(),
+        },
+    ) else {
+        panic!("not forgotten")
+    };
+    assert_eq!(report.originals_removed, 1);
+    assert!(found(&home, "lemons").is_empty());
+    assert_eq!(
+        local(&home, HomeCall::Forget { token }),
+        HomeAnswer::Error {
+            code: HomeError::TooLate
+        }
+    );
+}
+
+#[test]
+fn a_backup_comes_back_on_another_phone() {
+    let one = tempfile::tempdir().unwrap();
+    let (home, _) = alone(one.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    call(&home, note("The purple giraffe", "c-2"));
+    let open = home.open_store().unwrap();
+    kept_id(&dispatch::keep_bytes(
+        &open,
+        RemoteCall::KeepBytes {
+            mime: "image/jpeg".into(),
+            size: 3.0,
+            client_id: "c-3".into(),
+            caption: None,
+            feeling: None,
+            good: None,
+            captured_at: None,
+        },
+        b"jpg",
+        &home.keeping_dir(),
+    ));
+    assert_eq!(stats(&home).last_backup, None);
+    for inside in [
+        "store/b.nocturne",
+        "b.nocturne",
+        "store-put-aside-x/b.nocturne",
+    ] {
+        let dest = one.path().join(inside);
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        assert_eq!(
+            local(
+                &home,
+                HomeCall::SaveBackup {
+                    dest: dest.to_string_lossy().into(),
+                    passphrase: PASS.into(),
+                }
+            ),
+            HomeAnswer::Error {
+                code: HomeError::Invalid
+            },
+            "{inside}"
+        );
+    }
+    std::fs::remove_dir(one.path().join("store-put-aside-x")).unwrap();
+
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("Nocturne backup.nocturne");
+    let HomeAnswer::BackupSaved { report } = local(
+        &home,
+        HomeCall::SaveBackup {
+            dest: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("no backup")
+    };
+    assert!(file.is_file());
+    let before = stats(&home);
+    assert_eq!(
+        before.last_backup.as_ref().map(|b| b.bytes),
+        Some(report.bytes)
+    );
+    assert_eq!(before.counts.originals, 1);
+
+    // A new phone that has not chosen yet.
+    let two = tempfile::tempdir().unwrap();
+    let other = home_at(two.path(), clock());
+    let wrong = local(
+        &other,
+        HomeCall::CheckBackup {
+            file: file.to_string_lossy().into(),
+            passphrase: "not the passphrase at all".into(),
+        },
+    );
+    assert_eq!(
+        wrong,
+        HomeAnswer::Error {
+            code: HomeError::WrongPassphrase
+        }
+    );
+    let HomeAnswer::BackupChecked { check } = local(
+        &other,
+        HomeCall::CheckBackup {
+            file: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("not checked")
+    };
+    assert_eq!(check.here, None, "nothing here to replace");
+    assert_eq!(check.summary.originals, 1);
+    // A companion's memory is on its computer.
+    assert_eq!(
+        other.local_call(
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: false,
+            },
+            true,
+            &no_progress
+        ),
+        HomeAnswer::Error {
+            code: HomeError::NotReady
+        }
+    );
+    assert_eq!(
+        local(
+            &other,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: false,
+            }
+        ),
+        HomeAnswer::Restored
+    );
+    assert_eq!(other.mode(false), Some(PhoneMode::Alone));
+    let after = stats(&other);
+    assert_eq!(after.counts, before.counts);
+    assert_eq!(after.last_kept, before.last_kept);
+    assert_eq!(found(&other, "giraffe").len(), 1);
+    assert!(!two.path().join("restore-stage").exists());
+
+    // Over a memory that holds something: only when the person said so, and what was here is
+    // put aside.
+    call(&other, note("Kept after the restore", "c-9"));
+    assert_eq!(
+        local(
+            &other,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: false,
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+    assert_eq!(
+        local(
+            &other,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: true,
+            }
+        ),
+        HomeAnswer::Restored
+    );
+    assert_eq!(other.put_aside_names().len(), 1);
+    assert!(found(&other, "restore").is_empty());
+    assert_eq!(stats(&other).counts, before.counts);
+}
+
+#[test]
+fn a_damaged_store_is_put_aside() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    home.close();
+    let store = dir.path().join("store");
+    for side in ["nocturne.db-wal", "nocturne.db-shm"] {
+        let _ = std::fs::remove_file(store.join(side));
+    }
+    std::fs::write(store.join("nocturne.db"), vec![0x5au8; 8192]).unwrap();
+
+    let again = home_at(dir.path(), clock());
+    assert!(again.local().is_none());
+    let aside = again.damaged().expect("marked as damaged");
+    assert!(aside.starts_with("store-put-aside-2026-11-22-"), "{aside}");
+    assert_eq!(
+        std::fs::read(dir.path().join(&aside).join("nocturne.db")).unwrap(),
+        vec![0x5au8; 8192],
+        "nothing deleted"
+    );
+    assert!(!store.exists());
+    // Still not opened over it after a restart.
+    let later = home_at(dir.path(), clock());
+    assert!(later.local().is_none());
+    assert_eq!(later.damaged().as_deref(), Some(aside.as_str()));
+
+    // Starting over makes a fresh memory; the damaged one stays aside.
+    later.start_alone("Pixel", false).unwrap();
+    assert!(later.damaged().is_none());
+    assert!(found(&later, "bins").is_empty());
+    assert!(dir.path().join(&aside).is_dir());
+}
+
+#[test]
+fn delete_everything_needs_the_phrase_and_takes_copies_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    std::fs::create_dir_all(dir.path().join("store-put-aside-2026-01-01-000000")).unwrap();
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::DeleteEverything {
+                phrase: "delete".into()
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::WrongPhrase
+        }
+    );
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::DeleteEverything {
+                phrase: nocturne_engine::DELETE_PHRASE.into()
+            }
+        ),
+        HomeAnswer::Deleted
+    );
+    assert_eq!(stats(&home).counts.items, 0);
+    assert!(home.put_aside_names().is_empty());
+    assert!(
+        home.local()
+            .unwrap()
+            .engine
+            .local_device()
+            .unwrap()
+            .is_some()
+    );
+    kept_id(&call(&home, note("A fresh start", "c-1")));
+}
