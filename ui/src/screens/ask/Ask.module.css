@@ -608,3 +608,37 @@
   order: 2;
   width: min(760px, 100%);
 }
+
+/* The one-time notice that Online answers holds back only what is marked private. */
+.changed {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--raised);
+}
+
+.changed p {
+  margin: 0;
+}
+
+.changedTitle {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.changedWaits {
+  color: var(--ink2);
+}
+
+.changedButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+}

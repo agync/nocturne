@@ -65,6 +65,8 @@ fn lab_with(keychain: MemoryKeychain) -> Lab {
     nocturne_app_lib::online::manage_hub(h.app.handle(), port, keychain.clone())
         .unwrap()
         .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
+    // As on the consent step: the person has seen that only what is marked private stays here.
+    h.ok("see_online_change", json!({}));
     Lab { h, s, keychain }
 }
 

@@ -182,6 +182,7 @@ pub fn off_view() -> OnlineView {
         phones: true,
         phones_available: false,
         send_sensitive: false,
+        change_notice: false,
         limit: OnlineLimit::default(),
         questions_this_month: 0,
         spent_this_month_usd: None,

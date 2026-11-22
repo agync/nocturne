@@ -45,6 +45,8 @@ function reasonOf(reason: LocalReason): string {
       return t("sent.reason.turnedOff");
     case "notSureOnline":
       return t("sent.reason.notSureOnline");
+    case "changed":
+      return t("sent.reason.changed");
   }
 }
 

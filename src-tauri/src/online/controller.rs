@@ -507,6 +507,7 @@ impl<R: Runtime> OnlineHub<R> {
             phones: row.phones,
             phones_available: engine.remote_state().map(|r| r.wanted_on).unwrap_or(false),
             send_sensitive: row.send_sensitive,
+            change_notice: row.wanted_on && !engine.online_change_seen().unwrap_or(false),
             limit: row.limit.clone(),
             questions_this_month: engine.questions_this_month(&tz).unwrap_or(0),
             spent_this_month_usd: engine.spent_this_month(&tz).unwrap_or(None),
@@ -825,6 +826,15 @@ impl<R: Runtime> OnlineHub<R> {
         Ok(self.view_now())
     }
 
+    /// Records that the person has seen that only what they mark private is held back, on the
+    /// consent step or in the one-time notice, and tells the windows.
+    pub async fn see_change(&self) -> Result<OnlineView, CommandError> {
+        let engine = self.engine()?;
+        engine.see_online_change().map_err(internal)?;
+        self.emit();
+        Ok(self.view_now())
+    }
+
     /// Turns Online answers off at once: questions on their way online stop and are answered
     /// here, then the engine is relaunched without the route. With `forget`, the key is
     /// removed and Online answers is no longer set up.
@@ -962,6 +972,11 @@ impl<R: Runtime> OnlineHub<R> {
         }
         if place == nocturne_contract::AskPlace::ThisComputer {
             return RouteChoice::Computer(LocalReason::Chosen);
+        }
+        // Agreed before only what is marked private was held back: nothing goes online until
+        // the person has seen the notice that says so. Unknown counts as not seen.
+        if !engine.online_change_seen().unwrap_or(false) {
+            return RouteChoice::Computer(LocalReason::Changed);
         }
         // During a check the engine holds the route being checked, which the person has not
         // agreed to use for questions.

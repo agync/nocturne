@@ -383,6 +383,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("turn_on_online", Never),
         ("turn_off_online", Never),
         ("abandon_online_setup", Never),
+        ("see_online_change", Never),
         ("update_online_settings", Never),
         ("list_online_sends", Never),
         ("get_models", Never),

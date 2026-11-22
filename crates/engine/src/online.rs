@@ -22,6 +22,11 @@ use crate::Engine;
 use crate::error::Result;
 use crate::util::{enum_str, fmt_ts, parse_enum, parse_ts, sha256_hex};
 
+/// Set, in `settings`, once the person has seen that Online answers holds back only what they
+/// mark private: on the consent step's words, or in the one-time notice for those who agreed
+/// before.
+const ONLY_PRIVATE_SEEN: &str = "onlineOnlyPrivateSeen";
+
 /// Online answers' settings and counters, one row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OnlineRow {
@@ -450,6 +455,29 @@ impl Engine {
             f(&mut state);
             store_state(tx, &state)?;
             Ok(state)
+        })
+    }
+
+    /// Whether the person has seen that only what they mark private is held back. Until they
+    /// have, nothing goes online.
+    pub fn online_change_seen(&self) -> Result<bool> {
+        self.read(|conn| {
+            Ok(conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
+                [ONLY_PRIVATE_SEEN],
+                |r| r.get(0),
+            )?)
+        })
+    }
+
+    /// Records that the person has seen that only what they mark private is held back.
+    pub fn see_online_change(&self) -> Result<()> {
+        self.write(|tx| {
+            tx.execute(
+                "INSERT OR REPLACE INTO settings(key, value) VALUES (?1, 'true')",
+                [ONLY_PRIVATE_SEEN],
+            )?;
+            Ok(())
         })
     }
 

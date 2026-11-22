@@ -153,3 +153,35 @@ test.describe("with Online answers on", () => {
     });
   });
 });
+
+test.describe("the notice for someone who agreed before", () => {
+  test("holds the question, is axe clean in light and dark, and Continue sends it", async ({
+    browser,
+  }) => {
+    for (const scheme of ["light", "dark"] as const) {
+      const context = await browser.newContext({
+        colorScheme: scheme,
+        locale: "en-GB",
+        timezoneId: "Europe/London",
+        viewport: { width: 1280, height: 800 },
+      });
+      const page = await context.newPage();
+      await ready(page, "#/today", "changed");
+      await bar(page).fill(QUESTION);
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Online answers has changed" }),
+      ).toBeFocused();
+      await expect(page.getByText("Your question waits until you continue.")).toBeVisible();
+      expect(await axe(page), scheme).toEqual([]);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `${SHOTS}/online-changed-${scheme}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Continue" }).click();
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(`“${QUESTION}”`);
+      await expect(
+        page.getByText("Answered online by your provider (api.example.com) from 1 thing you kept"),
+      ).toBeVisible();
+      await context.close();
+    }
+  });
+});

@@ -284,6 +284,7 @@ async fn preview_takes_online_and_model_commands() {
         "turn_on_online",
         "turn_off_online",
         "abandon_online_setup",
+        "see_online_change",
         "update_online_settings",
         "list_online_sends",
         "get_models",

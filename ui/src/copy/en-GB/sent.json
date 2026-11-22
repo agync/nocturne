@@ -27,6 +27,7 @@
   "sent.reason.downloading": "a download was running",
   "sent.reason.turnedOff": "online answers was turned off",
   "sent.reason.notSureOnline": "your provider wasn’t sure, so this computer answered",
+  "sent.reason.changed": "you hadn’t yet seen what changed",
   "sent.field.sent": "Sent",
   "sent.field.when": "When",
   "sent.field.to": "To",

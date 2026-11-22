@@ -272,6 +272,8 @@ fn lab(mind: Arc<dyn Mind>) -> Lab {
     )
     .unwrap()
     .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
+    // As on the consent step: the person has seen that only what is marked private stays here.
+    h.ok("see_online_change", json!({}));
     Lab { h, s, port }
 }
 

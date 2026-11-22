@@ -328,6 +328,8 @@ export interface EngineClient {
   turnOffOnline(forget: boolean): Promise<OnlineView>;
   /** Leaving setup before saying yes: the key and the route are dropped. */
   abandonOnlineSetup(): Promise<void>;
+  /** The person has seen that only what they mark private is held back. */
+  seeOnlineChange(): Promise<OnlineView>;
   updateOnlineSettings(patch: OnlineSettingsPatch): Promise<OnlineView>;
   /** What was sent, newest first; `before` is the id of the oldest already shown. */
   listOnlineSends(limit: number, before: number | null): Promise<OnlineSend[]>;

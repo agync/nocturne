@@ -52,6 +52,9 @@ export function Consent({
       setFailed(why);
       return;
     }
+    // This step says only what is marked private stays here, so no notice follows it. If saving
+    // that fails, the notice comes with the first question instead.
+    await run(() => engine.seeOnlineChange(), { quiet: true });
     onHandOver();
     goTo("/settings/online");
   };

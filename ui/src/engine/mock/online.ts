@@ -24,6 +24,7 @@ export const ONLINE_SCENARIOS = [
   "problem",
   "keyUnavailable",
   "checking",
+  "changed",
 ] as const;
 export type OnlineScenario = (typeof ONLINE_SCENARIOS)[number];
 
@@ -99,6 +100,9 @@ export class OnlineSim {
     this.current = this.seed(merged.scenario ?? "off");
   }
 
+  /** Whether the person has seen that only what they mark private is held back. */
+  private seen = true;
+
   private seed(scenario: string): OnlineView {
     const now = this.now();
     const base: OnlineView = {
@@ -110,6 +114,7 @@ export class OnlineSim {
       phones: false,
       phonesAvailable: false,
       sendSensitive: false,
+      changeNotice: false,
       limit: { kind: "none", questions: 200, usd: null },
       questionsThisMonth: 0,
       spentThisMonthUsd: null,
@@ -140,7 +145,11 @@ export class OnlineSim {
       ...on,
       state: { type: "paused", pause },
     });
+    // A fresh computer has not seen the words yet: its consent step records them.
+    this.seen = scenario !== "changed" && scenario !== "off";
     switch (scenario) {
+      case "changed":
+        return on;
       case "offBefore":
         return {
           ...base,
@@ -203,7 +212,17 @@ export class OnlineSim {
   }
 
   view(): OnlineView {
-    return clone(this.current);
+    return {
+      ...clone(this.current),
+      changeNotice: this.current.state.type !== "off" && !this.seen,
+    };
+  }
+
+  /** The person has seen that only what they mark private is held back. */
+  async seeChange(): Promise<OnlineView> {
+    this.seen = true;
+    this.changed();
+    return this.view();
   }
 
   privacy(): Pick<

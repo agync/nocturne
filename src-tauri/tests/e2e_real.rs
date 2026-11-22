@@ -1835,6 +1835,7 @@ fn the_whole_product_works_with_real_models() {
             checked["type"] == "works",
             checked.to_string(),
         );
+        h.ok("see_online_change", json!({}));
         let on = h.ok(
             "turn_on_online",
             json!({"settings": {"phones": false, "sendSensitive": false,

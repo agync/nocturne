@@ -17,6 +17,7 @@ export function answeredBy(place: AskPlace | undefined, online?: OnlineView | nu
   if (!online || online.state.type === "off" || online.state.type === "checking") {
     return { type: "computer", reason: null };
   }
+  if (online.changeNotice) return { type: "computer", reason: "changed" };
   const reason = pausedReason(online);
   if (reason) return { type: "computer", reason };
   return { type: "online", host: online.host ?? "" };
@@ -38,6 +39,7 @@ export function onlineViewOn(overrides: Partial<OnlineView> = {}): OnlineView {
     phones: true,
     phonesAvailable: false,
     sendSensitive: false,
+    changeNotice: false,
     limit: { kind: "questions", questions: 200, usd: null },
     questionsThisMonth: 38,
     spentThisMonthUsd: null,

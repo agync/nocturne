@@ -24,6 +24,15 @@ struct Lab {
 }
 
 fn lab_with(mind: Arc<dyn Mind>) -> Lab {
+    let l = lab_agreed_before(mind);
+    // As on the consent step: the person has seen that only what is marked private stays here.
+    l.h.ok("see_online_change", json!({}));
+    l
+}
+
+/// An install whose person turned Online answers on before only what is marked private was held
+/// back, and has not seen the notice.
+fn lab_agreed_before(mind: Arc<dyn Mind>) -> Lab {
     let h = harness_with_mind(mind);
     let s = StandIn::start(&fake_provider());
     let port = Arc::new(StandInPort::new(Some(s.port)));
@@ -1113,4 +1122,41 @@ fn a_404_while_a_download_opens_is_not_a_missing_model() {
         .store(false, std::sync::atomic::Ordering::SeqCst);
     let v = l.h.ok("get_online", json!({}));
     assert_eq!(v["state"]["type"], "on", "no lasting problem: {v}");
+}
+
+/// Someone who turned Online answers on before only what is marked private was held back sees
+/// the notice first: until then nothing goes online, from the window or a phone.
+#[test]
+fn an_install_that_agreed_before_sends_nothing_until_the_notice_is_seen() {
+    let l = lab_agreed_before(Arc::new(FakeMind::new()));
+    dentist(&l);
+    assert_eq!(
+        l.h.ok("get_online", json!({}))["changeNotice"],
+        false,
+        "off: nothing to tell"
+    );
+    l.turn_on(true, false, 200);
+    assert_eq!(l.h.ok("get_online", json!({}))["changeNotice"], true);
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, here(LocalReason::Changed));
+    assert!(!phases(&d).contains(&AskPhase::AskingOnline));
+    phone_ask(&l, "When is the dentist?");
+    assert!(l.questions().is_empty(), "nothing went online");
+
+    let view = l.h.ok("see_online_change", json!({}));
+    assert_eq!(view["changeNotice"], false);
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
+    assert_eq!(l.questions().len(), 1);
+}
+
+/// A setup through the consent step has seen the new words: no notice, and questions go.
+#[test]
+fn a_new_setup_has_no_notice() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    assert_eq!(l.h.ok("get_online", json!({}))["changeNotice"], false);
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
 }

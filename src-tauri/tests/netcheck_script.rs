@@ -136,6 +136,9 @@ fn online_answers_in_the_network_check() {
             s.key_storage = Some(nocturne_contract::KeyStorage::File);
         })
         .expect("the online row");
+    h.engine()
+        .see_online_change()
+        .expect("the person has seen what changed");
     nocturne_app_lib::online::manage_hub(
         h.app.handle(),
         Arc::new(AppPort {
