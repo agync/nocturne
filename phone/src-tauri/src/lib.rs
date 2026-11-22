@@ -90,7 +90,18 @@ pub fn run() {
 }
 
 /// The store stays out of the phone's own backup. Android's backup rules already leave out every
-/// folder of the app.
+/// folder of the app; an iPhone marks the folder itself.
 fn exclude_from_backup<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> home::ExcludeFromBackup {
+    #[cfg(target_os = "ios")]
+    {
+        let app = _app.clone();
+        Box::new(move |path: &std::path::Path| {
+            use tauri_plugin_nocturne_system::SystemExt;
+            if let Err(e) = app.system().exclude_from_backup(path) {
+                tracing::warn!("the memory could not be kept out of the phone's backup: {e:?}");
+            }
+        })
+    }
+    #[cfg(not(target_os = "ios"))]
     Box::new(|_: &std::path::Path| {})
 }
