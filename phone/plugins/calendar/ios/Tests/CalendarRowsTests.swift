@@ -141,20 +141,8 @@ final class CalendarRowsTests: XCTestCase {
     XCTAssertEqual(CalendarRows.people((0..<150).map { "P\($0)" }).count, CalendarRows.maxPeople)
   }
 
-  func testHolidaysAndBirthdaysAreTold() {
-    func kind(_ name: String, birthdays: Bool = false) -> CalendarKind {
-      CalendarRows.kind(CalendarRow(id: "1", name: name, rgb: nil, isBirthdays: birthdays))
-    }
-    XCTAssertEqual(kind("UK Holidays"), .holidays)
-    XCTAssertEqual(kind("Feiertage in Deutschland"), .holidays)
-    XCTAssertEqual(kind("Birthdays"), .birthdays)
-    XCTAssertEqual(kind("Contacts", birthdays: true), .birthdays)
-    XCTAssertEqual(kind("Work"), .ordinary)
-  }
-
   func testACalendarHasANameAndAColour() {
-    let c = CalendarRows.calendar(
-      CalendarRow(id: "ABC", name: "  ", rgb: (1, 0.5, 0), isBirthdays: false))
+    let c = CalendarRows.calendar(CalendarRow(id: "ABC", name: "  ", rgb: (1, 0.5, 0)))
     XCTAssertEqual(c.name, "ABC")
     XCTAssertEqual(c.colour, "#FF8000")
     XCTAssertNil(CalendarRows.colour(nil))

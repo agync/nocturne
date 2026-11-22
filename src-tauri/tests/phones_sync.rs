@@ -13,9 +13,9 @@ use nocturne_app_lib::remote::protocol::*;
 use nocturne_app_lib::remote::testing::client::{Addr, Mode, Opened, Pairing, PhoneClient};
 use nocturne_app_lib::remote::testing::{self, FakeHelpers, PhoneKeys, PhonePair};
 use nocturne_contract::{
-    CalendarBatch, CalendarChange, CalendarEntry, CalendarKind, PhoneCalendar, PhoneError,
-    PhoneFeature, PhoneSource, Reading, ReadingBatch, ReadingChange, ReadingValue, RemoteAction,
-    RemoteAnswer, RemoteCall, RemoteState, SyncReceipt, TimeSpan,
+    CalendarBatch, CalendarChange, CalendarEntry, PhoneCalendar, PhoneError, PhoneFeature,
+    PhoneSource, Reading, ReadingBatch, ReadingChange, ReadingValue, RemoteAction, RemoteAnswer,
+    RemoteCall, RemoteState, SyncReceipt, TimeSpan,
 };
 use nocturne_engine::FakeMind;
 use nocturne_helpers::{HelperKind, Origin};
@@ -153,7 +153,6 @@ fn send_calendar(sync: &str, entries: Vec<CalendarEntry>) -> RemoteCall {
                 id: "c1".into(),
                 name: "Home".into(),
                 colour: None,
-                kind: CalendarKind::Ordinary,
             }],
             changes: entries
                 .into_iter()

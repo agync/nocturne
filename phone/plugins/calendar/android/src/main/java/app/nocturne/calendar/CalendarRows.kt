@@ -9,19 +9,15 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Base64
 
-/** Holiday and birthday calendars start off; every other calendar is ordinary. */
-enum class CalendarKind(val wire: String) { ORDINARY("ordinary"), HOLIDAYS("holidays"), BIRTHDAYS("birthdays") }
-
 /** One row of the phone's Calendars table, as read. */
 data class CalendarRow(
     val id: Long,
     val name: String?,
     val colour: Int?,
-    val accountType: String?,
     val ownerAccount: String?,
 )
 
-data class Calendar(val id: String, val name: String, val colour: String?, val kind: CalendarKind)
+data class Calendar(val id: String, val name: String, val colour: String?)
 
 /** One row of the Instances table: one appointment on one day. */
 data class InstanceRow(
@@ -76,38 +72,12 @@ object CalendarRows {
     const val ATTENDEE_DECLINED = 2
     const val ATTENDEE_INVITED = 3
 
-    private val HOLIDAY_OWNER = Regex("#holiday@group\\.v\\.calendar\\.google\\.com$", RegexOption.IGNORE_CASE)
-    private val BIRTHDAY_OWNER = Regex("#contacts@group\\.v\\.calendar\\.google\\.com$", RegexOption.IGNORE_CASE)
-    private val HOLIDAY_NAME = Regex(
-        "holiday|feiertag|vacances|jours fériés|festività|festivos|feestdagen|helgdagar|helligdage",
-        RegexOption.IGNORE_CASE,
-    )
-    private val BIRTHDAY_NAME = Regex(
-        "birthday|geburtstag|anniversaire|compleanno|cumpleaños|verjaardag|födelsedag|fødselsdag",
-        RegexOption.IGNORE_CASE,
-    )
-    private val BIRTHDAY_ACCOUNTS = setOf("com.android.contacts", "com.samsung.android.contacts")
-
-    fun kind(row: CalendarRow): CalendarKind {
-        val owner = row.ownerAccount.orEmpty()
-        val name = row.name.orEmpty()
-        return when {
-            BIRTHDAY_OWNER.containsMatchIn(owner) -> CalendarKind.BIRTHDAYS
-            HOLIDAY_OWNER.containsMatchIn(owner) -> CalendarKind.HOLIDAYS
-            row.accountType in BIRTHDAY_ACCOUNTS -> CalendarKind.BIRTHDAYS
-            BIRTHDAY_NAME.containsMatchIn(name) -> CalendarKind.BIRTHDAYS
-            HOLIDAY_NAME.containsMatchIn(name) -> CalendarKind.HOLIDAYS
-            else -> CalendarKind.ORDINARY
-        }
-    }
-
     fun colour(argb: Int?): String? = argb?.let { String.format("#%06X", it and 0xFFFFFF) }
 
     fun calendar(row: CalendarRow): Calendar = Calendar(
         id = row.id.toString(),
         name = cut(row.name?.trim()?.takeIf { it.isNotEmpty() } ?: row.id.toString(), MAX_NAME),
         colour = colour(row.colour),
-        kind = kind(row),
     )
 
     /** From `back` days before today to `ahead` days after, both included, in the phone's zone. */

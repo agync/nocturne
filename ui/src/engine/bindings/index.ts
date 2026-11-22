@@ -18,7 +18,6 @@ export type { CalendarBatch } from "./CalendarBatch";
 export type { CalendarChange } from "./CalendarChange";
 export type { CalendarDetail } from "./CalendarDetail";
 export type { CalendarEntry } from "./CalendarEntry";
-export type { CalendarKind } from "./CalendarKind";
 export type { CalendarLine } from "./CalendarLine";
 export type { CalendarWas } from "./CalendarWas";
 export type { CameInRow } from "./CameInRow";

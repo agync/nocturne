@@ -24,8 +24,8 @@ use nocturne_app_lib::remote::testing;
 use nocturne_channel::client::{self, CallError, Connection, OnIdentity, Options, Phone, Router};
 use nocturne_channel::phone::{PhoneIdentity, PhonePairing};
 use nocturne_contract::{
-    CalendarEntry, CalendarKind, CameInTag, PhoneCalendar, PhoneFeature, Reading, ReadingKind,
-    ReadingValue, RemoteAnswer, RemoteCall, RemoteState,
+    CalendarEntry, CameInTag, PhoneCalendar, PhoneFeature, Reading, ReadingKind, ReadingValue,
+    RemoteAnswer, RemoteCall, RemoteState,
 };
 use nocturne_engine::FakeMind;
 use nocturne_helpers::{HelperKind, Origin};
@@ -170,13 +170,11 @@ impl Device for Stand {
                 id: "1".into(),
                 name: "Home".into(),
                 colour: Some("#3F51B5".into()),
-                kind: CalendarKind::Ordinary,
             },
             PhoneCalendar {
                 id: "2".into(),
                 name: "Holidays in United Kingdom".into(),
                 colour: None,
-                kind: CalendarKind::Holidays,
             },
         ])
     }
@@ -299,6 +297,8 @@ fn the_phone_sends_what_changed_and_the_computer_keeps_it() {
     let dir = tempfile::tempdir().unwrap();
     let s = Syncer::new(LedgerFile::open(dir.path()));
     bring_both(&s);
+    s.ledger
+        .update(|l| l.calendar.settings.calendars.insert("2".into(), false));
     let stand = Stand::new();
     *stand.entries.lock().unwrap() = vec![
         entry("dentist", "Dentist", "2026-11-13", "1"),
@@ -312,7 +312,11 @@ fn the_phone_sends_what_changed_and_the_computer_keeps_it() {
         pauses: AtomicUsize::new(0),
     };
     let report = block(s.sync(&stand, &wire, &TAKES, "now".into())).unwrap();
-    assert_eq!(report.calendar.unwrap().taken, 2, "holidays start off");
+    assert_eq!(
+        report.calendar.unwrap().taken,
+        2,
+        "a calendar turned off stays home"
+    );
     assert_eq!(report.health.unwrap().taken, 2);
 
     let e = c.h.engine();
