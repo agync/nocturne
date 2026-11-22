@@ -67,8 +67,10 @@ entries and good things can't be marked private, so while Online answers is on, 
 go with a question it helps answer.
 
 If you turned Online answers on before it worked this way, Nocturne says so once, in place of the
-answer, before your next question goes online. Continue sends it; Online answers settings is where
-you can turn it off.
+answer, before your next question goes online, on this computer or on a paired phone. Continue
+sends it; Answer on this computer keeps that question here and sends nothing; Online answers
+settings is where you can turn it off. The same notice waits at the top of **Online answers** in
+Settings, and Continue there clears it too.
 
 When Nocturne leaves something out, the answer says so, and you can ask again on this computer to
 include it.
