@@ -73,6 +73,8 @@ first; iPhone follows the same words once the engine is built and tried there.
 | Backups to a file, and restoring one on a new phone | A locked copy online (phase 2a) |
 | Moving the memory to a computer of one's own | An online mind (phase 2b), a household's mind (phase 3) |
 | Voice notes turned into words by the phone, where it can with no network ([below](#voice-notes-in-words)) | |
+| An item's own page on the phone, with marking it private ([below](#an-item-on-the-phone)) | |
+| On the computer: "Already use Nocturne on your phone?" in first run, and receiving a phone's memory ([Moving](moving-memory.md#on-the-computer-a-phone-with-its-own-memory)) | Moving a memory from a computer to a phone, which waits for a phone that can hold one |
 
 A screen whose choice belongs to a later phase does not show that choice until it ships: no
 "coming soon", no greyed rows.
@@ -92,7 +94,7 @@ The screens above, with these differences in the first release. Every other word
 | Today, no mind card | As written; "Choose a mind" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release) |
 | Ask | As written in [Ask with no mind](#7-ask-with-no-mind) |
 | This phone, Your memory | "Where it is", "Its mind" ("None yet"); no locked copy row |
-| This phone, actions | "Move my memory…", "Save a backup…", "Delete everything…" |
+| This phone, actions | "Move my memory…", "Save a backup…", "Delete everything…". "Move my memory…" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release), the one place a memory can move to in this release |
 | This phone, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
 
 ### Giving it a mind, in the first release
@@ -136,7 +138,7 @@ ships, "I have a backup" offers both: "A locked copy online" and "A backup file"
 ### Behaviour
 
 **The memory.** One store on the phone, the same as a computer's: what was kept and its originals,
-the journal, check-ins, calendar and health readings, forgetting and fading, the activity list. It
+the journal, check-ins, calendar and health readings, forgetting and fading. It
 lives in the app's own space, which the phone locks while it is locked, and stays out of the phone's
 own backup ([decision 5](phone-parity.md#decisions)). Uninstalling the app removes it, which the
 phone does without asking Nocturne, so "What this phone can do" in This phone says so: "Removing
@@ -163,8 +165,31 @@ too, with their private mark: nothing leaves the phone. Check-ins are not search
 computer ([0015](/adr/0015-journal-privacy-class.md)). Results are newest first among equally good
 matches, at most 30, each with its receipt.
 
-**Forgetting.** Fading and letting go run on their clocks, as on the computer. Delete, forget and
-Delete everything use the computer's previews and confirmations, worded for this phone.
+**Forgetting.** Fading and letting go run on their clocks, as on the computer. Delete and forget use
+the computer's previews and confirmations, with "this computer" read as "this phone". Delete
+everything:
+
+| Part | Copy |
+|---|---|
+| Title | "Delete everything on this phone?" |
+| Body | "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." |
+| Typed check | The computer's typed phrase, as approved |
+| Buttons | "Delete everything" (careful) · "Cancel" |
+
+#### An item on the phone
+
+Every receipt opens the item's own page, as the companion's does, from the phone's memory: the kept
+thing (its words, photo, recording or document), when and how it was kept, and its versions.
+
+| Part | Copy |
+|---|---|
+| Private | Switch "Private" / hint "Kept on this phone and never sent to a mind online or at home." |
+| Journal entries and good things | No private switch, by the journal's rule: "Journal entries can’t be marked private." (0015) |
+| Actions | "Forget…" · "Delete…", with the computer's confirmations worded for this phone |
+
+**Activity.** The computer's activity list records what left it and what came in. A phone alone sends
+nothing, so it has no activity list; the Sent online list arrives with the online mind, and
+backups show their last time in This phone.
 
 **Notifications.** None in the first release: there is no page to announce, and the journal's rule
 keeps it off the lock screen.
@@ -213,7 +238,7 @@ A phone alone that pairs with a computer moves its memory there; one home at a t
 | It has arrived | Every count matches; the phone's memory is put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
 | Calendar and health | Carry on, now sent to the computer. What was already brought arrived with the memory, so nothing is sent twice |
 | What was put aside on the phone | "Remove it from this phone" or "Keep it put aside for 30 days" |
-| Later, the other way | The computer can move the memory back to this phone ([Back to the phone](moving-memory.md#back-to-the-phone)) |
+| Later, the other way | Once it ships, the computer can move the memory back to this phone ([Back to the phone](moving-memory.md#back-to-the-phone)) |
 
 ### Phone parity
 
@@ -223,6 +248,13 @@ noticing what changed), each of which comes with a mind. Two computer things hav
 the first release, each with its reason: Print, because a phone prints through its own share sheet
 and the printed page needs a mind's page; and models in advanced details, because a phone alone has
 no model to show.
+
+### Mockups for the first release
+
+The first release reuses `first-run.html` and `this-phone.html` with the differences above. Before
+the build starts, those mockups gain the release's states: the two-button Welcome, Give Nocturne a
+mind, Save a backup, Restore from a file, the item page with its private switch, and the empty
+states.
 
 ### Checks before it ships
 
@@ -272,7 +304,7 @@ One app, `is.nocturne.phone`, published by Nocturne, for every mode.
 | Short description (Google Play, 80 at most) | "Keep your day, your journal and your calendar in one place. Private by default." |
 | Subtitle (App Store, 30 at most) | "Your day, remembered" |
 | First lines | "Nocturne remembers your day: notes, photos, voice notes, your journal, your calendar and your health readings, side by side. It starts on your phone, with no account and no sign-in." |
-| Growing | "When you want answers and a morning page, give it a mind: a computer at home that runs Nocturne, an online service you choose, or Nocturne on your own computer." |
+| Growing | "When you want answers and a morning page, give it a mind: a computer at home that runs Nocturne, an online service you choose, or Nocturne on your own computer." Each way is named only once it ships |
 | What it does not do | "No account. No ads. Nothing leaves your phone unless you turn it on, and every screen that turns something on says exactly what goes and to whom." |
 
 ### 2. Welcome
@@ -370,9 +402,9 @@ the phone heard them, else "waiting to be read". No reflection is offered; where
 | When it sends | Not shown on a phone alone with no mind or copy | |
 | This phone | "Name" | "{name}". Editable here, since there is no computer to rename it on |
 | | "Version" | "Nocturne {version}" |
-| Help | "Privacy policy", "What this phone can do" | "What this phone can do" reads "Your memory is on this phone. It can keep, find, forget and delete. It can export a backup to a file." |
+| Help | "Privacy policy", "What this phone can do" | "What this phone can do" reads "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
 | Your memory | "Move my memory…" | Opens [Moving your memory](moving-memory.md) |
-| | "Export a backup…" | The 0013 backup, saved through the phone's share sheet |
+| | "Save a backup…" | The 0013 backup, saved through the phone's save sheet ([Backups to a file](#backups-to-a-file)) |
 | At the end | "Delete everything…" | The approved confirmation, worded for this phone |
 
 A phone alone can delete, forget and export, which a companion cannot: it holds the memory.
@@ -508,8 +540,8 @@ other way, sending memories to the assistant's company. Nothing is shown for wha
 | Part | Copy |
 |---|---|
 | Title | "Where should Nocturne’s mind be?" |
-| Lead | "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone whichever you choose." |
-| Choice | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
+| Lead | "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
+| Choice, from phase 3 | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
 | Choice | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Choice, iPhone, after the trial | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
 | Choice | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
@@ -546,7 +578,7 @@ place.
 |---|---|
 | Step label | "Nocturne’s mind online · step 2 of 4" |
 | Title | "Your service’s details" |
-| Lead | "Find these on your service’s website, often under API or developer settings." |
+| Lead | "Find these on your service’s website, often under developer settings or keys." |
 | Fields | "API URL" · "API key" · "Model name" |
 | Check | "Check" / checking "Checking with {host}…" / passed "{host} answered. It works." |
 | Bar | "Continue" · "Back" · disabled reason "Continue works once the check passes." |
@@ -665,8 +697,10 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Find, none | "Nothing you kept has those words." |
 | This phone, memory | "Your memory" / "Where it is" / "On this phone" / "Its mind" / "None yet" / "{service}, online" / "Apple Intelligence" / "{household}, at home" |
 | This phone, copy row | "A locked copy online" / "Off" / "Last copy {time}" |
-| This phone, can do, alone | "Your memory is on this phone. It can keep, find, forget and delete. It can export a backup to a file." |
-| This phone, actions | "Move my memory…" / "Export a backup…" / "Delete everything…" |
+| This phone, can do, alone | "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
+| This phone, actions | "Move my memory…" / "Save a backup…" / "Delete everything…" |
+| Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Delete everything" / "Cancel" |
+| Item, private | "Private" / "Kept on this phone and never sent to a mind online or at home." / "Journal entries can’t be marked private." |
 | Copy, step 1 | "A locked copy online · step 1 of 2" / "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
 | Copy, what goes | "Everything you kept, in one locked copy, made again after you keep something. Photos and recordings go once each." |
 | Copy, who opens | "Only someone with your passphrase. {company} stores it but can’t open it, and neither can Nocturne’s makers." |
@@ -698,7 +732,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, full | "There’s no room for the next copy in iCloud Drive." / "There’s no room for the next copy in your Google Drive." / "Your last copy from {time} is still there." |
 | Copy, access gone | "Google no longer allows the folder. Choose the account again to keep making copies." / "Choose account" |
 | Copy, another phone | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." / "Make this phone the one in use" |
-| Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone whichever you choose." |
+| Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
 | Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
 | Mind, service | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Mind, Apple | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
@@ -707,7 +741,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind online, sent | "The words of what you keep, your journal entries and good things, and your questions. Only words: what you typed, and what this phone heard in your voice notes." |
 | Mind online, never | "Your photos and recordings themselves, your check-ins, reflections and recaps, and anything you marked private." |
 | Mind online, need | "An account with that service. Most charge a little for what they read and write. Setting up means copying three details from its website." |
-| Mind online, details | "Your service’s details" / "Find these on your service’s website, often under API or developer settings." / "Checking with {host}…" / "{host} answered. It works." |
+| Mind online, details | "Your service’s details" / "Find these on your service’s website, often under developer settings or keys." / "Checking with {host}…" / "{host} answered. It works." |
 | Mind online, limit | "How much may go online each month?" / "A number of things read and answered" |
 | Mind online, lead | "While this is on, the words of what you keep and your questions leave this phone. Your photos, recordings and check-ins stay here." |
 | Mind online, what is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
