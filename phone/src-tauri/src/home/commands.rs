@@ -208,6 +208,12 @@ impl<R: Runtime> Reader for PhoneReader<R> {
             Err(_) => Heard::Waits,
         }
     }
+
+    fn decode(&self, src: &std::path::Path, dest: &std::path::Path) -> Option<u32> {
+        let (src, dest) = (src.to_str()?, dest.to_str()?);
+        let ms = self.0.speech().decode(src, dest).ok().flatten()?;
+        u32::try_from(ms).ok()
+    }
 }
 
 /// Read waiting voice notes in the background, if a language is known.
