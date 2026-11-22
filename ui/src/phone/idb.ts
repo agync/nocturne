@@ -4,9 +4,11 @@
 // and ids are never written here or anywhere else.
 
 export const DB_NAME = "nocturne-phone";
-export const DB_VERSION = 2;
+export const DB_VERSION = 1;
 export const STORE_DEVICE = "device";
 export const STORE_QUEUE = "queue";
+/** A phone alone's own notes, in a database of their own so the one above never changes. */
+export const NOTES_DB = "nocturne-phone-notes";
 export const STORE_NOTES = "notes";
 
 export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
@@ -18,7 +20,19 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_QUEUE)) {
         db.createObjectStore(STORE_QUEUE, { keyPath: "clientId" });
       }
-      if (!db.objectStoreNames.contains(STORE_NOTES)) db.createObjectStore(STORE_NOTES);
+    };
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error ?? new Error("could not open storage"));
+    open.onblocked = () => reject(new Error("storage is blocked"));
+  });
+}
+
+export function openNotesDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const open = factory.open(NOTES_DB, 1);
+    open.onupgradeneeded = () => {
+      if (!open.result.objectStoreNames.contains(STORE_NOTES))
+        open.result.createObjectStore(STORE_NOTES);
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error ?? new Error("could not open storage"));
