@@ -299,7 +299,7 @@ settings" with "Open phone settings". The voice note itself is always kept first
 | A keep that doesn't fit | On the Keep sheet, instead of "Kept.": "There wasn’t room to keep this. Free some room and try again." with "Try again". Nothing is half-kept |
 | Start can't make the memory | On "Your memory lives on this phone", under the button: "Nocturne couldn’t make your memory on this phone. Free some room, then try again." with "Try again". Nothing is made until it works |
 | The memory can’t be opened (damaged) | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." with "I have a backup" and "Get help". "Get help" opens the help page for this case on Nocturne's site in the phone's browser; nothing is sent with it. The damaged store is put aside, never deleted |
-| After Delete everything (pending the owner) | Recommended: the app goes back to Welcome as on a new phone, with one line above the buttons: "Everything was deleted from this phone." The phone's own permissions for the calendar, Health and the microphone stay as the person set them; This phone's help says how to take them back in the phone's settings |
+| After Delete everything | Decided by the owner: the app goes back to Welcome as on a new phone, with one line above the buttons: "Everything was deleted from this phone." The phone's own permissions for the calendar, Health and the microphone stay as the person set them; This phone's help says how to take them back in the phone's settings |
 | Calendar or health off in the phone's settings | As approved, worded "stays on this phone" |
 | A backup from a newer Nocturne | 0013's words |
 
