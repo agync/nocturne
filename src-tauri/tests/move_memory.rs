@@ -335,7 +335,7 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
         seen.load(Ordering::SeqCst) as u64,
         std::fs::metadata(&file).unwrap().len()
     );
-    assert!(matches!(c.view(), Some(MoveView::Arrived { .. })));
+    assert!(matches!(c.view(), Some(MoveView::Restarting { .. })));
 
     // Until the next start, what a phone sends would land in the store about to be put aside.
     let waits = block(phone.call(RemoteCall::SendCalendar {
@@ -347,10 +347,12 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
             code: PhoneError::Busy
         })
     );
-    // A phone that missed the answer is told again, without sending anything.
+    // Asking again before the restart: not opened yet, so the phone waits and keeps its memory.
     assert_eq!(
-        block(phone.call(home.offer(&file))).unwrap(),
-        RemoteAnswer::MemoryArrived { counts }
+        block(phone.call(home.offer(&file))).err(),
+        Some(CallError::Phone {
+            code: PhoneError::Busy
+        })
     );
     let parts = std::fs::read_dir(c.hub.core.incoming.dir())
         .unwrap()
@@ -389,13 +391,17 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
     c.h.ok("finish_move", json!({}));
     assert!(c.h.ok("get_move", json!({})).is_null());
 
-    // The same phone, with the keys it paired with, reaches the memory that moved here, and a
-    // calendar sent again is not taken twice.
+    // The same phone, with the keys it paired with, hears that the memory opened, and only then
+    // puts its own aside. A calendar sent again is not taken twice.
     let phone = c.phone(phone.identity().unwrap());
     assert!(matches!(
         block(phone.connect()),
         Connection::Connected { .. }
     ));
+    assert_eq!(
+        block(phone.call(home.offer(&file))).unwrap(),
+        RemoteAnswer::MemoryArrived { counts }
+    );
     let RemoteAnswer::Synced { receipt } = block(phone.call(RemoteCall::SendCalendar {
         batch: calendar("s3"),
     }))
@@ -681,4 +687,123 @@ fn a_memory_is_not_taken_without_the_persons_word() {
         })
     );
     assert!(c.view().is_none());
+}
+
+#[test]
+fn short_of_room_nothing_moves_until_there_is_some() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, sha) = home.backup();
+    nocturne_app_lib::remote::moving::pretend_free(c.data(), Some(1024));
+
+    assert_eq!(
+        block(phone.call(home.offer(&file))).err(),
+        Some(CallError::Phone {
+            code: PhoneError::TooLarge
+        })
+    );
+    let shown = c.h.ok("get_move", json!({}));
+    assert_eq!(shown["phase"], "offered");
+    assert!(shown["room"]["need"].as_f64().unwrap() > 1024.0);
+    assert_eq!(
+        c.h.code("answer_move", json!({"choice": "move"})),
+        "notFound",
+        "the move button waits for room"
+    );
+
+    // Room freed: the window says so, and the phone's next try is asked as usual.
+    nocturne_app_lib::remote::moving::pretend_free(c.data(), Some(u64::MAX / 4));
+    assert!(c.h.ok("get_move", json!({}))["room"].is_null());
+    let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
+    assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
+    assert!(matches!(
+        block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
+        RemoteAnswer::MemoryArrived { .. }
+    ));
+}
+
+#[test]
+fn stopping_on_the_computer_ends_the_move_and_the_phone_hears_so() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, _) = home.backup();
+    let big = home.dir.path().join("big.nocturne");
+    let mut bytes = std::fs::read(&file).unwrap();
+    bytes.resize(bytes.len() + 6 * 1024 * 1024, 7);
+    std::fs::write(&big, &bytes).unwrap();
+    let sha: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let offer = RemoteCall::OfferMemory {
+        counts: home.counts(),
+        bytes: bytes.len() as f64,
+        schema: nocturne_engine::store::latest_version(),
+    };
+    offer_and_answer(&c, &phone, offer, "move");
+    let before = c.relay.sent();
+    let p = phone.clone();
+    let (call, path) = (done(&big, &sha), big.clone());
+    let going =
+        tauri::async_runtime::spawn(async move { p.upload_memory(call, &path, |_| {}).await });
+    wait_for("part of it went", || {
+        c.relay.sent() > before + 2 * 1024 * 1024
+    });
+    c.h.ok("stop_move", json!({}));
+    assert_eq!(
+        block(going).unwrap().err(),
+        Some(CallError::Phone {
+            code: PhoneError::Paused
+        })
+    );
+    assert!(c.view().is_none());
+    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
+    assert_eq!(c.hub.core.incoming.in_flight(), 0);
+}
+
+#[test]
+fn a_memory_that_does_not_open_changes_nothing_and_the_phone_keeps_its_own() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, _) = home.backup();
+    moved(&c, &home, &phone);
+    // The staged store is damaged before the start that would open it.
+    let db = nocturne_app_lib::restore::stage_dir(c.data()).join("store/nocturne.db");
+    std::fs::write(&db, b"not a database at all").unwrap();
+    let c = c.restart();
+
+    assert_eq!(
+        c.h.engine().stats().unwrap().item_count,
+        0,
+        "nothing changed here"
+    );
+    let shown = c.h.ok("get_move", json!({}));
+    assert_eq!(shown["phase"], "failed");
+    assert_eq!(shown["why"], "notOpened");
+    c.h.ok("finish_move", json!({}));
+    assert!(c.h.ok("get_move", json!({})).is_null());
+
+    let phone = c.phone(phone.identity().unwrap());
+    assert_eq!(
+        block(phone.call(home.offer(&file))).err(),
+        Some(CallError::Phone {
+            code: PhoneError::NotFound
+        }),
+        "the phone hears it did not open"
+    );
+    // Told once: trying again is a new move, asked as before.
+    let p = phone.clone();
+    let offer = home.offer(&file);
+    let again = tauri::async_runtime::spawn(async move { p.call(offer).await });
+    wait_for("asked again", || {
+        matches!(c.view(), Some(MoveView::Offered { .. }))
+    });
+    c.h.ok("answer_move", json!({"choice": "move"}));
+    assert!(matches!(
+        block(again).unwrap(),
+        Ok(RemoteAnswer::MemoryAccepted { .. })
+    ));
 }

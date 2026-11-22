@@ -239,6 +239,7 @@ async fn preview_refuses_remote_commands() {
         "get_move",
         "answer_move",
         "finish_move",
+        "stop_move",
     ] {
         let (status, body) = invoke(&r, command, json!({})).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");

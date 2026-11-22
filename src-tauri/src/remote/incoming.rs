@@ -304,8 +304,13 @@ impl Incoming {
 
     /// Drop a phone's upload (removed, or its call gave up).
     pub fn cancel(&self, device: &str) {
+        self.fail(device, PhoneError::Revoked);
+    }
+
+    /// End a phone's upload with `code`, which its call answers.
+    pub fn fail(&self, device: &str, code: PhoneError) {
         if let Some(u) = self.uploads().remove(device) {
-            u.fail(PhoneError::Revoked);
+            u.fail(code);
         }
     }
 

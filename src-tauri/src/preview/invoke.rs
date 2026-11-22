@@ -44,6 +44,7 @@ pub const UNAVAILABLE: &[&str] = &[
     "get_move",
     "answer_move",
     "finish_move",
+    "stop_move",
     "get_phone_sources",
     "set_phone_source",
     "set_phone_page_options",

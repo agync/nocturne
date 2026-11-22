@@ -288,13 +288,14 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
 
     // What changed on this computer since the memory was settled (a phone removed or added,
     // a new address) holds: its own rows are taken again from the store still in use.
+    // A moved memory that does not open here changes nothing: it is let go, and its note says
+    // so, for the window and for the phone, which keeps its memory.
     if marker.arrival
         && store.is_dir()
         && let Err(e) = retake_computer(&source_store, &store)
     {
-        return ApplyOutcome::Failed(format!(
-            "the computer's own settings could not be kept ({e})"
-        ));
+        abandon_arrival(data, &source, &marker_path);
+        return ApplyOutcome::Failed(format!("the memory that moved here did not open ({e})"));
     }
 
     let mut kept = None;
@@ -329,6 +330,27 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
         ));
     }
     complete(data, &source, &marker, &marker_path, kept)
+}
+
+/// Let go of a moved memory that did not open: its note goes beside the backup state marked as
+/// failed, and the stage and the marker go.
+fn abandon_arrival(data: &Path, source: &Path, marker_path: &Path) {
+    let note = std::fs::read(source.join(ARRIVAL_NOTE))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+    if let Some(mut note) = note {
+        note["failed"] = serde_json::Value::Bool(true);
+        let written = fsutil::create_private_dir(&backup_dir(data)).and_then(|()| {
+            let bytes = serde_json::to_vec(&note).map_err(io::Error::other)?;
+            fsutil::write_private(&backup_dir(data).join(ARRIVAL_NOTE), &bytes)
+        });
+        if let Err(e) = written {
+            tracing::warn!("could not note that a moved memory did not open: {e}");
+        }
+    }
+    let _ = std::fs::remove_file(marker_path);
+    fsutil::shred_tree(source);
+    prune(&data.join(RESTORE));
 }
 
 fn retake_computer(arriving: &Path, here: &Path) -> nocturne_engine::Result<()> {
@@ -1043,10 +1065,16 @@ mod tests {
             serde_json::to_vec(&marker).unwrap(),
         )
         .unwrap();
-        // The live store here is not a real one, so the computer's rows cannot be taken again:
-        // nothing changes and the next start tries again.
+        // The arriving store here is not a real one, so it does not open: nothing changes, the
+        // stage goes and the note says it failed.
         assert!(matches!(apply_pending(dir.path()), ApplyOutcome::Failed(_)));
-        assert!(!backup_dir(dir.path()).join(ARRIVAL_NOTE).exists());
+        let note: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(backup_dir(dir.path()).join(ARRIVAL_NOTE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(note["failed"], true);
+        assert!(!marker_path(dir.path()).exists());
+        assert!(!stage_dir(dir.path()).exists());
         assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
     }
 
