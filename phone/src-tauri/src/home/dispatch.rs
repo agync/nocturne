@@ -10,7 +10,7 @@ use std::path::Path;
 
 use jiff::{SignedDuration, Timestamp};
 use nocturne_channel::crypto::check_id;
-use nocturne_channel::protocol::{MAX_CAPTION, MAX_TEXT, TAKE_BACK_SECS};
+use nocturne_channel::protocol::{MAX_CAPTION, MAX_ITEM, MAX_TEXT, TAKE_BACK_SECS};
 use nocturne_contract::{
     CheckIn, CheckInInput, Edition, Feeling, ItemKind, ItemView, Kept, PageView, PhoneError,
     PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice, QuestionKind, RemoteAnswer,
@@ -35,6 +35,22 @@ fn code(e: &nocturne_engine::Error) -> PhoneError {
         Error::TooLate => PhoneError::TooLate,
         Error::Busy | Error::LeaseLost => PhoneError::Busy,
         _ => PhoneError::NotReady,
+    }
+}
+
+/// Why a keep was not made. Only a keep that can never be made is `Invalid`: the screens drop
+/// it. A full phone or a busy store is `Busy`, so the keep waits and goes again.
+fn keep_code(e: &nocturne_engine::Error) -> PhoneError {
+    use nocturne_engine::Error;
+    use rusqlite::ErrorCode::{DatabaseBusy, DatabaseLocked, DiskFull};
+    match e {
+        Error::Io(_) | Error::Busy => PhoneError::Busy,
+        Error::Store(rusqlite::Error::SqliteFailure(f, _))
+            if matches!(f.code, DiskFull | DatabaseBusy | DatabaseLocked) =>
+        {
+            PhoneError::Busy
+        }
+        _ => PhoneError::Invalid,
     }
 }
 
@@ -206,10 +222,7 @@ fn finish_keep(
         Ok(m) => m,
         Err(x) => {
             tracing::warn!("a keep on this phone was not made: {x}");
-            return err(match x {
-                nocturne_engine::Error::Io(_) => PhoneError::Busy,
-                _ => PhoneError::Invalid,
-            });
+            return err(keep_code(&x));
         }
     };
     let (item, duplicate) = match &kept {
@@ -675,6 +688,12 @@ pub fn original(open: &Open, id: &str) -> Result<(String, Vec<u8>), PhoneError> 
     let mime = nocturne_engine::kind_for_ext(&ext)
         .map(|(_, m)| m)
         .unwrap_or("application/octet-stream");
+    let size = std::fs::metadata(&path)
+        .map_err(|_| PhoneError::NotFound)?
+        .len();
+    if size > MAX_ITEM {
+        return Err(PhoneError::TooLarge);
+    }
     let bytes = std::fs::read(&path).map_err(|_| PhoneError::NotFound)?;
     Ok((mime.to_string(), bytes))
 }

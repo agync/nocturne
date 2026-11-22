@@ -54,7 +54,7 @@ impl Home {
     pub fn local_call(&self, call: HomeCall, paired: bool, progress: Progress<'_>) -> HomeAnswer {
         let result = match call {
             HomeCall::Find { query } => self.find(&query),
-            HomeCall::PreviewForget { scope } => self.open_store().and_then(|o| {
+            HomeCall::PreviewForget { scope } => self.using().and_then(|(_use, o)| {
                 o.engine
                     .preview_delete(
                         &scope.ids,
@@ -65,7 +65,7 @@ impl Home {
                     .map(|preview| HomeAnswer::ForgetPreview { preview })
                     .map_err(|e| code(&e))
             }),
-            HomeCall::Forget { token } => self.open_store().and_then(|o| {
+            HomeCall::Forget { token } => self.using().and_then(|(_use, o)| {
                 o.engine
                     .forget(&token)
                     .map(|outcome| HomeAnswer::Forgotten {
@@ -85,9 +85,9 @@ impl Home {
                 replace,
             } => self.restore_backup(Path::new(&file), &passphrase, replace, paired, progress),
             HomeCall::DeleteEverything { phrase } => self.delete_everything(&phrase),
-            HomeCall::Export { dest } => self.open_store().and_then(|o| {
+            HomeCall::Export { dest } => self.using().and_then(|(_use, o)| {
                 let dest = Path::new(&dest);
-                if !dest.is_dir() {
+                if !dest.is_dir() || self.among_own_files(&dest.join("export")) {
                     return Err(HomeError::Invalid);
                 }
                 o.engine
@@ -101,7 +101,7 @@ impl Home {
     }
 
     fn find(&self, query: &str) -> Result<HomeAnswer, HomeError> {
-        let open = self.open_store()?;
+        let (_use, open) = self.using()?;
         let query = query.trim();
         if query.len() > MAX_QUESTION {
             return Err(HomeError::Invalid);
@@ -124,7 +124,7 @@ impl Home {
         passphrase: &str,
         progress: Progress<'_>,
     ) -> Result<HomeAnswer, HomeError> {
-        let open = self.open_store()?;
+        let (_use, open) = self.using()?;
         if self.among_own_files(dest) {
             return Err(HomeError::Invalid);
         }
@@ -181,6 +181,9 @@ impl Home {
         progress: Progress<'_>,
     ) -> Result<HomeAnswer, HomeError> {
         self.may_restore(paired)?;
+        if self.among_own_files(file) {
+            return Err(HomeError::Invalid);
+        }
         let _job = self.begin_job()?;
         let cancel = AtomicBool::new(false);
         let scratch = self.check_dir();
@@ -188,7 +191,10 @@ impl Home {
         let checked = nocturne_engine::check_backup(file, passphrase, &scratch, &progress, &cancel);
         clear(&scratch);
         let summary = checked.map_err(|e| code(&e))?;
-        let here = self.here(Some(&summary.made_at));
+        let here = {
+            let _use = self.gate.read().unwrap_or_else(|e| e.into_inner());
+            self.here(Some(&summary.made_at))
+        };
         Ok(HomeAnswer::BackupChecked {
             check: Box::new(RestoreCheck {
                 summary,
@@ -209,8 +215,15 @@ impl Home {
         progress: Progress<'_>,
     ) -> Result<HomeAnswer, HomeError> {
         self.may_restore(paired)?;
+        if self.among_own_files(file) {
+            return Err(HomeError::Invalid);
+        }
         let _job = self.begin_job()?;
-        if self.here(None).is_some() && !replace {
+        let holds = {
+            let _use = self.gate.read().unwrap_or_else(|e| e.into_inner());
+            self.here(None).is_some()
+        };
+        if holds && !replace {
             return Err(HomeError::Invalid);
         }
         let cancel = AtomicBool::new(false);
@@ -222,9 +235,9 @@ impl Home {
             return Err(code(&e));
         }
         let store = self.store_dir();
-        // Nothing opens the store while it changes places.
-        let mut slot = super::lock(&self.open);
-        slot.take();
+        // Every use ends first, and nothing opens the store while it changes places.
+        let _only = self.exclusive();
+        self.close();
         let moved = (|| {
             let holds = store.exists() && nocturne_engine::store_has_data(&store).unwrap_or(true);
             let aside = if holds {
@@ -237,12 +250,14 @@ impl Home {
                 None
             };
             std::fs::rename(stage.join("store"), &store).inspect_err(|_| {
-                if let Some(aside) = &aside {
-                    let _ = std::fs::rename(self.path(aside), &store);
+                if let Some(aside) = &aside
+                    && std::fs::rename(self.path(aside), &store).is_err()
+                {
+                    // The memory is safe but not in place: say so, never open an empty one.
+                    self.mark_damaged(Some(aside.clone()));
                 }
             })
         })();
-        drop(slot);
         clear(&stage);
         if let Err(e) = moved {
             tracing::warn!("the backup could not be put in place: {e}");
@@ -274,8 +289,9 @@ impl Home {
         if phrase != DELETE_PHRASE {
             return Err(HomeError::WrongPhrase);
         }
-        let open = self.open_store()?;
         let _job = self.begin_job()?;
+        let _only = self.exclusive();
+        let open = self.open_store()?;
         open.engine
             .delete_everything(phrase)
             .map_err(|e| code(&e))?;
@@ -286,13 +302,17 @@ impl Home {
         clear(&self.check_dir());
         clear(&self.keeping_dir());
         self.forget_backup_note();
-        self.close();
-        self.open_store()?;
+        // The phone's own row went with the rest: made again, the store left open.
+        let device = open
+            .engine
+            .ensure_local_device(&self.name_for_store(None))
+            .map_err(|e| code(&e))?;
+        self.set_device(device);
         Ok(HomeAnswer::Deleted)
     }
 
     fn stats(&self) -> Result<HomeStats, HomeError> {
-        let open = self.open_store()?;
+        let (_use, open) = self.using()?;
         let e = &open.engine;
         let holdings = e.holdings(None).map_err(|x| code(&x))?.unwrap_or_default();
         let items = e.stats().map_err(|x| code(&x))?.item_count;

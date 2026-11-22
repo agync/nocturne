@@ -125,7 +125,10 @@ fn a_phone_starts_alone() {
     let home = home_at(dir.path(), clock());
     assert_eq!(home.mode(false), None);
     assert_eq!(home.mode(true), Some(PhoneMode::Companion));
-    assert!(home.local().is_none(), "nothing opens before the choice");
+    assert!(
+        home.with_local(|_| ()).is_none(),
+        "nothing opens before the choice"
+    );
     assert_eq!(home.start_alone("   ", false), Err(HomeError::Invalid));
     assert_eq!(home.start_alone("Pixel", true), Err(HomeError::NotReady));
 
@@ -133,14 +136,27 @@ fn a_phone_starts_alone() {
     assert_eq!(home.mode(false), Some(PhoneMode::Alone));
     assert_eq!(home.mode(true), Some(PhoneMode::Alone));
     assert!(dir.path().join("store").join("nocturne.db").is_file());
-    let open = home.local().expect("the sync gets the open store");
-    let row = open.engine.local_device().unwrap().unwrap();
-    assert_eq!(row.id, open.device);
+    let (device, row) = home
+        .with_local(|o| (o.device.clone(), o.engine.local_device().unwrap().unwrap()))
+        .expect("the sync gets the open store");
+    assert_eq!(row.id, device);
     assert_eq!(row.name, "Pixel");
+
+    // Renamed in place while open: the same row.
+    home.start_alone("Fold", false).unwrap();
+    let renamed = home
+        .with_local(|o| {
+            (
+                o.device.clone(),
+                o.engine.local_device().unwrap().unwrap().name,
+            )
+        })
+        .unwrap();
+    assert_eq!(renamed, (device.clone(), "Fold".to_string()));
 
     // Again, after a restart: the same row.
     let again = home_at(dir.path(), clock());
-    assert_eq!(again.local().unwrap().device, open.device);
+    assert_eq!(again.with_local(|o| o.device.clone()), Some(device));
 }
 
 #[test]
@@ -510,7 +526,7 @@ fn a_damaged_store_is_put_aside() {
     std::fs::write(store.join("nocturne.db"), vec![0x5au8; 8192]).unwrap();
 
     let again = home_at(dir.path(), clock());
-    assert!(again.local().is_none());
+    assert!(again.with_local(|_| ()).is_none());
     let aside = again.damaged().expect("marked as damaged");
     assert!(aside.starts_with("store-put-aside-2026-11-22-"), "{aside}");
     assert_eq!(
@@ -521,7 +537,7 @@ fn a_damaged_store_is_put_aside() {
     assert!(!store.exists());
     // Still not opened over it after a restart.
     let later = home_at(dir.path(), clock());
-    assert!(later.local().is_none());
+    assert!(later.with_local(|_| ()).is_none());
     assert_eq!(later.damaged().as_deref(), Some(aside.as_str()));
 
     // Starting over makes a fresh memory; the damaged one stays aside.
@@ -559,14 +575,10 @@ fn delete_everything_needs_the_phrase_and_takes_copies_too() {
     );
     assert_eq!(stats(&home).counts.items, 0);
     assert!(home.put_aside_names().is_empty());
-    assert!(
-        home.local()
-            .unwrap()
-            .engine
-            .local_device()
-            .unwrap()
-            .is_some()
-    );
+    let (device, row) = home
+        .with_local(|o| (o.device.clone(), o.engine.local_device().unwrap()))
+        .unwrap();
+    assert_eq!(row.map(|r| r.id), Some(device), "its own row, made again");
     kept_id(&call(&home, note("A fresh start", "c-1")));
 }
 
@@ -658,4 +670,104 @@ fn nothing_heard_is_not_read_again_this_run() {
         heard: Heard::Words("late words".into()),
     };
     assert_eq!(home.hear_waiting(&words), 0);
+}
+
+#[test]
+fn a_restore_waits_for_every_use_to_end() {
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("b.nocturne");
+    let one = tempfile::tempdir().unwrap();
+    let (home, _) = alone(one.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    assert!(matches!(
+        local(
+            &home,
+            HomeCall::SaveBackup {
+                dest: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+            }
+        ),
+        HomeAnswer::BackupSaved { .. }
+    ));
+    let done = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|s| {
+        let (held, open) = home.using().unwrap();
+        let restore = s.spawn(|| {
+            let answer = local(
+                &home,
+                HomeCall::RestoreBackup {
+                    file: file.to_string_lossy().into(),
+                    passphrase: PASS.into(),
+                    replace: true,
+                },
+            );
+            done.store(true, std::sync::atomic::Ordering::SeqCst);
+            answer
+        });
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        assert!(
+            !done.load(std::sync::atomic::Ordering::SeqCst),
+            "waits for the use"
+        );
+        // The use still works on the store it opened.
+        assert!(matches!(
+            dispatch::answer(&open, note("Still here", "c-2")),
+            RemoteAnswer::Kept { .. }
+        ));
+        // A use ends with the store it opened as well as its place at the gate: a store still
+        // held open cannot be moved on every system.
+        drop(open);
+        drop(held);
+        assert_eq!(restore.join().unwrap(), HomeAnswer::Restored);
+    });
+    let aside = home.put_aside_names();
+    assert_eq!(
+        aside.len(),
+        1,
+        "what was here, with the late keep, is put aside"
+    );
+    assert!(found(&home, "still").is_empty());
+    assert_eq!(found(&home, "bins").len(), 1);
+}
+
+#[test]
+fn files_from_the_screens_never_land_among_the_apps_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::Export {
+                dest: dir.path().join("store").to_string_lossy().into()
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+    let staged = dir.path().join("restore-check");
+    std::fs::create_dir_all(&staged).unwrap();
+    std::fs::write(staged.join("b.nocturne"), b"x").unwrap();
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::CheckBackup {
+                file: staged.join("b.nocturne").to_string_lossy().into(),
+                passphrase: PASS.into(),
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+    let out = tempfile::tempdir().unwrap();
+    assert!(matches!(
+        local(
+            &home,
+            HomeCall::Export {
+                dest: out.path().to_string_lossy().into()
+            }
+        ),
+        HomeAnswer::Exported { .. }
+    ));
 }

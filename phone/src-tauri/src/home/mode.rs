@@ -65,16 +65,23 @@ impl Home {
         if paired && self.mode(paired) != Some(PhoneMode::Alone) {
             return Err(HomeError::NotReady);
         }
-        self.close();
+        let _only = self.exclusive();
         self.save_mode(&ModeFile {
             mode: PhoneMode::Alone,
-            name,
+            name: name.clone(),
         })
         .map_err(|e| {
             tracing::warn!("could not keep where the memory lives: {e}");
             HomeError::Failed
         })?;
         self.clear_damaged();
-        self.open_store().map(drop).map_err(|_| HomeError::Failed)
+        let open = self.open_store().map_err(|_| HomeError::Failed)?;
+        // Already open: the row takes the new name in place.
+        let device = open
+            .engine
+            .ensure_local_device(&name)
+            .map_err(|_| HomeError::Failed)?;
+        self.set_device(device);
+        Ok(())
     }
 }
