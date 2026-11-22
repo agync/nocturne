@@ -2,8 +2,8 @@
 //! to edge), the phone's name for the default device name, this app's settings page for a
 //! camera turned off there, and what the app was opened for from outside (a shortcut on its
 //! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
-//! and on an iPhone a folder kept out of its backup. On a computer every command answers a
-//! stand-in.
+//! the room left on the phone, and on an iPhone a folder kept out of its backup. On a computer
+//! every command answers a stand-in.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -108,6 +108,12 @@ pub enum Sheet {
     Failed,
 }
 
+#[derive(Debug, Deserialize)]
+struct Free {
+    #[serde(default)]
+    bytes: Option<u64>,
+}
+
 #[derive(Debug, Serialize)]
 struct SaveFile<'a> {
     path: &'a str,
@@ -120,7 +126,8 @@ fn plain(path: &Path) -> Result<&str, Error> {
 }
 
 /// The Android side, the shared folder, and the iPhone side, which keeps folders out of the
-/// backup and shows the save and open sheets: every other command answers its stand-in there.
+/// backup, shows the save and open sheets and says how much room is left: every other command
+/// answers its stand-in there.
 pub struct System<R: Runtime>(
     Option<PluginHandle<R>>,
     Mutex<Option<PathBuf>>,
@@ -171,6 +178,13 @@ impl<R: Runtime> System<R> {
     fn native<T>(&self, _method: &str, _args: impl Serialize) -> Result<Option<T>, Error> {
         let _ = (&self.0, &self.2);
         Ok(None)
+    }
+
+    /// The bytes free on the volume that holds `dir`, as the app may use them. `None` where the
+    /// phone does not say, and on a computer.
+    pub fn free_space(&self, dir: &Path) -> Result<Option<u64>, Error> {
+        let free: Option<Free> = self.native("freeSpace", Folder { path: plain(dir)? })?;
+        Ok(free.and_then(|f| f.bytes))
     }
 
     /// The phone's save sheet for the file at `src`, offered under `name`, so the person chooses
@@ -361,6 +375,14 @@ mod tests {
             undated,
             Sheet::Chosen(Chosen { modified: None, .. })
         ));
+    }
+
+    #[test]
+    fn free_space_may_be_unknown() {
+        let known: Free = serde_json::from_str(r#"{"bytes":524288000}"#).unwrap();
+        assert_eq!(known.bytes, Some(524_288_000));
+        let unknown: Free = serde_json::from_str("{}").unwrap();
+        assert_eq!(unknown.bytes, None);
     }
 
     #[test]

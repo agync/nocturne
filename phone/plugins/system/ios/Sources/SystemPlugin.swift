@@ -50,8 +50,8 @@ private final class Sheet: NSObject, UIDocumentPickerDelegate, UIAdaptivePresent
   }
 }
 
-/// The iPhone side of the system plugin: a folder kept out of the backup, and the phone's own
-/// sheets to save a file and to choose one. Every other command answers its stand-in.
+/// The iPhone side of the system plugin: a folder kept out of the backup, the free space, and the
+/// phone's own sheets to save a file and to choose one. Every other command answers its stand-in.
 class SystemPlugin: Plugin {
   private var sheet: Sheet?
 
@@ -74,6 +74,13 @@ class SystemPlugin: Plugin {
     let url = URL(fileURLWithPath: path, isDirectory: true)
     let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
     return values?.volumeAvailableCapacityForImportantUsage
+  }
+
+  /// Bytes free on the volume that holds the folder, counting what the phone would clear for it.
+  @objc public func freeSpace(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(FolderArgs.self)
+    let bytes: Any = SystemPlugin.available(args.path).map { NSNumber(value: $0) } ?? NSNull()
+    invoke.resolve(["bytes": bytes])
   }
 
   private func present(_ picker: UIDocumentPickerViewController, _ sheet: Sheet, _ invoke: Invoke) {
