@@ -99,6 +99,8 @@ The screens above, with these differences in the first release. Every other word
 | Today, no mind card | As written; "Choose a mind" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release) |
 | Ask | As written in [Ask with no mind](#7-ask-with-no-mind) |
 | This phone, Your memory | "Where it is", "Its mind" ("None yet"); no locked copy row |
+| This phone, This phone | "Version" / "Nocturne {version}". No "Name" row: a phone alone shows its name nowhere, and pairing asks for one if it is ever needed |
+| This phone, Help | "Privacy policy" (opens the policy page in the phone's browser) · "What this phone can do" |
 | This phone, actions | "Move my memory…", "Save a backup…", "Delete everything…". "Move my memory…" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release), the one place a memory can move to in this release |
 | This phone, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
 
@@ -127,18 +129,31 @@ should Nocturne's mind be?](#where-should-nocturnes-mind-be) with this as its la
 | This phone row | "Save a backup…" / hint "Last backup {day}" or "No backup yet" |
 | Form title | "Save a backup" |
 | Form lead | "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
-| Passphrase | 0013's fields, hint, note and tick |
+| Passphrase | 0013's fields, hint, note and tick. The note body is 0013's, word for word: "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Button | "Save the backup…" / under it "Next, choose where to save it." |
 | Saving | The phone's own save sheet, so the person chooses where: their files, a drive app, a computer |
 | Done | "Your backup is saved." / "{size}, made {time}." / "OK" |
 | Welcome link | "I have a backup" |
 | Restore title | "Bring back your memory" |
 | Restore lead | "Choose your backup file and type its passphrase." |
+| Restore file card | The file's name, then "{size} · made {day}" when the date can be read before the passphrase, else "{size}" alone |
 | Restore button | "Choose the file" then "Bring it back" |
 | Restore done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
 
 A restore runs 0013's checks before anything shows. On a phone that already holds a memory, 0013's
-"Replace what's here?" applies, and what was here is put aside, never deleted. When the locked copy
+choice, worded for the phone:
+
+| Part | Copy |
+|---|---|
+| Title | "Replace what’s on this phone?" |
+| Body | "Restoring puts what’s on this phone now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from {thisPhone}." |
+| Column, the backup | "In the backup · Comes in" / "Made {day}" · "Things kept {count}" · "Journal entries {count}" · "Photos and recordings {count}" |
+| Column, this phone | "On this phone now · Put aside, not deleted" / "Last kept {day}" · "Things kept {count}" · "Journal entries {count}" · "Photos and recordings {count}" · "Kept after the backup {count}", when above zero |
+| Already put aside | "Something is already put aside from {day}. It stays, and this is put aside as well." (0013) |
+| Buttons | "Keep what’s here" · "Replace with the backup"; neither is the default |
+
+What was put aside shows in This phone under Your memory as "Put aside {day}…", opening 0013's
+"Bring back what was put aside" and "Delete what was put aside", worded for this phone. When the locked copy
 ships, "I have a backup" offers both: "A locked copy online" and "A backup file".
 
 ### Behaviour
@@ -200,6 +215,50 @@ backups show their last time in This phone.
 **Notifications.** None in the first release: there is no page to announce, and the journal's rule
 keeps it off the lock screen.
 
+#### Reused screens, worded for a phone alone
+
+The companion's screens are reused on a phone alone, with these strings swapped. "Not shown" means
+the line has no meaning when the phone is the home. Keys are the companion's.
+
+| Screen | Key | Companion | A phone alone |
+|---|---|---|---|
+| Keep | `phone.keep.fromName` | "On your computer it will say “Kept from {name}”." | Not shown |
+| Keep | `phone.keep.kept.body` | "Your computer has it. It reads it shortly, and the dates can turn up on tomorrow’s page." | A note: "It’s on today’s journal, and Ask can find it by its words." A photo, document or voice note: "It’s on today’s journal, waiting to be read." A voice note the phone turned into words: "It’s on today’s journal, in words this phone heard." |
+| Keep | `phone.keep.kept.from` | "{kind} · {time} · kept from {name}" | "{kind} · {time}" |
+| Keep | `phone.keep.undo` | "Changed your mind? Until {time}" | "Changed your mind?" with no time: a phone alone can take back a keep from its page at any time |
+| Keep | `phone.keep.undo.late` | "It’s too late to take that back from the phone. Do it on your computer." | Not shown |
+| Keep | `phone.keep.waiting`, `phone.keep.waiting.body`, `phone.keep.waiting.from` | "Waiting." / "It’s on this phone and goes across when your computer is back…" | Not shown: a phone alone keeps at once |
+| Keep | `phone.keep.big.body` | "The limit is 50 MB. Keep it from your computer instead." | "Nocturne keeps files up to 50 MB." |
+| Keep | `phone.keep.failed.title`, `phone.keep.failed.body` | "That didn’t go across." / "Nothing was kept. Try again in a moment." | "That wasn’t kept." / "Nothing was kept. Try again." (no room: the phone-full line above) |
+| Keep | `phone.keep.micDenied` | "The microphone isn’t available. Allow it in your browser and try again." | "The microphone is off for Nocturne in your phone’s settings." with "Open phone settings" |
+| Share sheet | `phone.journal.keep.body` (the kept line) | "It’s on today’s journal. Your computer reads it shortly." | "It’s on today’s journal." |
+| Share sheet | Computer away | "Waiting." and the waiting words | Not shown |
+| Item | `phone.original.loading` | "Opening it from your computer…" | "Opening it…" |
+| Item | `phone.original.failed` | "That didn’t open. Your computer may be asleep. Try again in a moment." | "That didn’t open. Try again." |
+| Item | `phone.original.private` | "That one stays on your computer." | Not shown: private things open on the phone that holds them |
+| Item | `phone.original.zoom` | "Pinch to zoom. Shown from your computer; nothing is saved on this phone." | "Pinch to zoom." |
+| Item | `phone.original.text`, `phone.original.voice` | "Shown from your computer…" / "Played from your computer…" | Not shown |
+| Item | `phone.original.cantShow` | "This one can’t be shown on the phone. Open it on your computer." | "This one can’t be shown here. Save a copy to open it in another app." |
+| Item | `phone.original.cut` | "Only the start is shown here. Open it on your computer to read the rest." | "Only the start is shown here. Save a copy to read the rest in another app." |
+| Item | `phone.original.download` | "Save a copy on this phone" | "Save a copy…", opening the phone's save sheet |
+| Item | `phone.original.document.hint` | "It opens in your browser’s viewer. Viewing it saves nothing on this phone. Saving a copy does." | "It opens in your phone’s viewer." |
+| Item | `phone.original.heard` | "What Nocturne heard" | "Heard by this phone" |
+| Item | `phone.original.used` | "The highlighted part is what the answer used." | From Ask: "The highlighted words are what you looked for." Otherwise not shown |
+| Health ask | `phone.health.why.title` | "Bring health readings to your computer?" | "Show health readings in Nocturne?" |
+| Health ask | `phone.health.why.where` | "Only to your computer, in locked messages only your computer can open…" | "They stay on this phone, in Nocturne’s memory, and go wherever your memory goes: into a backup you save, a locked copy or a mind, only if you turn those on." |
+| Health ask | `phone.health.why.for` | "…and your page can show last night’s sleep." | "Your journal shows how you slept and moved beside what you wrote, and Today shows last night’s sleep." |
+| Health ask | `phone.health.done.body` | "Readings show on your computer as they go across. The first 30 days can take a minute." | "Readings show in your journal and on Today. The first 30 days can take a minute." |
+| Health ask | `phone.health.doneIos.body` | "Readings show on your computer as they go across." | "Readings show in your journal and on Today." |
+| Health rationale | `phone.rationale.why` | "…on your morning page, on your own computer." | "To show your readings beside your journal and last night’s sleep on Today, on this phone." |
+| Health rationale | `phone.rationale.where` | "Readings go only to the computer you paired…" | "Readings stay on this phone, in Nocturne’s memory, and in any backup you save. Nobody else receives them, including the people who make Nocturne. Nocturne has no account, no ads and no analytics." |
+| Health rationale | `phone.rationale.keeping` | "Your computer keeps readings until you delete them there." | "Nocturne keeps readings on this phone until you delete them." |
+| Health rationale | `phone.rationale.stopping` | "…To delete what went across, use {fromYourPhones} on your computer." | "Turn Health off in Nocturne’s {thisPhone}, or take the permission back in Health Connect. To delete readings already kept, use {deleteReadings} in {thisPhone}." |
+| Calendar and Health screens | `phone.sources.already` | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." | "What Nocturne already kept stays until you delete it." with "Delete what was kept…", opening the computer's From your phones delete preview worded for this phone |
+| Calendar screen | `phone.calendar.stoppedOnComputer.*` | "Your computer isn’t taking your calendar from this phone." | Not shown |
+
+The companion's other computer lines (pairing, Ask's answer marks, the journal's footers, "Please
+update") belong to screens a phone alone does not show.
+
 #### Voice notes in words
 
 Where the phone can turn a recording into words with no network, it does, after the recording is
@@ -210,6 +269,17 @@ a recording online. A voice note's words show with "Heard by this phone" in the 
 later mind's reading can replace them. If the build check finds a platform cannot do this offline
 from a recording, that platform ships with voice notes waiting, and nothing else changes.
 
+Each phone asks once, with one plain line before its own prompt, and a "Continue" that opens it:
+
+| Phone | When | Line before the prompt | The phone's own prompt |
+|---|---|---|---|
+| Android | The first time the microphone is needed while alone: the first "Record", or the first voice note shared from another app if the microphone was never allowed. Android's recogniser needs the microphone even for a recording it reads from a file | "Next, Android asks to let Nocturne use the microphone. Nocturne records only while you hold Record, and turns voice notes into words on this phone." | Android's microphone prompt |
+| iPhone | Just after the first voice note is kept while alone, recorded or shared | "Next, iPhone asks to let Nocturne recognise speech. Nocturne asks for it on this iPhone only, so your voice notes become words without leaving it." | Apple's speech recognition prompt, with Nocturne's purpose: "Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it." |
+
+"Not now" or a refusal leaves voice notes "waiting to be read". This phone then shows a row "Voice
+notes in words" with "Off" and "Turn on", or, once the phone has refused it, "Off in your phone’s
+settings" with "Open phone settings". The voice note itself is always kept first.
+
 ### Empty states
 
 | Where | What shows |
@@ -217,7 +287,7 @@ from a recording, that platform ships with voice notes waiting, and nothing else
 | Today, first day | The date, the no-mind card, the check-in card, and "Nothing kept yet today. Tap {keep} to keep something." No calendar or Last night rows until they are brought and have something |
 | Today, calendar on, nothing today | "Nothing in your calendar today." |
 | Journal, a day with nothing | The approved empty day |
-| Ask, before typing | The placeholder and "Find anything you kept by its words." |
+| Ask, before typing | The placeholder and "Find anything you kept by its words." Once something is typed, an x button with the accessible name "Clear" empties the box |
 | Ask, nothing kept yet | "Nothing kept yet. What you keep can be found here by its words." |
 | This phone, no backup | "Save a backup…" with "No backup yet" |
 
@@ -225,8 +295,11 @@ from a recording, that platform ships with voice notes waiting, and nothing else
 
 | State | What shows |
 |---|---|
-| The phone is nearly full | In This phone and on Keep: "This phone is nearly full. Free some room so Nocturne can keep more." Keeping stops only when a save fails, with "There wasn’t room to keep this. Free some room and try again." and nothing half-kept |
-| The memory can’t be opened (damaged) | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." with "I have a backup" and "Get help". The damaged store is put aside, never deleted |
+| The phone is nearly full | A banner on Today and on Keep, and a line under "Where it is" in This phone: "This phone is nearly full. Free some room so Nocturne can keep more." Shown when less than 500 MB is free, gone when there is more |
+| A keep that doesn't fit | On the Keep sheet, instead of "Kept.": "There wasn’t room to keep this. Free some room and try again." with "Try again". Nothing is half-kept |
+| Start can't make the memory | On "Your memory lives on this phone", under the button: "Nocturne couldn’t make your memory on this phone. Free some room, then try again." with "Try again". Nothing is made until it works |
+| The memory can’t be opened (damaged) | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." with "I have a backup" and "Get help". "Get help" opens the help page for this case on Nocturne's site in the phone's browser; nothing is sent with it. The damaged store is put aside, never deleted |
+| After Delete everything (pending the owner) | Recommended: the app goes back to Welcome as on a new phone, with one line above the buttons: "Everything was deleted from this phone." The phone's own permissions for the calendar, Health and the microphone stay as the person set them; This phone's help says how to take them back in the phone's settings |
 | Calendar or health off in the phone's settings | As approved, worded "stays on this phone" |
 | A backup from a newer Nocturne | 0013's words |
 
@@ -421,7 +494,7 @@ the phone heard them, else "waiting to be read". No reflection is offered; where
 | | "A locked copy online" | "Off" or "Last copy {time}". Opens [A locked copy online](#a-locked-copy-online) |
 | What this phone brings | "Your calendar", "Health" | As approved |
 | When it sends | Not shown on a phone alone with no mind or copy | |
-| This phone | "Name" | "{name}". Editable here, since there is no computer to rename it on |
+| This phone | "Name" | Not shown on a phone alone, which shows its name nowhere; pairing asks for a name when it is needed |
 | | "Version" | "Nocturne {version}" |
 | Help | "Privacy policy", "What this phone can do" | "What this phone can do" reads "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
 | Your memory | "Move my memory…" | Opens [Moving your memory](moving-memory.md) |
@@ -490,7 +563,7 @@ The backup form's words ([Back up and restore](backup-and-restore.md#the-form)),
 | Second field | "Type it again" (0013) |
 | Show | "Show passphrases" (0013) |
 | Note title | "Keep this passphrase safe" (0013) |
-| Note body | "Nocturne doesn’t keep it anywhere you can read. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
+| Note body | "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Note tick | "I’ve written it down or saved it somewhere safe" (0013) |
 | Bar | "Turn on" · "Back" · disabled reason "Choose a passphrase, type it again and tick the box to go on." (0013) |
 
@@ -739,7 +812,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, advanced | "Use storage you run instead" |
 | Copy, Google refused | "Nothing was turned on. Google didn’t allow the folder." |
 | Copy, step 2 | "A locked copy online · step 2 of 2" / "Choose a passphrase for the copy" |
-| Copy, keep safe body | "Nocturne doesn’t keep it anywhere you can read. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
+| Copy, keep safe body | "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Copy, bar | "Turn on" / "Back" |
 | Copy, making | "Making the first copy" / "{done} of {size}" / "You can use Nocturne while this runs." |
 | Copy, made | "Your locked copy is online." / "Made {time}. It is made again every day." / "OK" |
@@ -792,6 +865,16 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | First release, reminder | "No backup yet. If this phone is lost, what you kept goes with it." / "Save a backup" / "Not now" |
 | First release, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
 | Removing the app | "Removing the app removes your memory from this phone. Save a backup first." |
+| Replace on this phone | "Replace what’s on this phone?" / "Restoring puts what’s on this phone now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from {thisPhone}." / "In the backup · Comes in" / "On this phone now · Put aside, not deleted" / "Things kept {count}" / "Journal entries {count}" / "Photos and recordings {count}" / "Keep what’s here" / "Replace with the backup" |
+| Put aside row | "Put aside {day}…" |
+| Keep, no room | "There wasn’t room to keep this. Free some room and try again." / "Try again" |
+| Start failed | "Nocturne couldn’t make your memory on this phone. Free some room, then try again." / "Try again" |
+| After Delete everything (pending) | "Everything was deleted from this phone." |
+| Voice, Android line | "Next, Android asks to let Nocturne use the microphone. Nocturne records only while you hold Record, and turns voice notes into words on this phone." |
+| Voice, iPhone line | "Next, iPhone asks to let Nocturne recognise speech. Nocturne asks for it on this iPhone only, so your voice notes become words without leaving it." |
+| Voice, iPhone purpose | "Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it." |
+| Voice, This phone row | "Voice notes in words" / "Off" / "Turn on" / "Off in your phone’s settings" / "Open phone settings" |
+| Find, clear | "Clear" |
 | Give it a mind | "Give Nocturne a mind" / "A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own." / "1. Install Nocturne on your computer." / "2. Choose Add a phone there, and scan its code from this phone." / "3. Your memory moves to the computer, and this phone works with it." / "Scan the code" / "Not now" |
 | Backup, row | "Save a backup…" / "Last backup {day}" / "No backup yet" |
 | Backup, form | "Save a backup" / "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
