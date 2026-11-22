@@ -95,8 +95,8 @@ interface KeepProps {
 }
 
 export interface AloneKeep {
-  /** Runs before Record first opens the microphone; the recording starts once it resolves. */
-  beforeRecord?(): Promise<void>;
+  /** Runs before Record first opens the microphone; false keeps the microphone closed. */
+  beforeRecord?(): Promise<boolean>;
   /** A thing was kept. */
   onKept?(kind: "text" | "photo" | "recording"): void;
   /** Opens the phone's settings for Nocturne, where the microphone is turned back on. */
@@ -379,7 +379,7 @@ export function Keep({
                 className={`ph-source${recording ? " ph-source--ready" : ""}`}
                 onClick={async () => {
                   setMicError(null);
-                  await alone?.beforeRecord?.();
+                  if ((await alone?.beforeRecord?.()) === false) return;
                   setState({ name: "recording" });
                 }}
               >

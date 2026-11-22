@@ -165,21 +165,35 @@ export function HomeApp({
   const refresh = useCallback(() => setFresh((n) => n + 1), []);
 
   // Once per phone: a plain line, then the phone's own prompt for what reads voice notes.
+  // Resolves false when the person said "Not now": nothing then opens the phone's prompt.
   const askVoice = useCallback(
     () =>
-      new Promise<void>((done) => {
+      new Promise<boolean>((done) => {
         void (async () => {
-          const access = await home.voiceAccess();
-          const asked = await home.notes.get(VOICE_ASKED);
-          if (asked || (access !== "prompt" && access !== "prompt-with-rationale")) return done();
-          await home.notes.set(VOICE_ASKED, "1");
-          setAsking(() => (go: boolean) => {
-            setAsking(null);
-            if (!go) return done();
-            void home.voiceRequest().finally(done);
-          });
+          try {
+            const access = await home.voiceAccess();
+            const asked = await home.notes.get(VOICE_ASKED);
+            if (asked || (access !== "prompt" && access !== "prompt-with-rationale"))
+              return done(true);
+            await home.notes.set(VOICE_ASKED, "1");
+            setAsking(() => (go: boolean) => {
+              setAsking(null);
+              if (!go) return done(false);
+              void home.voiceRequest().finally(() => done(true));
+            });
+          } catch {
+            done(true);
+          }
         })();
       }),
+    [home],
+  );
+  const voice = useMemo(
+    () => ({
+      access: home.voiceAccess,
+      turnOn: home.voiceRequest,
+      asked: async () => Boolean(await home.notes.get(VOICE_ASKED)),
+    }),
     [home],
   );
   const ios = services.platform.ios;
@@ -319,7 +333,7 @@ export function HomeApp({
           channel={channel}
           stats={stats}
           version={services.version}
-          voice={{ access: home.voiceAccess, turnOn: home.voiceRequest }}
+          voice={voice}
           onBack={back}
           onMind={toMind}
           onCalendar={() => go({ name: "calendar" })}

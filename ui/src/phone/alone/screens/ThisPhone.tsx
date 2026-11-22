@@ -43,7 +43,12 @@ export function HomeThisPhone({
   /** This app's version. */
   version: string;
   /** Whether voice notes can be read into words, and the way to turn it on. */
-  voice: { access(): Promise<VoiceAccess>; turnOn(): Promise<VoiceAccess> };
+  voice: {
+    access(): Promise<VoiceAccess>;
+    turnOn(): Promise<VoiceAccess>;
+    /** The line before the phone's prompt was shown, so the row has a reason to be here. */
+    asked(): Promise<boolean>;
+  };
   onBack(): void;
   onMind(): void;
   onCalendar(): void;
@@ -66,8 +71,8 @@ export function HomeThisPhone({
       (s) => !gone && setHeld(s),
       () => undefined,
     );
-    voice.access().then(
-      (a) => !gone && setHeard(a),
+    Promise.all([voice.access(), voice.asked()]).then(
+      ([a, asked]) => !gone && setHeard(asked || a === "denied" ? a : "granted"),
       () => undefined,
     );
     return () => {
@@ -115,6 +120,7 @@ export function HomeThisPhone({
             />
             {heard === "denied" ? (
               <Row
+                icon="mic"
                 label={t("phone.alone.voice.row")}
                 hint={t("phone.alone.voice.offInSettings")}
                 value={t("phone.sources.openPhoneSettings")}
@@ -122,6 +128,7 @@ export function HomeThisPhone({
               />
             ) : heard && heard !== "granted" ? (
               <Row
+                icon="mic"
                 label={t("phone.alone.voice.row")}
                 hint={t("phone.alone.voice.off")}
                 value={t("phone.alone.voice.turnOn")}
