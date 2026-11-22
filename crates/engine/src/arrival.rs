@@ -86,6 +86,23 @@ fn settle(tx: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Every thing with no device name yet takes the name of device `id`, as it is paired here.
+fn name_unnamed(tx: &Connection, id: &str) -> Result<usize> {
+    Ok(tx.execute(
+        &format!(
+            "UPDATE items SET metadata = json_set(metadata, '$.keptOn', \
+               (SELECT name FROM remote_devices WHERE id = ?1)) \
+             WHERE {UNNAMED}"
+        ),
+        [id],
+    )?)
+}
+
+/// A thing whose device has no name yet: none of its own, and none kept through a pairing.
+const UNNAMED: &str = "json_extract(metadata, '$.keptOn') IS NULL AND NOT EXISTS ( \
+    SELECT 1 FROM remote_keeps rk JOIN remote_devices rd \
+    ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = items.id)";
+
 impl Engine {
     /// Make this store, a phone's memory unpacked from its backup, ready to be this computer's.
     /// It takes the computer's own settings and paired phones from the store in `here`, and the
@@ -111,11 +128,10 @@ impl Engine {
     pub fn name_unnamed_items(&self, name: &str) -> Result<usize> {
         self.write(|tx| {
             Ok(tx.execute(
-                "UPDATE items SET metadata = json_set(metadata, '$.keptOn', ?1) \
-                 WHERE json_extract(metadata, '$.keptOn') IS NULL AND NOT EXISTS ( \
-                   SELECT 1 FROM remote_keeps rk JOIN remote_devices rd \
-                   ON rd.id = rk.device_id AND rd.connection != 'local' \
-                   WHERE rk.item_id = items.id)",
+                &format!(
+                    "UPDATE items SET metadata = json_set(metadata, '$.keptOn', ?1) \
+                     WHERE {UNNAMED}"
+                ),
                 [name],
             )?)
         })
@@ -157,9 +173,13 @@ impl Engine {
                 )
                 .optional()?;
             match local {
-                Some(local) => crate::remote::rehome(tx, &local, paired),
-                None => Err(Error::not_found("the phone's own row")),
+                Some(local) => crate::remote::rehome(tx, &local, paired)?,
+                None => return Err(Error::not_found("the phone's own row")),
             }
+            // What the phone kept with no device named on it was kept on that phone: it takes
+            // the name the phone paired with, so this computer can say "Kept on {device}".
+            name_unnamed(tx, paired)?;
+            Ok(())
         });
         let dropped = self.write_raw(|conn| Ok(conn.execute_batch(DROP)?));
         settled?;
