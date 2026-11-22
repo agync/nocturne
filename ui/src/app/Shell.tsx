@@ -17,6 +17,7 @@ import { t } from "../copy/t";
 import { EngineError } from "../engine/client";
 import { useEngine, usePage, useRefresh, useSettings, useStatus } from "../engine/context";
 import { usePlatform } from "../platform/context";
+import { MoveDialog } from "../screens/away/MoveDialog";
 import { askRequests } from "./ask-request";
 import { findRoute, routes } from "./routes";
 import styles from "./Shell.module.css";
@@ -342,6 +343,9 @@ export function Shell({ children }: ShellProps) {
         </Dialog>
       ) : null}
       <DropOverlay onDrop={keepFiles} />
+      {/* A phone's memory moving here shows over whatever is open, and after the start that put
+          it in place. */}
+      <MoveDialog />
     </div>
   );
 }
