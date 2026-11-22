@@ -35,7 +35,6 @@ pub struct OnlineRow {
     pub base_url: Option<String>,
     pub model: Option<String>,
     pub phones: bool,
-    pub send_sensitive: bool,
     pub limit: OnlineLimit,
     pub pause: Option<OnlinePause>,
     pub problem: Option<OnlineProblem>,
@@ -98,7 +97,9 @@ pub struct LastSend {
 
 type LastRaw = (String, Option<u16>, Option<f32>, f64, f64);
 
-const STATE_COLS: &str = "wanted_on, set_up, base_url, model, phones, send_sensitive, \
+/// `send_sensitive`, the choice an earlier version offered for health, money and ID details, is
+/// left in the table unread: only what the person marks private is held back now.
+const STATE_COLS: &str = "wanted_on, set_up, base_url, model, phones, \
     limit_kind, limit_questions, limit_usd, pause, problem, problem_since, sent_bytes, \
     first_on_at, on_since, last_on_at, last_off_at, key_storage";
 
@@ -107,7 +108,7 @@ fn ts_opt(s: Option<String>) -> Result<Option<Timestamp>> {
 }
 
 type StateRaw = (
-    (bool, bool, Option<String>, Option<String>, bool, bool),
+    (bool, bool, Option<String>, Option<String>, bool),
     (String, u32, Option<f64>, Option<String>, Option<String>),
     (Option<String>, f64, [Option<String>; 4], Option<String>),
 );
@@ -118,20 +119,13 @@ fn load_state(conn: &Connection) -> Result<OnlineRow> {
         [],
         |r| {
             Ok((
+                (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?),
+                (r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?),
                 (
-                    r.get(0)?,
-                    r.get(1)?,
-                    r.get(2)?,
-                    r.get(3)?,
-                    r.get(4)?,
-                    r.get(5)?,
-                ),
-                (r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?),
-                (
+                    r.get(10)?,
                     r.get(11)?,
-                    r.get(12)?,
-                    [r.get(13)?, r.get(14)?, r.get(15)?, r.get(16)?],
-                    r.get(17)?,
+                    [r.get(12)?, r.get(13)?, r.get(14)?, r.get(15)?],
+                    r.get(16)?,
                 ),
             ))
         },
@@ -143,7 +137,6 @@ fn load_state(conn: &Connection) -> Result<OnlineRow> {
         base_url: a.2,
         model: a.3,
         phones: a.4,
-        send_sensitive: a.5,
         limit: OnlineLimit {
             kind: parse_enum(&b.0).unwrap_or(LimitKind::Questions),
             questions: b.1,
@@ -166,17 +159,15 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
     let ts = |t: Option<Timestamp>| t.map(fmt_ts);
     conn.execute(
         "UPDATE online_state SET wanted_on = ?1, set_up = ?2, base_url = ?3, model = ?4, \
-         phones = ?5, send_sensitive = ?6, limit_kind = ?7, limit_questions = ?8, \
-         limit_usd = ?9, pause = ?10, problem = ?11, problem_since = ?12, sent_bytes = ?13, \
-         first_on_at = ?14, on_since = ?15, last_on_at = ?16, last_off_at = ?17, \
-         key_storage = ?18 WHERE id = 1",
+         phones = ?5, limit_kind = ?6, limit_questions = ?7, limit_usd = ?8, pause = ?9, \
+         problem = ?10, problem_since = ?11, sent_bytes = ?12, first_on_at = ?13, \
+         on_since = ?14, last_on_at = ?15, last_off_at = ?16, key_storage = ?17 WHERE id = 1",
         params![
             s.wanted_on,
             s.set_up,
             s.base_url,
             s.model,
             s.phones,
-            s.send_sensitive,
             enum_str(&s.limit.kind),
             s.limit.questions,
             s.limit.usd,
