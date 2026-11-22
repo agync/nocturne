@@ -409,6 +409,10 @@ pub enum PhoneError {
     /// The phone is newer than the newest build this computer speaks, or a call needs a newer
     /// build than the two agreed: update the computer.
     ComputerOutdated,
+    /// A phone that keeps its own memory has no room for what it was asked to keep. The thing
+    /// may be kept without its feeling or mark: the person frees some room and the keep goes
+    /// again, and finishes. Never sent by a computer.
+    Full,
     /// A reply this phone could not read, from a newer computer: the call failed, the session
     /// goes on. Never sent by a computer.
     Unknown,

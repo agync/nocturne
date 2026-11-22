@@ -3,4 +3,4 @@
 /**
  * Why a home call did not do what was asked.
  */
-export type HomeError = "invalid" | "notFound" | "notReady" | "tooLate" | "wrongPassphrase" | "notABackup" | "full" | "wrongPhrase" | "failed";
+export type HomeError = "invalid" | "notFound" | "notReady" | "tooLate" | "wrongPassphrase" | "notABackup" | "newerBackup" | "damagedBackup" | "full" | "wrongPhrase" | "failed";

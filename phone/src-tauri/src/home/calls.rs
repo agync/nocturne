@@ -13,8 +13,8 @@ use nocturne_contract::{
 };
 use nocturne_engine::{BackupRun, DELETE_PHRASE, Engine, FIND_CAP};
 
-use super::Home;
 use super::mode::ModeFile;
+use super::{Home, io_full, is_full};
 
 pub type Progress<'a> = &'a (dyn Fn(BackupPhase, u64, u64) + Sync);
 
@@ -31,20 +31,17 @@ fn error(code: HomeError) -> HomeAnswer {
     HomeAnswer::Error { code }
 }
 
-fn code(e: &nocturne_engine::Error) -> HomeError {
+pub(crate) fn code(e: &nocturne_engine::Error) -> HomeError {
     use nocturne_engine::Error;
     match e {
         Error::NotFound(_) => HomeError::NotFound,
         Error::Invalid(_) => HomeError::Invalid,
         Error::StaleToken | Error::TooLate => HomeError::TooLate,
         Error::WrongPassphrase => HomeError::WrongPassphrase,
-        Error::NotABackup | Error::BackupTooNew => HomeError::NotABackup,
-        Error::Io(io) if io.kind() == std::io::ErrorKind::StorageFull => HomeError::Full,
-        Error::Store(rusqlite::Error::SqliteFailure(f, _))
-            if f.code == rusqlite::ErrorCode::DiskFull =>
-        {
-            HomeError::Full
-        }
+        Error::NotABackup => HomeError::NotABackup,
+        Error::BackupTooNew => HomeError::NewerBackup,
+        Error::BackupDamaged => HomeError::DamagedBackup,
+        e if is_full(e) => HomeError::Full,
         _ => HomeError::Failed,
     }
 }
@@ -263,7 +260,7 @@ impl Home {
         clear(&stage);
         if let Err(e) = moved {
             tracing::warn!("the backup could not be put in place: {e}");
-            return Err(if e.kind() == std::io::ErrorKind::StorageFull {
+            return Err(if io_full(&e) {
                 HomeError::Full
             } else {
                 HomeError::Failed

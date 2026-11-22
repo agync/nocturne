@@ -87,6 +87,26 @@ fn is_damage(e: &nocturne_engine::Error) -> bool {
     )
 }
 
+/// The phone has no room: a file or the store could not grow.
+pub(crate) fn is_full(e: &nocturne_engine::Error) -> bool {
+    use nocturne_engine::Error;
+    match e {
+        Error::Io(io) => io_full(io),
+        Error::Store(rusqlite::Error::SqliteFailure(f, _)) => {
+            f.code == rusqlite::ErrorCode::DiskFull
+        }
+        _ => false,
+    }
+}
+
+/// A write that failed for lack of room, or because the app's share of the phone is used up.
+pub(crate) fn io_full(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+    )
+}
+
 /// Releases the one job however the call ends.
 pub(crate) struct Job<'a>(&'a AtomicBool);
 
