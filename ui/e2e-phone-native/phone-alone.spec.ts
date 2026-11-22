@@ -21,6 +21,12 @@ async function fits(page: Page) {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(wide).toBeLessThanOrEqual(1);
+  const clipped = await page.evaluate(() =>
+    [...document.querySelectorAll("main button, footer button")]
+      .filter((b) => b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1)
+      .map((b) => b.textContent),
+  );
+  expect(clipped).toEqual([]);
 }
 
 async function toThisPhone(page: Page, m = "fresh") {

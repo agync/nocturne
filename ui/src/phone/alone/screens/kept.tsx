@@ -26,6 +26,11 @@ function kindWord(row: TimelineRow): string {
   return t("kind.document");
 }
 
+/** A voice note whose words this phone heard, before any mind has read it. */
+export function heardByPhone(row: TimelineRow): boolean {
+  return row.kind === "voice" && Boolean(row.item.text) && row.item.status === "kept";
+}
+
 /** One kept thing's line: its words, or its kind and "waiting to be read". */
 export function KeptLine({ row }: { row: TimelineRow }) {
   const icon = kindIcon(row);
@@ -47,6 +52,12 @@ export function KeptLine({ row }: { row: TimelineRow }) {
         </>
       ) : null}
       {words}
+      {heardByPhone(row) ? (
+        <>
+          {" "}
+          <span className="ph-wait">{t("phone.alone.heard")}</span>
+        </>
+      ) : null}
     </span>
   );
 }

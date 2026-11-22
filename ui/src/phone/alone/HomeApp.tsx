@@ -18,7 +18,8 @@ import { Keep } from "../screens/Keep";
 import { Original } from "../screens/Original";
 import { Which } from "../screens/Which";
 import "./home.css";
-import { reminderDone, reminderDue } from "./reminder";
+import { HomeRequestError } from "./api";
+import { forgetReminder, reminderDone, reminderDue } from "./reminder";
 import { SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
 import { HomeFind } from "./screens/Find";
@@ -43,15 +44,40 @@ type View =
 
 const TODAY: View = { name: "tab", tab: "today" };
 
+const OWN: ReadonlySet<string> = new Set([
+  "tab",
+  "offer",
+  "thisPhone",
+  "calendar",
+  "health",
+  "mind",
+  "backup",
+  "delete",
+  "keep",
+  "checkin",
+  "original",
+  "journal",
+  "which",
+]);
+
+/** A view from the history entry, when it is one of this app's; a companion's is not. */
+function ownView(state: unknown): View | null {
+  const view = (state as { view?: { name?: unknown } } | null)?.view;
+  if (!view || typeof view.name !== "string" || !OWN.has(view.name)) return null;
+  if (view.name === "journal" && !(view as { day?: unknown }).day)
+    return { name: "tab", tab: "journal" };
+  return view as View;
+}
+
 /** Views live in the history entries, so the phone's back gesture steps back through the app. */
 function useView(first: View) {
   const [view, setView] = useState<View>(() => {
     if (first.name === "offer") return first;
-    return (history.state?.view as View | undefined) ?? first;
+    return ownView(history.state) ?? first;
   });
   useEffect(() => {
     history.replaceState({ view }, "");
-    const onPop = (e: PopStateEvent) => setView((e.state?.view as View | undefined) ?? TODAY);
+    const onPop = (e: PopStateEvent) => setView(ownView(e.state) ?? TODAY);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
     // The first entry is recorded once.
@@ -83,6 +109,7 @@ export function HomeApp({
   channel,
   offer,
   name,
+  onLost,
 }: {
   services: NativeServices;
   channel: NativeChannel;
@@ -90,6 +117,8 @@ export function HomeApp({
   offer: boolean;
   /** This phone's name. */
   name: string;
+  /** The memory could not be opened: where it stands is asked again. */
+  onLost(): void;
 }) {
   const { home } = services;
   const engine = useMemo(() => services.engineFor(() => ""), [services]);
@@ -109,9 +138,21 @@ export function HomeApp({
     if (view.name === "tab") setTab(view.tab);
   }, [view]);
 
-  const stats = useCallback(() => home.stats(), [home]);
+  const stats = useCallback(
+    () =>
+      home.stats().catch((e: unknown) => {
+        if (e instanceof HomeRequestError && e.code === "notReady") onLost();
+        throw e;
+      }),
+    [home, onLost],
+  );
+  // Shown once: once it is due and on screen, it does not come back.
   const due = useCallback(
-    (s: HomeStats) => reminderDue(s, services.now(), home.notes),
+    async (s: HomeStats) => {
+      const show = await reminderDue(s, services.now(), home.notes);
+      if (show) await reminderDone(home.notes);
+      return show;
+    },
     [services, home],
   );
   const calendarOn = useCallback(
@@ -259,6 +300,8 @@ export function HomeApp({
           onKeep={back}
           onDelete={async (phrase) => {
             await home.deleteEverything(phrase);
+            await services.queue.clear().catch(() => undefined);
+            await forgetReminder(home.notes);
             refresh();
             replace(TODAY);
           }}
@@ -348,7 +391,6 @@ export function HomeApp({
             stats={stats}
             reminderDue={due}
             onReminder={(save) => {
-              void reminderDone(home.notes);
               if (save) go({ name: "backup" });
             }}
             onMind={toMind}
