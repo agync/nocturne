@@ -45,7 +45,7 @@ flowchart LR
 | Check-ins | The morning page |
 | The calendar and health, on Today and beside the journal | Answers to questions |
 | Finding what you kept by its words, with receipts | Noticing what changed, what needs you, what fades |
-| Voice notes turned into words by the phone itself, where it can do that with no network ([decision 9](phone-parity.md#decisions-for-the-owner)) | |
+| Voice notes turned into words by the phone itself, where it can do that with no network ([decision 9](phone-parity.md#decisions)) | |
 
 Forgetting and fading run on the phone without a mind: they are clocks, not reading. The calendar
 and health come from the phone itself, so the "goes only to your computer" lines of [Nocturne on
@@ -134,7 +134,7 @@ change.
 | Calendar why, title | "Bring your calendar to your computer?" | "Show your calendar in Nocturne?" |
 | Calendar why, goes | "It goes only to your computer, the same way as everything this phone keeps…" | "It stays on this phone, in Nocturne’s memory, and goes wherever your memory goes: into a locked copy or to a mind, only if you turn those on." |
 | Calendar why, for | "Your page shows what’s on today and this week…" | "Today shows what’s on, and your journal shows each appointment at its time. Each line shows which calendar it came from." |
-| Which calendars | Holidays and birthdays start off | Every calendar the phone has starts on, work-profile calendars included, each named as the phone names it ([decision 20](phone-parity.md#decisions-for-the-owner)) |
+| Which calendars | Holidays and birthdays start off | Every calendar the phone has starts on, work-profile calendars included, each named as the phone names it ([decision 20](phone-parity.md#decisions)) |
 | iPhone purpose, calendar | "Nocturne reads your calendar so your computer can show what’s on today on your morning page…" | "Nocturne reads your calendar so it can show what’s on today beside your days. It never changes your calendar." |
 
 Health follows the same change in [Health from the phone](phone-health.md): "only to your
@@ -192,7 +192,7 @@ A phone alone can delete, forget and export, which a companion cannot: it holds 
 
 ## A locked copy online
 
-The owner's opt-in copy online ([decisions 1 to 5](phone-parity.md#decisions-for-the-owner)): one
+The owner's opt-in copy online ([decisions 1 to 5](phone-parity.md#decisions)): one
 locked copy of the one home, in the phone's own online storage, opened only with the person's
 passphrase. The phone's own device backup leaves the memory out, so this is the one copy.
 
@@ -322,14 +322,15 @@ other way, sending memories to the assistant's company. Nothing is shown for wha
 |---|---|
 | Title | "Where should Nocturne’s mind be?" |
 | Lead | "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone whichever you choose." |
-| Choice | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on. It reads and answers for you, and keeps nothing." |
+| Choice | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
 | Choice | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Choice, iPhone, after the trial | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
 | Choice | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
 | Bar | "Continue" · "Not now" |
 
-The memory-stays line is true of the first three. The fourth moves the memory, and says so in its
-own line. "On this phone" joins the list only when the phone's own mind ships.
+The memory-stays line is true of the first three: using a mind never moves a memory or leaves a
+copy of it where the mind runs. The fourth moves the memory, by pairing, and says so in its own
+line. "On this phone" joins the list only when the phone's own mind ships.
 
 ### An online service you choose
 
@@ -378,7 +379,7 @@ disabled reasons.
 | Example | "Kept 7:40 am · Dentist moved to Thursday at 9, Bridge Street." |
 | Where it goes | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Who can see it | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." / "Nocturne can’t check what the service keeps, for how long, or whether it learns from what you send. Read its privacy page before you turn this on." (0011) |
-| Never sent | "Photos and recordings themselves" · "Your check-ins. Reflections and recaps wait until your memory has a mind at home." · "Things you marked private" · "Nocturne keeps back things that look like health, money or ID details, unless you chose to send them. They stay findable by their words. It can miss some, so mark anything you never want sent as private." |
+| Never sent | "Photos and recordings themselves" · "Your check-ins. Reflections and recaps wait until your memory has a mind at home." · "Things you marked private" |
 | What changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Changing your mind | "{limit line}" · "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." · "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Bar | "Turn on" · "Not now" |
@@ -511,7 +512,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, access gone | "Google no longer allows the folder. Choose the account again to keep making copies." / "Choose account" |
 | Copy, another phone | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." / "Make this phone the one in use" |
 | Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone whichever you choose." |
-| Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on. It reads and answers for you, and keeps nothing." |
+| Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
 | Mind, service | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Mind, Apple | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
 | Mind, own computer | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
@@ -525,7 +526,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind online, what is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
 | Mind online, where | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Mind online, sees | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." |
-| Mind online, never list | "Photos and recordings themselves" / "Your check-ins. Reflections and recaps wait until your memory has a mind at home." / "Things you marked private" / "Nocturne keeps back things that look like health, money or ID details, unless you chose to send them. They stay findable by their words. It can miss some, so mark anything you never want sent as private." |
+| Mind online, never list | "Photos and recordings themselves" / "Your check-ins. Reflections and recaps wait until your memory has a mind at home." / "Things you marked private" |
 | Mind online, changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Mind online, changing | "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." / "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Mind online, bar | "Turn on" / "Not now" |

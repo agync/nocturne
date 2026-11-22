@@ -1,7 +1,7 @@
 ---
 type: Design
 title: A household computer
-description: Proposal for step 3 of the phone parity roadmap and hosting in step 4, a computer at home that runs Nocturne for several people's phones, each choosing to borrow its mind or keep their memory there, with joining, exactly what the person who runs it can and cannot see, the mind being away, leaving and removing, the household screen on the computer, fairness and copy.
+description: Proposal for step 3 of the phone parity roadmap and hosting in step 4, a computer at home that runs Nocturne and lends its mind to the phones its owner invites, keeping nothing of them, and that can be the home of someone's memory only when they pair to make it so, with invitations, exactly what the person who runs it can and cannot see, the mind being away, leaving and removing, the household screen on the computer, fairness and copy.
 status: draft
 tags: [proposal, ux, phone, household, away-from-home, privacy, copy]
 ---
@@ -9,13 +9,14 @@ tags: [proposal, ux, phone, household, away-from-home, privacy, copy]
 # A household computer
 
 Part of [Phone and computer as equal starting points](phone-parity.md). A household computer is a
-computer at home that runs Nocturne and lets the phones of people in the household use it. It can be
-a desktop with its own owner and their memory (Sam's Home computer), or a computer that is always on
-and kept for the purpose (Tom's Hallway). Either way, a household shares a mind, never a memory.
+computer at home that runs Nocturne and lends its mind to the phones of people its owner invites. It
+can be a desktop with its own owner and their memory (Sam's Home computer), or a computer that is
+always on and kept for the purpose (Tom's Hallway). Either way, a household shares a mind, never a
+memory.
 
-Status: proposed. Nothing here is built. The first slice, by the research and [decision
-11](phone-parity.md#decisions-for-the-owner), is keeping a memory on someone's desktop; borrowing
-the mind follows once a phone keeps its own memory.
+Status: proposed, with the owner's decisions folded in. Nothing here is built. Borrowing the mind
+ships first, after a phone alone and online ([decision 11](phone-parity.md#decisions)). A household
+computer as someone's home follows.
 
 ## Mockups
 
@@ -23,62 +24,72 @@ In `docs/design/mockups/phone-parity/`.
 
 | Screen | File and states | Renders |
 |---|---|---|
-| Joining, on the phone | `household.html`: `found`, `choose`, `see`, `passphrase`, `words`, `joined` | `household-found-light.png`, `household-choose-light.png`, `household-choose-dark.png`, `household-see-light.png`, `household-passphrase-light.png`, `household-words-light.png`, `household-joined-light.png` |
+| Joining, on the phone | `household.html`: `found`, `see`, `words`, `joined` | `household-found-light.png`, `household-see-light.png`, `household-words-light.png`, `household-joined-light.png` |
 | The mind is away, removed | `away.html`: `today`, `journal`, `back`, `removed` | `away-today-light.png`, `away-today-dark.png`, `away-journal-light.png`, `away-back-light.png`, `away-removed-light.png` |
 | This phone, in a household | `this-phone.html`: `guest`, `member` | `this-phone-guest-light.png`, `this-phone-member-light.png` |
 | The household, on the computer | `desktop-household.html`: `household`, `add`, `allow`, `remove`, `off` | `desktop-household-light.png`, `desktop-household-dark.png`, `desktop-household-add-light.png`, `desktop-household-allow-light.png`, `desktop-household-remove-light.png`, `desktop-household-off-light.png` |
 
-## Two ways to join
+The owner's decisions changed this page after the mockups were drawn. Until they are redrawn, the
+words here win where a mockup differs: `household.html` `choose` and `passphrase` are superseded
+(joining has no choice; a passphrase belongs to [making it your home](#making-a-household-computer-your-home)),
+and the use counts on borrowing phones in `desktop-household.html` and the "how much" line in
+`household-see` are gone.
 
-| | Borrow its mind | Keep my memory there |
+## Borrowing, and a home
+
+A phone has one of two relationships with a household computer, and its owner's invitation decides
+which. They are not two settings of one thing: borrowing never turns into a home by itself.
+
+| | Borrow its mind | Its home |
 |---|---|---|
-| Interface words | "Borrow its mind" / "Your memory stays on this phone. {household} reads and answers for you, and keeps nothing." | "Keep my memory there" / "{household} keeps your memory, locked with a key this phone holds, and reads it overnight. This phone keeps what you add until it can reach {household}." |
+| How it starts | The owner invites the person to borrow the mind; the phone joins with the code | The owner invites the person to keep their memory there; the person pairs and their memory moves ([Moving](moving-memory.md#to-a-household-computer)) |
+| Interface words | "Borrow its mind" / "Your memory stays on this phone. {household} reads and answers for you, and keeps nothing." | "Keep my memory on {household}" / "{household} becomes your memory’s home, locked with a key this phone holds. This phone then works with it." |
 | Where the memory lives | On the phone | On the household computer, one store per person |
-| What travels | Each thing to be read, each question with its few lines, the lines a page or tidy needs; sealed | Everything kept, sealed |
-| What the household computer keeps | Nothing | That person's memory, locked |
+| What travels | What each request in flight needs: a thing to read, a question with its few lines, the lines a page or tidy step needs; sealed | Everything kept, sealed |
+| What the household computer keeps | The phone's name and the key it was invited with, so it can let it in. No memory, file, copy, log or count | That person's memory, locked |
 | Needs | A phone that keeps its own memory ([Phone first](phone-first.md)) | Nothing new on the phone: it works as a companion of that store |
-| Overnight | The phone drives its own tidy when it is charging and can reach the household | The household computer tidies overnight, with the key the phone leaves for the night ([decision 13](phone-parity.md#decisions-for-the-owner)) |
-| Things marked private | Never sent ([decision 15](phone-parity.md#decisions-for-the-owner)) | Read like everything else: it is their home |
+| Overnight | The phone drives its own tidy when it is charging and can reach the household | The household computer tidies overnight, with the key the phone leaves for the night ([decision 13](phone-parity.md#decisions)) |
+| Things marked private | Never sent ([decision 15](phone-parity.md#decisions)) | Read like everything else: it is their home |
 | When the household computer is away | The phone works as a phone alone: keeps, finds by words; reading waits | The phone keeps recording and never reads on its own; things wait to go across |
-| On Sam's desktop, which has its own owner | Yes | Yes, in the first slice |
+| On Sam's desktop, which has its own owner | Yes | Yes |
 
 A phone joins one Nocturne at a time. A phone that is a companion of its own computer is not
-offered "Join a household": its person already has a mind.
+offered "Join a household": its person already has a mind. No phone can find a household or ask to
+join it without an invitation.
 
 ```mermaid
 flowchart LR
     subgraph HC["Household computer"]
         OS[(Owner's memory)]
-        PS[(Tom's memory, locked with his phone's key)]
+        PS[(Gran's memory, locked with her phone's key)]
         MD[Mind, shared in turn]
     end
     OP[Owner's own phones] -->|companion, as today| OS
-    TP[Tom's phone] -->|keeps his memory here| PS
-    IP[Ines's phone, her memory on it] -->|borrows the mind, nothing kept| MD
+    GP[Gran's phone: paired, its home is here] -->|companion of her store| PS
+    LP[Leo's phone, his memory on it] -->|invited to borrow: nothing kept| MD
     PS --> MD
     OS --> MD
 ```
 
 ## Joining
 
+Joining is borrowing the mind. The owner invites; the phone scans; the owner allows.
+
 ```mermaid
 flowchart TD
-    A[Household computer: Add someone, a code] --> S[Phone: Join a household, scan or type]
-    S --> F[Join Hallway's household? Run by Tom]
-    F --> C{How should Hallway help you?}
-    C -->|Borrow its mind| SB[What Tom can see, borrowing]
-    C -->|Keep my memory there| SK[What Tom can see, keeping]
+    A[Household computer: Add someone, Borrow its mind: a code] --> S[Phone: Join a household, scan or type]
+    S --> F[Tom invited this phone to borrow Hallway's mind]
+    F --> SB[What Tom can see]
     SB --> W[Three words]
-    SK --> PP[A passphrase for your memory there] --> W
-    W --> AL[On the household computer: Allow, showing the way it joins]
+    W --> AL[On the household computer: Allow, showing the invitation]
     AL --> J[Joined]
-    J -->|kept there, and this phone had a memory| MV[Moving your memory to Hallway]
 ```
 
 Pairing is today's protocol ([Remote access](/architecture/remote.md#pairing)): a code, a name,
-three words, Allow. The way it joins travels inside the sealed pairing message and shows on the
-Allow screen, which is where the person who runs the household decides. Changing the way one
-joined later is moving a memory ([Moving](moving-memory.md)).
+three words, Allow. The invitation's way travels inside the sealed pairing message, was chosen by
+the owner when they made the code, and shows again on the Allow screen. A phone that scans a code
+made for keeping a memory there goes to [Making a household computer your
+home](#making-a-household-computer-your-home) instead.
 
 ### 1. Scan or type
 
@@ -87,7 +98,7 @@ words:
 
 | Part | Copy |
 |---|---|
-| Steps | "1. Ask whoever runs Nocturne at home to open {settings}, then {household}, then {addSomeone}." / "2. Scan the code it shows, or type the address and the code." |
+| Steps | "1. Ask whoever runs Nocturne at home to invite you: {settings}, then {household}, then {addSomeone}." / "2. Scan the code it shows, or type the address and the code." |
 | Scan lead | "Point at the code on their screen, under {addSomeone}." |
 
 ### 2. Found
@@ -96,87 +107,40 @@ words:
 |---|---|
 | Title | "Join {household}’s household?" |
 | Who runs it | "Run by {runner}" |
-| Lead | "{household} is a computer at home that runs Nocturne. Next, choose how it should help you." |
+| Lead | "{runner} invited this phone to borrow {household}’s mind. {household} is a computer at home that runs Nocturne." |
 | Bar | "Continue" · "Cancel" |
 
 `{household}` and `{runner}` are names the person who runs it gave on the computer.
 
-### 3. How should it help you?
-
-| Part | Copy |
-|---|---|
-| Title | "How should {household} help you?" |
-| Choice | "Borrow its mind" / "Your memory stays on this phone. {household} reads and answers for you, and keeps nothing." |
-| Choice | "Keep my memory there" / "{household} keeps your memory, locked with a key this phone holds, and reads it overnight. This phone keeps what you add until it can reach {household}." |
-| Hint | "You can change this later." |
-| This phone already has a memory, keeping chosen | "What this phone holds now moves to {household} after you join: {count} things, about {size}." |
-| Bar | "Continue" · "Back" |
-
-"Borrow its mind" is offered only on a phone that keeps its own memory; before phase 4 the choice
-screen shows "Keep my memory there" alone, with the title "{household} will keep your memory".
-
-### What the person who runs it can see
+### 3. What the person who runs it can see
 
 The screen before the three words. The words are exact, and appear the same in This phone later.
-
-**Borrowing its mind.**
 
 | Part | Copy |
 |---|---|
 | Title | "What {runner} can see" |
 | Can see heading | "{runner} can see" |
-| Can see | "This phone’s name" · "That it borrows {household}’s mind" · "When it last used it, and how much: how many things were read, how many questions, and the mind’s time" |
+| Can see | "This phone’s name" · "That it borrows {household}’s mind" · "Whether it is using the mind right now" |
 | Can’t see heading | "{runner} can’t see, in Nocturne" |
-| Can’t see | "What you keep, ask or write" · "Your answers, your page or your journal" · "Your calendar and health" |
-| Nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing, and no record of what it read." |
+| Can’t see | "What you keep, ask or write" · "Your answers, your page or your journal" · "Your calendar and health" · "When or how much you used the mind" |
+| Nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing of yours: no copy, no file, and no record of what it read or when. It keeps only this phone’s name and the key that lets it in." |
 | Private | "Things you marked private never go to {household}." |
 | Others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
 | The limit | "Someone with full control of {household} could change Nocturne on it to look at what it reads. Nocturne can’t prevent that. Join only a household you trust." |
 | Bar | "Continue" · "Back" |
 
-**Keeping your memory there.**
-
-| Part | Copy |
-|---|---|
-| Title | "What {runner} can see" |
-| Can see | "This phone’s name" · "That your memory is kept on {household}, and how much room it takes" · "When this phone last used it, and how much" |
-| Can’t see heading | "{runner} can’t see, in Nocturne" |
-| Can’t see | "What you keep, ask or write" · "Your answers, your page or your journal" · "Your calendar and health" |
-| Locked | "Your memory on {household} is locked with a key this phone holds, so it can’t be browsed, copied or backed up in a way anyone can read." |
-| Others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
-| The limit | "While {household} reads or tidies your memory, it is open in that computer’s memory, and someone with full control of {household} could get at it then. That includes overnight, when this phone leaves the key there for the tidy. Nocturne can’t prevent that. Keep your memory there only if you trust who runs it." |
-| Leaving | "You can bring your memory to this phone or your own computer at any time. It is deleted from {household} only when you say so." |
-| Bar | "Continue" · "Back" |
-
 Why each line is true, against the research:
 
-- **Can see.** The household screen shows names, the way each joined, last use, counts and the
-  mind's time, and room taken. The activity trail records action, result and size, never content.
-- **Can't see, in Nocturne.** The calls a borrowing phone can make have no handle on any store; a
-  kept memory is its own store with its own key. "In Nocturne" is there because the next line is
-  about outside it.
-- **Nothing kept.** Recordings and photos are read from memory or a temporary place removed when
-  the reading returns; nothing is logged beyond counts.
+- **Can see.** The household screen shows each phone's name, how it was invited, and a live mark
+  while one of its requests is being worked on. Nothing about a borrowing phone is counted or
+  stored once a request is answered.
+- **Can't see, in Nocturne.** The calls a borrowing phone can make have no handle on any store. "In
+  Nocturne" is there because the next line is about outside it.
+- **Nothing kept.** Recordings and photos are read from memory, never written to a file; nothing is
+  logged or counted per phone. The name and key are what any invited phone needs to be let in, and
+  they go when the phone leaves or is removed.
 - **The limit.** A computer reads what it works on in its own memory. Whoever controls it fully can
   read that memory or replace the program. The research's words are kept nearly as written.
-
-### A passphrase, when keeping the memory there
-
-The key that locks a memory kept on the household computer lives on the phone. So that a lost phone
-does not lose the memory, the key is also locked with a passphrase the person chooses, as the
-locked copy online does. A new phone joins again and types it.
-
-| Part | Copy |
-|---|---|
-| Step label | "Keeping your memory on {household}" |
-| Title | "Choose a passphrase for your memory on {household}" |
-| Lead | "Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even {runner}." |
-| Fields, hint, tick | 0013's, as in [the locked copy](phone-first.md#step-2-the-passphrase) |
-| Bar | "Continue" · "Back" · 0013's disabled reason |
-
-A phone that joins where its person already keeps a memory (a replacement phone) is asked instead:
-"Your memory is already on {household}. Type its passphrase to open it on this phone." with "Open
-it" and "That passphrase doesn’t open your memory. Check capital letters, and try again."
 
 ### 4. Three words, and Allow
 
@@ -190,18 +154,80 @@ The approved words screen, with these words:
 | Warning | "If {household} asks to allow a phone and this phone isn’t showing three words, someone else is trying to join. Refuse it." |
 | Status | "Waiting for {household}…" |
 
-On the household computer the Allow dialog shows the way the phone asked to join ([below](#allow)).
-
 ### 5. Joined
 
 | Part | Copy |
 |---|---|
-| Title, borrowing | "{name} borrows {household}’s mind." |
-| Body, borrowing | "What you keep is read there and comes back to this phone. Your first page comes tomorrow morning." |
-| Title, keeping | "{name} keeps your memory on {household}." |
-| Body, keeping, empty phone | "Keep, ask and read your page from here." |
-| Body, keeping, phone had a memory | "Next, your memory moves to {household}." and the button leads to [Moving](moving-memory.md#from-a-phone-to-a-household) |
+| Title | "{name} borrows {household}’s mind." |
+| Body | "What you keep is read there and comes back to this phone. Your first page comes tomorrow morning." |
 | Button | "Continue" |
+
+## Making a household computer your home
+
+The one way a memory comes to live on a household computer: its person pairs to make that computer
+their home. Borrowing the mind never leads here by itself, and nothing a phone sends while borrowing
+is kept for later.
+
+```mermaid
+flowchart TD
+    A[Household computer: Add someone, Keep their memory here: a code] --> S[Phone: Join a household or Move my memory, scan]
+    S --> F[Tom invited you to keep your memory on Hallway]
+    F --> SK[What Tom can see, for a memory kept there]
+    SK --> PP[A passphrase for your memory there]
+    PP --> W[Three words, Allow]
+    W --> MV[Moving your memory to Hallway]
+    MV --> C[This phone works with your memory on Hallway]
+```
+
+### Found, for a home
+
+| Part | Copy |
+|---|---|
+| Title | "Keep your memory on {household}?" |
+| Who runs it | "Run by {runner}" |
+| Lead | "{runner} invited you to keep your memory on {household}. It becomes your memory’s home, locked with a key this phone holds, and reads it overnight. This phone then works with it." |
+| This phone has a memory | "What this phone holds now moves to {household}: {count} things, about {size}." |
+| Bar | "Continue" · "Cancel" |
+
+### What the person who runs it can see, for a home
+
+The host's promise for a memory kept on a computer someone else runs, by [decision
+13](phone-parity.md#decisions): locked with a key the phone holds, opened only while it is read or
+tidied, including one night at a time.
+
+| Part | Copy |
+|---|---|
+| Title | "What {runner} can see" |
+| Can see | "This phone’s name" · "That your memory is kept on {household}, and how much room it takes" · "When this phone last connected" |
+| Can’t see heading | "{runner} can’t see, in Nocturne" |
+| Can’t see | "What you keep, ask or write" · "Your answers, your page or your journal" · "Your calendar and health" |
+| Locked | "Your memory on {household} is locked with a key this phone holds, so it can’t be browsed, copied or backed up in a way anyone can read." |
+| Others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
+| The limit | "While {household} reads or tidies your memory, it is open in that computer’s memory, and someone with full control of {household} could get at it then. That includes overnight, when this phone leaves the key there for the tidy. Nocturne can’t prevent that. Keep your memory there only if you trust who runs it." |
+| Leaving | "You can bring your memory to this phone or your own computer at any time. It is deleted from {household} only when you say so." |
+| Bar | "Continue" · "Back" |
+
+### A passphrase for a memory kept there
+
+The key that locks a memory kept on a household computer lives on the phone. So that a lost phone
+does not lose the memory, the key is also locked with a passphrase the person chooses, as the
+locked copy online does. A new phone, invited again, types it.
+
+| Part | Copy |
+|---|---|
+| Step label | "Keeping your memory on {household}" |
+| Title | "Choose a passphrase for your memory on {household}" |
+| Lead | "Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even {runner}." |
+| Fields, hint, tick | 0013's, as in [the locked copy](phone-first.md#step-2-the-passphrase) |
+| Bar | "Continue" · "Back" · 0013's disabled reason |
+
+A phone invited where its person already keeps a memory (a replacement phone) is asked instead:
+"Your memory is already on {household}. Type its passphrase to open it on this phone." with "Open
+it" and "That passphrase doesn’t open your memory. Check capital letters, and try again."
+
+Then the three words and Allow as for joining, and, when this phone held a memory, the move
+([Moving](moving-memory.md#to-a-household-computer)). Joined: "Your memory’s home is {household}." /
+"Keep, ask and read your page from here."
 
 ## This phone
 
@@ -214,44 +240,43 @@ On the household computer the Allow dialog shows the way the phone asked to join
 | | "A locked copy online" | As on a phone alone |
 | Household | "{household}" | "Run by {runner} · borrows its mind" |
 | | "What {runner} can see" | Opens the borrowing screen above |
-| | "This month" | "{count} things read, {count} questions" |
-| | "Change how {household} helps you…" | Moving |
+| | "This month" | "{count} things read, {count} questions" (counted on this phone only) |
+| | "Keep my memory on {household}…" | "Ask {runner} to invite you to keep your memory there, then scan the code they show." with "Scan" · "Cancel" |
 | | "Leave this household…" | Below |
 
-**Keeping the memory there.**
+**Its home.**
 
 | Group | Row | Value |
 |---|---|---|
 | Your memory | "Where it is" | "On {household}" · "{size}" |
 | | "Its mind" | "{household}" |
 | | "Waiting to go across" | "Nothing waiting" or "{count} waiting" |
-| | "Kept here to read when you’re away" | "Today’s page, the last week of pages, and your journal entries" ([decision 17](phone-parity.md#decisions-for-the-owner)) |
-| Household | "{household}" | "Run by {runner} · keeps your memory" |
-| | "What {runner} can see" | Opens the keeping screen above |
+| | "Kept here to read when you’re away" | "Today’s page, the last week of pages, and your journal entries" ([decision 17](phone-parity.md#decisions)) |
+| Household | "{household}" | "Run by {runner} · your memory’s home" |
+| | "What {runner} can see" | Opens the home screen above |
 | | "Move my memory…" | [Moving](moving-memory.md) |
 | | "Leave this household…" | Below |
 
-Everything else is the companion's This phone, including "What this phone brings". A kept memory
-there can delete, forget and export from the phone, because it is that person's own store: the
-phone acts for its owner, not for the household's runner.
+Everything else is the companion's This phone, including "What this phone brings". A memory whose
+home is there can delete, forget and export from the phone, because it is that person's own store:
+the phone acts for its owner, not for the household's runner.
 
 ## Leaving
 
-| Way joined | Dialog | Then |
+| Relationship | Dialog | Then |
 |---|---|---|
-| Borrowing | "Leave {household}’s household?" / "This phone stops using {household}’s mind. Your memory stays on this phone." / "Leave" · "Stay" | Its mind reads "None yet"; the no-mind card returns on Today |
-| Keeping the memory there | "Where should your memory go?" / "To this phone" · "To a computer of your own" · "Cancel" | [Moving](moving-memory.md#back-to-the-phone), then "Delete your memory from {household}?" once it has arrived |
+| Borrowing | "Leave {household}’s household?" / "This phone stops using {household}’s mind, and {household} forgets this phone. Your memory stays on this phone." / "Leave" · "Stay" | Its mind reads "None yet"; the no-mind card returns on Today |
+| Its home | "Where should your memory go?" / "To this phone" · "To a computer of your own" · "Cancel" | [Moving](moving-memory.md#back-to-the-phone), then "Delete your memory from {household}?" once it has arrived |
 
 ## States
 
-| State | Borrowing | Keeping the memory there |
+| State | Borrowing | Its home |
 |---|---|---|
 | Connected | Status "Connected to {household}" | Status "Connected to {household}" |
-| A lost phone, memory kept there | Not applicable | The person who runs it removes the lost phone; it stops at once. The memory waits, locked. A new phone joins and types the passphrase, and carries on |
+| A lost phone | The person who runs it removes the lost phone; it stops at once. Nothing of the person's is on {household} | The person who runs it removes the lost phone; it stops at once. The memory waits, locked. A new phone, invited again, types the passphrase and carries on |
 | Household computer away | Banner "{household} is out of reach." / "What you keep is kept on this phone and read when it’s back." Today keeps the last page with "Written {day}". Ask finds by words | Banner "{household} is out of reach. Still recording." / "What you keep waits here and goes across when it’s back." Today keeps the last page with "From {time} today", and "{count} waiting to go across" |
 | A thing waiting | Journal row as kept, "waiting to be read" | Journal row with "waiting to go across" and a receipt chip "On this phone". It never shows as read until it has gone across and been read there |
 | Back | Nothing; reading resumes | Toast "{household} is back. {count} went across." Today: "Your page is updated once they’re read." |
-| Daily share used | "Today’s share of {household}’s mind is used. Reading carries on tomorrow; Ask finds by words until then." | The same words |
 | Paused by the runner | "{runner} has paused this phone in {household}’s household. What you keep is safe on this phone." | "{runner} has paused this phone in {household}’s household. What you keep waits here." |
 | Removed | "{household}’s household removed this phone." / "Your memory is on this phone and wasn’t touched. Choose another mind when you’re ready." / "Choose a mind" · "OK" | "{household}’s household removed this phone." / "Your memory is still on {household}, locked. Bring it to this phone before {date}. After that, {runner} may delete it." / "Bring my memory to this phone" · "Later" |
 | Household no longer lends its mind | As removed, with "{household} stopped lending its mind." | As removed, with "{household} stopped lending its mind." |
@@ -264,26 +289,34 @@ phone acts for its owner, not for the household's runner.
 general chat: turn a question into what finding needs, answer from the few lines sent (at most 12),
 hear a recording, read a photo or document, read a thing's words, find what goes together, write a
 reflection, write the page's headline. The household computer's own instructions and settings stay
-on it. Nothing it reads is kept, logged or cached on disk.
+on it.
+
+**What the household computer keeps of a borrowing phone.** Its name and the public key from the
+invitation, so it can let it in, and whether it is paused. Nothing else, ever: what a request
+carries is held in memory until the answer is sent, recordings and photos are never written to a
+file, and nothing is logged, cached or counted per phone. The name and key are deleted when the
+phone leaves or is removed. The owner's activity list records only the owner's own acts (invited,
+allowed, paused, removed).
 
 **Overnight for a borrowing phone.** The phone runs its own tidy and calls the household's mind for
 each step, when it is charging and can reach the household, as the phone allows. A morning page is
 written from what finished, and says "Some of yesterday is still being read." when it is not all
 done.
 
-**Things waiting to go across.** Kept on the phone in order, with the time they were kept; sent
-oldest first; each kept once however often it is sent; placed on the day it was kept, not the day it
-arrived. Receipts in answers cite only things the home has.
+**Things waiting to go across (a home).** Kept on the phone in order, with the time they were kept;
+sent oldest first; each kept once however often it is sent; placed on the day it was kept, not the
+day it arrived. Receipts in answers cite only things the home has.
 
-**Sharing the mind.** In turn, by [decision 16](phone-parity.md#decisions-for-the-owner): the owner's
-own asks, then household asks (one at a time per phone), then everyone's reading in turn, one thing
-at a time per phone. Reading by household phones never makes the computer load a different mind. On
-computers with two minds, household reading goes where the owner's reading goes
+**Sharing the mind.** In turn, by [decision 16](phone-parity.md#decisions): the owner's own asks,
+then household asks (one at a time per phone), then everyone's reading in turn, one thing at a time
+per phone. Taking turns needs only the requests waiting now, so nothing is counted per phone. The
+owner can pause a phone. Reading by household phones never makes the computer load a different mind.
+On computers with two minds, household reading goes where the owner's reading goes
 ([0014](/adr/0014-npu-mind.md)).
 
 **Connections.** Household phones connect through Simple, as the owner's own phones do. With Most
 private, only the owner's own devices are admitted, so Household asks to use Simple ([decision
-14](phone-parity.md#decisions-for-the-owner)).
+14](phone-parity.md#decisions)).
 
 ## On the computer that runs it
 
@@ -300,17 +333,15 @@ On a household computer with no window, the same page shows in its browser page.
 | Switch | "Lend this computer’s mind" |
 | Name rows | "Household name" / "{household}" · "Your name, as phones see it" / "{runner}" |
 | List heading | "Phones in your household" |
-| Each phone, borrowing | "{name}" / "Borrows the mind · last used {time}" / "Today: {count} things read, {count} questions · {minutes} of the mind’s time" / "Pause" · "Remove…" |
-| Each phone, keeping | "{name}" / "Keeps its memory here · {size} · last used {time}" / "Today: {count} things kept, {count} questions · {minutes} of the mind’s time" / "Pause" · "Remove…" |
-| Nothing today | "Today: nothing yet" |
+| Each phone, borrowing | "{name}" / "Borrows the mind" / while a request is worked on: "Using the mind now" / "Pause" · "Remove…" |
+| Each phone, its home | "{name}" / "Keeps its memory here · {size} · last connected {time}" / "Pause" · "Remove…" |
 | Paused | "Paused" tag and "Resume" |
 | Empty | "No one yet. Add someone and they scan the code with Nocturne on their phone." |
 | Button | "Add someone…" |
 | Sharing heading | "Sharing the mind" |
 | Sharing body | "Your own questions always come first. Then household questions, then everyone’s reading, in turn." |
-| Limit row | "A daily share for each phone" / "Off" or "{minutes} minutes of the mind’s time a day" |
 | What you see heading | "What you can see" |
-| What you see body | "Each phone’s name, the way it joined, when it was last used and how much it used. Never what it kept, asked or read." |
+| What you see body | "Each phone’s name and how it was invited. For a memory kept here, how much room it takes and when its phone last connected. Never what anyone kept, asked or read, and no record of when a phone borrowed the mind." |
 | Foot | "Household phones connect through Simple, like your own phones. Cloudflare sees when they connect and from where, not what they send." |
 | Foot, Most private | "Household phones need Simple. With Most private, only your own phones can connect." with "Change to Simple…" |
 
@@ -319,11 +350,16 @@ On a household computer with no window, the same page shows in its browser page.
 | Part | Copy |
 |---|---|
 | Title | "Add someone to your household" |
+| Choice heading | "How should this computer help them?" |
+| Choice | "Borrow its mind" (selected) / "Their memory stays on their phone. This computer reads and answers for them and keeps nothing of theirs." |
+| Choice | "Keep their memory here" / "Their memory moves here and lives here, locked with a key their phone holds. Their phone then works with it." |
 | Lead | "Ask them to open Nocturne on their phone, choose Join a household, and scan this." |
 | The code | The code, as Add a phone shows it, with "Can’t scan?" and the four words and the code |
-| Note | "Anyone with this code can ask to join. You still choose Allow, and you see the way they want to join first." |
+| Note | "Anyone with this code can ask to join, only in the way you chose. You still choose Allow." |
 | Time | "This code works for 5 minutes, once." |
 | Button | "Done" |
+
+The code appears once a way is chosen; changing the way makes a new code.
 
 ### Allow
 
@@ -331,8 +367,8 @@ On a household computer with no window, the same page shows in its browser page.
 |---|---|
 | Title | "Allow {name} to join your household?" |
 | Words | "Check {name} shows the same three words." and the words |
-| The way, borrowing | "It wants to borrow this computer’s mind." / "Its memory stays on its phone. This computer reads and answers for it and keeps nothing." |
-| The way, keeping | "It wants to keep its memory here." / "Its memory will be kept on this computer, locked with a key its phone holds. About {size} to start." |
+| The way, borrowing | "You invited it to borrow this computer’s mind." / "Its memory stays on its phone. This computer reads and answers for it and keeps nothing of it." |
+| The way, its home | "You invited it to keep its memory here." / "Its memory will be kept on this computer, locked with a key its phone holds. About {size} to start." |
 | Warning | "If a phone that isn’t showing three words asks to join, someone else is trying. Don’t allow it." |
 | Buttons | "Allow" · "Don’t allow" (the careful choice is not the default) |
 
@@ -341,10 +377,10 @@ On a household computer with no window, the same page shows in its browser page.
 | Part | Copy |
 |---|---|
 | Title | "Remove {name} from your household?" |
-| Borrowing | "It stops at once. Its memory is on its phone and isn’t touched." |
-| Keeping | "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." |
+| Borrowing | "It stops at once, and this computer forgets it. Its memory is on its phone and isn’t touched." |
+| Its home | "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." |
 | Buttons | "Remove" (careful) · "Cancel" |
-| After, keeping | Row "{name} · removed {day}" / "Their memory waits here, locked · {size}" / from the 30th day: "Delete their memory…" |
+| After, its home | Row "{name} · removed {day}" / "Their memory waits here, locked · {size}" / from the 30th day: "Delete their memory…" |
 | Delete their memory | "Delete {name}’s memory from this computer?" / "They were told on {day}. If they haven’t taken it, it is gone for good." / "Delete" · "Keep it" |
 
 ### Turning it off
@@ -358,9 +394,10 @@ On a household computer with no window, the same page shows in its browser page.
 ### Elsewhere on the computer
 
 - **Privacy screen.** Under Away from home: "Household phones can use this computer’s mind, in the
-  same locked messages. Nothing they send is kept, unless their memory is kept here." Bytes to
-  household phones are counted with the rest.
-- **Activity list.** "{name} used the mind: {count} things read, {count} questions", never what.
+  same locked messages. Nothing they send is kept, unless their memory’s home is here." Bytes to
+  household phones are counted with the rest, never per phone.
+- **Activity list.** The owner's own acts only: "Invited {name} to borrow the mind", "Allowed
+  {name}", "Removed {name}". Nothing a household phone sent, and no line when it used the mind.
 - **Rail status.** "Uses the internet for" lists "Away from home and Household" while both are on.
 - **Export and Delete everything.** The owner's export never includes household memories. Delete
   everything asks first: "{count} household memories are kept here. They stay, locked, until their
@@ -370,76 +407,74 @@ On a household computer with no window, the same page shows in its browser page.
 
 | Key | Copy |
 |---|---|
-| Join, steps | "Ask whoever runs Nocturne at home to open {settings}, then {household}, then {addSomeone}." / "Scan the code it shows, or type the address and the code." |
+| Join, steps | "Ask whoever runs Nocturne at home to invite you: {settings}, then {household}, then {addSomeone}." / "Scan the code it shows, or type the address and the code." |
 | Join, scan lead | "Point at the code on their screen, under {addSomeone}." |
-| Found | "Join {household}’s household?" / "Run by {runner}" / "{household} is a computer at home that runs Nocturne. Next, choose how it should help you." |
-| Choose, title | "How should {household} help you?" / single: "{household} will keep your memory" |
-| Choose, borrow | "Borrow its mind" / "Your memory stays on this phone. {household} reads and answers for you, and keeps nothing." |
-| Choose, keep | "Keep my memory there" / "{household} keeps your memory, locked with a key this phone holds, and reads it overnight. This phone keeps what you add until it can reach {household}." |
-| Choose, hint | "You can change this later." |
-| Choose, moves | "What this phone holds now moves to {household} after you join: {count} things, about {size}." |
+| Found | "Join {household}’s household?" / "Run by {runner}" / "{runner} invited this phone to borrow {household}’s mind. {household} is a computer at home that runs Nocturne." |
 | See, title | "What {runner} can see" |
-| See, can | "{runner} can see" / "This phone’s name" / "That it borrows {household}’s mind" / "That your memory is kept on {household}, and how much room it takes" / "When it last used it, and how much: how many things were read, how many questions, and the mind’s time" / "When this phone last used it, and how much" |
-| See, can’t | "{runner} can’t see, in Nocturne" / "What you keep, ask or write" / "Your answers, your page or your journal" / "Your calendar and health" |
-| See, nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing, and no record of what it read." |
+| See, can | "{runner} can see" / "This phone’s name" / "That it borrows {household}’s mind" / "Whether it is using the mind right now" |
+| See, can’t | "{runner} can’t see, in Nocturne" / "What you keep, ask or write" / "Your answers, your page or your journal" / "Your calendar and health" / "When or how much you used the mind" |
+| See, nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing of yours: no copy, no file, and no record of what it read or when. It keeps only this phone’s name and the key that lets it in." |
 | See, private | "Things you marked private never go to {household}." |
 | See, others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
-| See, locked | "Your memory on {household} is locked with a key this phone holds, so it can’t be browsed, copied or backed up in a way anyone can read." |
 | See, limit, borrowing | "Someone with full control of {household} could change Nocturne on it to look at what it reads. Nocturne can’t prevent that. Join only a household you trust." |
-| See, limit, keeping | "While {household} reads or tidies your memory, it is open in that computer’s memory, and someone with full control of {household} could get at it then. That includes overnight, when this phone leaves the key there for the tidy. Nocturne can’t prevent that. Keep your memory there only if you trust who runs it." |
-| See, leaving | "You can bring your memory to this phone or your own computer at any time. It is deleted from {household} only when you say so." |
 | Words | "Adding {name} to {household}’s household" / "Check {household} shows the same three words." / "If they match, {runner} chooses {allow} on {household}. If they don’t, {runner} chooses {dontAllow} there and you start again." / "If {household} asks to allow a phone and this phone isn’t showing three words, someone else is trying to join. Refuse it." / "Waiting for {household}…" |
-| Passphrase | "Keeping your memory on {household}" / "Choose a passphrase for your memory on {household}" / "Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even {runner}." |
-| Replacement phone | "Your memory is already on {household}. Type its passphrase to open it on this phone." / "Open it" / "That passphrase doesn’t open your memory. Check capital letters, and try again." |
-| Joined, borrowing | "{name} borrows {household}’s mind." / "What you keep is read there and comes back to this phone. Your first page comes tomorrow morning." |
-| Joined, keeping | "{name} keeps your memory on {household}." / "Keep, ask and read your page from here." / "Next, your memory moves to {household}." |
-| This phone, household | "Household" / "Run by {runner} · borrows its mind" / "Run by {runner} · keeps your memory" / "This month" / "{count} things read, {count} questions" |
-| This phone, member rows | "On {household}" / "Waiting to go across" / "Nothing waiting" / "{count} waiting" / "Kept here to read when you’re away" / "Today’s page, the last week of pages, and your journal entries" |
-| This phone, actions | "Change how {household} helps you…" / "Leave this household…" |
-| Leave, borrowing | "Leave {household}’s household?" / "This phone stops using {household}’s mind. Your memory stays on this phone." / "Leave" / "Stay" |
-| Leave, keeping | "Where should your memory go?" / "To this phone" / "To a computer of your own" / "Cancel" |
+| Joined | "{name} borrows {household}’s mind." / "What you keep is read there and comes back to this phone. Your first page comes tomorrow morning." |
+| Home, found | "Keep your memory on {household}?" / "{runner} invited you to keep your memory on {household}. It becomes your memory’s home, locked with a key this phone holds, and reads it overnight. This phone then works with it." / "What this phone holds now moves to {household}: {count} things, about {size}." |
+| Home, see | "That your memory is kept on {household}, and how much room it takes" / "When this phone last connected" |
+| Home, locked | "Your memory on {household} is locked with a key this phone holds, so it can’t be browsed, copied or backed up in a way anyone can read." |
+| Home, limit | "While {household} reads or tidies your memory, it is open in that computer’s memory, and someone with full control of {household} could get at it then. That includes overnight, when this phone leaves the key there for the tidy. Nocturne can’t prevent that. Keep your memory there only if you trust who runs it." |
+| Home, leaving | "You can bring your memory to this phone or your own computer at any time. It is deleted from {household} only when you say so." |
+| Home, passphrase | "Keeping your memory on {household}" / "Choose a passphrase for your memory on {household}" / "Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even {runner}." |
+| Home, replacement phone | "Your memory is already on {household}. Type its passphrase to open it on this phone." / "Open it" / "That passphrase doesn’t open your memory. Check capital letters, and try again." |
+| Home, joined | "Your memory’s home is {household}." / "Keep, ask and read your page from here." |
+| This phone, household | "Household" / "Run by {runner} · borrows its mind" / "Run by {runner} · your memory’s home" / "This month" / "{count} things read, {count} questions" |
+| This phone, keep there | "Keep my memory on {household}…" / "Ask {runner} to invite you to keep your memory there, then scan the code they show." / "Scan" / "Cancel" |
+| This phone, home rows | "On {household}" / "Waiting to go across" / "Nothing waiting" / "{count} waiting" / "Kept here to read when you’re away" / "Today’s page, the last week of pages, and your journal entries" |
+| This phone, leave | "Leave this household…" |
+| Leave, borrowing | "Leave {household}’s household?" / "This phone stops using {household}’s mind, and {household} forgets this phone. Your memory stays on this phone." / "Leave" / "Stay" |
+| Leave, home | "Where should your memory go?" / "To this phone" / "To a computer of your own" / "Cancel" |
 | Status | "Connected to {household}" |
 | Away, borrowing | "{household} is out of reach." / "What you keep is kept on this phone and read when it’s back." |
-| Away, keeping | "{household} is out of reach. Still recording." / "What you keep waits here and goes across when it’s back." |
+| Away, home | "{household} is out of reach. Still recording." / "What you keep waits here and goes across when it’s back." |
 | Last page | "Written {day}" / "From {time} today" |
 | Waiting | "{count} waiting to go across" / "waiting to go across" / "On this phone" |
 | Back | "{household} is back. {count} went across." / "Your page is updated once they’re read." |
 | Page not done | "Some of yesterday is still being read." |
-| Share used | "Today’s share of {household}’s mind is used. Reading carries on tomorrow; Ask finds by words until then." |
 | Paused | "{runner} has paused this phone in {household}’s household. What you keep is safe on this phone." / "{runner} has paused this phone in {household}’s household. What you keep waits here." |
 | Removed, borrowing | "{household}’s household removed this phone." / "Your memory is on this phone and wasn’t touched. Choose another mind when you’re ready." / "Choose a mind" / "OK" |
-| Removed, keeping | "{household}’s household removed this phone." / "Your memory is still on {household}, locked. Bring it to this phone before {date}. After that, {runner} may delete it." / "Bring my memory to this phone" / "Later" |
+| Removed, home | "{household}’s household removed this phone." / "Your memory is still on {household}, locked. Bring it to this phone before {date}. After that, {runner} may delete it." / "Bring my memory to this phone" / "Later" |
 | Stopped lending | "{household} stopped lending its mind." |
 | Settings row | "Household" / "Lend this computer’s mind to people at home" |
 | Household, lead | "Lend this computer’s mind to people in your household. Their memories stay theirs: you can’t see what they keep or ask, and they can’t see yours." |
 | Household, switch | "Lend this computer’s mind" |
 | Household, names | "Household name" / "Your name, as phones see it" |
 | Household, list | "Phones in your household" |
-| Household, borrowing row | "Borrows the mind · last used {time}" / "Today: {count} things read, {count} questions · {minutes} of the mind’s time" |
-| Household, keeping row | "Keeps its memory here · {size} · last used {time}" / "Today: {count} things kept, {count} questions · {minutes} of the mind’s time" |
-| Household, nothing today | "Today: nothing yet" |
+| Household, borrowing row | "Borrows the mind" / "Using the mind now" |
+| Household, home row | "Keeps its memory here · {size} · last connected {time}" |
 | Household, actions | "Pause" / "Resume" / "Paused" / "Remove…" / "Add someone…" |
 | Household, empty | "No one yet. Add someone and they scan the code with Nocturne on their phone." |
-| Household, sharing | "Sharing the mind" / "Your own questions always come first. Then household questions, then everyone’s reading, in turn." / "A daily share for each phone" / "Off" / "{minutes} minutes of the mind’s time a day" |
-| Household, you see | "What you can see" / "Each phone’s name, the way it joined, when it was last used and how much it used. Never what it kept, asked or read." |
+| Household, sharing | "Sharing the mind" / "Your own questions always come first. Then household questions, then everyone’s reading, in turn." |
+| Household, you see | "What you can see" / "Each phone’s name and how it was invited. For a memory kept here, how much room it takes and when its phone last connected. Never what anyone kept, asked or read, and no record of when a phone borrowed the mind." |
 | Household, foot | "Household phones connect through Simple, like your own phones. Cloudflare sees when they connect and from where, not what they send." |
 | Household, Most private | "Household phones need Simple. With Most private, only your own phones can connect." / "Change to Simple…" |
-| Add someone | "Add someone to your household" / "Ask them to open Nocturne on their phone, choose Join a household, and scan this." / "Anyone with this code can ask to join. You still choose Allow, and you see the way they want to join first." / "This code works for 5 minutes, once." / "Done" |
-| Allow | "Allow {name} to join your household?" / "Check {name} shows the same three words." / "If a phone that isn’t showing three words asks to join, someone else is trying. Don’t allow it." / "It wants to borrow this computer’s mind." / "Its memory stays on its phone. This computer reads and answers for it and keeps nothing." / "It wants to keep its memory here." / "Its memory will be kept on this computer, locked with a key its phone holds. About {size} to start." / "Allow" / "Don’t allow" |
-| Remove | "Remove {name} from your household?" / "It stops at once. Its memory is on its phone and isn’t touched." / "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." / "Remove" / "Cancel" |
+| Add someone | "Add someone to your household" / "How should this computer help them?" / "Borrow its mind" / "Their memory stays on their phone. This computer reads and answers for them and keeps nothing of theirs." / "Keep their memory here" / "Their memory moves here and lives here, locked with a key their phone holds. Their phone then works with it." / "Ask them to open Nocturne on their phone, choose Join a household, and scan this." / "Anyone with this code can ask to join, only in the way you chose. You still choose Allow." / "This code works for 5 minutes, once." / "Done" |
+| Allow | "Allow {name} to join your household?" / "Check {name} shows the same three words." / "If a phone that isn’t showing three words asks to join, someone else is trying. Don’t allow it." / "You invited it to borrow this computer’s mind." / "Its memory stays on its phone. This computer reads and answers for it and keeps nothing of it." / "You invited it to keep its memory here." / "Its memory will be kept on this computer, locked with a key its phone holds. About {size} to start." / "Allow" / "Don’t allow" |
+| Remove | "Remove {name} from your household?" / "It stops at once, and this computer forgets it. Its memory is on its phone and isn’t touched." / "It stops at once. Their memory stays here, locked, so they can take it home. You can delete it after 30 days; they are told on their phone first." / "Remove" / "Cancel" |
 | Removed row | "{name} · removed {day}" / "Their memory waits here, locked · {size}" / "Delete their memory…" |
 | Delete their memory | "Delete {name}’s memory from this computer?" / "They were told on {day}. If they haven’t taken it, it is gone for good." / "Delete" / "Keep it" |
 | Turn off | "Stop lending this computer’s mind?" / "Every household phone stops at once. Memories kept here stay, locked, until their people take them home." / "Stop lending" / "Keep lending" |
-| Privacy screen | "Household phones can use this computer’s mind, in the same locked messages. Nothing they send is kept, unless their memory is kept here." |
-| Activity | "{name} used the mind: {count} things read, {count} questions" |
+| Privacy screen | "Household phones can use this computer’s mind, in the same locked messages. Nothing they send is kept, unless their memory’s home is here." |
+| Activity | "Invited {name} to borrow the mind" / "Invited {name} to keep their memory here" / "Allowed {name}" / "Removed {name}" |
 | Rail status | "Away from home and Household" |
 | Delete everything, household | "{count} household memories are kept here. They stay, locked, until their people take them home, or you delete them after telling them." |
 
 ## Accessibility
 
-- The "What {runner} can see" screen reads as three lists with headings, then the two paragraphs;
-  the limit is a paragraph, not small print.
-- The household list reads each phone as one row: "{name}, borrows the mind, last used {time},
-  today {counts}", then its actions.
-- The Allow dialog announces the way the phone wants to join before the buttons, and Allow is never
-  the default.
+- The "What {runner} can see" screen reads as two lists with headings, then the paragraphs; the
+  limit is a paragraph, not small print.
+- The household list reads each phone as one row: "{name}, borrows the mind" or "{name}, keeps its
+  memory here, {size}, last connected {time}", then its actions. "Using the mind now" is announced
+  politely, not on every change.
+- Add someone announces the chosen way before the code; the code changes only when the way does.
+- The Allow dialog announces the invitation's way before the buttons, and Allow is never the
+  default.
