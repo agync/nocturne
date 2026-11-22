@@ -9,7 +9,9 @@ use nocturne_contract::{
 };
 use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri_plugin_nocturne_speech::{Access, SpeechExt};
 
+use super::voice::{Heard, Reader};
 use super::{Home, dispatch};
 use crate::state::AppState;
 
@@ -87,7 +89,7 @@ pub async fn home_keep_end<R: Runtime>(app: AppHandle<R>, handle: u32) -> Remote
         };
     };
     let worker = app.clone();
-    blocking(move || {
+    let answer = blocking(move || {
         let home = worker.state::<Home>();
         match home.open_store() {
             Ok(open) => dispatch::keep_bytes(&open, call, &bytes, &home.keeping_dir()),
@@ -99,7 +101,11 @@ pub async fn home_keep_end<R: Runtime>(app: AppHandle<R>, handle: u32) -> Remote
     .await
     .unwrap_or(RemoteAnswer::Error {
         code: PhoneError::Busy,
-    })
+    });
+    if dispatch::is_voice_note(&answer) {
+        hear_soon(&app);
+    }
+    answer
 }
 
 /// An item's original, as `[type length][type][bytes]`, as the companion's `original` answers.
@@ -143,6 +149,7 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     }
     if changes_mode && done {
         emit_mode(&app);
+        hear_soon(&app);
     }
     answer
 }
@@ -168,4 +175,72 @@ fn progress<R: Runtime>(app: AppHandle<R>) -> impl Fn(BackupPhase, u64, u64) + S
             let _ = app.emit(EVENT_BACKUP, value);
         }
     }
+}
+
+/// The phone's speech reader, through its plugin.
+struct PhoneReader<R: Runtime>(AppHandle<R>);
+
+impl<R: Runtime> Reader for PhoneReader<R> {
+    fn ready(&self, language: &str) -> bool {
+        let speech = self.0.speech();
+        speech.access() == Access::Granted
+            && speech
+                .check_support(language)
+                .is_ok_and(|outcome| !outcome.waits())
+    }
+
+    fn read(&self, pcm: &std::path::Path, language: &str) -> Heard {
+        let Some(path) = pcm.to_str() else {
+            return Heard::Waits;
+        };
+        match self.0.speech().transcribe(path, language) {
+            Ok(outcome) => match outcome.words() {
+                Some(words) => Heard::Words(words.to_string()),
+                None if outcome.waits() => Heard::Waits,
+                None => Heard::Nothing,
+            },
+            Err(_) => Heard::Waits,
+        }
+    }
+}
+
+/// Read waiting voice notes in the background, if a language is known.
+fn hear_soon<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let heard = app.state::<Home>().hear_waiting(&PhoneReader(app.clone()));
+        if heard > 0 {
+            tracing::info!("{heard} voice notes have their words");
+        }
+    });
+}
+
+/// The phone's language, as the web view knows it (such as `en-GB`), for reading voice notes;
+/// then every note still waiting is read where the phone can. Called when the app opens and
+/// each time it comes back to the front. Never asks for the microphone.
+#[tauri::command]
+pub fn hear_voice_notes<R: Runtime>(app: AppHandle<R>, language: String) -> bool {
+    let taken = app.state::<Home>().set_language(&language);
+    if taken {
+        hear_soon(&app);
+    }
+    taken
+}
+
+/// Whether the phone's speech reader may run: it asks for the microphone permission although it
+/// only reads files.
+#[tauri::command]
+pub async fn voice_access<R: Runtime>(app: AppHandle<R>) -> Access {
+    blocking(move || app.speech().access())
+        .await
+        .unwrap_or(Access::Denied)
+}
+
+/// The phone's own prompt for that permission, unless it will no longer show it. The screens
+/// say why first.
+#[tauri::command]
+pub async fn voice_request<R: Runtime>(app: AppHandle<R>) -> Access {
+    blocking(move || app.speech().request().unwrap_or(Access::Denied))
+        .await
+        .unwrap_or(Access::Denied)
 }
