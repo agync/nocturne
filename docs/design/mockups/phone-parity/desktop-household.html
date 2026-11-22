@@ -24,15 +24,15 @@
       <h2 class="label">Phones in your household · 3</h2>
       <ul class="oRows">
         <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Leo’s phone <span class="wayTag">Borrows the mind</span></span><span class="oHint">Last used 8:12 am</span><span class="oHint">Today: 14 things read, 3 questions · 6 min of the mind’s time <span class="useBar"><span style="width: 40%"></span></span></span></span>
+          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Leo’s phone <span class="wayTag">Borrows the mind</span></span><span class="oHint">Using the mind now</span></span>
           <span class="oActs"><span class="button" data-variant="secondary">Pause</span><span class="button" data-variant="quiet">Remove…</span></span>
         </li>
         <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Gran’s phone <span class="wayTag">Keeps its memory here</span></span><span class="oHint">2.1 GB · last used yesterday 6:40 pm</span><span class="oHint">Today: nothing yet</span></span>
+          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Gran’s phone <span class="wayTag">Keeps its memory here</span></span><span class="oHint">2.1 GB · last connected yesterday 6:40 pm</span></span>
           <span class="oActs"><span class="button" data-variant="secondary">Pause</span><span class="button" data-variant="quiet">Remove…</span></span>
         </li>
         <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Mo’s phone <span class="wayTag">Borrows the mind</span> <span class="tagPaused">Paused</span></span><span class="oHint">Last used Tuesday</span></span>
+          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Mo’s phone <span class="wayTag">Borrows the mind</span> <span class="tagPaused">Paused</span></span></span>
           <span class="oActs"><span class="button" data-variant="secondary">Resume</span><span class="button" data-variant="quiet">Remove…</span></span>
         </li>
       </ul>
@@ -42,12 +42,11 @@
     <div class="section" style="padding-top: var(--s-3)">
       <h2 class="label">Sharing the mind</h2>
       <p class="small" style="color: var(--ink)">Your own questions always come first. Then household questions, then everyone’s reading, in turn.</p>
-      <ul class="oRows"><li class="oRow"><span class="oText"><span class="oLabel">A daily share for each phone</span></span><span class="oValue">Off</span></li></ul>
     </div>
 
     <div class="section" style="padding-top: var(--s-3)">
       <h2 class="label">What you can see</h2>
-      <p class="small" style="color: var(--ink)">Each phone’s name, the way it joined, when it was last used and how much it used. Never what it kept, asked or read.</p>
+      <p class="small" style="color: var(--ink)">Each phone’s name and how it was invited. For a memory kept here, how much room it takes and when its phone last connected. Never what anyone kept, asked or read, and no record of when a phone borrowed the mind.</p>
     </div>
     <p class="small">Household phones connect through Simple, like your own phones. Cloudflare sees when they connect and from where, not what they send.</p>
   </div>
@@ -56,6 +55,11 @@
   <div data-state="add" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
     <a class="back" href="#"><span aria-hidden="true">←</span> Household</a>
     <h1 class="stepTitle">Add someone to your household</h1>
+    <p class="label" style="margin: 0">How should this computer help them?</p>
+    <div class="choices" style="display: flex; flex-direction: column; gap: var(--s-2)">
+      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="way" checked> <span class="oText"><span class="oLabel">Borrow its mind</span><span class="oHint">Their memory stays on their phone. This computer reads and answers for them and keeps nothing of theirs.</span></span></label>
+      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="way"> <span class="oText"><span class="oLabel">Keep their memory here</span><span class="oHint">Their memory moves here and lives here, locked with a key their phone holds. Their phone then works with it.</span></span></label>
+    </div>
     <p class="lead">Ask them to open Nocturne on their phone, choose Join a household, and scan this.</p>
     <div style="display: flex; gap: var(--s-6); align-items: flex-start">
       <span class="qrBox"><span data-qr="200"></span></span>
@@ -66,7 +70,7 @@
         <p class="small">This code works for 5 minutes, once.</p>
       </div>
     </div>
-    <p class="notice" style="padding: var(--s-3); border-radius: var(--r-md); background: var(--accent-soft)">Anyone with this code can ask to join. You still choose Allow, and you see the way they want to join first.</p>
+    <p class="notice" style="padding: var(--s-3); border-radius: var(--r-md); background: var(--accent-soft)">Anyone with this code can ask to join, only in the way you chose. You still choose Allow.</p>
     <div class="buttons"><span class="button" data-variant="primary">Done</span></div>
   </div>
 </div>
@@ -77,7 +81,7 @@
       <h2 id="at" class="dialogTitle">Allow Leo’s phone to join your household?</h2>
       <p class="muted">Check Leo’s phone shows the same three words.</p>
       <p style="font: 400 1.5rem / 1.3 var(--font-serif)">harbour · violet · kettle</p>
-      <p><strong style="font-weight: 500">It wants to borrow this computer’s mind.</strong><br>Its memory stays on its phone. This computer reads and answers for it and keeps nothing.</p>
+      <p><strong style="font-weight: 500">You invited it to borrow this computer’s mind.</strong><br>Its memory stays on its phone. This computer reads and answers for it and keeps nothing of it.</p>
       <p class="small">If a phone that isn’t showing three words asks to join, someone else is trying. Don’t allow it.</p>
       <div class="buttons" style="justify-content: flex-end">
         <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Don’t allow</span>
