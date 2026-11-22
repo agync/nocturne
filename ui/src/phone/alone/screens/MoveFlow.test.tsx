@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemoryCounts } from "../../../engine/bindings";
 import { type MoveApi, type MoveError, MoveFlow } from "./MoveFlow";
-import { type MoveProgress, moveMinutes } from "./MoveScreens";
+import { MEASURE_MS, MoveMoving, type MoveProgress } from "./MoveScreens";
 
 afterEach(cleanup);
 
@@ -19,7 +19,13 @@ function fakeApi(): Fake {
   let settleOffer: ((r: MemoryCounts | null | MoveError) => void) | null = null;
   const api: Fake = {
     computer: vi.fn(async () => "Maya’s laptop"),
-    facts: vi.fn(async () => ({ counts: COUNTS, since: "2026-03-03", bytes: 1_400_000_000 })),
+    facts: vi.fn(async () => ({
+      counts: COUNTS,
+      things: 1284,
+      journal: 12,
+      since: "2026-03-03",
+      bytes: 1_400_000_000,
+    })),
     offer: vi.fn(
       () =>
         new Promise<MemoryCounts | null>((ok, no) => {
@@ -91,17 +97,17 @@ describe("moving the memory to a computer", () => {
     expect(
       screen.getByText(/^About 1\.4\sGB, most of it photos and recordings$/),
     ).toBeInTheDocument();
+    expect(screen.getByText("12 journal entries")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        `About ${moveMinutes(1_400_000_000)} minutes on this connection. Keep Nocturne open; it carries on if the phone allows.`,
-      ),
+      screen.getByText("Keep Nocturne open; it carries on if the phone allows."),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/minutes/)).toBeNull();
     expect(
       screen.getByText(
         "Your memory here is put aside once it has arrived. You choose then whether to remove it.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/pages and your journal/)).toBeNull();
+    expect(screen.queryByText(/pages/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
       await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
@@ -158,7 +164,8 @@ describe("moving the memory to a computer", () => {
         "Stop moving? Nothing has changed here, and Maya’s laptop keeps nothing of it.",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(within(sheet).getByRole("button", { name: "Stop" }));
+    expect(within(sheet).getByRole("button", { name: "Keep moving" })).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Stop moving" }));
     await waitFor(() => expect(onExit).toHaveBeenCalled());
     expect(api.stop).toHaveBeenCalled();
   });
@@ -194,5 +201,99 @@ describe("moving the memory to a computer", () => {
     await screen.findByRole("button", { name: "Continue" });
     api.answerOffer("declined");
     await waitFor(() => expect(onExit).toHaveBeenCalled());
+  });
+
+  it("says it is finishing while the computer restarts, with nothing left to stop", async () => {
+    const api = fakeApi();
+    open(api);
+    await toMoving(api);
+    act(() => api.progress?.({ phase: "finishing", done: 1, total: 1 }));
+    expect(
+      screen.getByText(
+        "Finishing on Maya’s laptop. Nocturne there restarts to open your memory; this takes a moment.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it.each([
+    [
+      "noRoom",
+      "Maya’s laptop needs more free room for your memory. Free some there, then try again.",
+    ],
+    [
+      "ranOutOfRoom",
+      "Maya’s laptop ran out of room, so nothing changed. Your memory is still on this phone.",
+    ],
+    [
+      "notOpened",
+      "Maya’s laptop couldn’t open your memory, so nothing changed. Your memory is still on this phone.",
+    ],
+  ] as const)("after %s says so, with Try again and Not now", async (why, line) => {
+    const api = fakeApi();
+    const { onExit } = open(api);
+    await toMoving(api);
+    api.finishMove(why);
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+    expect(api.undo).toHaveBeenCalled();
+  });
+
+  it("says when the computer stopped it, with OK", async () => {
+    const api = fakeApi();
+    const { onExit } = open(api);
+    await toMoving(api);
+    api.finishMove("stoppedThere");
+    expect(
+      await screen.findByText(
+        "Maya’s laptop stopped the move. Nothing changed, and your memory is still on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+  });
+});
+
+describe("how long is left", () => {
+  it("says nothing until the move has been measured, then the minutes left", () => {
+    let clock = 0;
+    const now = () => clock;
+    const sending = (done: number): MoveProgress => ({
+      phase: "sending",
+      done,
+      total: 1_200_000_000,
+    });
+    const { rerender } = render(
+      <MoveMoving
+        computer="Maya’s laptop"
+        progress={sending(0)}
+        onStop={() => undefined}
+        now={now}
+      />,
+    );
+    clock = MEASURE_MS - 1;
+    rerender(
+      <MoveMoving
+        computer="Maya’s laptop"
+        progress={sending(10_000_000)}
+        onStop={() => undefined}
+        now={now}
+      />,
+    );
+    expect(screen.queryByText(/minutes left/)).toBeNull();
+    // 20 MB in 10 seconds: 2 MB a second, so 1,180 MB left is about 10 minutes.
+    clock = MEASURE_MS;
+    rerender(
+      <MoveMoving
+        computer="Maya’s laptop"
+        progress={sending(20_000_000)}
+        onStop={() => undefined}
+        now={now}
+      />,
+    );
+    expect(screen.getByText(/About 10 minutes left/)).toBeInTheDocument();
   });
 });
