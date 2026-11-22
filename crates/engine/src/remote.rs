@@ -225,6 +225,66 @@ fn day_bytes(conn: &rusqlite::Connection, device_id: &str, date: &str) -> Result
     Ok(used.unwrap_or(0).max(0) as u64)
 }
 
+/// The body of [`Engine::rehome_device`], inside a write transaction of its own or a caller's.
+pub(crate) fn rehome(tx: &rusqlite::Transaction<'_>, from: &str, to: &str) -> Result<()> {
+    if !is_local(tx, from)? {
+        return Err(Error::not_found(format!("local device {from}")));
+    }
+    let paired: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM remote_devices \
+             WHERE id = ?1 AND connection != 'local' AND revoked_at IS NULL)",
+        [to],
+        |r| r.get(0),
+    )?;
+    if !paired {
+        return Err(Error::not_found(format!("device {to}")));
+    }
+    let has_history: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM remote_keeps WHERE device_id = ?1) \
+             OR EXISTS(SELECT 1 FROM phone_records WHERE device_id = ?1)",
+        [to],
+        |r| r.get(0),
+    )?;
+    if has_history {
+        return Err(Error::Invalid(format!(
+            "device {to} already has its own history"
+        )));
+    }
+    tx.execute(
+        "DELETE FROM phone_sources WHERE device_id = ?2 AND source IN \
+             (SELECT source FROM phone_sources WHERE device_id = ?1)",
+        [from, to],
+    )?;
+    tx.execute(
+        "UPDATE phone_sources SET device_id = ?2 WHERE device_id = ?1",
+        [from, to],
+    )?;
+    tx.execute(
+        "UPDATE phone_records SET device_id = ?2 WHERE device_id = ?1",
+        [from, to],
+    )?;
+    tx.execute(
+        "UPDATE remote_keeps SET device_id = ?2 WHERE device_id = ?1",
+        [from, to],
+    )?;
+    tx.execute(
+        "UPDATE items SET metadata = json_set(metadata, '$.phone.device', ?2, \
+             '$.phone.hashDevice', COALESCE(json_extract(metadata, '$.phone.hashDevice'), ?1)) \
+             WHERE json_extract(metadata, '$.phone.device') = ?1",
+        [from, to],
+    )?;
+    // What a keep made beside its item is found again by `{device}/{client}`. Not
+    // LIKE: an id can hold `_`.
+    tx.execute(
+        "UPDATE items SET metadata = json_set(metadata, '$.keep', \
+             ?2 || substr(json_extract(metadata, '$.keep'), length(?1) + 1)) \
+             WHERE substr(json_extract(metadata, '$.keep'), 1, length(?1) + 1) = ?1 || '/'",
+        [from, to],
+    )?;
+    tx.execute("DELETE FROM remote_devices WHERE id = ?1", [from])?;
+    Ok(())
+}
+
 impl Engine {
     pub fn remote_state(&self) -> Result<RemoteRow> {
         self.read(load_state)
@@ -331,64 +391,7 @@ impl Engine {
     /// joined without losing one. A source `to` already has a row for takes the own row's
     /// choices.
     pub fn rehome_device(&self, from: &str, to: &str) -> Result<()> {
-        self.write(|tx| {
-            if !is_local(tx, from)? {
-                return Err(Error::not_found(format!("local device {from}")));
-            }
-            let paired: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM remote_devices \
-                 WHERE id = ?1 AND connection != 'local' AND revoked_at IS NULL)",
-                [to],
-                |r| r.get(0),
-            )?;
-            if !paired {
-                return Err(Error::not_found(format!("device {to}")));
-            }
-            let has_history: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM remote_keeps WHERE device_id = ?1) \
-                 OR EXISTS(SELECT 1 FROM phone_records WHERE device_id = ?1)",
-                [to],
-                |r| r.get(0),
-            )?;
-            if has_history {
-                return Err(Error::Invalid(format!(
-                    "device {to} already has its own history"
-                )));
-            }
-            tx.execute(
-                "DELETE FROM phone_sources WHERE device_id = ?2 AND source IN \
-                 (SELECT source FROM phone_sources WHERE device_id = ?1)",
-                [from, to],
-            )?;
-            tx.execute(
-                "UPDATE phone_sources SET device_id = ?2 WHERE device_id = ?1",
-                [from, to],
-            )?;
-            tx.execute(
-                "UPDATE phone_records SET device_id = ?2 WHERE device_id = ?1",
-                [from, to],
-            )?;
-            tx.execute(
-                "UPDATE remote_keeps SET device_id = ?2 WHERE device_id = ?1",
-                [from, to],
-            )?;
-            tx.execute(
-                "UPDATE items SET metadata = json_set(metadata, '$.phone.device', ?2, \
-                 '$.phone.hashDevice', COALESCE(json_extract(metadata, '$.phone.hashDevice'), ?1)) \
-                 WHERE json_extract(metadata, '$.phone.device') = ?1",
-                [from, to],
-            )?;
-            // What a keep made beside its item is found again by `{device}/{client}`. Not
-            // LIKE: an id can hold `_`.
-            tx.execute(
-                "UPDATE items SET metadata = json_set(metadata, '$.keep', \
-                 ?2 || substr(json_extract(metadata, '$.keep'), length(?1) + 1)) \
-                 WHERE substr(json_extract(metadata, '$.keep'), 1, length(?1) + 1) = ?1 || '/'",
-                [from, to],
-            )?;
-            tx.execute("DELETE FROM remote_devices WHERE id = ?1", [from])?;
-            Ok(())
-        })
+        self.write(|tx| rehome(tx, from, to))
     }
 
     pub fn devices(&self, include_revoked: bool) -> Result<Vec<DeviceRow>> {
