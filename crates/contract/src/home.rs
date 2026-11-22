@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    BackupReport, ExportReport, ForgetPreview, ForgetReport, LastBackup, PhoneItem, Receipt,
-    RestoreCheck,
+    BackupReport, ExportReport, ForgetPreview, ForgetReport, LastBackup, PhoneDeletePreview,
+    PhoneItem, PhoneSource, Receipt, RestoreCheck,
 };
 
 /// Where a phone's memory lives. `Alone`: on the phone itself. `Companion`: on a computer the
@@ -68,6 +68,33 @@ pub struct MemoryCounts {
     pub memories: u32,
     pub pages: u32,
     pub originals: u32,
+}
+
+/// What a memory holds, in the columns a phone shows before a restore replaces it: things kept
+/// (not the journal, check-ins, the calendar or readings), journal entries and good things as
+/// they stand now, and photos and recordings.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct KeptCounts {
+    pub things: u32,
+    pub journal_entries: u32,
+    pub photos_and_recordings: u32,
+}
+
+/// A memory put aside on this phone: by a restore that replaced it, by bringing back another,
+/// or because it could not be opened.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PutAsideMemory {
+    /// Names this one in the calls that bring it back or delete it.
+    pub id: String,
+    /// When it was put aside.
+    pub at: String,
+    pub bytes: f64,
+    /// None when it cannot be read: it was put aside because it could not be opened.
+    pub counts: Option<KeptCounts>,
 }
 
 /// What a phone that keeps its own memory shows of it.
@@ -154,6 +181,30 @@ pub enum HomeCall {
         id: String,
         private: bool,
     },
+    /// The memories put aside on this phone, newest first.
+    PutAside,
+    /// Bring one back in place of what is here, which is put aside in turn.
+    BringBack {
+        id: String,
+    },
+    DeletePutAside {
+        id: String,
+    },
+    /// What deleting everything this phone brought from one source would remove.
+    PreviewSourceDelete {
+        source: PhoneSource,
+    },
+    /// Apply that preview. `also_stop` (the calendar only): the phone stops bringing it.
+    DeleteSource {
+        token: String,
+        source: PhoneSource,
+        also_stop: bool,
+    },
+    /// Forget what was learned from one thing kept; `with_original` deletes the thing too.
+    PreviewForgetItem {
+        id: String,
+        with_original: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -178,6 +229,9 @@ pub enum HomeAnswer {
     },
     BackupChecked {
         check: Box<RestoreCheck>,
+        /// The columns of the backup, and of this phone when it holds anything.
+        backup: KeptCounts,
+        here: Option<KeptCounts>,
     },
     Restored,
     Deleted,
@@ -191,6 +245,14 @@ pub enum HomeAnswer {
     PrivateSet {
         item: PhoneItem,
     },
+    PutAside {
+        memories: Vec<PutAsideMemory>,
+    },
+    PutAsideDeleted,
+    SourceDeletePreview {
+        preview: PhoneDeletePreview,
+    },
+    SourceDeleted,
     Error {
         code: HomeError,
     },

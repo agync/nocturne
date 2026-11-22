@@ -258,6 +258,12 @@ impl LedgerFile {
         out
     }
 
+    /// Everything was deleted: what was sent and the person's choices for each source go, so
+    /// nothing is brought again until they start again and choose.
+    pub fn reset(&self) {
+        self.update(|l| *l = Ledger::default());
+    }
+
     /// The phone was disconnected or removed: what was sent belongs to that pairing.
     pub fn forget_sends(&self) {
         self.update(|l| {

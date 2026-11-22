@@ -12,6 +12,7 @@
 //! A store that SQLite says is damaged is put aside whole, as `store-put-aside-{time}`, never
 //! deleted, and nothing opens again until a backup is brought back or the phone starts over.
 
+pub mod aside;
 pub mod calls;
 pub mod commands;
 pub mod dispatch;
