@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
 import { Restore } from "../alone/screens/Backup";
+import { MoveFlow, nativeMoveApi } from "../alone/screens/MoveFlow";
 import { Permissions } from "../alone/screens/Permissions";
 import { AloneWelcome, Damaged, Start } from "../alone/screens/Welcome";
 import { cleanDeviceName } from "../crypto";
@@ -36,6 +37,7 @@ type Screen =
   | { name: "address"; text: string; busy: boolean; error: "incomplete" | "noAnswer" | null }
   | { name: "code"; address: string; busy: boolean; error: "bad" | "noAnswer" | null }
   | { name: "pair"; pairing: PairingLike }
+  | { name: "move" }
   | { name: "paired"; device: PairedDevice; offer: boolean };
 
 /** A page opened by its own address: from Health Connect, or from This phone. */
@@ -74,6 +76,8 @@ export function NativeRoot({ services }: { services: NativeServices }) {
 
   const home = useCallback(
     async (unreached = false, offer = false) => {
+      // A memory moving to a computer says itself where it goes next.
+      if (shown.current === "move") return;
       const mode = await services.home.mode();
       // A damaged memory is found when it is first opened: open it before asking.
       if (mode === "alone") await services.home.stats().catch(() => undefined);
@@ -320,9 +324,22 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           services={services}
           pairing={screen.pairing}
           onExit={() => void home()}
-          onPaired={() => void home(false, true)}
+          onPaired={async () => {
+            // A phone that holds its own memory offers to move it before it works with the
+            // computer: one home at a time.
+            if ((await services.home.mode()) === "alone") return setScreen({ name: "move" });
+            void home(false, true);
+          }}
         />
       );
+    case "move": {
+      const leave = () => {
+        shown.current = "loading";
+        setScreen({ name: "loading" });
+        void home();
+      };
+      return <MoveFlow api={services.move ?? nativeMoveApi} onExit={leave} onDone={leave} />;
+    }
     case "paired":
       return (
         <NativeApp

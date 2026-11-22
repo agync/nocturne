@@ -4,6 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { createHomeApi, type HomeApi } from "../alone/api";
 import { createLocalEngine } from "../alone/engine";
+import type { MoveApi } from "../alone/screens/MoveFlow";
 import type { OpenFailure } from "../channel";
 import { PairingError, type PairingResult } from "../pairing";
 import { idbQueue } from "../queue";
@@ -81,6 +82,8 @@ export interface NativeServices extends Services {
   store: NativeKeyStore;
   /** The phone's own memory, when it is a phone alone. */
   home: HomeApi;
+  /** Moving that memory to a computer; the app's own commands when not set. */
+  move?: MoveApi;
 }
 
 export function nativeServices(): NativeServices {
