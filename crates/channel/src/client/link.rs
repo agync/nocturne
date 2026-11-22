@@ -31,6 +31,14 @@ impl Route {
         }
     }
 
+    /// A route to an in-memory listener, for tests.
+    #[cfg(test)]
+    pub(crate) fn pipe(name: &str) -> Route {
+        Route {
+            base: format!("pipe://{name}"),
+        }
+    }
+
     pub fn base(&self) -> &str {
         &self.base
     }
@@ -173,6 +181,8 @@ pub enum LinkKind {
 pub(crate) enum Link {
     Ws(ws::WsLink),
     Poll(poll::PollLink),
+    #[cfg(test)]
+    Pipe(super::pipe::PipeLink),
 }
 
 impl Link {
@@ -180,6 +190,8 @@ impl Link {
         match self {
             Link::Ws(_) => LinkKind::WebSocket,
             Link::Poll(_) => LinkKind::Poll,
+            #[cfg(test)]
+            Link::Pipe(_) => LinkKind::WebSocket,
         }
     }
 
@@ -188,6 +200,8 @@ impl Link {
         match self {
             Link::Ws(l) => l.send(frame).await,
             Link::Poll(l) => l.send(frame).await,
+            #[cfg(test)]
+            Link::Pipe(l) => l.send(frame).await,
         }
     }
 
@@ -202,6 +216,8 @@ impl Link {
         match self {
             Link::Ws(l) => l.close(),
             Link::Poll(l) => l.close(),
+            #[cfg(test)]
+            Link::Pipe(l) => l.close(),
         }
     }
 }
@@ -220,6 +236,11 @@ pub(crate) async fn open(
     socket_timeout: Duration,
 ) -> (Link, Inbox) {
     let (tx, inbox) = Inbox::new();
+    #[cfg(test)]
+    if let Some(name) = route.base.strip_prefix("pipe://") {
+        let link = super::pipe::PipeLink::open(name, tx).expect("a listener under that name");
+        return (Link::Pipe(link), inbox);
+    }
     if !prefer_poll
         && let Ok(Ok(l)) =
             tokio::time::timeout(socket_timeout, ws::WsLink::open(route, tx.clone())).await
