@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone alone · the first release · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "none" },
+  "today": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "reminder": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "full": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "ask": { "bar": "brand", "title": "Ask", "tab": "Ask", "action": true },
+  "mind": { "bar": "back", "title": "", "back": "Today" },
+  "backup": { "bar": "modal", "title": "Save a backup", "back": "Cancel" },
+  "restore": { "bar": "back", "title": "", "back": "Back" },
+  "item": { "bar": "back", "title": "", "back": "Journal" },
+  "this-phone": { "bar": "back", "title": "This phone", "back": "Today" },
+  "delete": { "bar": "modal", "title": "Delete everything", "back": "Cancel" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="welcome start today reminder full ask mind backup saved restore item this-phone delete damaged">
+<main id="content">
+
+  <!-- Welcome, two ways in -->
+  <div class="hero" data-state="welcome" style="padding-top: 72px">
+    <span data-mark="40"></span>
+    <h1 class="heroTitle">Nocturne remembers your day</h1>
+    <p class="plead">Keep notes, photos and voice notes, write your journal, and see your calendar beside your days.</p>
+  </div>
+  <div class="foot plain" data-state="welcome">
+    <span class="btn" data-kind="primary">Start on this phone</span>
+    <span class="btn"><span data-icon="laptop" data-size="20"></span>Connect to my computer</span>
+    <span class="link2" style="text-align: center; padding-top: 6px">I have a backup</span>
+    <p class="small" style="text-align: center">No account and no sign-in.</p>
+  </div>
+
+  <!-- Your memory lives on this phone, first release -->
+  <div class="hero" data-state="start" style="padding-top: 28px">
+    <span data-icon="phone" data-size="32"></span>
+    <h1 class="stepH">Your memory lives on this phone</h1>
+  </div>
+  <p class="seeHead" data-state="start">Works now</p>
+  <ul class="see" data-state="start">
+    <li><span data-icon="check" data-size="18"></span><span>Keep notes, photos and voice notes</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>Write your journal and check in</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>See your calendar and health beside your days</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>Find anything you kept by its words</span></li>
+  </ul>
+  <p class="seeHead" data-state="start">Waits for a mind</p>
+  <ul class="see no" data-state="start">
+    <li><span data-icon="moon" data-size="18"></span><span>Reading photos</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Your morning page</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Answers</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Reflections and recaps</span></li>
+  </ul>
+  <p class="small" data-state="start">A mind can come from Nocturne on your own computer. Your memory then moves there.</p>
+  <p class="limit" data-state="start">If this phone is lost, what you kept goes with it. Save a backup now and then in <span class="cc">This phone</span>.</p>
+  <div class="foot" data-state="start"><span class="btn" data-kind="primary">Start</span></div>
+
+  <!-- Today, first day, nothing kept yet -->
+  <p class="pstatus" data-state="today reminder full"><span class="pdot"></span>Your memory is on this phone</p>
+  <div class="pbanner" role="status" data-state="full">
+    <span data-icon="phone" data-size="22"></span>
+    <span><strong>This phone is nearly full.</strong>Free some room so Nocturne can keep more.</span>
+  </div>
+  <p class="plbl" data-state="today reminder full">Saturday 21 November</p>
+  <div data-state="reminder" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: var(--accent-soft)">
+    <p style="margin: 0">No backup yet. If this phone is lost, what you kept goes with it.</p>
+    <div style="display: flex; gap: 8px"><span class="btn" data-kind="primary" style="flex: 1">Save a backup</span><span class="btn" data-kind="quiet" style="flex: 1">Not now</span></div>
+  </div>
+  <div class="noMind" data-state="today reminder full">
+    <h2>Your page needs a mind to write it.</h2>
+    <p class="plead">A mind reads what you keep, writes this page each morning and answers your questions.</p>
+    <span class="btn" data-kind="tonal">Choose a mind</span>
+  </div>
+  <section data-state="today" style="display: flex; flex-direction: column; gap: 4px">
+    <p class="plbl">In your calendar today</p>
+    <p class="small">Nothing in your calendar today.</p>
+  </section>
+  <div data-state="today reminder full" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule)"><span>How are you feeling?</span><span class="link2">Check in</span></div>
+  <p class="small" data-state="today" style="padding-top: 4px">Nothing kept yet today. Tap <span class="cc">Keep</span> to keep something.</p>
+  <section data-state="reminder full" style="display: flex; flex-direction: column; gap: 4px">
+    <p class="plbl">Kept today · 2</p>
+    <ul class="kept">
+      <li><span class="at">7:05 am</span><span>Ask about the swap for the 28th</span></li>
+      <li><span class="at">8:12 am</span><span><span data-icon="mic" data-size="14"></span> Voice note · <span class="wait">waiting to be read</span></span></li>
+    </ul>
+    <span class="link2">See today’s journal</span>
+  </section>
+
+  <!-- Ask, nothing kept yet -->
+  <div class="fieldWrap" data-state="ask">
+    <div class="fieldInput"><span style="color: var(--ink3)">Find something you kept</span><span data-icon="ask" data-size="18"></span></div>
+  </div>
+  <div class="hero" data-state="ask" style="padding-top: 56px">
+    <span data-icon="ask" data-size="32" style="color: var(--ink3)"></span>
+    <p class="plead" style="text-align: center">Nothing kept yet. What you keep can be found here by its words.</p>
+  </div>
+
+  <!-- Give Nocturne a mind, first release -->
+  <h1 class="stepH" data-state="mind">Give Nocturne a mind</h1>
+  <p class="plead" data-state="mind">A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own.</p>
+  <ol class="see" data-state="mind" style="list-style: none">
+    <li><span class="num" style="font-family: var(--font-mono); color: var(--ink2)">1</span><span>Install Nocturne on your computer.</span></li>
+    <li><span class="num" style="font-family: var(--font-mono); color: var(--ink2)">2</span><span>Choose <span class="cc">Add a phone</span> there, and scan its code from this phone.</span></li>
+    <li><span class="num" style="font-family: var(--font-mono); color: var(--ink2)">3</span><span>Your memory moves to the computer, and this phone works with it.</span></li>
+  </ol>
+  <div class="foot" data-state="mind"><span class="btn" data-kind="primary"><span data-icon="camera" data-size="20"></span>Scan the code</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- Save a backup -->
+  <p class="plead" data-state="backup">One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone.</p>
+  <div class="fieldWrap" data-state="backup">
+    <span class="fieldLabel">Choose a passphrase</span>
+    <div class="fieldInput"><span>••••••••••••••••••</span></div>
+    <p class="small">At least 8 characters. A few words that don’t go together are strong and easy to remember.</p>
+  </div>
+  <div class="fieldWrap" data-state="backup">
+    <span class="fieldLabel">Type it again</span>
+    <div class="fieldInput"><span>••••••••••••••••••</span></div>
+  </div>
+  <p class="link2" data-state="backup">Show passphrases</p>
+  <div class="limit" data-state="backup" style="display: flex; flex-direction: column; gap: 8px">
+    <strong style="font-weight: 500">Keep this passphrase safe</strong>
+    <span>Nocturne doesn’t keep it anywhere you can read. If the passphrase is lost, nobody can open this backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager.</span>
+  </div>
+  <div data-state="backup" style="display: flex; gap: 10px; align-items: center"><span style="width: 18px; height: 18px; flex: none; border: 1.5px solid var(--ink); border-radius: 4px; background: var(--ink)"></span><span style="font-size: 0.9375rem">I’ve written it down or saved it somewhere safe</span></div>
+  <div class="foot" data-state="backup"><span class="btn" data-kind="primary">Save the backup…</span><p class="barLine">Next, choose where to save it.</p></div>
+
+  <!-- Your backup is saved -->
+  <div class="hero" data-state="saved" style="padding-top: 96px">
+    <span data-icon="check" data-size="40"></span>
+    <h1 class="heroTitle">Your backup is saved.</h1>
+    <p class="plead">412 MB, made 9:32 am.</p>
+  </div>
+  <div class="foot plain" data-state="saved"><span class="btn" data-kind="primary">OK</span></div>
+
+  <!-- Restore from a file -->
+  <h1 class="stepH" data-state="restore">Bring back your memory</h1>
+  <p class="plead" data-state="restore">Choose your backup file and type its passphrase.</p>
+  <div class="row" data-state="restore" style="padding: 12px 14px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule)"><span data-icon="file" data-size="22"></span><span class="rowText"><span class="rowLabel">nocturne-backup-2026-11-21.nocturne</span><span class="rowHint">412 MB · made 21 November</span></span><span class="link2">Change</span></div>
+  <div class="fieldWrap" data-state="restore">
+    <span class="fieldLabel">Passphrase for this backup</span>
+    <div class="fieldInput"><span>••••••••••••••••••</span></div>
+  </div>
+  <div class="foot" data-state="restore"><span class="btn" data-kind="primary">Bring it back</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- An item on the phone, with its private switch -->
+  <p class="plbl" data-state="item">Kept Thursday 19 November, 6:48 pm · Note</p>
+  <p class="quote" data-state="item" style="font-size: 1.125rem">Rent goes up to 940 from January. Letter in the drawer.</p>
+  <div class="group" data-state="item">
+    <div class="rows">
+      <div class="row"><span data-icon="shield" data-size="22"></span><span class="rowText"><span class="rowLabel">Private</span><span class="rowHint">Kept on this phone and never sent to a mind online or at home.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="pen" data-size="22"></span><span class="rowText"><span class="rowLabel">Kept</span><span class="rowHint">Typed on this phone · Thursday 19 November, 6:48 pm</span></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="item">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Forget…</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Delete…</span></span></div>
+    </div>
+  </div>
+
+  <!-- This phone, first release -->
+  <div class="group" data-state="this-phone">
+    <p class="ghead">Your memory</p>
+    <div class="rows">
+      <div class="row"><span data-icon="phone" data-size="22"></span><span class="rowText"><span class="rowLabel">Where it is</span><span class="rowHint">On this phone · 412 MB</span></span></div>
+      <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Its mind</span><span class="rowHint">None yet</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="this-phone">
+    <p class="ghead">What this phone brings</p>
+    <div class="rows">
+      <div class="row"><span data-icon="calendar" data-size="22"></span><span class="rowText"><span class="rowLabel">Your calendar</span></span><span class="rowValue">On · 4 calendars</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span data-icon="heart" data-size="22"></span><span class="rowText"><span class="rowLabel">Health</span></span><span class="rowValue">On · 3 kinds</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="this-phone">
+    <p class="ghead">This phone</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Name</span></span><span class="rowValue">Maya’s phone</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">What this phone can do</span><span class="rowHint">Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file. Removing the app removes your memory from this phone. Save a backup first.</span></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="this-phone">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Move my memory…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Save a backup…</span><span class="rowHint">No backup yet</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Delete everything…</span></span></div>
+    </div>
+  </div>
+
+  <!-- Delete everything on this phone -->
+  <h1 class="stepH" data-state="delete">Delete everything on this phone?</h1>
+  <p class="plead" data-state="delete">Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched.</p>
+  <div class="fieldWrap" data-state="delete">
+    <span class="fieldLabel">Type “delete everything” to go ahead</span>
+    <div class="fieldInput"><span>delete everything</span></div>
+  </div>
+  <div class="foot" data-state="delete"><span class="btn" data-kind="primary" style="border-color: var(--ember); background: var(--ember)">Delete everything</span><span class="btn" data-kind="quiet">Keep everything</span></div>
+
+  <!-- The memory can't be opened -->
+  <div class="hero" data-state="damaged" style="padding-top: 96px">
+    <span data-icon="info" data-size="36" style="color: var(--ember)"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem">Nocturne couldn’t open your memory on this phone.</h1>
+    <p class="plead">Nothing was deleted. Bring back a backup, or ask for help.</p>
+  </div>
+  <div class="foot plain" data-state="damaged"><span class="btn" data-kind="primary">I have a backup</span><span class="btn" data-kind="quiet">Get help</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

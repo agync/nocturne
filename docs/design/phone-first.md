@@ -25,6 +25,7 @@ In `docs/design/mockups/phone-parity/`, Android and iPhone side by side.
 | A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | `copy-online-why-light.png`, `copy-online-why-dark.png`, `copy-online-passphrase-light.png`, `copy-online-on-light.png` |
 | Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | `mind-choose-light.png`, `mind-choose-dark.png`, `mind-service-light.png`, `mind-consent-light.png`, `mind-apple-light.png`, `mind-first-page-light.png` |
 | This phone, a phone alone | `this-phone.html`: `alone` | `this-phone-alone-light.png`, `this-phone-alone-dark.png` |
+| The first release | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `delete`, `damaged` | `first-release-{state}-light.png` for every state; `first-release-welcome-dark.png`, `first-release-today-dark.png`, `first-release-mind-dark.png`, `first-release-backup-dark.png`, `first-release-this-phone-dark.png` |
 
 ## What a phone alone is
 
@@ -123,6 +124,7 @@ should Nocturne's mind be?](#where-should-nocturnes-mind-be) with this as its la
 | Form title | "Save a backup" |
 | Form lead | "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
 | Passphrase | 0013's fields, hint, note and tick |
+| Button | "Save the backup…" / under it "Next, choose where to save it." |
 | Saving | The phone's own save sheet, so the person chooses where: their files, a drive app, a computer |
 | Done | "Your backup is saved." / "{size}, made {time}." / "OK" |
 | Welcome link | "I have a backup" |
@@ -173,8 +175,8 @@ everything:
 |---|---|
 | Title | "Delete everything on this phone?" |
 | Body | "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." |
-| Typed check | The computer's typed phrase, as approved |
-| Buttons | "Delete everything" (careful) · "Cancel" |
+| Typed check | The computer's: "Type “delete everything” to go ahead" |
+| Buttons | "Delete everything" (careful) · "Keep everything" |
 
 #### An item on the phone
 
@@ -251,10 +253,25 @@ no model to show.
 
 ### Mockups for the first release
 
-The first release reuses `first-run.html` and `this-phone.html` with the differences above. Before
-the build starts, those mockups gain the release's states: the two-button Welcome, Give Nocturne a
-mind, Save a backup, Restore from a file, the item page with its private switch, and the empty
-states.
+In `docs/design/mockups/phone-parity/first-release.html`, Android and iPhone side by side, with the
+kit of the other mockups. Names and data are fictional.
+
+| State | What it shows | Renders |
+|---|---|---|
+| `welcome` | Welcome with two buttons and "I have a backup" | `first-release-welcome-light.png`, `first-release-welcome-dark.png` |
+| `start` | Your memory lives on this phone, with the first release's waits hint and lost-phone line | `first-release-start-light.png` |
+| `today` | Today on the first day: nothing kept, nothing in the calendar | `first-release-today-light.png`, `first-release-today-dark.png` |
+| `reminder` | Today after 30 days with no backup | `first-release-reminder-light.png` |
+| `full` | Today when the phone is nearly full | `first-release-full-light.png` |
+| `ask` | Ask with nothing kept yet | `first-release-ask-light.png` |
+| `mind` | Give Nocturne a mind | `first-release-mind-light.png`, `first-release-mind-dark.png` |
+| `backup` | Save a backup, the form | `first-release-backup-light.png`, `first-release-backup-dark.png` |
+| `saved` | Your backup is saved | `first-release-saved-light.png` |
+| `restore` | Bring back your memory from a file | `first-release-restore-light.png` |
+| `item` | An item's page with its private switch | `first-release-item-light.png` |
+| `this-phone` | This phone in the first release | `first-release-this-phone-light.png`, `first-release-this-phone-dark.png` |
+| `delete` | Delete everything on this phone | `first-release-delete-light.png` |
+| `damaged` | The memory can't be opened | `first-release-damaged-light.png` |
 
 ### Checks before it ships
 
@@ -699,7 +716,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | This phone, copy row | "A locked copy online" / "Off" / "Last copy {time}" |
 | This phone, can do, alone | "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
 | This phone, actions | "Move my memory…" / "Save a backup…" / "Delete everything…" |
-| Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Delete everything" / "Cancel" |
+| Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Type “delete everything” to go ahead" / "Delete everything" / "Keep everything" |
 | Item, private | "Private" / "Kept on this phone and never sent to a mind online or at home." / "Journal entries can’t be marked private." |
 | Copy, step 1 | "A locked copy online · step 1 of 2" / "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
 | Copy, what goes | "Everything you kept, in one locked copy, made again after you keep something. Photos and recordings go once each." |
@@ -771,6 +788,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Give it a mind | "Give Nocturne a mind" / "A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own." / "1. Install Nocturne on your computer." / "2. Choose Add a phone there, and scan its code from this phone." / "3. Your memory moves to the computer, and this phone works with it." / "Scan the code" / "Not now" |
 | Backup, row | "Save a backup…" / "Last backup {day}" / "No backup yet" |
 | Backup, form | "Save a backup" / "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
+| Backup, save | "Save the backup…" / "Next, choose where to save it." |
 | Backup, done | "Your backup is saved." / "{size}, made {time}." / "OK" |
 | Restore, file | "Bring back your memory" / "Choose your backup file and type its passphrase." / "Choose the file" / "Bring it back" |
 | Restore, choice | "A locked copy online" / "A backup file" |

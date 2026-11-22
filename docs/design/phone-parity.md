@@ -36,6 +36,18 @@ Android (412 by 892) and iPhone (393 by 852) side by side, rendered 920 by 1000.
 are 1280 wide, full length. A dashed outline marks what is new on an existing screen; it is not part
 of the design. All names and data are fictional.
 
+| Screen | File and states | Page |
+|---|---|---|
+| First run on a phone, and Today with no mind | `first-run.html`: `welcome`, `start`, `today`, `ask` | [Phone first](phone-first.md#screens) |
+| The first release of a phone alone | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `delete`, `damaged` | [Phone first](phone-first.md#mockups-for-the-first-release) |
+| A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | [Phone first](phone-first.md#a-locked-copy-online) |
+| Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | [Phone first](phone-first.md#choosing-a-mind) |
+| Joining a household, and a passphrase for making it your home | `household.html`: `found`, `see`, `passphrase`, `words`, `joined` | [Household](household-server.md#joining) |
+| The mind is away | `away.html`: `today`, `journal`, `back`, `removed` | [Household](household-server.md#states) |
+| This phone in each mode | `this-phone.html`: `alone`, `guest`, `member` | [Phone first](phone-first.md#8-this-phone), [Household](household-server.md#this-phone) |
+| The household on a computer | `desktop-household.html`: `household`, `add`, `allow`, `remove`, `off` | [Household](household-server.md#on-the-computer-that-runs-it) |
+| Moving your memory | `move.html`: `found`, `size`, `moving`, `moved`; `desktop-move.html`: `receive`, `done` | [Moving](moving-memory.md#screens) |
+
 ## Goals
 
 1. **Start anywhere.** A person can install Nocturne on a phone with no computer and use it from the
