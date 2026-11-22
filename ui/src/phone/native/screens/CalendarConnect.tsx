@@ -254,7 +254,9 @@ export function CalendarSettingsScreen({
             })}
           </p>
         )}
-        {alone ? null : <p className="ph-hint">{places("phone.sources.already")}</p>}
+        <p className="ph-hint">
+          {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
+        </p>
       </main>
     </Page>
   );

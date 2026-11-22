@@ -49,7 +49,16 @@ export function kindList(kinds: ReadingKind[]): string {
  * confirm (Health Connect's, or Apple Health's sheet), then what it allowed. An iPhone never says
  * what was allowed, so it answers "Done." Once brought, the same screen is Health's settings.
  */
-export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onDone(): void }) {
+export function HealthConnect({
+  channel,
+  onDone,
+  alone = false,
+}: {
+  channel: NativeChannel;
+  onDone(): void;
+  /** A phone alone: readings stay in this phone's own memory. */
+  alone?: boolean;
+}) {
   const [step, setStep] = useState<Step>({ name: "loading" });
   const [kinds, setKinds] = useState<ReadingKind[]>(DEFAULT_KINDS);
   const [ios, setIos] = useState(false);
@@ -93,6 +102,7 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
       return (
         <HealthWhy
           ios={ios}
+          alone={alone}
           onContinue={() => setStep({ name: "kinds" })}
           onNotNow={() => setStep({ name: "none" })}
         />
@@ -103,7 +113,7 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
       return (
         <HealthAnswer
           title={t("phone.health.done.title", { kinds: kindList(step.kinds) })}
-          body={t("phone.health.done.body")}
+          body={alone ? t("phone.alone.health.done.body") : t("phone.health.done.body")}
           onOk={onDone}
         />
       );
@@ -111,7 +121,7 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
       return (
         <HealthAnswer
           title={t("phone.health.doneIos.title")}
-          body={t("phone.health.doneIos.body")}
+          body={alone ? t("phone.alone.health.doneIos.body") : t("phone.health.doneIos.body")}
           onOk={onDone}
         />
       );
@@ -126,16 +136,18 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
     case "missing":
       return <HealthMissing onGet={() => void openHealth("healthStore")} onBack={onDone} />;
     case "settings":
-      return <HealthSettingsScreen channel={channel} ios={ios} onBack={onDone} />;
+      return <HealthSettingsScreen channel={channel} ios={ios} onBack={onDone} alone={alone} />;
   }
 }
 
 export function HealthWhy({
   ios = false,
+  alone = false,
   onContinue,
   onNotNow,
 }: {
   ios?: boolean;
+  alone?: boolean;
   onContinue(): void;
   onNotNow(): void;
 }) {
@@ -145,7 +157,7 @@ export function HealthWhy({
       <main className="ph-main ph-bring">
         <span className="ph-lbl">{t("phone.health.label")}</span>
         <h1 className="ph-h1" tabIndex={-1} ref={heading}>
-          {t("phone.health.why.title")}
+          {alone ? t("phone.alone.health.why.title") : t("phone.health.why.title")}
         </h1>
         <p className="ph-body">
           {t("phone.health.why.what", {
@@ -153,8 +165,12 @@ export function HealthWhy({
           })}
         </p>
         <p className="ph-body">{t("phone.health.why.far")}</p>
-        <p className="ph-body">{t("phone.health.why.where")}</p>
-        <p className="ph-body">{t("phone.health.why.for")}</p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.health.why.where") : t("phone.health.why.where")}
+        </p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.health.why.for") : t("phone.health.why.for")}
+        </p>
         <p className="ph-body">{t("phone.health.why.never")}</p>
         <p className="ph-hint">{t("phone.health.why.next")}</p>
         <div className="ph-spacer" />
@@ -290,10 +306,13 @@ export function HealthSettingsScreen({
   channel,
   ios = false,
   onBack,
+  alone = false,
 }: {
   channel: NativeChannel;
   ios?: boolean;
   onBack(): void;
+  /** A phone alone sends nothing anywhere: no lines about what went across. */
+  alone?: boolean;
 }) {
   const [settings, setSettings] = useState<HealthSettings | null>(null);
   const [status, setStatus] = useState<ThisPhoneSources | null>(null);
@@ -376,13 +395,15 @@ export function HealthSettingsScreen({
             }
           />
         )}
-        {lastSent && (
+        {lastSent && !alone && (
           <p className="ph-hint">
             {t("phone.health.lastSent", { time: sentAt(lastSent.at), count: lastSent.count })}
           </p>
         )}
         <p className="ph-hint">{t("phone.health.fixed")}</p>
-        <p className="ph-hint">{places("phone.sources.already")}</p>
+        <p className="ph-hint">
+          {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
+        </p>
       </main>
     </Page>
   );

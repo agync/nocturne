@@ -24,6 +24,7 @@ export function placesRich(id: CopyId): ReactNode {
     tParts(id, {
       thisPhone: <strong>{t("phone.sources.thisPhone")}</strong>,
       fromYourPhones: <strong>{t("phone.sources.fromYourPhones")}</strong>,
+      deleteReadings: <strong>{t("phone.alone.sources.delete")}</strong>,
     }) as ReactNode[],
   );
 }

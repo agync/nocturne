@@ -6,7 +6,7 @@ import { openPolicy, placesRich, useHeading } from "./parts";
  * How Nocturne uses health readings: the page Health Connect opens from its own link beside
  * Nocturne. Readable without pairing.
  */
-export function Rationale({ onBack }: { onBack(): void }) {
+export function Rationale({ onBack, alone = false }: { onBack(): void; alone?: boolean }) {
   const heading = useHeading("rationale");
   return (
     <Page bar={<Bar />}>
@@ -15,10 +15,20 @@ export function Rationale({ onBack }: { onBack(): void }) {
           {t("phone.rationale.title")}
         </h1>
         <p className="ph-body">{t("phone.rationale.what")}</p>
-        <p className="ph-body">{t("phone.rationale.why")}</p>
-        <p className="ph-body">{t("phone.rationale.where")}</p>
-        <p className="ph-body">{t("phone.rationale.keeping")}</p>
-        <p className="ph-body">{placesRich("phone.rationale.stopping")}</p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.rationale.why") : t("phone.rationale.why")}
+        </p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.rationale.where") : t("phone.rationale.where")}
+        </p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.rationale.keeping") : t("phone.rationale.keeping")}
+        </p>
+        <p className="ph-body">
+          {alone
+            ? placesRich("phone.alone.rationale.stopping")
+            : placesRich("phone.rationale.stopping")}
+        </p>
         <button type="button" className="ph-native-link" onClick={openPolicy}>
           {t("phone.rationale.link")}
         </button>
