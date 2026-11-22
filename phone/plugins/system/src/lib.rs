@@ -1,7 +1,8 @@
 //! The phone's own bits Nocturne needs: the screen insets as CSS variables (the app draws edge
 //! to edge), the phone's name for the default device name, this app's settings page for a
 //! camera turned off there, and what the app was opened for from outside (a shortcut on its
-//! icon, or another app's share menu). On a computer every command answers a stand-in.
+//! icon, or another app's share menu), and on an iPhone a folder kept out of its backup. On a
+//! computer every command answers a stand-in.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -80,7 +81,19 @@ struct Named {
 #[derive(Debug, Serialize)]
 pub struct Error(String);
 
-pub struct System<R: Runtime>(Option<PluginHandle<R>>, Mutex<Option<PathBuf>>);
+/// The Android side, the shared folder, and the iPhone side, which so far only keeps folders out
+/// of the backup: every other command answers its stand-in there.
+pub struct System<R: Runtime>(
+    Option<PluginHandle<R>>,
+    Mutex<Option<PathBuf>>,
+    Option<PluginHandle<R>>,
+);
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Folder<'a> {
+    path: &'a str,
+}
 
 impl<R: Runtime> System<R> {
     #[cfg(mobile)]
@@ -99,7 +112,37 @@ impl<R: Runtime> System<R> {
         let _ = &self.0;
         Ok(None)
     }
+
+    /// Keep a folder of the app's out of the phone's own backup. Only an iPhone needs asking:
+    /// Android's backup rules already leave out every folder of the app.
+    pub fn exclude_from_backup(&self, path: &Path) -> Result<(), Error> {
+        let path = path
+            .to_str()
+            .ok_or_else(|| Error("not a plain path".into()))?;
+        #[cfg(mobile)]
+        if let Some(handle) = self.2.as_ref() {
+            return handle
+                .run_mobile_plugin::<serde_json::Value>("excludeFromBackup", Folder { path })
+                .map(drop)
+                .map_err(|e| Error(e.to_string()));
+        }
+        let _ = (&self.2, Folder { path });
+        Ok(())
+    }
 }
+
+pub trait SystemExt<R: Runtime> {
+    fn system(&self) -> &System<R>;
+}
+
+impl<R: Runtime, T: Manager<R>> SystemExt<R> for T {
+    fn system(&self) -> &System<R> {
+        self.state::<System<R>>().inner()
+    }
+}
+
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_nocturne_system);
 
 #[command]
 async fn insets<R: Runtime>(app: AppHandle<R>) -> Result<Insets, Error> {
@@ -191,7 +234,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let handle = Some(_api.register_android_plugin("app.nocturne.system", "SystemPlugin")?);
             #[cfg(not(target_os = "android"))]
             let handle: Option<PluginHandle<R>> = None;
-            app.manage(System(handle, Mutex::new(None)));
+            #[cfg(target_os = "ios")]
+            let ios = Some(_api.register_ios_plugin(init_plugin_nocturne_system)?);
+            #[cfg(not(target_os = "ios"))]
+            let ios: Option<PluginHandle<R>> = None;
+            app.manage(System(handle, Mutex::new(None), ios));
             Ok(())
         })
         .build()
