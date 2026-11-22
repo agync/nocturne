@@ -24,6 +24,7 @@
 #
 # `android` builds the phone app's debug APK for arm64 and runs its plugins' JVM tests and lint.
 # It runs no emulator; the phone app's Rust side is linted and tested on the host in `rust`.
+# `android-engine` only checks that the engine builds for the phone, and runs on its own paths.
 #
 # A pull request that touches what the packages are built from also builds them, on the platforms
 # release.yml builds on, unsigned and with nothing uploaded:
@@ -96,6 +97,7 @@ jobs:
       package: ${{ steps.paths.outputs.package }}
       package-linux: ${{ steps.paths.outputs.package-linux }}
       android: ${{ steps.paths.outputs.android }}
+      phone-engine: ${{ steps.paths.outputs.phone-engine }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -689,6 +691,34 @@ jobs:
           path: phone/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 7
 
+  # The engine alone on the phone target, so a change to it does not wait for the whole APK build
+  # above. The bundled SQLite is compiled by the NDK's clang, at the API level the app's
+  # minSdk names.
+  android-engine:
+    name: android (engine)
+    needs: changes
+    if: needs.changes.outputs.phone-engine != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/rust-toolchain
+      - name: Android Rust target
+        run: rustup target add aarch64-linux-android
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: android-engine
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Check the engine
+        run: |
+          set -euo pipefail
+          bin=$(echo "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/*/bin)
+          export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
+          export AR_aarch64_linux_android="$bin/llvm-ar"
+          cargo check -p nocturne-engine --target aarch64-linux-android
+
   # The one job to require in branch protection: it fails when any job above failed or was
   # cancelled, and it says what this workflow does not cover. A job that was skipped because its
   # paths did not change counts as passed; if `changes` itself fails, every job waiting on it is
@@ -712,6 +742,7 @@ jobs:
       - package-macos
       - package-windows
       - android
+      - android-engine
     # The gate only reads its needs, so the 1 vCPU runner is enough.
     runs-on: ubuntu-slim
     timeout-minutes: 5
