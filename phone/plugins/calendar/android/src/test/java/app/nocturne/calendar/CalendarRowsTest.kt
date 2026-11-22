@@ -131,18 +131,6 @@ class CalendarRowsTest {
     }
 
     @Test
-    fun holidaysAndBirthdaysAreFound() {
-        fun kind(name: String, owner: String? = null, type: String? = "com.google") =
-            CalendarRows.kind(CalendarRow(1, name, null, type, owner))
-        assertEquals(CalendarKind.HOLIDAYS, kind("Feiertage", "en.uk#holiday@group.v.calendar.google.com"))
-        assertEquals(CalendarKind.HOLIDAYS, kind("Holidays in United Kingdom"))
-        assertEquals(CalendarKind.BIRTHDAYS, kind("Contacts", "addressbook#contacts@group.v.calendar.google.com"))
-        assertEquals(CalendarKind.BIRTHDAYS, kind("Birthdays"))
-        assertEquals(CalendarKind.BIRTHDAYS, kind("Events", type = "com.android.contacts"))
-        assertEquals(CalendarKind.ORDINARY, kind("Work", "ana@example.com"))
-    }
-
-    @Test
     fun peopleAreNamesWithoutThePerson() {
         val got = CalendarRows.people(
             listOf(
@@ -170,7 +158,7 @@ class CalendarRowsTest {
     fun longTextIsCutToWhatTheComputerTakes() {
         val long = "a".repeat(CalendarRows.MAX_FIELD + 10)
         assertEquals(CalendarRows.MAX_FIELD, CalendarRows.cut(long).length)
-        val named = CalendarRows.calendar(CalendarRow(1, "n".repeat(300), null, null, null))
+        val named = CalendarRows.calendar(CalendarRow(1, "n".repeat(300), null, null))
         assertEquals(CalendarRows.MAX_NAME, named.name.length)
         assertEquals("#3F51B5", CalendarRows.colour(0xFF3F51B5.toInt()))
     }

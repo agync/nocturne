@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use nocturne_channel::client::{CallError, Reach};
 use nocturne_contract::{
-    CalendarChange, CalendarEntry, CalendarKind, PhoneCalendar, PhoneError, PhoneFeature, Reading,
-    ReadingChange, ReadingKind, ReadingValue, RemoteAnswer, RemoteCall, SyncReceipt, TimeSpan,
+    CalendarChange, CalendarEntry, PhoneCalendar, PhoneError, PhoneFeature, Reading, ReadingChange,
+    ReadingKind, ReadingValue, RemoteAnswer, RemoteCall, SyncReceipt, TimeSpan,
 };
 
 use crate::sync::ledger::SentEntry;
@@ -22,12 +22,11 @@ fn block<T>(f: impl std::future::Future<Output = T>) -> T {
     tauri::async_runtime::block_on(f)
 }
 
-fn cal(id: &str, kind: CalendarKind) -> PhoneCalendar {
+fn cal(id: &str) -> PhoneCalendar {
     PhoneCalendar {
         id: id.into(),
         name: format!("Calendar {id}"),
         colour: Some("#3F51B5".into()),
-        kind,
     }
 }
 
@@ -106,11 +105,7 @@ impl FakeDevice {
     fn new() -> FakeDevice {
         FakeDevice {
             access: Mutex::new(Access::Granted),
-            calendars: Mutex::new(vec![
-                cal("1", CalendarKind::Ordinary),
-                cal("2", CalendarKind::Holidays),
-                cal("3", CalendarKind::Birthdays),
-            ]),
+            calendars: Mutex::new(vec![cal("1"), cal("2"), cal("3")]),
             window: Mutex::new(("2026-11-19".into(), "2026-12-05".into())),
             entries: Mutex::new(vec![]),
             asked_notes: Mutex::new(None),
@@ -431,7 +426,7 @@ fn an_entry_on_the_far_edge_counts_once_it_is_inside() {
 }
 
 #[test]
-fn holidays_and_birthdays_start_off() {
+fn every_calendar_starts_on() {
     let (_dir, s) = syncer();
     bring_calendar(&s);
     let d = FakeDevice::new();
@@ -442,23 +437,26 @@ fn holidays_and_birthdays_start_off() {
     ];
     let link = FakeLink::new(Mode::Take);
     sync(&s, &d, &link);
-    assert_eq!(ids(&link.calendar_changes()), vec![("a".into(), true)]);
+    assert_eq!(
+        ids(&link.calendar_changes()),
+        vec![("a".into(), true), ("b".into(), true), ("h".into(), true)]
+    );
     match &link.calls.lock().unwrap()[0] {
         RemoteCall::SendCalendar { batch } => {
             assert_eq!(batch.seq, 0);
             assert!(batch.last);
-            assert_eq!(batch.calendars, vec![cal("1", CalendarKind::Ordinary)]);
+            assert_eq!(batch.calendars, vec![cal("1"), cal("2"), cal("3")]);
         }
         other => panic!("not a calendar send: {other:?}"),
     }
-    assert_eq!(s.sources(&d, &BOTH).calendars, 1);
+    assert_eq!(s.sources(&d, &BOTH).calendars, 3);
 
-    // Turned on by hand, the holidays go too.
+    // Turned off by hand, a calendar's entries are let go.
     s.ledger
-        .update(|l| l.calendar.settings.calendars.insert("2".into(), true));
+        .update(|l| l.calendar.settings.calendars.insert("2".into(), false));
     link.clear();
     sync(&s, &d, &link);
-    assert_eq!(ids(&link.calendar_changes()), vec![("h".into(), true)]);
+    assert_eq!(s.sources(&d, &BOTH).calendars, 2);
 }
 
 #[test]

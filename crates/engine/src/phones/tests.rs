@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 use jiff::civil::Date;
 use nocturne_contract::{
-    CalendarBatch, CalendarChange, CalendarEntry, CalendarKind, CameInTag, CheckInInput, Edition,
-    Feeling, FeelingPart, FeelingPoint, HourRange, ItemFilter, PhoneCalendar, PhoneDeleteScope,
-    PhoneSource, Reading, ReadingBatch, ReadingChange, ReadingKind, ReadingValue, RemoteConnection,
-    RowKind, Source, TimeSpan, Versus,
+    CalendarBatch, CalendarChange, CalendarEntry, CameInTag, CheckInInput, Edition, Feeling,
+    FeelingPart, FeelingPoint, HourRange, ItemFilter, PhoneCalendar, PhoneDeleteScope, PhoneSource,
+    Reading, ReadingBatch, ReadingChange, ReadingKind, ReadingValue, RemoteConnection, RowKind,
+    Source, TimeSpan, Versus,
 };
 
 use crate::{Engine, ManualClock};
@@ -75,7 +75,6 @@ fn calendars() -> Vec<PhoneCalendar> {
         id: "c1".into(),
         name: "Home".into(),
         colour: None,
-        kind: CalendarKind::Ordinary,
     }]
 }
 

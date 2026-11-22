@@ -1,27 +1,18 @@
 import CryptoKit
 import Foundation
 
-/// Holiday and birthday calendars start off; every other calendar is ordinary.
-enum CalendarKind: String, Encodable {
-  case ordinary
-  case holidays
-  case birthdays
-}
-
 /// One of the phone's calendars, as read.
 struct CalendarRow {
   let id: String
   let name: String?
   /// Red, green and blue from 0 to 1, when the calendar has a colour.
   let rgb: (Double, Double, Double)?
-  let isBirthdays: Bool
 }
 
 struct PhoneCalendar: Encodable, Equatable {
   let id: String
   let name: String
   let colour: String?
-  let kind: CalendarKind
 }
 
 /// How an appointment repeats, as EventKit holds it.
@@ -91,26 +82,6 @@ enum CalendarRows {
   /// The computer keeps a calendar's name to this many characters.
   static let maxName = 200
 
-  private static let holidayName = try! NSRegularExpression(
-    pattern:
-      "holiday|feiertag|vacances|jours fériés|festività|festivos|feestdagen|helgdagar|helligdage",
-    options: .caseInsensitive)
-  private static let birthdayName = try! NSRegularExpression(
-    pattern:
-      "birthday|geburtstag|anniversaire|compleanno|cumpleaños|verjaardag|födelsedag|fødselsdag",
-    options: .caseInsensitive)
-
-  private static func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
-    re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
-  }
-
-  static func kind(_ row: CalendarRow) -> CalendarKind {
-    let name = row.name ?? ""
-    if row.isBirthdays || matches(birthdayName, name) { return .birthdays }
-    if matches(holidayName, name) { return .holidays }
-    return .ordinary
-  }
-
   static func colour(_ rgb: (Double, Double, Double)?) -> String? {
     guard let (r, g, b) = rgb else { return nil }
     func byte(_ v: Double) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
@@ -122,8 +93,7 @@ enum CalendarRows {
     return PhoneCalendar(
       id: row.id,
       name: cut(name.isEmpty ? row.id : name, maxName),
-      colour: colour(row.rgb),
-      kind: kind(row))
+      colour: colour(row.rgb))
   }
 
   static func gregorian(_ zone: TimeZone) -> Calendar {

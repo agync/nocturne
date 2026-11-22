@@ -11,8 +11,7 @@
         {
           "id": "cal-1",
           "name": "Home",
-          "colour": "#3f7cac",
-          "kind": "ordinary"
+          "colour": "#3f7cac"
         }
       ],
       "changes": [

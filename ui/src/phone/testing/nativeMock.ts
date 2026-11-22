@@ -15,10 +15,10 @@ import { withCalendar, withPhones } from "./phoneFixtures";
 const at = (time: string, day = TODAY) => `${day}T${time}:00Z`;
 
 const CALENDARS: PhoneCalendar[] = [
-  { id: "1", name: "Family", colour: "#3B7556", kind: "ordinary" },
-  { id: "2", name: "Work", colour: "#2C4BCF", kind: "ordinary" },
-  { id: "3", name: "School term dates", colour: "#8A6A12", kind: "ordinary" },
-  { id: "4", name: "Holidays in England", colour: "#A8402A", kind: "holidays" },
+  { id: "1", name: "Family", colour: "#3B7556" },
+  { id: "2", name: "Work", colour: "#2C4BCF" },
+  { id: "3", name: "School term dates", colour: "#8A6A12" },
+  { id: "4", name: "Holidays in England", colour: "#A8402A" },
 ];
 
 export type NativeScenario =

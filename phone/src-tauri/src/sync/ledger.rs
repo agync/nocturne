@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use nocturne_contract::{CalendarChange, CalendarKind, PhoneCalendar, ReadingChange, ReadingKind};
+use nocturne_contract::{CalendarChange, PhoneCalendar, ReadingChange, ReadingKind};
 use serde::{Deserialize, Serialize};
 
 const FILE: &str = "sync.json";
@@ -26,7 +26,7 @@ pub const DEFAULT_KINDS: [ReadingKind; 6] = [
 ];
 
 /// "Your calendar": whether it is brought, which calendars, and notes. A calendar not in
-/// `calendars` takes its default: on, unless it is a holiday or birthday calendar.
+/// `calendars` starts on.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CalendarSettings {
@@ -37,10 +37,7 @@ pub struct CalendarSettings {
 
 impl CalendarSettings {
     pub fn brings(&self, c: &PhoneCalendar) -> bool {
-        self.calendars
-            .get(&c.id)
-            .copied()
-            .unwrap_or(c.kind == CalendarKind::Ordinary)
+        self.calendars.get(&c.id).copied().unwrap_or(true)
     }
 
     /// Every calendar on the phone with its switch as it stands, defaults filled in.

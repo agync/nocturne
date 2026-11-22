@@ -28,16 +28,6 @@ pub enum PhoneFeature {
     Health,
 }
 
-/// Holiday and birthday calendars start off on the phone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub enum CalendarKind {
-    Ordinary,
-    Holidays,
-    Birthdays,
-}
-
 /// A calendar as the phone names it. `colour` is a CSS colour.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -46,7 +36,6 @@ pub struct PhoneCalendar {
     pub id: String,
     pub name: String,
     pub colour: Option<String>,
-    pub kind: CalendarKind,
 }
 
 /// One appointment on one day. A repeating entry goes as the separate days it falls on inside

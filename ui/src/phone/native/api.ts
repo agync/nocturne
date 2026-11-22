@@ -18,7 +18,7 @@ export type SourceStatus =
 /** "Your calendar": which calendars are brought, and notes on each appointment. */
 export interface CalendarSettings {
   bring: boolean;
-  /** Calendar id to on or off; holidays and birthdays start off. */
+  /** Calendar id to on or off; a calendar not listed is on. */
   calendars: Record<string, boolean>;
   notes: boolean;
 }

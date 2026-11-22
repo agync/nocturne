@@ -30,8 +30,8 @@ const sources: ThisPhoneSources = {
 };
 
 const calendars = [
-  { id: "1", name: "Family", colour: "#3F51B5", kind: "ordinary" },
-  { id: "2", name: "Holidays in England", colour: null, kind: "holidays" },
+  { id: "1", name: "Family", colour: "#3F51B5" },
+  { id: "2", name: "Holidays in England", colour: null },
 ];
 
 describe("the phone's sources through the Rust side", () => {

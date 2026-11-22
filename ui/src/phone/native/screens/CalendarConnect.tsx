@@ -209,14 +209,13 @@ export function CalendarSettingsScreen({
               key={c.id}
               label={c.name}
               dot={c.colour}
-              on={settings.calendars[c.id] ?? c.kind === "ordinary"}
+              on={settings.calendars[c.id] ?? true}
               onChange={(on) =>
                 void save({ ...settings, calendars: { ...settings.calendars, [c.id]: on } })
               }
             />
           ))}
         </div>
-        <p className="ph-hint">{t("phone.calendar.which.note")}</p>
         {status?.calendarTooMany && (
           <p className="ph-hint" role="status">
             {t("phone.calendar.tooMany")}

@@ -60,7 +60,6 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
             CalendarContract.Calendars.CALENDAR_COLOR,
-            CalendarContract.Calendars.ACCOUNT_TYPE,
             CalendarContract.Calendars.OWNER_ACCOUNT,
         )
         val rows = mutableListOf<CalendarRow>()
@@ -76,7 +75,6 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
                     id = cur.long(CalendarContract.Calendars._ID) ?: continue,
                     name = cur.str(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME),
                     colour = cur.int(CalendarContract.Calendars.CALENDAR_COLOR),
-                    accountType = cur.str(CalendarContract.Calendars.ACCOUNT_TYPE),
                     ownerAccount = cur.str(CalendarContract.Calendars.OWNER_ACCOUNT),
                 )
             }
@@ -93,8 +91,7 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
                 JSObject()
                     .put("id", cal.id)
                     .put("name", cal.name)
-                    .put("colour", cal.colour)
-                    .put("kind", cal.kind.wire),
+                    .put("colour", cal.colour),
             )
         }
         invoke.resolve(JSObject().put("calendars", list))
