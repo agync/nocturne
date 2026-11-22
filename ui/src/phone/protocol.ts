@@ -103,6 +103,8 @@ export const MAX_ITEM_TEXT = 16384;
 export const MAX_ITEM = 52428800;
 export const MAX_DAY = 524288000;
 export const MAX_INCOMING_TOTAL = 104857600;
+/** The most a phone may offer to move to a computer as one memory, in bytes. */
+export const MAX_MEMORY_BYTES = 4294967296;
 export const MAX_LONG_POLL_BATCH = 8;
 export const MAX_CONNECTIONS = 16;
 /** Live sessions; pending ones do not count. */
@@ -141,6 +143,8 @@ export const INTRODUCE_BUILD = 2;
 export const JOURNAL_ANSWER_BUILD = 2;
 /** The first build that keeps a shared web page as untrusted (`keepText` with `web`). */
 export const WEB_KEEP_BUILD = 2;
+/** The first build that moves a phone's memory to a computer (`offerMemory`, `memoryDone`). */
+export const MEMORY_MOVE_BUILD = 2;
 
 /** HTTP statuses between the listener and the phone. */
 /** Away from home is off. */
