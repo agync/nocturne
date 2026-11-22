@@ -57,6 +57,7 @@ test.describe("O1 and O8, the page, in each state", () => {
     ["refused", "refused", "Your provider refused the key"],
     ["no-credit", "noCredit", "Your provider says there’s no credit left"],
     ["problem", "problem", "Online answers aren’t working right now"],
+    ["changed", "changed", "Online answers has changed"],
   ];
   for (const [name, scenario, text] of states) {
     test(`${name}: axe clean in light and dark, no sideways scroll`, async ({ browser }) => {

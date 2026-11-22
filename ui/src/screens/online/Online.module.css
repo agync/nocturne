@@ -196,6 +196,13 @@
   color: var(--ink);
 }
 
+.cardTitle {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  margin: 0;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

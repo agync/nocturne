@@ -263,3 +263,42 @@ describe("only what is marked private is held back", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the notice for someone who agreed before, in Settings", () => {
+  it("shows under the opening line, and Continue clears it everywhere", async () => {
+    const { engine } = await openOnline(PAGE, "changed");
+    const see = vi.spyOn(engine, "seeOnlineChange");
+    const notice = screen.getByRole("region", { name: "Online answers has changed" });
+    expect(
+      within(notice).getByText(/Nocturne no longer keeps back lines that look like health/),
+    ).toBeInTheDocument();
+    expect(within(notice).queryByText("Your question waits until you continue.")).toBeNull();
+    expect(
+      within(notice)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Continue"]);
+    expect(screen.getByRole("switch", { name: "Online answers are on" })).toBeChecked();
+    await userEvent.click(within(notice).getByRole("button", { name: "Continue" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Online answers has changed" })).toBeNull(),
+    );
+    expect(see).toHaveBeenCalledTimes(1);
+    expect(engine.online.view().changeNotice).toBe(false);
+  });
+
+  it("says so when saving fails, and stays", async () => {
+    const { engine } = await openOnline(PAGE, "changed");
+    vi.spyOn(engine, "seeOnlineChange").mockRejectedValueOnce(new Error("no"));
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t save this. Try again.",
+    );
+    expect(screen.getByRole("region", { name: "Online answers has changed" })).toBeInTheDocument();
+  });
+
+  it("is not shown once the new words were seen", async () => {
+    await openOnline(PAGE, "on");
+    expect(screen.queryByRole("region", { name: "Online answers has changed" })).toBeNull();
+  });
+});
