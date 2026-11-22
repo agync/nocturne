@@ -1372,3 +1372,41 @@ fn has_data_says_whether_the_store_holds_anything_of_the_persons() {
         .unwrap();
     assert!(g.engine.has_data().unwrap());
 }
+
+#[test]
+fn a_phones_own_row_travels_and_is_no_one_elses_data() {
+    let f = fixture();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    assert!(
+        !nocturne_engine::store_has_data(f.dir.path()).unwrap(),
+        "the row alone is no memory"
+    );
+    let item = keep(&f.engine, "a note");
+    f.engine.link_remote_keep(&item, &local, "c-1").unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    let dest = backup(&f, out.path());
+    let summary = check(&dest).unwrap();
+    assert!(!summary.away_used, "no phone was paired");
+
+    let (out, _) = unpack(&dest);
+    let conn = rusqlite::Connection::open(out.path().join("stage/store/nocturne.db")).unwrap();
+    let (connection, revoked, name): (String, Option<String>, String) = conn
+        .query_row(
+            "SELECT connection, revoked_at, name FROM remote_devices WHERE id = ?1",
+            [&local],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(connection, "local");
+    assert!(revoked.is_none(), "it was never a pairing to let go");
+    assert_eq!(name, "This phone");
+    let kept: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM remote_keeps WHERE device_id = ?1",
+            [&local],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(kept, 1);
+}

@@ -377,8 +377,7 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
                         content_hash(device_id, PhoneSource::Calendar, &entry.phone_id, &content);
                     let before = record(tx, device_id, PhoneSource::Calendar, &entry.phone_id)?;
                     if let Some(b) = &before
-                        && !b.removed
-                        && b.hash.as_deref() == Some(hash.as_str())
+                        && b.is_current(device_id, PhoneSource::Calendar, &entry.phone_id, &content)
                     {
                         receipt.unchanged += 1;
                         continue;

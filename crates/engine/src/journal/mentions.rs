@@ -536,7 +536,7 @@ pub(crate) fn open_questions(
         "SELECT q.id, q.item_id, q.name, q.quote, q.options, \
                 i.kind, i.source, i.title, i.kept_at, i.duration_ms, i.trust, \
                 (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
-                 ON rd.id = rk.device_id WHERE rk.item_id = i.id) \
+                 ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id) \
          FROM name_questions q JOIN items i ON i.id = q.item_id \
          WHERE q.answered_at IS NULL ORDER BY q.created_at, q.id",
     )?;

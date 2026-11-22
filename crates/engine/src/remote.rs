@@ -9,6 +9,10 @@ use crate::error::{Error, Result};
 use crate::util::{enum_str, fmt_ts, parse_enum, parse_ts};
 
 const COLLAPSE_SECS: i64 = 60;
+/// The `connection` a phone's own row has when the phone holds the memory itself. Such a row is
+/// no pairing: it gives a calendar or health source somewhere to belong and a keep somewhere to
+/// come from. Away lists, the listener's lookups and every phone-facing change skip it.
+const LOCAL: &str = "local";
 const BASE64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /// A paired phone. A removed phone keeps its row with `revoked_at` set.
@@ -18,7 +22,10 @@ pub struct DeviceRow {
     pub name: String,
     pub public_key: Vec<u8>,
     pub home_origin: String,
+    /// Always `Simple` for the local row, which has no connection.
     pub connection: RemoteConnection,
+    /// This is the phone's own row ([`Engine::ensure_local_device`]), not a pairing.
+    pub local: bool,
     pub address: Option<String>,
     pub paired_at: Timestamp,
     pub last_used_at: Option<Timestamp>,
@@ -56,12 +63,18 @@ fn device_row(r: &Row<'_>) -> rusqlite::Result<Result<DeviceRow>> {
     let (id, name, public_key, home_origin, address) =
         (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(5)?);
     Ok((|| {
+        let local = connection == LOCAL;
         Ok(DeviceRow {
             id,
             name,
             public_key,
             home_origin,
-            connection: parse_enum(&connection)?,
+            connection: if local {
+                RemoteConnection::Simple
+            } else {
+                parse_enum(&connection)?
+            },
+            local,
             address,
             paired_at: parse_ts(&paired)?,
             last_used_at: ts_opt(used)?,
@@ -192,6 +205,14 @@ pub(crate) fn withheld_from_phones(conn: &rusqlite::Connection, item_id: &str) -
     Ok(false)
 }
 
+fn is_local(conn: &rusqlite::Connection, id: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM remote_devices WHERE id = ?1 AND connection = 'local')",
+        [id],
+        |r| r.get(0),
+    )?)
+}
+
 fn day_bytes(conn: &rusqlite::Connection, device_id: &str, date: &str) -> Result<u64> {
     let used: Option<i64> = conn
         .query_row(
@@ -247,12 +268,135 @@ impl Engine {
         })
     }
 
+    /// This phone's own row, made on first use and the same one afterwards, named `name`. A phone
+    /// that holds its memory itself has it so calendar entries and health readings have a source
+    /// to belong to and keeps a phone to come from. It is no pairing: it has no key, never shows
+    /// in Away lists and never admits anyone. Returns its id. Delete everything removes the row
+    /// with the rest, so call this again before the next send.
+    ///
+    /// This does not adopt a paired row. When a computer's memory moves back to the phone the
+    /// store arrives holding a paired row for this very phone, and the move must turn that row
+    /// into the local one in place, keeping its id, before this is called: a second row would
+    /// show the entries and readings already tied to the first twice.
+    pub fn ensure_local_device(&self, name: &str) -> Result<String> {
+        let now = fmt_ts(self.clock_now());
+        self.write(|tx| {
+            let id: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM remote_devices WHERE connection = 'local'",
+                    [],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(id) = id {
+                // A backup restored onto another phone arrives with the row of the one it came
+                // from: same id, so what belongs to it stays, and the name of this phone.
+                tx.execute(
+                    "UPDATE remote_devices SET name = ?2, revoked_at = NULL WHERE id = ?1",
+                    params![id, name],
+                )?;
+                return Ok(id);
+            }
+            let id = new_device_id();
+            tx.execute(
+                "INSERT INTO remote_devices(id, name, public_key, home_origin, connection, \
+                 paired_at) VALUES (?1, ?2, x'', '', 'local', ?3)",
+                params![id, name, now],
+            )?;
+            Ok(id)
+        })
+    }
+
+    /// This phone's own row, when it has one.
+    pub fn local_device(&self) -> Result<Option<DeviceRow>> {
+        self.read(|conn| {
+            conn.query_row(
+                &format!("SELECT {DEVICE_COLS} FROM remote_devices WHERE connection = 'local'"),
+                [],
+                device_row,
+            )
+            .optional()?
+            .transpose()
+        })
+    }
+
+    /// A memory that moved to a computer: everything that belonged to this phone's own row
+    /// (what it kept, the sources it gave, every entry and reading that came from them and the
+    /// markers its keeps left) now belongs to `to`, the phone as that computer has it paired,
+    /// and the own row goes. All or nothing. An entry keeps being checked against what it was
+    /// sent as, so a resend after the move is not a change.
+    ///
+    /// Run it right after the pairing, before the phone sends anything as `to`: it is refused
+    /// when `to` already has keeps or entries, since two histories for one phone cannot be
+    /// joined without losing one. A source `to` already has a row for takes the own row's
+    /// choices.
+    pub fn rehome_device(&self, from: &str, to: &str) -> Result<()> {
+        self.write(|tx| {
+            if !is_local(tx, from)? {
+                return Err(Error::not_found(format!("local device {from}")));
+            }
+            let paired: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM remote_devices \
+                 WHERE id = ?1 AND connection != 'local' AND revoked_at IS NULL)",
+                [to],
+                |r| r.get(0),
+            )?;
+            if !paired {
+                return Err(Error::not_found(format!("device {to}")));
+            }
+            let has_history: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM remote_keeps WHERE device_id = ?1) \
+                 OR EXISTS(SELECT 1 FROM phone_records WHERE device_id = ?1)",
+                [to],
+                |r| r.get(0),
+            )?;
+            if has_history {
+                return Err(Error::Invalid(format!(
+                    "device {to} already has its own history"
+                )));
+            }
+            tx.execute(
+                "DELETE FROM phone_sources WHERE device_id = ?2 AND source IN \
+                 (SELECT source FROM phone_sources WHERE device_id = ?1)",
+                [from, to],
+            )?;
+            tx.execute(
+                "UPDATE phone_sources SET device_id = ?2 WHERE device_id = ?1",
+                [from, to],
+            )?;
+            tx.execute(
+                "UPDATE phone_records SET device_id = ?2 WHERE device_id = ?1",
+                [from, to],
+            )?;
+            tx.execute(
+                "UPDATE remote_keeps SET device_id = ?2 WHERE device_id = ?1",
+                [from, to],
+            )?;
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.phone.device', ?2, \
+                 '$.phone.hashDevice', COALESCE(json_extract(metadata, '$.phone.hashDevice'), ?1)) \
+                 WHERE json_extract(metadata, '$.phone.device') = ?1",
+                [from, to],
+            )?;
+            // What a keep made beside its item is found again by `{device}/{client}`. Not
+            // LIKE: an id can hold `_`.
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.keep', \
+                 ?2 || substr(json_extract(metadata, '$.keep'), length(?1) + 1)) \
+                 WHERE substr(json_extract(metadata, '$.keep'), 1, length(?1) + 1) = ?1 || '/'",
+                [from, to],
+            )?;
+            tx.execute("DELETE FROM remote_devices WHERE id = ?1", [from])?;
+            Ok(())
+        })
+    }
+
     pub fn devices(&self, include_revoked: bool) -> Result<Vec<DeviceRow>> {
         self.read(|conn| {
             let filter = if include_revoked {
-                ""
+                "WHERE connection != 'local' "
             } else {
-                "WHERE revoked_at IS NULL "
+                "WHERE connection != 'local' AND revoked_at IS NULL "
             };
             let mut stmt = conn.prepare(&format!(
                 "SELECT {DEVICE_COLS} FROM remote_devices {filter}ORDER BY paired_at, id"
@@ -262,15 +406,19 @@ impl Engine {
         })
     }
 
+    /// A paired phone by id. The phone's own row is not a pairing and is never returned here:
+    /// see [`Engine::local_device`].
     pub fn device(&self, id: &str) -> Result<Option<DeviceRow>> {
-        self.read(|conn| load_device(conn, id))
+        Ok(self
+            .read(|conn| load_device(conn, id))?
+            .filter(|d| !d.local))
     }
 
     pub fn home_origins(&self) -> Result<Vec<String>> {
         self.read(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT DISTINCT home_origin FROM remote_devices WHERE revoked_at IS NULL \
-                 ORDER BY home_origin",
+                "SELECT DISTINCT home_origin FROM remote_devices \
+                 WHERE revoked_at IS NULL AND connection != 'local' ORDER BY home_origin",
             )?;
             let rows = stmt.query_map([], |r| r.get(0))?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -280,7 +428,8 @@ impl Engine {
     pub fn rename_device(&self, id: &str, name: &str) -> Result<DeviceRow> {
         self.write(|tx| {
             let changed = tx.execute(
-                "UPDATE remote_devices SET name = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+                "UPDATE remote_devices SET name = ?2 \
+                 WHERE id = ?1 AND revoked_at IS NULL AND connection != 'local'",
                 params![id, name],
             )?;
             if changed == 0 {
@@ -294,7 +443,8 @@ impl Engine {
         let now = fmt_ts(self.clock_now());
         self.write(|tx| {
             let changed = tx.execute(
-                "UPDATE remote_devices SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+                "UPDATE remote_devices SET revoked_at = ?2 \
+                 WHERE id = ?1 AND revoked_at IS NULL AND connection != 'local'",
                 params![id, now],
             )?;
             Ok(changed > 0)
@@ -305,7 +455,8 @@ impl Engine {
         let now = fmt_ts(self.clock_now());
         self.write(|tx| {
             let changed = tx.execute(
-                "UPDATE remote_devices SET revoked_at = ?1 WHERE revoked_at IS NULL",
+                "UPDATE remote_devices SET revoked_at = ?1 \
+                 WHERE revoked_at IS NULL AND connection != 'local'",
                 [now],
             )?;
             Ok(changed as u32)
@@ -317,7 +468,7 @@ impl Engine {
         self.write(|tx| {
             tx.execute(
                 "UPDATE remote_devices SET last_used_at = ?2, address = ?3 \
-                 WHERE id = ?1 AND revoked_at IS NULL",
+                 WHERE id = ?1 AND revoked_at IS NULL AND connection != 'local'",
                 params![id, now, address],
             )?;
             Ok(())
@@ -450,6 +601,12 @@ impl Engine {
         let now = self.clock_now();
         let (action, result) = (enum_str(&action), enum_str(&result));
         self.write(|tx| {
+            // What the phone does for itself is not Away from home's business.
+            if let Some(id) = device_id
+                && is_local(tx, id)?
+            {
+                return Ok(());
+            }
             let newest: Option<(i64, Option<String>, String, String, String)> = tx
                 .query_row(
                     "SELECT id, device_id, action, result, at FROM remote_events \

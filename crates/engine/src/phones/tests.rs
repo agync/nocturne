@@ -1981,3 +1981,173 @@ fn an_entry_from_an_earlier_day_is_until_when_it_ends_today_and_all_day_when_it_
         vec![("all day", "Trip"), ("until 1:00 am", "Night shift")]
     );
 }
+
+#[test]
+fn the_phones_own_row_takes_calendar_and_readings_and_stays_out_of_from_your_phones() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let r = f
+        .engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    assert_eq!(r.taken, 1);
+    let r = f
+        .engine
+        .take_readings(
+            &local,
+            readings(
+                "h1",
+                vec![reading(
+                    "st1",
+                    "2026-11-19",
+                    "2026-11-19T00:00:00Z",
+                    ReadingValue::Steps { total: 8000 },
+                )],
+            ),
+        )
+        .unwrap();
+    assert_eq!(r.taken, 1);
+
+    let listed = f.engine.phone_sources().unwrap();
+    let names: Vec<&str> = listed.phones.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["Pixel"], "only a paired phone is listed");
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM remote_events"), 0);
+
+    let item = record_item(&f, "ev1");
+    assert_eq!(f.engine.get_item(&item).unwrap().from_device, None);
+}
+
+#[test]
+fn rehoming_carries_sources_entries_and_what_a_resend_is_checked_against() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    let steps = || {
+        readings(
+            "h1",
+            vec![reading(
+                "st1",
+                "2026-11-19",
+                "2026-11-19T00:00:00Z",
+                ReadingValue::Steps { total: 8000 },
+            )],
+        )
+    };
+    f.engine.take_readings(&local, steps()).unwrap();
+    f.engine
+        .set_source_taking(&local, PhoneSource::Health, false)
+        .unwrap();
+    let item = record_item(&f, "ev1");
+
+    f.engine.rehome_device(&local, &f.phone).unwrap();
+
+    assert_eq!(
+        count(
+            &f,
+            &format!(
+                "SELECT COUNT(*) FROM phone_records WHERE device_id = '{}' AND phone_id = 'ev1'",
+                f.phone
+            )
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &f,
+            &format!("SELECT COUNT(*) FROM phone_sources WHERE device_id = '{local}'")
+        ),
+        0
+    );
+    assert_eq!(
+        count(
+            &f,
+            &format!(
+                "SELECT COUNT(*) FROM items WHERE id = '{item}' \
+                 AND json_extract(metadata, '$.phone.device') = '{}'",
+                f.phone
+            )
+        ),
+        1,
+        "the entry's own record names the paired phone"
+    );
+    assert_eq!(
+        f.engine.get_item(&item).unwrap().from_device.as_deref(),
+        Some("Pixel")
+    );
+    assert_eq!(
+        count(
+            &f,
+            &format!(
+                "SELECT COUNT(*) FROM phone_sources WHERE device_id = '{}' \
+                 AND source = 'health' AND taking = 0",
+                f.phone
+            )
+        ),
+        1,
+        "the choice to stop taking health came too"
+    );
+
+    // The phone sends the same entry again as the paired phone: nothing new.
+    let r = f
+        .engine
+        .take_calendar(&f.phone, batch("s2", vec![upsert(dentist_wed())]))
+        .unwrap();
+    assert_eq!((r.taken, r.unchanged), (0, 1));
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM items WHERE kind = 'calendar'"),
+        1
+    );
+    f.engine
+        .set_source_taking(&f.phone, PhoneSource::Health, true)
+        .unwrap();
+    let r = f.engine.take_readings(&f.phone, steps()).unwrap();
+    assert_eq!((r.taken, r.unchanged), (0, 1));
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM items WHERE kind = 'reading'"),
+        1
+    );
+    // A real change after the move is a new version, checked from then on as the paired phone.
+    let r = f
+        .engine
+        .take_calendar(&f.phone, batch("s3", vec![upsert(dentist_thu())]))
+        .unwrap();
+    assert_eq!(r.taken, 1);
+    let r = f
+        .engine
+        .take_calendar(&f.phone, batch("s4", vec![upsert(dentist_thu())]))
+        .unwrap();
+    assert_eq!((r.taken, r.unchanged), (0, 1));
+}
+
+#[test]
+fn rehoming_prefers_what_the_phone_sent_first() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    f.engine
+        .set_source_taking(&f.phone, PhoneSource::Calendar, false)
+        .unwrap();
+    f.engine.rehome_device(&local, &f.phone).unwrap();
+    let taking: bool = f
+        .engine
+        .read(|conn| {
+            Ok(conn.query_row(
+                "SELECT taking FROM phone_sources WHERE device_id = ?1 AND source = 'calendar'",
+                [&f.phone],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+    assert!(taking, "the own row's source replaced the paired one's");
+    assert_eq!(
+        count(
+            &f,
+            "SELECT COUNT(*) FROM phone_sources WHERE source = 'calendar'"
+        ),
+        1
+    );
+}

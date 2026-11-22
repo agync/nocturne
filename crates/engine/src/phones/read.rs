@@ -86,7 +86,7 @@ pub(crate) fn calendar_entries(conn: &Connection, day: Date) -> Result<Vec<CalEn
     let mut stmt = conn.prepare_cached(
         "SELECT i.id, i.metadata, r.device_id, COALESCE(d.name, '') \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
-         LEFT JOIN remote_devices d ON d.id = r.device_id \
+         LEFT JOIN remote_devices d ON d.id = r.device_id AND d.connection != 'local' \
          WHERE r.source = 'calendar' AND r.removed_at IS NULL \
          AND json_extract(i.metadata, '$.day') <= ?1 \
          AND COALESCE(json_extract(i.metadata, '$.endDay'), json_extract(i.metadata, '$.day')) >= ?1",
@@ -172,7 +172,7 @@ pub(crate) fn readings_of(
     let mut stmt = conn.prepare_cached(
         "SELECT i.id, i.metadata, r.removed_at IS NOT NULL, COALESCE(d.name, ''), r.device_id \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
-         LEFT JOIN remote_devices d ON d.id = r.device_id \
+         LEFT JOIN remote_devices d ON d.id = r.device_id AND d.connection != 'local' \
          WHERE r.source = 'health' AND i.kind = 'reading' \
          AND json_extract(i.metadata, '$.reading.type') = ?1 \
          AND json_extract(i.metadata, '$.day') BETWEEN ?2 AND ?3 \
@@ -622,7 +622,7 @@ pub(crate) fn day_brought(conn: &Connection, day: Date) -> Result<Option<DayFrom
     let mut stmt = conn.prepare_cached(
         "SELECT r.source, i.id, i.title, COALESCE(d.name, '') \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
-         LEFT JOIN remote_devices d ON d.id = r.device_id \
+         LEFT JOIN remote_devices d ON d.id = r.device_id AND d.connection != 'local' \
          WHERE json_extract(i.metadata, '$.day') = ?1 \
          ORDER BY json_extract(i.metadata, '$.entry.start'), json_extract(i.metadata, '$.start'), i.id",
     )?;
@@ -747,7 +747,7 @@ pub(crate) fn calendar_detail(
     let meta: Value = serde_json::from_str(&meta)?;
     let phone: String = conn
         .query_row(
-            "SELECT name FROM remote_devices WHERE id = ?1",
+            "SELECT name FROM remote_devices WHERE id = ?1 AND connection != 'local'",
             [&device],
             |r| r.get(0),
         )

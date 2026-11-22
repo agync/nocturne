@@ -34,7 +34,8 @@ pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.
      WHERE s.item_id = i.id AND (m.superseded_at IS NULL OR NOT EXISTS ( \
        SELECT 1 FROM memory_sources n WHERE n.memory_id = m.superseded_by AND n.item_id = i.id))), \
     i.sha256, i.ext, \
-    (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
+    (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+     ON rd.id = rk.device_id AND rd.connection != 'local' \
      WHERE rk.item_id = i.id), \
     json_extract(i.metadata, '$.journal')";
 
@@ -99,7 +100,8 @@ pub(crate) fn get_item_view(
 pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Receipt>> {
     let mut stmt = conn.prepare_cached(
         "SELECT i.id, i.kind, i.source, i.trust, i.title, i.kept_at, i.duration_ms, s.span, \
-                (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
+                (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+                 ON rd.id = rk.device_id AND rd.connection != 'local' \
                  WHERE rk.item_id = i.id) \
          FROM memory_sources s JOIN items i ON i.id = s.item_id \
          WHERE s.memory_id = ?1 ORDER BY i.kept_at, i.id",

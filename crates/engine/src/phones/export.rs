@@ -220,9 +220,15 @@ fn readings_file(rows: &[Stored], tz: &TimeZone) -> String {
             .map(|t| t.to_zoned(tz.clone()).strftime("%H:%M").to_string())
             .unwrap_or_default();
         let (value, unit) = value_and_unit(&r.value);
+        // A phone alone has no name to give: there is only the one.
+        let on = if r.phone.is_empty() {
+            String::new()
+        } else {
+            format!(" on {}", r.phone)
+        };
         let source = match &r.source_device {
-            Some(d) => format!("{d}, through Health on {}", r.phone),
-            None => format!("Health on {}", r.phone),
+            Some(d) => format!("{d}, through Health{on}"),
+            None => format!("Health{on}"),
         };
         let removed = if r.removed { "removed in Health" } else { "" };
         let _ = write!(
@@ -246,7 +252,7 @@ pub(crate) fn export_section(conn: &Connection, dir: &Path, tz: &TimeZone) -> Re
         "SELECT r.device_id, COALESCE(d.name, ''), i.id, i.metadata, r.came_in_at, \
          r.removed_at IS NOT NULL \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
-         LEFT JOIN remote_devices d ON d.id = r.device_id \
+         LEFT JOIN remote_devices d ON d.id = r.device_id AND d.connection != 'local' \
          WHERE r.source = 'calendar' ORDER BY d.name, r.device_id, json_extract(i.metadata, '$.day'), i.id",
     )?;
     type Raw = (String, String, String, String, String, bool);

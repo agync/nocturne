@@ -780,7 +780,7 @@ const LINE_ITEM_RULES: &str = "i.private = 0 AND i.trust = 'trusted' \
 
 const LINE_ITEM_COLS: &str = "i.id, i.kind, i.source, NULL, i.title, i.kept_at, i.duration_ms, \
      i.text, (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
-     ON rd.id = rk.device_id WHERE rk.item_id = i.id)";
+     ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id)";
 
 fn line_source_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LineSource> {
     Ok(LineSource {
