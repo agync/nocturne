@@ -684,6 +684,7 @@ jobs:
           :tauri-plugin-nocturne-system:testDebugUnitTest :tauri-plugin-nocturne-system:lintDebug
           :tauri-plugin-nocturne-calendar:testDebugUnitTest :tauri-plugin-nocturne-calendar:lintDebug
           :tauri-plugin-nocturne-health:testDebugUnitTest :tauri-plugin-nocturne-health:lintDebug
+          :tauri-plugin-nocturne-speech:testDebugUnitTest :tauri-plugin-nocturne-speech:lintDebug
       - name: Keep the APK for emulator checks
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
