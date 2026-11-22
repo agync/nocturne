@@ -218,7 +218,7 @@ thing (its words, photo, recording or document), when and how it was kept, and i
 
 | Part | Copy |
 |---|---|
-| Kept | "Kept" / "{how} · {day}, {time}", where {how} is "Typed on this phone", "Taken on this phone", "Chosen from your photos", "Recorded on this phone", "Shared from another app", "From your calendar" or "From Health". A thing restored from a backup or moved from a computer keeps its first {how}, or "Kept on {device}" when it was kept elsewhere |
+| Kept | "Kept" / "{how} · {day}, {time}", where {how} is "Typed on this phone", "Taken on this phone", "Chosen from your photos", "Recorded on this phone", "Shared from another app", "From your calendar" or "From Health". A thing restored from a backup or moved from a computer keeps its first {how}, or "Kept on {device}" when it was kept elsewhere and its device name travelled with it ([Moving](moving-memory.md#one-home-holds-the-pen)); with no name, the row shows "{day}, {time}" alone |
 | Private | Switch "Private" / hint "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest." |
 | Journal entries and good things | No private switch, by the journal's rule: "Journal entries can’t be marked private." (0015) |
 | Actions | "Delete…", with the computer's confirmation worded for this phone ("This will be deleted from this phone for good, along with anything Nocturne worked out from it."). "Forget…" shows only when Nocturne has worked something out from this thing, which on a phone alone happens only for a memory restored from a backup or moved from a computer; otherwise there is nothing to forget, and the row would always say "There is nothing left to delete here." |
@@ -330,7 +330,7 @@ A phone alone that pairs with a computer moves its memory there; one home at a t
 | The person says "Not now" | Pairing is undone on both, and the phone stays a phone alone. A phone never becomes a companion while it holds its own memory |
 | The move | The phone makes a last backup in 0013's format and sends it over the sealed channel; things kept meanwhile wait and go across at the end |
 | The computer already holds a memory | 0013's choice on the computer: put what is there aside and take the phone's, or keep it and move nothing |
-| It has arrived | Every count matches; the phone's memory is put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
+| It has arrived | Every count matches; Nocturne on the computer restarts to open it ("Finishing on {computer}…"). Only when the computer says the memory opened is the phone's memory put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
 | Calendar and health | Carry on, now sent to the computer. What was already brought arrived with the memory, so nothing is sent twice |
 | What was put aside on the phone | "Remove it from this phone" or "Keep it put aside for 30 days" |
 | Later, the other way | Once it ships, the computer can move the memory back to this phone ([Back to the phone](moving-memory.md#back-to-the-phone)) |
