@@ -75,6 +75,8 @@ pub fn phone_item(v: &ItemView) -> PhoneItem {
         summary: v.summary.clone(),
         text: v.text.clone(),
         truncated: false,
+        private: v.private,
+        journal: v.journal,
     }
 }
 

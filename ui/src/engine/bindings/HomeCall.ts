@@ -4,4 +4,4 @@ import type { ForgetScope } from "./ForgetScope";
 /**
  * What the phone's screens ask of the phone's own memory.
  */
-export type HomeCall = { "cmd": "find", query: string, } | { "cmd": "previewForget", scope: ForgetScope, } | { "cmd": "forget", token: string, } | { "cmd": "saveBackup", dest: string, passphrase: string, } | { "cmd": "checkBackup", file: string, passphrase: string, } | { "cmd": "restoreBackup", file: string, passphrase: string, replace: boolean, } | { "cmd": "deleteEverything", phrase: string, } | { "cmd": "export", dest: string, } | { "cmd": "stats" };
+export type HomeCall = { "cmd": "find", query: string, } | { "cmd": "previewForget", scope: ForgetScope, } | { "cmd": "forget", token: string, } | { "cmd": "saveBackup", dest: string, passphrase: string, } | { "cmd": "checkBackup", file: string, passphrase: string, } | { "cmd": "restoreBackup", file: string, passphrase: string, replace: boolean, } | { "cmd": "deleteEverything", phrase: string, } | { "cmd": "export", dest: string, } | { "cmd": "stats" } | { "cmd": "setPrivate", id: string, private: boolean, };

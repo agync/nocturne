@@ -364,6 +364,8 @@ fn positive(v: &Vectors, p: &Vector<'_>) {
                     summary: Some(worst.clone()),
                     text: Some(worst),
                     truncated: true,
+                    private: false,
+                    journal: None,
                 };
                 let reply = nocturne_contract::RemoteReply {
                     id: u32::MAX,

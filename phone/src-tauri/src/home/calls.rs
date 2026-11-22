@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
+use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::MAX_QUESTION;
 use nocturne_contract::{
     BackupPhase, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, MemoryCounts, PhoneMode,
@@ -96,6 +97,7 @@ impl Home {
                     .map_err(|e| code(&e))
             }),
             HomeCall::Stats => self.stats().map(|stats| HomeAnswer::Stats { stats }),
+            HomeCall::SetPrivate { id, private } => self.set_private(&id, private),
         };
         result.unwrap_or_else(error)
     }
@@ -309,6 +311,22 @@ impl Home {
             .map_err(|e| code(&e))?;
         self.set_device(device);
         Ok(HomeAnswer::Deleted)
+    }
+
+    /// The same rule as the computer's private switch: a journal entry, a good thing and a health
+    /// reading cannot be marked, and what was read from the item follows it.
+    fn set_private(&self, id: &str, private: bool) -> Result<HomeAnswer, HomeError> {
+        if check_id(id).is_err() {
+            return Err(HomeError::Invalid);
+        }
+        let (_use, open) = self.using()?;
+        open.engine
+            .set_item_private(id, private)
+            .map_err(|e| code(&e))?;
+        let item = open.engine.get_item(id).map_err(|e| code(&e))?;
+        Ok(HomeAnswer::PrivateSet {
+            item: super::dispatch::phone_item(&item),
+        })
     }
 
     fn stats(&self) -> Result<HomeStats, HomeError> {
