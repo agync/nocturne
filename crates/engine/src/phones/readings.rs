@@ -138,8 +138,7 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: ReadingBatch) -> Res
                     let hash = content_hash(device_id, PhoneSource::Health, &key, &content);
                     let before = record(tx, device_id, PhoneSource::Health, &key)?;
                     if let Some(b) = &before
-                        && !b.removed
-                        && b.hash.as_deref() == Some(hash.as_str())
+                        && b.is_current(device_id, PhoneSource::Health, &key, &content)
                     {
                         receipt.unchanged += 1;
                         continue;

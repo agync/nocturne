@@ -112,7 +112,7 @@ pub(crate) struct SourceRow {
     pub calendars: String,
 }
 
-/// The device must be paired now.
+/// The device must be paired now, or be this phone's own row.
 pub(crate) fn check_device(tx: &Transaction<'_>, device_id: &str) -> Result<()> {
     let live: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM remote_devices WHERE id = ?1 AND revoked_at IS NULL)",
@@ -213,6 +213,26 @@ pub(crate) struct Record {
     pub version: u32,
     pub removed: bool,
     pub hash: Option<String>,
+    /// The phone id the hash was made with, when a move gave the entry to another phone id.
+    pub hash_device: Option<String>,
+}
+
+impl Record {
+    /// Whether the entry still stands as `content` says: taken, not removed and hashing the
+    /// same. The hash holds the device it was made with, so an entry that moved to another
+    /// device id is checked with the one it was made with.
+    pub(crate) fn is_current(
+        &self,
+        device: &str,
+        source: PhoneSource,
+        phone_id: &str,
+        content: &Value,
+    ) -> bool {
+        let made_with = self.hash_device.as_deref().unwrap_or(device);
+        !self.removed
+            && self.hash.as_deref()
+                == Some(content_hash(made_with, source, phone_id, content).as_str())
+    }
 }
 
 pub(crate) fn record(
@@ -224,7 +244,8 @@ pub(crate) fn record(
     Ok(tx
         .query_row(
             "SELECT r.item_id, r.version, r.removed_at IS NOT NULL, \
-             json_extract(i.metadata, '$.phone.hash') \
+             json_extract(i.metadata, '$.phone.hash'), \
+             json_extract(i.metadata, '$.phone.hashDevice') \
              FROM phone_records r JOIN items i ON i.id = r.item_id \
              WHERE r.device_id = ?1 AND r.source = ?2 AND r.phone_id = ?3",
             params![device_id, source_str(source), phone_id],
@@ -234,6 +255,7 @@ pub(crate) fn record(
                     version: r.get(1)?,
                     removed: r.get(2)?,
                     hash: r.get(3)?,
+                    hash_device: r.get(4)?,
                 })
             },
         )
@@ -468,8 +490,8 @@ impl Engine {
         self.read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, name, app_platform, app_version, agreed_build FROM remote_devices d \
-                 WHERE revoked_at IS NULL \
-                 OR EXISTS (SELECT 1 FROM phone_sources s WHERE s.device_id = d.id) \
+                 WHERE connection != 'local' AND (revoked_at IS NULL \
+                 OR EXISTS (SELECT 1 FROM phone_sources s WHERE s.device_id = d.id)) \
                  ORDER BY paired_at, id",
             )?;
             type Row = (String, String, Option<String>, Option<String>, Option<u32>);

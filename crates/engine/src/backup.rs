@@ -241,7 +241,6 @@ fn connection_has_data(conn: &Connection) -> Result<bool> {
         "pages",
         "questions",
         "settings",
-        "remote_devices",
         "ledger",
         "online_sends",
     ] {
@@ -253,7 +252,12 @@ fn connection_has_data(conn: &Connection) -> Result<bool> {
             return Ok(true);
         }
     }
-    Ok(false)
+    // A phone's own row is there from its first start and holds nothing of anyone's.
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM remote_devices WHERE connection != 'local')",
+        [],
+        |r| r.get(0),
+    )?)
 }
 
 /// Open an unpacked database for checking, already locked down.
@@ -562,7 +566,7 @@ impl Engine {
             |r| r.get(0),
         )?;
         let away_used: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM remote_devices) \
+            "SELECT EXISTS(SELECT 1 FROM remote_devices WHERE connection != 'local') \
              OR EXISTS(SELECT 1 FROM remote_state WHERE first_on_at IS NOT NULL)",
             [],
             |r| r.get(0),
@@ -638,10 +642,11 @@ fn scrub_database(conn: &Connection, now: &str) -> Result<()> {
         "DELETE FROM settings WHERE key = ?1",
         [crate::TRUNCATE_PENDING],
     )?;
-    // The phones stay paired by name, but what would let them in again does not travel.
+    // The phones stay paired by name, but what would let them in again does not travel. A
+    // phone's own row was never a pairing and travels as it is.
     conn.execute(
         "UPDATE remote_devices SET public_key = x'', \
-         revoked_at = COALESCE(revoked_at, ?1), address = NULL",
+         revoked_at = COALESCE(revoked_at, ?1), address = NULL WHERE connection != 'local'",
         [now],
     )?;
     conn.execute_batch("COMMIT")?;

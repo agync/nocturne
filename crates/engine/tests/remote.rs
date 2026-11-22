@@ -356,3 +356,152 @@ fn update_remote_state_round_trips_every_field() {
     f.engine.add_sent_to_phones(10).unwrap();
     assert_eq!(f.engine.remote_state().unwrap().sent_bytes, 1244.5);
 }
+
+#[test]
+fn the_phones_own_row_is_made_once_and_named_by_the_phone() {
+    let f = fixture();
+    assert_eq!(f.engine.local_device().unwrap(), None);
+    let id = f.engine.ensure_local_device("Pixel 9").unwrap();
+    assert_eq!(id.len(), 22);
+    assert_eq!(f.engine.ensure_local_device("Pixel 9a").unwrap(), id);
+    let row = f.engine.local_device().unwrap().unwrap();
+    assert_eq!(row.id, id);
+    assert_eq!(row.name, "Pixel 9a");
+    assert!(row.local && row.public_key.is_empty() && row.revoked_at.is_none());
+}
+
+#[test]
+fn the_phones_own_row_is_never_a_pairing() {
+    let f = fixture();
+    let paired = pair(&f.engine, "Phone A", "https://home.example");
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+
+    assert_eq!(
+        f.engine.device(&local).unwrap(),
+        None,
+        "the listener cannot find it"
+    );
+    for all in [false, true] {
+        let ids: Vec<String> = f
+            .engine
+            .devices(all)
+            .unwrap()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(ids, std::slice::from_ref(&paired));
+    }
+    assert_eq!(f.engine.home_origins().unwrap(), ["https://home.example"]);
+    assert!(f.engine.rename_device(&local, "x").is_err());
+    assert!(!f.engine.revoke_device(&local).unwrap());
+    f.engine.touch_device(&local, "somewhere").unwrap();
+    assert_eq!(f.engine.revoke_all_devices().unwrap(), 1);
+
+    let row = f.engine.local_device().unwrap().unwrap();
+    assert_eq!(row.name, "This phone");
+    assert!(row.revoked_at.is_none() && row.address.is_none() && row.last_used_at.is_none());
+}
+
+#[test]
+fn what_the_phone_does_for_itself_is_not_logged_as_away() {
+    let f = fixture();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let paired = pair(&f.engine, "Phone A", "https://home.example");
+    f.engine
+        .log_remote_event(Some(&local), RemoteAction::KeptText, RemoteResult::Ok, 5.0)
+        .unwrap();
+    f.engine
+        .log_remote_count(&local, RemoteAction::KeptText, RemoteResult::Ok, 3)
+        .unwrap();
+    assert!(f.engine.remote_events(10).unwrap().is_empty());
+    f.engine
+        .log_remote_event(Some(&paired), RemoteAction::KeptText, RemoteResult::Ok, 5.0)
+        .unwrap();
+    assert_eq!(f.engine.remote_events(10).unwrap().len(), 1);
+}
+
+#[test]
+fn a_keep_from_the_phones_own_row_has_no_phone_to_name() {
+    let f = fixture();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let (item, memory) = learn(
+        &f.engine,
+        "Dentist on Thursday at 10:00.",
+        cand(
+            "dentist",
+            Predicate::Happened,
+            "Thursday 10:00",
+            "Your dentist is Thursday.",
+        ),
+    );
+    f.engine.link_remote_keep(&item, &local, "c1").unwrap();
+    assert_eq!(
+        f.engine.remote_keep(&local, "c1").unwrap(),
+        Some(item.clone())
+    );
+    let receipts = f.engine.get_memory(&memory).unwrap().receipts;
+    assert_eq!(receipts[0].from_device, None);
+    assert_eq!(f.engine.get_item(&item).unwrap().from_device, None);
+}
+
+#[test]
+fn rehoming_gives_the_computers_pairing_everything_the_phone_kept() {
+    let f = fixture();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let item = keep(&f.engine, "Bought a ticket");
+    f.engine.link_remote_keep(&item, &local, "c1").unwrap();
+
+    let paired = pair(&f.engine, "Pixel", "https://home.example");
+    f.engine.rehome_device(&local, &paired).unwrap();
+
+    assert_eq!(f.engine.local_device().unwrap(), None);
+    assert_eq!(
+        f.engine.remote_keep(&paired, "c1").unwrap(),
+        Some(item.clone())
+    );
+    assert_eq!(f.engine.remote_keep(&local, "c1").unwrap(), None);
+    assert_eq!(
+        f.engine.get_item(&item).unwrap().from_device.as_deref(),
+        Some("Pixel")
+    );
+    assert_eq!(f.engine.devices(false).unwrap().len(), 1);
+}
+
+#[test]
+fn rehoming_only_goes_from_the_phones_own_row_to_a_live_pairing() {
+    let f = fixture();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let paired = pair(&f.engine, "Pixel", "https://home.example");
+    let other = pair(&f.engine, "Other", "https://home.example");
+    assert!(
+        f.engine.rehome_device(&paired, &other).is_err(),
+        "not from a pairing"
+    );
+    assert!(f.engine.rehome_device(&local, "missing").is_err());
+    assert!(
+        f.engine.rehome_device(&local, &local).is_err(),
+        "not to itself"
+    );
+    f.engine.revoke_device(&paired).unwrap();
+    assert!(
+        f.engine.rehome_device(&local, &paired).is_err(),
+        "not to a removed phone"
+    );
+    assert!(
+        f.engine.local_device().unwrap().is_some(),
+        "nothing changed"
+    );
+}
+
+#[test]
+fn delete_everything_takes_the_phones_own_row_and_it_can_be_made_again() {
+    let f = fixture();
+    let first = f.engine.ensure_local_device("This phone").unwrap();
+    keep(&f.engine, "a note");
+    f.engine
+        .delete_everything(nocturne_engine::DELETE_PHRASE)
+        .unwrap();
+    assert_eq!(f.engine.local_device().unwrap(), None);
+    let second = f.engine.ensure_local_device("This phone").unwrap();
+    assert_ne!(first, second);
+}
