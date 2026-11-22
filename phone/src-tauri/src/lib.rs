@@ -33,9 +33,11 @@ pub fn run() {
                 std::sync::Arc::new(nocturne_engine::SystemClock),
                 exclude_from_backup(app.handle()),
             ));
+            app.manage(home::r#move::Moving::default());
             sources::start(app.handle());
             home::commands::fade_soon(app.handle());
             home::commands::clear_backup_copies(app.handle());
+            home::r#move::clear_old_put_aside(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -85,6 +87,12 @@ pub fn run() {
             home::commands::choose_backup_file,
             home::commands::let_go_backup_file,
             home::commands::free_space,
+            home::r#move::move_facts,
+            home::r#move::move_offer,
+            home::r#move::move_memory,
+            home::r#move::move_stop,
+            home::r#move::move_undo,
+            home::r#move::move_put_aside,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
