@@ -30,7 +30,6 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
     letGoAt: null,
     keepForever: SAFETY_PREDICATES.has(predicate),
     private: false,
-    suggestPrivate: false,
     was: null,
     movedFrom: null,
     receipts,
@@ -144,7 +143,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "allergicTo",
       "nuts",
       [receipt("item-nut", { type: "quote", text: "Leo is allergic to nuts so I always..." })],
-      { status: "unconfirmed", certainty: "notSure", entityId: "ent-leo", suggestPrivate: true },
+      { status: "unconfirmed", certainty: "notSure", entityId: "ent-leo" },
     ),
     memory(
       "mem-ava-penicillin",
@@ -153,7 +152,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "allergicTo",
       "penicillin",
       [receipt("item-gp")],
-      { entityId: "ent-ava", certainty: "sure", suggestPrivate: true },
+      { entityId: "ent-ava", certainty: "sure" },
     ),
     memory(
       "mem-gran-tablets",
@@ -162,7 +161,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "takes",
       "amlodipine 2.5 mg",
       [receipt("item-prescription")],
-      { entityId: "ent-gran", certainty: "sure", private: true, suggestPrivate: true },
+      { entityId: "ent-gran", certainty: "sure", private: true },
     ),
     memory(
       "mem-gran-court",

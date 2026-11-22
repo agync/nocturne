@@ -85,7 +85,6 @@
   "memory.keepForever.off": "It can fade again.",
   "memory.private.on": "Marked private.",
   "memory.private.off": "No longer private.",
-  "memory.suggestPrivate": "This looks like health, money or ID information. You may want to mark it private.",
   "item.meta": "{kind} · {day} {time}",
   "item.understood": "Understood in {count, plural, one {# second} other {# seconds}}",
   "item.says": "What it says",

@@ -805,7 +805,7 @@ mod tests {
             "predicate": "scheduled", "object": "x", "certainty": "sure", "status": "active",
             "validFrom": null, "validTo": null, "due": null,
             "learnedAt": "2026-11-10T09:30:00+00:00", "lastUsed": null, "letGoAt": null,
-            "keepForever": false, "private": false, "suggestPrivate": false, "was": null,
+            "keepForever": false, "private": false, "was": null,
             "receipts": [],
         });
         for (k, x) in extra.as_object().unwrap() {

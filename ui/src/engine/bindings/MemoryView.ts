@@ -8,10 +8,6 @@ import type { Receipt } from "./Receipt";
  */
 export type MemoryView = { id: string, sentence: string, subject: string, entityId: string | null, predicate: string, object: string, certainty: Certainty, status: MemoryStatus, validFrom: string | null, validTo: string | null, due: string | null, learnedAt: string, lastUsed: string | null, letGoAt: string | null, keepForever: boolean, private: boolean, 
 /**
- * Health, money or ID content: the interface may suggest marking it private.
- */
-suggestPrivate: boolean, 
-/**
  * The previous value when this memory replaced an older one ("was Wed").
  */
 was: string | null, 

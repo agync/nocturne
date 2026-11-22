@@ -221,9 +221,6 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget, onRefile }:
               </Button>
             </div>
           )}
-          {m.suggestPrivate && !m.private && !editing ? (
-            <p className={styles.note}>{t("memory.suggestPrivate")}</p>
-          ) : null}
         </fieldset>
       ) : null}
     </li>

@@ -1031,7 +1031,6 @@ export class MockJournal {
       letGoAt: null,
       keepForever: false,
       private: false,
-      suggestPrivate: false,
       was: null,
       movedFrom: null,
       receipts: [this.receipt(o.itemId)],

@@ -497,7 +497,7 @@ fn highlights(
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
             .query_map(params_from_iter(both), |r| {
-                Ok((mem_row(r)?, r.get::<_, String>(28)?))
+                Ok((mem_row(r)?, r.get::<_, String>(27)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         for (m, item_id) in rows {

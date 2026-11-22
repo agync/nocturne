@@ -124,7 +124,7 @@ pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Rec
 pub(crate) const MEM_COLS: &str = "m.id, m.subject, m.subject_key, m.entity_id, m.predicate, \
     m.object, m.object_key, m.sentence, m.valid_from, m.valid_to, m.due, m.recorded_at, \
     m.superseded_at, m.superseded_by, m.confidence, m.status, m.confirmed, m.last_used, \
-    m.let_go_at, m.done, m.keep_forever, m.private, m.suggest_private, m.tags, \
+    m.let_go_at, m.done, m.keep_forever, m.private, m.tags, \
     (SELECT CASE WHEN m.sentence = m.object THEN o.sentence ELSE o.object END \
        FROM memories o WHERE o.superseded_by = m.id \
        AND NOT (o.subject_key = m.subject_key AND o.predicate = m.predicate \
@@ -160,7 +160,6 @@ pub(crate) struct MemRow {
     pub done: bool,
     pub keep_forever: bool,
     pub private: bool,
-    pub suggest_private: bool,
     pub tags: Vec<String>,
     pub was: Option<String>,
     pub sources: u32,
@@ -169,7 +168,7 @@ pub(crate) struct MemRow {
 }
 
 pub(crate) fn mem_row(r: &Row<'_>) -> rusqlite::Result<MemRow> {
-    let tags: String = r.get(23)?;
+    let tags: String = r.get(22)?;
     Ok(MemRow {
         id: r.get(0)?,
         subject: r.get(1)?,
@@ -193,12 +192,11 @@ pub(crate) fn mem_row(r: &Row<'_>) -> rusqlite::Result<MemRow> {
         done: r.get(19)?,
         keep_forever: r.get(20)?,
         private: r.get(21)?,
-        suggest_private: r.get(22)?,
         tags: serde_json::from_str(&tags).unwrap_or_default(),
-        was: r.get(24)?,
-        sources: r.get(25)?,
-        trusted_sources: r.get(26)?,
-        moved_from: r.get(27)?,
+        was: r.get(23)?,
+        sources: r.get(24)?,
+        trusted_sources: r.get(25)?,
+        moved_from: r.get(26)?,
     })
 }
 
@@ -255,7 +253,6 @@ impl MemRow {
             let_go_at: self.let_go_at.clone(),
             keep_forever: self.keep_forever,
             private: self.private,
-            suggest_private: self.suggest_private,
             was: self.was.clone(),
             moved_from: self.moved_from.clone(),
             receipts,
