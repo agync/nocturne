@@ -127,6 +127,14 @@ describe("Today on a phone alone", () => {
     expect(screen.queryByRole("button", { name: /Reflect on/ })).toBeNull();
   });
 
+  it("says an empty journal day holds what you keep, with no computer in it", async () => {
+    await app("m=fresh");
+    await screen.findByText("Your memory is on this phone");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Journal" }));
+    expect(await screen.findByText("Anything you keep shows up here.")).toBeInTheDocument();
+    expect(screen.queryByText(/computer/)).toBeNull();
+  });
+
   it("shows the lost-phone reminder once", async () => {
     await app("m=reminder");
     expect(
