@@ -1,4 +1,4 @@
-package app.nocturne.phone
+package `is`.nocturne.phone
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
