@@ -1,5 +1,6 @@
 .row {
   display: flex;
+  flex: 1 1 100%;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-4);
@@ -14,6 +15,7 @@
 
 .text {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
