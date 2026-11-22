@@ -181,7 +181,9 @@ export async function nativeMockServices(): Promise<NativeServices> {
     history.replaceState(
       {
         view:
-          view === "offer" || view === "thisPhone" ? { name: view } : { name: "tab", tab: view },
+          view === "offer" || view === "thisPhone" || view === "keep"
+            ? { name: view }
+            : { name: "tab", tab: view },
       },
       "",
     );

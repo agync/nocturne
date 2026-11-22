@@ -10,7 +10,9 @@ import { createLocalEngine } from "./engine";
 import { memoryNotes, REMINDER_DAYS, reminderDone, reminderDue } from "./reminder";
 import { scriptedNoteRows } from "./testing/homeMock";
 
-afterEach(() => {
+afterEach(async () => {
+  // A step back the screens asked for lands before the next test starts.
+  await new Promise((settle) => setTimeout(settle, 50));
   cleanup();
   clearMocks();
   scriptedNoteRows.clear();
@@ -198,7 +200,13 @@ describe("This phone, a backup and Delete everything", () => {
     expect(screen.getByRole("button", { name: /Save a backup….*No backup yet/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "Move my memory…" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Delete everything…" })).toBeVisible();
+    expect(screen.getByText("Nocturne 0.1.0", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Privacy policy" })).toBeVisible();
+    expect(screen.queryByText("Name")).toBeNull();
     expect(screen.queryByText(/locked copy/i)).toBeNull();
+    const voice = await screen.findByRole("button", { name: /Voice notes in words.*Off.*Turn on/ });
+    fireEvent.click(voice);
+    await waitFor(() => expect(screen.queryByText("Voice notes in words")).toBeNull());
   });
 
   it("saves a backup with a passphrase, to the place the phone's sheet gives", async () => {
@@ -226,7 +234,7 @@ describe("This phone, a backup and Delete everything", () => {
     expect(screen.getByText(/^412 MB, made /)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     expect(
-      await screen.findByRole("button", { name: /Save a backup….*Last backup/ }),
+      await screen.findByRole("button", { name: /Save a backup….*Last backup/ }, { timeout: 4000 }),
     ).toBeVisible();
   }, 15_000);
 
@@ -293,12 +301,100 @@ describe("a backup over a memory that is already here", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
     expect(
-      await screen.findByText("That didn’t work. Nothing was lost, so try again in a moment."),
-    ).toBeInTheDocument();
+      await screen.findByRole("heading", { name: "Replace what’s on this phone?" }),
+    ).toBeVisible();
+    expect(screen.getByText(/You can bring back what was here from/)).toHaveTextContent(
+      "Restoring puts what’s on this phone now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from This phone.",
+    );
+    expect(screen.getByText("On this phone now · Put aside, not deleted")).toBeInTheDocument();
+    expect(screen.getByText("Kept after the backup")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Replace with the backup" }));
     expect(
-      screen.queryByRole("heading", { name: "Your memory is back on this phone." }),
-    ).toBeNull();
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeVisible();
   });
+
+  it("keeps what is here when the person says so", async () => {
+    await app("m=first&s=welcome");
+    fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
+    expect(await screen.findByText(/^412 MB · made /)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Passphrase for this backup"), {
+      target: { value: "already here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep what’s here" }));
+    expect(
+      await screen.findByRole("heading", { name: "Nocturne remembers your day" }),
+    ).toBeVisible();
+  });
+
+  it("says a backup is from a newer Nocturne, or damaged, in 0013's words", async () => {
+    await app("m=first&s=welcome");
+    fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
+    const field = await screen.findByLabelText("Passphrase for this backup");
+    fireEvent.change(field, { target: { value: "from the future" } });
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    expect(await screen.findByText("This backup is from a newer Nocturne")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Passphrase for this backup"), {
+      target: { value: "torn pages" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    expect(await screen.findByText("Part of this backup is damaged")).toBeInTheDocument();
+  });
+});
+
+describe("keeping and an item on a phone alone", () => {
+  it("says a kept note is on today's journal, and nothing of a computer", async () => {
+    await app("m=fresh");
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    expect(screen.queryByText(/On your computer/)).toBeNull();
+    fireEvent.change(await screen.findByLabelText(/Type something to keep/), {
+      target: { value: "Bins go out on Tuesday" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(
+      await screen.findByText("It’s on today’s journal, and Ask can find it by its words."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Changed your mind?")).toBeInTheDocument();
+    expect(screen.queryByText(/computer/)).toBeNull();
+  });
+
+  it("says when there was no room to keep it", async () => {
+    await app("m=fresh");
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    fireEvent.change(await screen.findByLabelText(/Type something to keep/), {
+      target: { value: "no room left" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(
+      await screen.findByText("There wasn’t room to keep this. Free some room and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("says why before Android first asks for the microphone", async () => {
+    await app("m=fresh");
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    expect(await screen.findByText(/^Next, Android asks to let Nocturne use/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.queryByText(/^Next, Android asks/)).toBeNull());
+  });
+
+  it("marks a kept thing private on its page", async () => {
+    await app("m=kept");
+    fireEvent.click(await screen.findByRole("button", { name: /Ask about the swap/ }));
+    const toggle = await screen.findByRole("switch", { name: /Private/ });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen.getByText("Kept on this phone and never sent to a mind online or at home."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/your computer/)).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+  }, 15_000);
 });
 
 describe("the phone's own memory behind the screens", () => {

@@ -145,6 +145,8 @@ export function homeState(scenario: HomeScenario) {
   };
   let rows = scenario === "kept" || scenario === "reminder" ? keptRows() : [];
   let lastBackup: HomeStats["lastBackup"] = null;
+  const privates = new Set<string>();
+  let voice: "granted" | "denied" | "prompt" = "prompt";
   const day = (): JournalDay => ({ ...emptyDay(HOME_DAY, true), rows });
   const stats = (): HomeStats => ({
     counts: { items: rows.length, memories: 0, pages: 0, originals: rows.length },
@@ -161,8 +163,9 @@ export function homeState(scenario: HomeScenario) {
       case "getJournalDay":
         return { type: "journalDay", day: day() };
       case "getItem":
-        return { type: "item", item: phoneItem(call.id) };
+        return { type: "item", item: { ...phoneItem(call.id), private: privates.has(call.id) } };
       case "keepText": {
+        if (call.text === "no room left") return { type: "error", code: "full" };
         const item = itemView({
           id: call.clientId,
           kind: "text",
@@ -213,6 +216,8 @@ export function homeState(scenario: HomeScenario) {
           },
         };
       case "checkBackup":
+        if (call.passphrase === "from the future") return { type: "error", code: "newerBackup" };
+        if (call.passphrase === "torn pages") return { type: "error", code: "damagedBackup" };
         if (call.passphrase !== "correct horse battery" && call.passphrase !== "already here")
           return { type: "error", code: "wrongPassphrase" };
         return {
@@ -245,13 +250,18 @@ export function homeState(scenario: HomeScenario) {
           },
         };
       case "restoreBackup":
-        if (call.replace) return { type: "error", code: "invalid" };
+        if (call.passphrase === "already here" && !call.replace)
+          return { type: "error", code: "invalid" };
         mode = "alone";
         broken = false;
         damaged = false;
         rows = keptRows();
         void emit("mode_changed", mode);
         return { type: "restored" };
+      case "setPrivate":
+        if (call.private) privates.add(call.id);
+        else privates.delete(call.id);
+        return { type: "privateSet", item: { ...phoneItem(call.id), private: call.private } };
       case "deleteEverything":
         if (call.phrase !== "delete everything") return { type: "error", code: "wrongPhrase" };
         rows = [];
@@ -282,6 +292,11 @@ export function homeState(scenario: HomeScenario) {
         return local(args.call as HomeCall);
       case "hear_voice_notes":
         return false;
+      case "voice_access":
+        return voice;
+      case "voice_request":
+        voice = "granted";
+        return voice;
       default:
         return undefined;
     }
@@ -297,6 +312,7 @@ export const scriptedFiles: HomeFiles = {
     path: "/sdcard/Download/nocturne-backup-2026-11-21.nocturne",
     name: "nocturne-backup-2026-11-21.nocturne",
     bytes: 412_000_000,
+    madeAt: at("09:32"),
   }),
 };
 
