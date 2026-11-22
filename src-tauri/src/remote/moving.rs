@@ -75,13 +75,15 @@ const ROOM_MARGIN: u64 = 64 * 1024 * 1024;
     rename_all_fields = "camelCase"
 )]
 pub enum MoveView {
-    /// "{name} has its own memory. Move it here?" `here`: this computer already holds one.
-    /// `room`: not enough free room yet, and the move button waits.
+    /// "{name} has its own memory. Move it here?" `here`: this computer already holds one, and
+    /// `others`: other phones then send their calendar and health again. `room`: not enough
+    /// free room yet, and the move button waits.
     Offered {
         name: String,
         items: u32,
         bytes: f64,
         here: bool,
+        others: bool,
         room: Option<Room>,
     },
     Arriving {
@@ -170,6 +172,8 @@ struct Move {
     gone: bool,
     /// The person stopped it here: its phone hears so.
     stopped: bool,
+    /// Other paired phones send again if this memory replaces the one here.
+    others: bool,
     /// Room short when it was offered.
     room: Option<Room>,
     /// The conversation carrying the memory, while it is on its way or being checked.
@@ -197,6 +201,7 @@ impl Move {
             data: data.to_path_buf(),
             gone: false,
             stopped: false,
+            others: false,
             room: None,
             conv: None,
             shown: None,
@@ -219,6 +224,7 @@ impl Move {
                 items: self.offer.items,
                 bytes: self.bytes,
                 here: self.here.is_some(),
+                others: self.others,
                 room: self.room,
             },
             Phase::Accepted => MoveView::Arriving {
@@ -264,6 +270,17 @@ struct Moved {
     /// Its phone has heard that it did not open.
     #[serde(default)]
     told: bool,
+    /// The other phones of a replaced memory, and which of their sources still have to send
+    /// again from scratch.
+    #[serde(default)]
+    resend: Vec<Resend>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Resend {
+    device: String,
+    sources: Vec<String>,
 }
 
 /// The one move under way, if any. Every change of phase is one method here, under one lock:
@@ -826,8 +843,13 @@ pub async fn offer<R: Runtime>(
     let Ok(e) = state.engine() else {
         return Some(err(PhoneError::NotReady));
     };
-    let looked = crate::error::blocking(move || Ok((held(&e)?, e.online_state()?.set_up))).await;
-    let Ok((here, online)) = looked else {
+    let paired = device.id.clone();
+    let looked = crate::error::blocking(move || {
+        let others = e.devices(false)?.iter().any(|d| d.id != paired);
+        Ok((held(&e)?, e.online_state()?.set_up, others))
+    })
+    .await;
+    let Ok((here, online, others)) = looked else {
         return Some(err(PhoneError::Busy));
     };
     // Agreed to already: a phone carrying on after a pause is not asked about twice.
@@ -853,6 +875,7 @@ pub async fn offer<R: Runtime>(
     let mut new = Move::new(device, &data, counts, bytes);
     new.here = here;
     new.online = online;
+    new.others = here.is_some() && others;
     new.room = room;
     // Short of room, the question shows with its room line and the phone hears so at once: it
     // tries again once the person here has freed some.
@@ -939,6 +962,28 @@ fn opened_here(core: &Core, data: &Path, device: &str) -> Option<RemoteAnswer> {
         tracing::warn!("could not note that the phone heard: {e}");
     }
     Some(err(PhoneError::NotFound))
+}
+
+/// The first calendar or health send from a phone whose sends went aside with a replaced
+/// memory: true once per source, and the phone then sends that source again from scratch.
+pub fn resend_due(core: &Core, data: &Path, device: &str, source: &str) -> bool {
+    let _one = lock(&core.moves.note);
+    let Some(mut moved) = read_moved(data).filter(|m| !m.failed) else {
+        return false;
+    };
+    let Some(r) = moved.resend.iter_mut().find(|r| r.device == device) else {
+        return false;
+    };
+    let before = r.sources.len();
+    r.sources.retain(|s| s != source);
+    if r.sources.len() == before {
+        return false;
+    }
+    moved.resend.retain(|r| !r.sources.is_empty());
+    if let Err(e) = write_note(&moved_path(data), &moved) {
+        tracing::warn!("could not note a phone asked to send again: {e}");
+    }
+    true
 }
 
 /// The person's answer on this computer. False when there was nothing to answer, or no room
@@ -1070,18 +1115,35 @@ async fn check(
     let out = if restore::marker_path(&data).exists() {
         Err(PhoneError::Busy)
     } else {
-        // What is here now, not when the person agreed: a lot may have been kept since.
-        let here = match state.engine() {
-            Ok(e) => crate::error::blocking(move || held(&e))
-                .await
-                .ok()
-                .flatten(),
-            Err(_) => None,
+        // What is here now, not when the person agreed: a lot may have been kept since. The
+        // other phones send again only if this memory replaces one.
+        let paired = device.id.clone();
+        let (here, resend) = match state.engine() {
+            Ok(e) => crate::error::blocking(move || {
+                let here = held(&e)?;
+                let others = match here {
+                    Some(_) => e
+                        .devices(false)?
+                        .into_iter()
+                        .filter(|d| d.id != paired)
+                        .map(|d| Resend {
+                            device: d.id,
+                            sources: vec!["calendar".into(), "health".into()],
+                        })
+                        .collect(),
+                    None => Vec::new(),
+                };
+                Ok((here, others))
+            })
+            .await
+            .unwrap_or_default(),
+            Err(_) => (None, Vec::new()),
         };
         let place = Place {
             data,
             paired: device.id.clone(),
             name: device.name.clone(),
+            resend,
             here,
             stamp: state
                 .now()
@@ -1147,6 +1209,8 @@ struct Place {
     data: PathBuf,
     paired: String,
     name: String,
+    /// The other phones, when this memory replaces the one here.
+    resend: Vec<Resend>,
     here: Option<MemoryCounts>,
     stamp: String,
     owner: Owner,
@@ -1167,6 +1231,7 @@ fn settle(
         here,
         stamp,
         owner,
+        resend,
     } = place;
     let (here, data) = (*here, data.as_path());
     let damaged = |_| PhoneError::Invalid;
@@ -1216,6 +1281,7 @@ fn settle(
             seen: false,
             failed: false,
             told: false,
+            resend: resend.clone(),
         };
         write_note(&staged_note(data), &moved).map_err(|_| PhoneError::Busy)?;
         let aside = here.map(|h| Aside {
@@ -1330,6 +1396,10 @@ mod tests {
             seen: false,
             failed: false,
             told: false,
+            resend: vec![Resend {
+                device: "b".into(),
+                sources: vec!["calendar".into(), "health".into()],
+            }],
         };
         write_note(&staged_note(data), &moved).unwrap();
         std::fs::write(restore::marker_path(data), b"{}").unwrap();

@@ -381,6 +381,12 @@ async fn send(
         Sent::TooMany => l.health.too_many = true,
         Sent::Done => l.health.too_many = too_many,
         Sent::Away | Sent::Refused => {}
+        Sent::Again => {
+            let settings = l.health.settings.clone();
+            l.health = Default::default();
+            l.health.settings = settings;
+            l.health.again = true;
+        }
         Sent::Off => {
             let chosen = l.health.settings.kinds.clone();
             if l.health.settings.bring {

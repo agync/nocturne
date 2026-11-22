@@ -121,6 +121,8 @@ pub struct CalendarLedger {
     /// The last send had more than the computer takes at once.
     pub too_many: bool,
     pub last_sent: Option<SourceSent>,
+    /// The computer asked for all of it again; the next send starts from nothing.
+    pub again: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +150,8 @@ pub struct HealthLedger {
     pub stopped: bool,
     pub too_many: bool,
     pub last_sent: Option<SourceSent>,
+    /// The computer asked for all of it again; the next send starts from nothing.
+    pub again: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -262,6 +266,11 @@ impl LedgerFile {
     /// nothing is brought again until they start again and choose.
     pub fn reset(&self) {
         self.update(|l| *l = Ledger::default());
+    }
+
+    /// True once after the computer asked for a source again, clearing the flag.
+    pub fn take_again(&self, flag: impl Fn(&mut Ledger) -> &mut bool) -> bool {
+        self.update(|l| std::mem::take(flag(l)))
     }
 
     /// The phone was disconnected or removed: what was sent belongs to that pairing.
