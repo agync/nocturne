@@ -416,7 +416,11 @@ impl Home {
             (_, Some("chosen")) => Some(KeptHow::Chosen),
             (_, Some("recorded")) => Some(KeptHow::Recorded),
             (_, Some("shared")) => Some(KeptHow::Shared),
-            _ if item.source == Source::PastedWeb => Some(KeptHow::Shared),
+            // A link shared on this phone before keeps noted how; one pasted on a computer and
+            // restored here was not kept on this phone at all.
+            _ if item.source == Source::PastedWeb && item.from_device.is_some() => {
+                Some(KeptHow::Shared)
+            }
             _ => None,
         };
         Ok(HomeAnswer::ItemKept {
