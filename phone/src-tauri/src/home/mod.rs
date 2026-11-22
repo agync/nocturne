@@ -16,6 +16,7 @@ pub mod dispatch;
 pub mod mode;
 #[cfg(test)]
 mod tests;
+pub mod voice;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,6 +64,7 @@ pub struct Home {
     /// A backup, check or restore under way: one at a time.
     job: AtomicBool,
     exclude: ExcludeFromBackup,
+    pub(crate) voice: voice::Voice,
     /// The passphrase work a backup asks of whoever opens it; `None` is what Nocturne writes.
     work_factor: Option<u8>,
 }
@@ -98,6 +100,7 @@ impl Home {
             open: Mutex::new(None),
             job: AtomicBool::new(false),
             exclude,
+            voice: voice::Voice::default(),
             work_factor: None,
         }
     }

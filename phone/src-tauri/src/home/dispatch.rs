@@ -12,9 +12,9 @@ use jiff::{SignedDuration, Timestamp};
 use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::{MAX_CAPTION, MAX_TEXT, TAKE_BACK_SECS};
 use nocturne_contract::{
-    CheckIn, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, PhoneError, PhoneItem,
-    PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice, QuestionKind, RemoteAnswer, RemoteCall,
-    SameNameAnswer, Source,
+    CheckIn, CheckInInput, Edition, Feeling, ItemKind, ItemView, Kept, PageView, PhoneError,
+    PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice, QuestionKind, RemoteAnswer,
+    RemoteCall, SameNameAnswer, Source,
 };
 use nocturne_engine::{Engine, KeepPlace};
 
@@ -677,4 +677,9 @@ pub fn original(open: &Open, id: &str) -> Result<(String, Vec<u8>), PhoneError> 
         .unwrap_or("application/octet-stream");
     let bytes = std::fs::read(&path).map_err(|_| PhoneError::NotFound)?;
     Ok((mime.to_string(), bytes))
+}
+
+/// Whether this answer kept a new voice note, which waits for its words.
+pub fn is_voice_note(answer: &RemoteAnswer) -> bool {
+    matches!(answer, RemoteAnswer::Kept { kept } if kept.item.kind == ItemKind::Audio && !kept.duplicate)
 }

@@ -75,6 +75,9 @@ pub fn run() {
             home::commands::home_keep_end,
             home::commands::home_original,
             home::commands::home_local,
+            home::commands::hear_voice_notes,
+            home::commands::voice_access,
+            home::commands::voice_request,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")

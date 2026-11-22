@@ -7,6 +7,7 @@ use nocturne_contract::{
 };
 use nocturne_engine::ManualClock;
 
+use super::voice::{Heard, Reader};
 use super::{Home, dispatch};
 
 const PASS: &str = "a long enough passphrase";
@@ -84,6 +85,37 @@ fn stats(home: &Home) -> nocturne_contract::HomeStats {
     match local(home, HomeCall::Stats) {
         HomeAnswer::Stats { stats } => stats,
         other => panic!("no stats: {other:?}"),
+    }
+}
+
+/// A WAV file of plain sound as the phone's reader takes it.
+fn wav(samples: usize) -> Vec<u8> {
+    let data = vec![0u8; samples * 2];
+    let mut out = Vec::new();
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&16_000u32.to_le_bytes());
+    out.extend_from_slice(&32_000u32.to_le_bytes());
+    out.extend_from_slice(&2u16.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(&data);
+    out
+}
+
+fn recording(mime: &str, client_id: &str, size: usize) -> RemoteCall {
+    RemoteCall::KeepRecording {
+        mime: mime.into(),
+        size: size as f64,
+        client_id: client_id.into(),
+        feeling: None,
+        good: None,
+        captured_at: None,
     }
 }
 
@@ -536,4 +568,94 @@ fn delete_everything_needs_the_phrase_and_takes_copies_too() {
             .is_some()
     );
     kept_id(&call(&home, note("A fresh start", "c-1")));
+}
+
+struct Scripted {
+    ready: bool,
+    heard: Heard,
+}
+
+impl Reader for Scripted {
+    fn ready(&self, _: &str) -> bool {
+        self.ready
+    }
+
+    fn read(&self, pcm: &Path, language: &str) -> Heard {
+        assert_eq!(language, "en-GB");
+        assert_eq!(std::fs::metadata(pcm).unwrap().len(), 32_000, "header off");
+        self.heard.clone()
+    }
+}
+
+#[test]
+fn a_voice_note_gets_its_words_and_stays_waiting_for_a_mind() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let open = home.open_store().unwrap();
+    let sound = wav(16_000);
+    let id = kept_id(&dispatch::keep_bytes(
+        &open,
+        recording("audio/wav", "c-1", sound.len()),
+        &sound,
+        &home.keeping_dir(),
+    ));
+    let other = kept_id(&dispatch::keep_bytes(
+        &open,
+        recording("audio/webm", "c-2", 4),
+        b"\x1a\x45\xdf\xa3",
+        &home.keeping_dir(),
+    ));
+    let words = Scripted {
+        ready: true,
+        heard: Heard::Words("the purple giraffe".into()),
+    };
+    assert_eq!(home.hear_waiting(&words), 0, "no language yet");
+    assert!(!home.set_language("en_GB"));
+    assert!(home.set_language("en-GB"));
+    let not_ready = Scripted {
+        ready: false,
+        heard: Heard::Words("never".into()),
+    };
+    assert_eq!(home.hear_waiting(&not_ready), 0);
+    assert_eq!(home.hear_waiting(&words), 1);
+
+    let item = open.engine.get_item(&id).unwrap();
+    assert_eq!(item.text.as_deref(), Some("the purple giraffe"));
+    assert_eq!(item.duration_ms, Some(1000));
+    assert_eq!(item.status, ItemStatus::Kept, "still waiting for a mind");
+    assert_eq!(found(&home, "giraffe"), vec![id.clone()]);
+    assert_eq!(
+        open.engine.get_item(&other).unwrap().text,
+        None,
+        "a webm waits"
+    );
+    assert_eq!(home.hear_waiting(&words), 0, "read once");
+}
+
+#[test]
+fn nothing_heard_is_not_read_again_this_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let open = home.open_store().unwrap();
+    let sound = wav(16_000);
+    let id = kept_id(&dispatch::keep_bytes(
+        &open,
+        recording("audio/wav", "c-1", sound.len()),
+        &sound,
+        &home.keeping_dir(),
+    ));
+    home.set_language("en-GB");
+    let silent = Scripted {
+        ready: true,
+        heard: Heard::Nothing,
+    };
+    assert_eq!(home.hear_waiting(&silent), 0);
+    let item = open.engine.get_item(&id).unwrap();
+    assert_eq!(item.text, None);
+    assert_eq!(item.status, ItemStatus::Kept);
+    let words = Scripted {
+        ready: true,
+        heard: Heard::Words("late words".into()),
+    };
+    assert_eq!(home.hear_waiting(&words), 0);
 }
