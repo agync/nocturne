@@ -9,6 +9,7 @@ import { HomeRequestError, type PickedFile, type Progress } from "../api";
 const MIN_PASSPHRASE = 8;
 
 function ModalBar({ title, onClose }: { title: string; onClose(): void }) {
+  const heading = useHeading(title);
   return (
     <header className="ph-bar ph-bar--back">
       <button
@@ -19,7 +20,9 @@ function ModalBar({ title, onClose }: { title: string; onClose(): void }) {
       >
         <Icon name="close" />
       </button>
-      <h1 className="ph-bar-title ph-serif">{title}</h1>
+      <h1 className="ph-bar-title ph-serif" tabIndex={-1} ref={heading}>
+        {title}
+      </h1>
     </header>
   );
 }
@@ -168,7 +171,6 @@ export function SaveBackup({
   const [again, setAgain] = useState("");
   const [shown, setShown] = useState(false);
   const [ticked, setTicked] = useState(false);
-  const heading = useHeading("backup");
   const tickId = useId();
 
   const ready = first.length >= MIN_PASSPHRASE && again.length > 0 && ticked;
@@ -218,9 +220,6 @@ export function SaveBackup({
   return (
     <Page bar={<ModalBar title={t("phone.alone.backup.title")} onClose={onClose} />}>
       <main className="ph-main" style={{ gap: 16 }}>
-        <h2 className="sr-only" tabIndex={-1} ref={heading}>
-          {t("phone.alone.backup.title")}
-        </h2>
         <p className="ph-body ph-ink2">{t("phone.alone.backup.lead")}</p>
         <Passphrase
           label={t("backup.field.label")}
@@ -262,9 +261,12 @@ export function SaveBackup({
           {t("backup.note.check")}
         </label>
         {step.error === "failed" || step.error === "full" ? (
-          <p className="ph-error" role="alert">
-            {step.error === "full" ? t("phone.alone.full") : t("ask.action.failed")}
-          </p>
+          <div className="ph-stack" role="alert" style={{ gap: 4 }}>
+            <p className="ph-card-title">{t("backup.fail.stopped")}</p>
+            <p className="ph-small">
+              {step.error === "full" ? t("backup.fail.room.body") : t("backup.fail.other.body")}
+            </p>
+          </div>
         ) : null}
       </main>
       <footer className="ph-foot">
@@ -278,7 +280,7 @@ export function SaveBackup({
 }
 
 type RestoreStep =
-  | { name: "form"; error: "wrong" | "bad" | "full" | "failed" | null }
+  | { name: "form"; error: "wrong" | "bad" | "full" | "failed" | "here" | null }
   | { name: "running"; phase: "checking" | "restoring"; progress: BackupProgress | null }
   | { name: "done"; count: number };
 
@@ -318,8 +320,10 @@ export function Restore({
     try {
       setStep({ name: "running", phase: "checking", progress: null });
       const checked = await check(file.path, passphrase, running("checking"));
+      // What is here is never replaced without asking, and the phone's question is not written yet.
+      if (checked.here !== null) return setStep({ name: "form", error: "here" });
       setStep({ name: "running", phase: "restoring", progress: null });
-      await restore(file.path, passphrase, checked.here !== null, running("restoring"));
+      await restore(file.path, passphrase, false, running("restoring"));
       setStep({ name: "done", count: checked.summary.items });
     } catch (e) {
       const code = e instanceof HomeRequestError ? e.code : "failed";
@@ -394,7 +398,7 @@ export function Restore({
                   ? t("restore.wrong")
                   : step.error === "full"
                     ? t("phone.alone.full")
-                    : t("ask.action.failed")}
+                    : t("setup.action.failed")}
               </p>
             )}
           </div>

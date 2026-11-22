@@ -109,8 +109,8 @@ export function HomeFind({
 
   useEffect(() => {
     const query = draft.trim();
-    if (query === "") return setState({ name: "idle" });
     const n = ++asked.current;
+    if (query === "") return setState({ name: "idle" });
     const timer = setTimeout(() => {
       setState({ name: "finding", query });
       find(query).then(

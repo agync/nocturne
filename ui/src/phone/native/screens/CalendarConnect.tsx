@@ -72,7 +72,7 @@ export function CalendarConnect({
     case "refused":
       return <CalendarRefused onOk={onDone} />;
     case "settings":
-      return <CalendarSettingsScreen channel={channel} onBack={onDone} />;
+      return <CalendarSettingsScreen channel={channel} onBack={onDone} alone={alone} />;
   }
 }
 
@@ -156,9 +156,12 @@ export function CalendarRefused({ onOk }: { onOk(): void }) {
 export function CalendarSettingsScreen({
   channel,
   onBack,
+  alone = false,
 }: {
   channel: NativeChannel;
   onBack(): void;
+  /** A phone alone sends nothing anywhere: no lines about what went across. */
+  alone?: boolean;
 }) {
   const [calendars, setCalendars] = useState<PhoneCalendar[]>([]);
   const [settings, setSettings] = useState<CalendarSettings | null>(null);
@@ -192,7 +195,7 @@ export function CalendarSettingsScreen({
   return (
     <Page bar={<BackBar title={t("phone.calendar.label")} onBack={onBack} />}>
       <main className="ph-main ph-bring">
-        {status?.calendar === "stoppedOnComputer" && (
+        {!alone && status?.calendar === "stoppedOnComputer" && (
           <div className="ph-card" role="status">
             <p className="ph-card-title">{t("phone.calendar.stoppedOnComputer.title")}</p>
             <p className="ph-hint">{placesRich("phone.calendar.stoppedOnComputer.body")}</p>
@@ -213,7 +216,7 @@ export function CalendarSettingsScreen({
           on={settings.bring}
           onChange={(bring) => void save({ ...settings, bring })}
         />
-        {stopped && (
+        {stopped && !alone && (
           <p className="ph-hint" role="status">
             {t("phone.calendar.stopped")}
           </p>
@@ -243,7 +246,7 @@ export function CalendarSettingsScreen({
           on={settings.notes}
           onChange={(notes) => void save({ ...settings, notes })}
         />
-        {lastSent && (
+        {lastSent && !alone && (
           <p className="ph-hint">
             {t("phone.calendar.lastSent", {
               time: sentAt(lastSent.at),
@@ -251,7 +254,7 @@ export function CalendarSettingsScreen({
             })}
           </p>
         )}
-        <p className="ph-hint">{places("phone.sources.already")}</p>
+        {alone ? null : <p className="ph-hint">{places("phone.sources.already")}</p>}
       </main>
     </Page>
   );

@@ -63,6 +63,28 @@ describe("Welcome and starting on this phone", () => {
     ).toBeInTheDocument();
   });
 
+  it("starts with the app's own name when the phone gives none", async () => {
+    history.replaceState(null, "", "/?m=first&s=welcome");
+    const services = await nativeMockServices();
+    services.deviceName = async () => null;
+    render(<NativeRoot services={services} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start on this phone" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    expect(
+      await screen.findByText(/Nocturne can show what’s in this phone’s calendar/),
+    ).toBeInTheDocument();
+  });
+
+  it("ignores a companion's screen left in the history", async () => {
+    history.replaceState(
+      { view: { name: "relinkWords", busy: false, error: false } },
+      "",
+      "/?m=fresh",
+    );
+    render(<NativeRoot services={await nativeMockServices()} />);
+    expect(await screen.findByText("Your memory is on this phone")).toBeInTheDocument();
+  });
+
   it("opens the pairing from Connect to my computer", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "Connect to my computer" }));
@@ -258,6 +280,24 @@ describe("a memory that can't be opened, and bringing back a backup", () => {
     expect(screen.getByText("128 things, every page and your journal.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("heading", { name: "Kept today · 2" })).toBeInTheDocument();
+  });
+});
+
+describe("a backup over a memory that is already here", () => {
+  it("never replaces what is here without asking", async () => {
+    await app("m=first&s=welcome");
+    fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
+    fireEvent.change(await screen.findByLabelText("Passphrase for this backup"), {
+      target: { value: "already here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    expect(
+      await screen.findByText("That didn’t work. Nothing was lost, so try again in a moment."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeNull();
   });
 });
 

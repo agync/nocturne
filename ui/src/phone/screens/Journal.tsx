@@ -13,6 +13,7 @@ import type {
 import { FeelingMark } from "../../journal/FeelingMark";
 import { PARTS } from "../../journal/feelings";
 import { addDays, dayWords, weekdayOf } from "../../screens/journal/time";
+import { heardByPhone, KeptLine, waitsToBeRead } from "../alone/screens/kept";
 import {
   type Connection,
   ConnectionError,
@@ -21,7 +22,6 @@ import {
   PhoneRequestError,
   type Queue,
 } from "../engine";
-import { KeptLine, waitsToBeRead } from "../alone/screens/kept";
 import { afterSheet, BottomSheet } from "./Dialog";
 import { FromHealthCard } from "./FromHealthCard";
 import { Button, Icon, Page } from "./ui";
@@ -169,7 +169,7 @@ function Row({
   const checkin = row.checkin;
   const quote = checkin?.line ? `“${checkin.line}”` : null;
   const body =
-    noMind && waitsToBeRead(row) ? (
+    noMind && (waitsToBeRead(row) || heardByPhone(row)) ? (
       <KeptLine row={row} />
     ) : phone && row.kind === "calendar" ? (
       <span className="ph-calrow">

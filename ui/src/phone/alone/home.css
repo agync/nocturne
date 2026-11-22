@@ -32,10 +32,6 @@
   color: var(--ink);
 }
 
-.ph-hero-icon--ember {
-  color: var(--ember);
-}
-
 .ph-steph {
   margin: 0;
   font-family: var(--font-serif);
@@ -361,7 +357,7 @@
 .ph-textbtn {
   min-height: 48px;
   width: 100%;
-  padding: 0 16px;
+  padding: 8px 16px;
   border: 0;
   background: none;
   color: var(--accent);

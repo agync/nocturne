@@ -2,9 +2,9 @@
 // engine, the store, pairing and re-linking going to the app's Rust side.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { OpenFailure } from "../channel";
 import { createHomeApi, type HomeApi } from "../alone/api";
 import { createLocalEngine } from "../alone/engine";
+import type { OpenFailure } from "../channel";
 import { PairingError, type PairingResult } from "../pairing";
 import { idbQueue } from "../queue";
 import type { RelinkResult } from "../relink";

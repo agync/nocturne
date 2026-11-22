@@ -135,7 +135,14 @@ const phoneItem = (id: string): PhoneItem => ({
 /** What the scripted phone holds, and how it answers. */
 export function homeState(scenario: HomeScenario) {
   let mode: PhoneMode | null = scenario === "first" ? null : "alone";
-  let damaged = scenario === "damaged";
+  // A damaged memory is found, and put aside, when something first tries to open it.
+  let broken = scenario === "damaged";
+  let damaged = false;
+  const opens = () => {
+    if (!broken) return true;
+    damaged = true;
+    return false;
+  };
   let rows = scenario === "kept" || scenario === "reminder" ? keptRows() : [];
   let lastBackup: HomeStats["lastBackup"] = null;
   const day = (): JournalDay => ({ ...emptyDay(HOME_DAY, true), rows });
@@ -147,6 +154,7 @@ export function homeState(scenario: HomeScenario) {
   });
 
   function remote(call: RemoteCall): RemoteAnswer {
+    if (!opens()) return { type: "error", code: "notReady" };
     switch (call.cmd) {
       case "getStatus":
         return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
@@ -185,7 +193,7 @@ export function homeState(scenario: HomeScenario) {
   function local(call: HomeCall): HomeAnswer {
     switch (call.cmd) {
       case "stats":
-        return { type: "stats", stats: stats() };
+        return opens() ? { type: "stats", stats: stats() } : { type: "error", code: "notReady" };
       case "find":
         return {
           type: "found",
@@ -205,7 +213,7 @@ export function homeState(scenario: HomeScenario) {
           },
         };
       case "checkBackup":
-        if (call.passphrase !== "correct horse battery")
+        if (call.passphrase !== "correct horse battery" && call.passphrase !== "already here")
           return { type: "error", code: "wrongPassphrase" };
         return {
           type: "backupChecked",
@@ -222,12 +230,24 @@ export function homeState(scenario: HomeScenario) {
               awayUsed: false,
               bytes: 412_000_000,
             },
-            here: null,
+            here:
+              call.passphrase === "already here"
+                ? {
+                    memories: 0,
+                    pages: 0,
+                    originals: 2,
+                    lastKept: at("08:12"),
+                    keptAfterBackup: 2,
+                    bytes: 1,
+                  }
+                : null,
             putAside: null,
           },
         };
       case "restoreBackup":
+        if (call.replace) return { type: "error", code: "invalid" };
         mode = "alone";
+        broken = false;
         damaged = false;
         rows = keptRows();
         void emit("mode_changed", mode);
@@ -249,10 +269,13 @@ export function homeState(scenario: HomeScenario) {
         return mode;
       case "memory_damaged":
         return damaged ? "store-put-aside-1" : null;
-      case "start_alone":
+      case "start_alone": {
+        const name = String(args.name ?? "").trim();
+        if (name === "" || name.length > 40) throw "invalid";
         mode = "alone";
         void emit("mode_changed", mode);
         return null;
+      }
       case "home_call":
         return remote(args.call as RemoteCall);
       case "home_local":

@@ -84,5 +84,6 @@
   "phone.alone.damaged.title": "Nocturne couldn’t open your memory on this phone.",
   "phone.alone.damaged.body": "Nothing was deleted. Bring back a backup, or ask for help.",
   "phone.alone.damaged.help": "Get help",
-  "phone.alone.full": "This phone is nearly full. Free some room so Nocturne can keep more."
+  "phone.alone.full": "This phone is nearly full. Free some room so Nocturne can keep more.",
+  "phone.alone.heard": "Heard by this phone"
 }

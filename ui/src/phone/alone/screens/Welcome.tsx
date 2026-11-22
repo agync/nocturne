@@ -44,7 +44,15 @@ export function AloneWelcome({
 }
 
 /** "Your memory lives on this phone": what works now, what waits for a mind, then Start. */
-export function Start({ busy, onStart }: { busy: boolean; onStart(): void }) {
+export function Start({
+  busy,
+  failed,
+  onStart,
+}: {
+  busy: boolean;
+  failed: boolean;
+  onStart(): void;
+}) {
   const heading = useHeading("start");
   const works = [
     t("phone.alone.start.works.keep"),
@@ -91,6 +99,11 @@ export function Start({ busy, onStart }: { busy: boolean; onStart(): void }) {
         <p className="ph-limit">{chips("phone.alone.start.lostPhone")}</p>
       </main>
       <footer className="ph-foot">
+        {failed ? (
+          <p className="ph-error" role="alert">
+            {t("setup.action.failed")}
+          </p>
+        ) : null}
         <Button kind="primary" disabled={busy} onClick={onStart}>
           {t("phone.alone.start.button")}
         </Button>
@@ -106,7 +119,7 @@ export function Damaged({ onBackup, onHelp }: { onBackup(): void; onHelp(): void
     <Page bar={null}>
       <main className="ph-main">
         <div className="ph-hero" style={{ paddingTop: 72 }} role="alert">
-          <span className="ph-hero-icon ph-hero-icon--ember">
+          <span className="ph-hero-icon">
             <Icon name="info" size={36} />
           </span>
           <h1 className="ph-h1" tabIndex={-1} ref={heading}>

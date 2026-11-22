@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PairedDevice } from "../engine";
+import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
 import { Restore } from "../alone/screens/Backup";
 import { AloneWelcome, Damaged, Start } from "../alone/screens/Welcome";
+import { cleanDeviceName } from "../crypto";
+import type { PairedDevice } from "../engine";
 import { Pair } from "../screens/Pair";
 import type { PairingLike } from "../services";
 import { AddressStep, CameraOff, CodeStep, NativeWelcome } from "./Entry";
@@ -23,7 +25,7 @@ const SITE = "https://nocturne.is/";
 type Screen =
   | { name: "loading" }
   | { name: "first" }
-  | { name: "start"; busy: boolean }
+  | { name: "start"; busy: boolean; failed: boolean }
   | { name: "restore" }
   | { name: "damaged" }
   | { name: "alone"; offer: boolean }
@@ -54,19 +56,25 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [waiting, setWaiting] = useState(0);
   const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
   // A restore says where the memory lives before its own "back on this phone" is read.
   const shown = useRef(screen.name);
   shown.current = screen.name;
 
   useEffect(() => {
-    void services.deviceName?.().then((n) => setName(n ?? ""));
+    void services.deviceName?.().then((own) => {
+      const clean = own ? cleanDeviceName(own.trim()) : "";
+      if (clean !== "") setName(clean);
+    });
   }, [services]);
 
   const home = useCallback(
     async (unreached = false, offer = false) => {
+      const mode = await services.home.mode();
+      // A damaged memory is found when it is first opened: open it before asking.
+      if (mode === "alone") await services.home.stats().catch(() => undefined);
       if (await services.home.damaged()) return setScreen({ name: "damaged" });
-      if ((await services.home.mode()) === "alone")
+      if (mode === "alone")
         return setScreen((now) =>
           now.name === "alone" && !offer ? now : { name: "alone", offer },
         );
@@ -94,6 +102,16 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       stopMode();
     };
   }, [services, home]);
+
+  // From the pairing Welcome, the phone's back gesture returns to the first Welcome.
+  useEffect(() => {
+    const pairing = new Set(["welcome", "cameraOff", "address", "code"]);
+    const onPop = () => {
+      if (pairing.has(shown.current)) void home();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [home]);
 
   useEffect(() => {
     const changed = () => setRoute(routeOf(location.hash));
@@ -153,8 +171,11 @@ export function NativeRoot({ services }: { services: NativeServices }) {
     case "first":
       return (
         <AloneWelcome
-          onStart={() => setScreen({ name: "start", busy: false })}
-          onConnect={() => setScreen({ name: "welcome", unreached: false })}
+          onStart={() => setScreen({ name: "start", busy: false, failed: false })}
+          onConnect={() => {
+            history.pushState({ root: "pairing" }, "");
+            setScreen({ name: "welcome", unreached: false });
+          }}
           onBackup={() => setScreen({ name: "restore" })}
         />
       );
@@ -162,13 +183,14 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       return (
         <Start
           busy={screen.busy}
+          failed={screen.failed}
           onStart={async () => {
-            setScreen({ name: "start", busy: true });
+            setScreen({ name: "start", busy: true, failed: false });
             try {
               await services.home.startAlone(name);
               setScreen({ name: "alone", offer: true });
             } catch {
-              setScreen({ name: "start", busy: false });
+              setScreen({ name: "start", busy: false, failed: true });
             }
           }}
         />
@@ -193,6 +215,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           channel={nativeChannel}
           offer={screen.offer}
           name={name}
+          onLost={() => void home()}
         />
       );
     case "welcome":
