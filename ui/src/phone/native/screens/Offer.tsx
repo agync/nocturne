@@ -54,6 +54,7 @@ export function Offer({
   onCalendar,
   onHealth,
   onDone,
+  alone = false,
 }: {
   channel: NativeChannel;
   /**
@@ -66,6 +67,8 @@ export function Offer({
   onCalendar(): void;
   onHealth(): void;
   onDone(): void;
+  /** A phone alone: it takes both itself, and its lead says so. */
+  alone?: boolean;
 }) {
   const [sources, setSources] = useState<ThisPhoneSources | null>(null);
   const heading = useHeading("offer");
@@ -77,15 +80,16 @@ export function Offer({
     channel.sources().then(
       (s) => {
         if (gone) return;
-        if (connected && !offered(s, "calendar") && !offered(s, "health")) return done.current();
-        setSources(connected ? s : { ...s, computerTakes: ["calendar", "health"] });
+        const known = connected && !alone;
+        if (known && !offered(s, "calendar") && !offered(s, "health")) return done.current();
+        setSources(known ? s : { ...s, computerTakes: ["calendar", "health"] });
       },
       () => !gone && done.current(),
     );
     return () => {
       gone = true;
     };
-  }, [channel, connected]);
+  }, [channel, connected, alone]);
 
   if (!sources) return null;
   return (
@@ -94,7 +98,9 @@ export function Offer({
         <h1 className="ph-h1 ph-h1--big" tabIndex={-1} ref={heading}>
           {t("phone.app.offer.title")}
         </h1>
-        <p className="ph-body">{placesRich("phone.app.offer.lead")}</p>
+        <p className="ph-body">
+          {placesRich(alone ? "phone.alone.offer.lead" : "phone.app.offer.lead")}
+        </p>
         <Group>
           {offered(sources, "calendar") ? (
             <Row

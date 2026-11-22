@@ -21,6 +21,7 @@ import {
   PhoneRequestError,
   type Queue,
 } from "../engine";
+import { KeptLine, waitsToBeRead } from "../alone/screens/kept";
 import { afterSheet, BottomSheet } from "./Dialog";
 import { FromHealthCard } from "./FromHealthCard";
 import { Button, Icon, Page } from "./ui";
@@ -58,6 +59,10 @@ interface JournalProps {
   tabBar?: (action: ReactNode | null) => ReactNode;
   /** The app: what the phone brought (the night, workouts, From Health) shows on the day. */
   phone?: boolean;
+  /**
+   * A phone alone, with no mind: things not yet read say so, and no reflection is offered.
+   */
+  noMind?: boolean;
 }
 
 function entryParagraphs(blocks: readonly EntryBlock[]): string[] {
@@ -147,11 +152,13 @@ function Row({
   row,
   day,
   phone,
+  noMind,
   afterSleep,
   onOpen,
 }: {
   row: TimelineRow;
   day: JournalDay;
+  noMind: boolean;
   /** In the app, appointments read as plans and the night and workouts as Health. */
   phone: boolean;
   /** The day's first check-in, after the night: "after {asleep} asleep". */
@@ -162,7 +169,9 @@ function Row({
   const checkin = row.checkin;
   const quote = checkin?.line ? `“${checkin.line}”` : null;
   const body =
-    phone && row.kind === "calendar" ? (
+    noMind && waitsToBeRead(row) ? (
+      <KeptLine row={row} />
+    ) : phone && row.kind === "calendar" ? (
       <span className="ph-calrow">
         <span>{row.item.title}</span>
         <span className="ph-caltag">
@@ -501,7 +510,9 @@ export function Journal(p: JournalProps) {
         </>
       ) : (
         <>
-          {!reflection && !empty ? (
+          {!reflection && !empty && p.noMind ? (
+            <p className="ph-hint ph-hint--ink2">{t("phone.alone.noReflection")}</p>
+          ) : !reflection && !empty ? (
             <Button kind="primary" onClick={() => p.onReflect(day0.day, known)}>
               {day0.today ? t("journal.day.reflect") : t("journal.day.reflectPast")}
             </Button>
@@ -523,7 +534,7 @@ export function Journal(p: JournalProps) {
     <Page bar={bar} className={inTab ? "ph-journal ph-tabbed" : "ph-journal"}>
       <main className="ph-main ph-main--tight" style={{ gap: 14 }}>
         <p className="ph-lbl">{eyebrow}</p>
-        {load.notReady ? (
+        {load.notReady && !p.noMind ? (
           <div className="ph-card" role="status" style={{ gap: 4 }}>
             <p className="ph-card-title">{t("journal.notReady.title")}</p>
             <p className="ph-hint ph-hint--ink2">{t("journal.notReady.body")}</p>
@@ -602,6 +613,7 @@ export function Journal(p: JournalProps) {
                   row={row}
                   day={day0}
                   phone={p.phone === true}
+                  noMind={p.noMind === true}
                   afterSleep={row.item.id === firstCheckIn && night ? afterSleep : null}
                   onOpen={p.onOpen}
                 />

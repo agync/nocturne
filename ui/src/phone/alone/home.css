@@ -1,0 +1,384 @@
+/* A phone alone: the parts its screens add to the phone app's own. */
+
+.ph-cc {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ph-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding-top: 48px;
+}
+
+.ph-hero h1 {
+  text-wrap: balance;
+}
+
+.ph-hero .ph-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.ph-hero-icon {
+  color: var(--ink);
+}
+
+.ph-hero-icon--ember {
+  color: var(--ember);
+}
+
+.ph-steph {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.625rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.ph-small {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ph-see-head {
+  margin: 0;
+  color: var(--ink2);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ph-see {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-see li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.ph-see li svg {
+  margin-top: 2px;
+  color: var(--ink2);
+}
+
+.ph-see--no li svg {
+  color: var(--ink3);
+}
+
+.ph-see-num {
+  font-family: var(--font-mono);
+  color: var(--ink2);
+}
+
+.ph-limit {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.ph-nomind {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed var(--ink3);
+}
+
+.ph-nomind h2 {
+  margin: 0;
+  font: 400 1.375rem / 1.25 var(--font-serif);
+}
+
+.ph-btn--tonal {
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.ph-reminder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+
+.ph-reminder p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.ph-reminder-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ph-reminder-actions > * {
+  flex: 1;
+}
+
+.ph-feelcard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.ph-feelcard-act {
+  color: var(--accent);
+}
+
+.ph-kept-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-kept-list > li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.ph-kept-list > li:last-child {
+  border-bottom: 0;
+}
+
+.ph-kept-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.ph-kept-at {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.6 var(--font-mono);
+}
+
+.ph-kept-row span svg {
+  vertical-align: -2px;
+}
+
+.ph-wait {
+  color: var(--ink3);
+  font-size: 0.8125rem;
+}
+
+.ph-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 4px 0 16px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--raised);
+}
+
+.ph-find input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.ph-find input::placeholder {
+  color: var(--ink2);
+}
+
+.ph-find:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ph-find-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-top: 56px;
+  text-align: center;
+}
+
+.ph-main .ph-find-empty svg {
+  color: var(--ink3);
+}
+
+.ph-found-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.ph-found-row mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+.ph-found-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.5 var(--font-mono);
+}
+
+.ph-found-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.ph-filecard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.ph-filecard .ph-srow-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ph-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 0.9375rem;
+}
+
+.ph-check input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--ink);
+}
+
+.ph-bar-line {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.ph-foot--plain {
+  border-top: 0;
+}
+
+.ph-btn--ember {
+  border-color: var(--ember);
+  background: var(--ember);
+  color: var(--sheet);
+}
+
+.ph-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.ph-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.ph-textbtn {
+  min-height: 48px;
+  width: 100%;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.ph-link--center {
+  align-self: center;
+  justify-content: center;
+}
+
+.ph-center {
+  text-align: center;
+}
+
+.ph-ink2 {
+  color: var(--ink2);
+}

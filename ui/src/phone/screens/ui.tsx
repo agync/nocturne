@@ -79,6 +79,9 @@ const PATHS = {
     "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",
     "M14 2v4a2 2 0 0 0 2 2h4",
   ],
+  phone: ["M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z", "M12 18h.01"],
+  info: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z", "M12 16v-4", "M12 8h.01"],
+  close: ["M18 6 6 18", "m6 6 12 12"],
 } as const;
 
 export type IconName = keyof typeof PATHS;

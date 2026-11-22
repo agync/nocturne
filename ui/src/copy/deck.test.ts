@@ -37,6 +37,7 @@ describe("the copy deck is split by area", () => {
       "online",
       "page",
       "phone",
+      "phone-alone",
       "phone-app",
       "phone-health",
       "phone-native",

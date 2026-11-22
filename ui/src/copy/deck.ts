@@ -22,6 +22,7 @@ import notice from "./en-GB/notice.json";
 import online from "./en-GB/online.json";
 import page from "./en-GB/page.json";
 import phone from "./en-GB/phone.json";
+import phoneAlone from "./en-GB/phone-alone.json";
 import phoneApp from "./en-GB/phone-app.json";
 import phoneHealth from "./en-GB/phone-health.json";
 import phoneNative from "./en-GB/phone-native.json";
@@ -60,6 +61,7 @@ export const enGB = {
   ...phoneNative,
   ...phoneApp,
   ...phoneHealth,
+  ...phoneAlone,
   ...phones,
   ...health,
   ...online,

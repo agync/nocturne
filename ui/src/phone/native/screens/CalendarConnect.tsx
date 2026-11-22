@@ -13,7 +13,16 @@ type Step = "loading" | "why" | "refused" | "settings";
  * calendars" when allowed or "stays on this phone" when not. Once brought, the same screen is
  * the calendar's settings.
  */
-export function CalendarConnect({ channel, onDone }: { channel: NativeChannel; onDone(): void }) {
+export function CalendarConnect({
+  channel,
+  onDone,
+  alone = false,
+}: {
+  channel: NativeChannel;
+  onDone(): void;
+  /** A phone alone: the calendar stays in this phone's own memory. */
+  alone?: boolean;
+}) {
   const [step, setStep] = useState<Step>("loading");
   const [access, setAccess] = useState<CalendarAccess>("ask");
 
@@ -53,6 +62,7 @@ export function CalendarConnect({ channel, onDone }: { channel: NativeChannel; o
     case "why":
       return (
         <CalendarWhy
+          alone={alone}
           blocked={access === "blocked"}
           onContinue={() => void ask()}
           onSettings={() => void openAppSettings()}
@@ -67,11 +77,13 @@ export function CalendarConnect({ channel, onDone }: { channel: NativeChannel; o
 }
 
 export function CalendarWhy({
+  alone = false,
   blocked,
   onContinue,
   onSettings,
   onNotNow,
 }: {
+  alone?: boolean;
   /** The phone will no longer ask: the way on is its settings. */
   blocked: boolean;
   onContinue(): void;
@@ -84,11 +96,15 @@ export function CalendarWhy({
       <main className="ph-main ph-bring">
         <span className="ph-lbl">{t("phone.calendar.label")}</span>
         <h1 className="ph-h1" tabIndex={-1} ref={heading}>
-          {t("phone.calendar.why.title")}
+          {alone ? t("phone.alone.calendar.why.title") : t("phone.calendar.why.title")}
         </h1>
         <p className="ph-body">{t("phone.calendar.why.what")}</p>
-        <p className="ph-body">{t("phone.calendar.why.where")}</p>
-        <p className="ph-body">{t("phone.calendar.why.for")}</p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.calendar.why.where") : t("phone.calendar.why.where")}
+        </p>
+        <p className="ph-body">
+          {alone ? t("phone.alone.calendar.why.for") : t("phone.calendar.why.for")}
+        </p>
         <p className="ph-body">{t("phone.calendar.why.never")}</p>
         {blocked ? (
           <p className="ph-hint">{t("phone.calendar.off.title")}</p>

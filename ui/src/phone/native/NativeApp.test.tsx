@@ -72,7 +72,7 @@ describe("the app's bar, Keep and This phone", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect this phone…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
     expect(
-      await screen.findByRole("heading", { name: "Nocturne lives on your computer" }),
+      await screen.findByRole("heading", { name: "Nocturne remembers your day" }),
     ).toBeInTheDocument();
   });
 
