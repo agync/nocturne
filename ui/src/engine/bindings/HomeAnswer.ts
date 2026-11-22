@@ -6,6 +6,7 @@ import type { ForgetReport } from "./ForgetReport";
 import type { FoundItem } from "./FoundItem";
 import type { HomeError } from "./HomeError";
 import type { HomeStats } from "./HomeStats";
+import type { ItemKept } from "./ItemKept";
 import type { KeptCounts } from "./KeptCounts";
 import type { PhoneDeletePreview } from "./PhoneDeletePreview";
 import type { PhoneItem } from "./PhoneItem";
@@ -16,4 +17,4 @@ export type HomeAnswer = { "type": "found", items: Array<FoundItem>, } | { "type
 /**
  * The columns of the backup, and of this phone when it holds anything.
  */
-backup: KeptCounts, here: KeptCounts | null, } | { "type": "restored" } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "privateSet", item: PhoneItem, } | { "type": "putAside", memories: Array<PutAsideMemory>, } | { "type": "putAsideDeleted" } | { "type": "sourceDeletePreview", preview: PhoneDeletePreview, } | { "type": "sourceDeleted" } | { "type": "error", code: HomeError, };
+backup: KeptCounts, here: KeptCounts | null, } | { "type": "restored" } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "privateSet", item: PhoneItem, } | { "type": "putAside", memories: Array<PutAsideMemory>, } | { "type": "putAsideDeleted" } | { "type": "sourceDeletePreview", preview: PhoneDeletePreview, } | { "type": "sourceDeleted" } | { "type": "keptHowSet" } | { "type": "itemKept", kept: ItemKept, } | { "type": "error", code: HomeError, };

@@ -97,6 +97,33 @@ pub struct PutAsideMemory {
     pub counts: Option<KeptCounts>,
 }
 
+/// How a thing came to be kept, for the Kept row on its page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum KeptHow {
+    Typed,
+    Taken,
+    Chosen,
+    Recorded,
+    Shared,
+    Calendar,
+    Health,
+}
+
+/// What a thing's page on a phone alone says of how it was kept.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ItemKept {
+    /// How it was kept on this phone; none when it was kept elsewhere or not noted.
+    pub how: Option<KeptHow>,
+    /// The phone it was kept on, when that was another one.
+    pub device: Option<String>,
+    /// Nocturne worked something out from it, so there is something to forget.
+    pub worked_out: bool,
+}
+
 /// What a phone that keeps its own memory shows of it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -194,11 +221,21 @@ pub enum HomeCall {
     PreviewSourceDelete {
         source: PhoneSource,
     },
-    /// Apply that preview. `also_stop` (the calendar only): the phone stops bringing it.
+    /// Apply that preview. `also_stop`: the phone stops bringing that source.
     DeleteSource {
         token: String,
         source: PhoneSource,
         also_stop: bool,
+    },
+    /// Note how a thing was just kept on this phone. Calendar and Health are not noted: they
+    /// say so themselves.
+    SetKeptHow {
+        id: String,
+        how: KeptHow,
+    },
+    /// How a thing was kept, for its page.
+    ItemKept {
+        id: String,
     },
     /// Forget what was learned from one thing kept; `with_original` deletes the thing too.
     PreviewForgetItem {
@@ -253,6 +290,10 @@ pub enum HomeAnswer {
         preview: PhoneDeletePreview,
     },
     SourceDeleted,
+    KeptHowSet,
+    ItemKept {
+        kept: ItemKept,
+    },
     Error {
         code: HomeError,
     },

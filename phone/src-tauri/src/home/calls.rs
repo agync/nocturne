@@ -8,8 +8,9 @@ use std::sync::atomic::AtomicBool;
 use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::MAX_QUESTION;
 use nocturne_contract::{
-    BackupPhase, BackupReport, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, KeptCounts,
-    MemoryCounts, MemoryFilter, PhoneDeleteScope, PhoneMode, PhoneSource, RestoreCheck,
+    BackupPhase, BackupReport, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, ItemKept,
+    ItemKind, KeptCounts, KeptHow, MemoryCounts, MemoryFilter, PhoneDeleteScope, PhoneMode,
+    PhoneSource, RestoreCheck, Source,
 };
 use nocturne_engine::{BackupRun, DELETE_PHRASE, Engine, FIND_CAP};
 
@@ -112,6 +113,8 @@ impl Home {
                     .map(|_| HomeAnswer::SourceDeleted)
                     .map_err(|e| code(&e))
             }),
+            HomeCall::SetKeptHow { id, how } => self.set_kept_how(&id, how),
+            HomeCall::ItemKept { id } => self.item_kept(&id),
             HomeCall::PreviewForgetItem { id, with_original } => {
                 self.preview_forget_item(&id, with_original)
             }
@@ -368,6 +371,60 @@ impl Home {
         let item = open.engine.get_item(id).map_err(|e| code(&e))?;
         Ok(HomeAnswer::PrivateSet {
             item: super::dispatch::phone_item(&item),
+        })
+    }
+
+    fn set_kept_how(&self, id: &str, how: KeptHow) -> Result<HomeAnswer, HomeError> {
+        if check_id(id).is_err() || matches!(how, KeptHow::Calendar | KeptHow::Health) {
+            return Err(HomeError::Invalid);
+        }
+        let word = match how {
+            KeptHow::Typed => "typed",
+            KeptHow::Taken => "taken",
+            KeptHow::Chosen => "chosen",
+            KeptHow::Recorded => "recorded",
+            _ => "shared",
+        };
+        let (_use, open) = self.using()?;
+        open.engine
+            .set_kept_how(id, word)
+            .map(|()| HomeAnswer::KeptHowSet)
+            .map_err(|e| code(&e))
+    }
+
+    fn item_kept(&self, id: &str) -> Result<HomeAnswer, HomeError> {
+        if check_id(id).is_err() {
+            return Err(HomeError::Invalid);
+        }
+        let (_use, open) = self.using()?;
+        let e = &open.engine;
+        let item = e.get_item(id).map_err(|x| code(&x))?;
+        let noted = e.kept_how(id).map_err(|x| code(&x))?;
+        let here = e
+            .local_device()
+            .ok()
+            .flatten()
+            .map(|d| d.name)
+            .unwrap_or_default();
+        let device = item.from_device.clone().filter(|d| *d != here);
+        let how = match (item.kind, noted.as_deref()) {
+            (ItemKind::Calendar, _) => Some(KeptHow::Calendar),
+            (ItemKind::Reading, _) => Some(KeptHow::Health),
+            _ if device.is_some() => None,
+            (_, Some("typed")) => Some(KeptHow::Typed),
+            (_, Some("taken")) => Some(KeptHow::Taken),
+            (_, Some("chosen")) => Some(KeptHow::Chosen),
+            (_, Some("recorded")) => Some(KeptHow::Recorded),
+            (_, Some("shared")) => Some(KeptHow::Shared),
+            _ if item.source == Source::PastedWeb => Some(KeptHow::Shared),
+            _ => None,
+        };
+        Ok(HomeAnswer::ItemKept {
+            kept: ItemKept {
+                how,
+                device,
+                worked_out: item.memory_count > 0,
+            },
         })
     }
 

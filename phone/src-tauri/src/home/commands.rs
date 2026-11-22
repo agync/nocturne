@@ -152,9 +152,12 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
         let syncer = &worker.state::<AppState>().syncer;
         // What the phone brings and the store change together: no send runs in between.
         let _hold = (deletes || source.is_some()).then(|| syncer.hold());
-        if let Some((PhoneSource::Calendar, true)) = source {
+        if let Some((source, true)) = source {
             // Stopped first, so nothing read meanwhile comes back after the delete.
-            syncer.ledger.update(|l| l.calendar.settings.bring = false);
+            syncer.ledger.update(|l| match source {
+                PhoneSource::Calendar => l.calendar.settings.bring = false,
+                PhoneSource::Health => l.health.settings.bring = false,
+            });
         }
         let answer = worker.state::<Home>().local_call(call, paired, &progress);
         match (&answer, source) {
@@ -193,6 +196,9 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
 /// brought again the next time it is read. Health readings are not brought again.
 pub(crate) fn forget_source_sends(ledger: &LedgerFile, source: PhoneSource, also_stop: bool) {
     if source != PhoneSource::Calendar {
+        if also_stop {
+            ledger.update(|l| l.health.settings.bring = false);
+        }
         return;
     }
     ledger.update(|l| {
