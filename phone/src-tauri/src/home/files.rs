@@ -8,8 +8,8 @@ use nocturne_contract::{HomeAnswer, HomeError};
 use serde::Serialize;
 use tauri_plugin_nocturne_system::Sheet;
 
-use super::Home;
 use super::calls::{Progress, clear};
+use super::{Home, Job};
 
 /// The folder of the app's cache a backup is made in before the save sheet takes it.
 pub const OUTBOX: &str = "backup-out";
@@ -45,6 +45,14 @@ fn from_millis(ms: i64) -> Option<String> {
 }
 
 impl Home {
+    /// One sheet and its copy at a time: a second ask while one is up is `NotReady`.
+    fn begin_sheet(&self) -> Result<Job<'_>, HomeError> {
+        if self.sheet.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return Err(HomeError::NotReady);
+        }
+        Ok(Job(&self.sheet))
+    }
+
     /// Make a backup in `outbox` and offer it on the save sheet. `None` when the person closed the
     /// sheet: nothing was saved, and the last backup stays as it was.
     pub fn save_backup_file(
@@ -55,6 +63,10 @@ impl Home {
         progress: Progress<'_>,
     ) -> Option<HomeAnswer> {
         let fail = |code| Some(HomeAnswer::Error { code });
+        let _sheet = match self.begin_sheet() {
+            Ok(sheet) => sheet,
+            Err(code) => return fail(code),
+        };
         let name = match self.using() {
             Ok((_use, open)) => open.engine.suggested_backup_name(),
             Err(code) => return fail(code),
@@ -93,6 +105,7 @@ impl Home {
         inbox: &Path,
         sheets: &dyn Sheets,
     ) -> Result<Option<ChosenBackup>, HomeError> {
+        let _sheet = self.begin_sheet()?;
         clear(inbox);
         let chosen = match sheets.choose(inbox) {
             Sheet::Chosen(chosen) => chosen,
@@ -342,6 +355,26 @@ mod tests {
             home.choose_backup_file(&inbox, &Elsewhere(file)),
             Err(HomeError::Failed)
         );
+    }
+
+    #[test]
+    fn a_second_sheet_waits_for_the_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = alone(tmp.path());
+        let _up = home.begin_sheet().unwrap();
+        let fake = Fake::new(tmp.path());
+        let answer = home.save_backup_file(&tmp.path().join(OUTBOX), PASS, &fake, &no_progress);
+        assert_eq!(
+            answer,
+            Some(HomeAnswer::Error {
+                code: HomeError::NotReady
+            })
+        );
+        assert_eq!(
+            home.choose_backup_file(&tmp.path().join(INBOX), &fake),
+            Err(HomeError::NotReady)
+        );
+        assert!(!fake.place.exists());
     }
 
     #[test]

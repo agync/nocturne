@@ -70,6 +70,8 @@ pub struct Home {
     gate: RwLock<()>,
     /// A backup, check or restore under way: one at a time.
     job: AtomicBool,
+    /// One of the phone's save or open sheets is up, or its file is on the way: one at a time.
+    pub(crate) sheet: AtomicBool,
     pub(crate) voice: voice::Voice,
     /// Held while fading runs, so a second ask for the same day waits and then finds it done.
     fading: Mutex<()>,
@@ -134,6 +136,7 @@ impl Home {
             open: Mutex::new(None),
             gate: RwLock::new(()),
             job: AtomicBool::new(false),
+            sheet: AtomicBool::new(false),
             voice: voice::Voice::default(),
             fading: Mutex::new(()),
             work_factor: None,
