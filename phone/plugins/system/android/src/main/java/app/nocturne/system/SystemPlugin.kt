@@ -21,6 +21,7 @@ import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 @InvokeArg
 class SaveArgs {
@@ -44,6 +45,9 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
     private var insets = CssInsets(0.0, 0.0, 0.0, 0.0)
     @Volatile private var route: String? = null
     @Volatile private var share: Intent? = null
+
+    /** A save or open sheet is up: the phone keeps one answer waiting at a time. */
+    private val sheetUp = AtomicBoolean(false)
 
     companion object {
         /** The largest file kept from a share, as the computer takes at most. */
@@ -248,11 +252,22 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("application/octet-stream")
             .putExtra(Intent.EXTRA_TITLE, args.name)
-        startActivityForResult(invoke, intent, "saveChosen")
+        showSheet(invoke, intent, "saveChosen")
+    }
+
+    private fun showSheet(invoke: Invoke, intent: Intent, callback: String) {
+        if (!sheetUp.compareAndSet(false, true)) return outcome(invoke, FileOutcome.Failed)
+        try {
+            startActivityForResult(invoke, intent, callback)
+        } catch (e: Exception) {
+            sheetUp.set(false)
+            outcome(invoke, FileOutcome.Failed)
+        }
     }
 
     @ActivityCallback
     fun saveChosen(invoke: Invoke, result: ActivityResult) {
+        sheetUp.set(false)
         val uri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             return outcome(invoke, FileOutcome.Cancelled)
@@ -283,11 +298,12 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("*/*")
-        startActivityForResult(invoke, intent, "fileChosen")
+        showSheet(invoke, intent, "fileChosen")
     }
 
     @ActivityCallback
     fun fileChosen(invoke: Invoke, result: ActivityResult) {
+        sheetUp.set(false)
         val uri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             return outcome(invoke, FileOutcome.Cancelled)

@@ -85,9 +85,10 @@ class SystemPlugin: Plugin {
 
   private func present(_ picker: UIDocumentPickerViewController, _ sheet: Sheet, _ invoke: Invoke) {
     DispatchQueue.main.async {
-      guard let root = self.manager.viewController else {
+      guard self.sheet == nil, var root = self.manager.viewController else {
         return invoke.resolve(["outcome": "failed"])
       }
+      while let shown = root.presentedViewController { root = shown }
       self.sheet = sheet
       picker.delegate = sheet
       picker.presentationController?.delegate = sheet
