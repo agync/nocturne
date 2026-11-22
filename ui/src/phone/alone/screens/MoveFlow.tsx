@@ -27,13 +27,23 @@ export type MoveError =
   | "notOpened"
   | "stoppedThere";
 
+/** The computer's answer to the offer. */
+export interface MoveOffered {
+  opened: boolean;
+  here: MemoryCounts | null;
+}
+
 /** The phone's way to move its memory to the computer it has just paired with. */
 export interface MoveApi {
   /** The computer's name, from the session the pairing opened. */
   computer(): Promise<string>;
   facts(): Promise<MoveFacts>;
-  /** Offers the memory and waits for the person on the computer; answers what it holds. */
-  offer(): Promise<MemoryCounts | null>;
+  /**
+   * Offers the memory and waits for the person on the computer: what it holds, or that the
+   * memory already opened there (a move whose phone went away part way, which only has to
+   * finish).
+   */
+  offer(): Promise<MoveOffered>;
   /** "Move my memory": answers how many things arrived. Rejects with a `MoveError`. */
   move(onProgress: (p: MoveProgress) => void): Promise<{ items: number }>;
   stop(): Promise<void>;
@@ -41,6 +51,8 @@ export interface MoveApi {
   undo(): Promise<void>;
   /** What becomes of the memory put aside here: removed now, or kept for 30 days. */
   putAside(remove: boolean): Promise<void>;
+  /** A move is part way: this phone still holds its memory and a pairing for it. */
+  pending(): Promise<boolean>;
 }
 
 const errorOf = (e: unknown): MoveError => (typeof e === "string" ? (e as MoveError) : "failed");
@@ -62,7 +74,7 @@ export const nativeMoveApi: MoveApi = {
     return state.hello?.computerName ?? "";
   },
   facts: () => invoke<MoveFacts>("move_facts"),
-  offer: () => invoke<MemoryCounts | null>("move_offer").catch((e) => Promise.reject(errorOf(e))),
+  offer: () => invoke<MoveOffered>("move_offer").catch((e) => Promise.reject(errorOf(e))),
   move: async (onProgress) => {
     const stop = await listen<MoveProgress>("move-progress", (e) => onProgress(e.payload));
     try {
@@ -76,6 +88,7 @@ export const nativeMoveApi: MoveApi = {
   stop: () => invoke<void>("move_stop"),
   undo: () => invoke<void>("move_undo"),
   putAside: (remove) => invoke<void>("move_put_aside", { remove }),
+  pending: () => invoke<boolean>("move_pending").then(Boolean, () => false),
 };
 
 type Step =
@@ -104,7 +117,7 @@ export function MoveFlow({
   const [computer, setComputer] = useState("");
   const [facts, setFacts] = useState<MoveFacts | null>(null);
   const [progress, setProgress] = useState<MoveProgress | null>(null);
-  const offer = useRef<Promise<MemoryCounts | null> | null>(null);
+  const offer = useRef<Promise<MoveOffered> | null>(null);
   const leaving = useRef(false);
 
   const exit = (undo: boolean) => {
@@ -123,11 +136,17 @@ export function MoveFlow({
     return sent;
   };
 
-  // The pairing just opened the session: the question and the offer go at once.
+  // The pairing just opened the session: the question and the offer go at once. A memory that
+  // already opened there finishes straight away.
   useEffect(() => {
     void api.computer().then(setComputer, () => undefined);
     void api.facts().then(setFacts, () => undefined);
-    ask();
+    ask().then(
+      (answer) => {
+        if (answer.opened) void move();
+      },
+      () => undefined,
+    );
   }, []);
 
   const move = async () => {

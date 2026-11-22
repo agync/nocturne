@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemoryCounts } from "../../../engine/bindings";
-import { type MoveApi, type MoveError, MoveFlow } from "./MoveFlow";
+import { type MoveApi, type MoveError, MoveFlow, type MoveOffered } from "./MoveFlow";
 import { MEASURE_MS, MoveMoving, type MoveProgress } from "./MoveScreens";
 
 afterEach(cleanup);
@@ -11,12 +11,12 @@ const COUNTS: MemoryCounts = { items: 1284, memories: 0, pages: 0, originals: 40
 interface Fake extends MoveApi {
   progress?: (p: MoveProgress) => void;
   finishMove(result: { items: number } | MoveError): void;
-  answerOffer(result: MemoryCounts | null | MoveError): void;
+  answerOffer(result: MemoryCounts | null | MoveError | "opened"): void;
 }
 
 function fakeApi(): Fake {
   let settleMove: ((r: { items: number } | MoveError) => void) | null = null;
-  let settleOffer: ((r: MemoryCounts | null | MoveError) => void) | null = null;
+  let settleOffer: ((r: MemoryCounts | null | MoveError | "opened") => void) | null = null;
   const api: Fake = {
     computer: vi.fn(async () => "Maya’s laptop"),
     facts: vi.fn(async () => ({
@@ -28,8 +28,13 @@ function fakeApi(): Fake {
     })),
     offer: vi.fn(
       () =>
-        new Promise<MemoryCounts | null>((ok, no) => {
-          settleOffer = (r) => (typeof r === "string" ? no(r) : ok(r));
+        new Promise<MoveOffered>((ok, no) => {
+          settleOffer = (r) =>
+            r === "opened"
+              ? ok({ opened: true, here: null })
+              : typeof r === "string"
+                ? no(r)
+                : ok({ opened: false, here: r });
         }),
     ),
     move: vi.fn(
@@ -42,6 +47,7 @@ function fakeApi(): Fake {
     stop: vi.fn(async () => undefined),
     undo: vi.fn(async () => undefined),
     putAside: vi.fn(async () => undefined),
+    pending: vi.fn(async () => false),
     finishMove: (r) => act(() => settleMove?.(r)),
     answerOffer: (r) => act(() => settleOffer?.(r)),
   };
@@ -254,6 +260,16 @@ describe("moving the memory to a computer", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     await waitFor(() => expect(onExit).toHaveBeenCalled());
+  });
+});
+
+describe("a move that went away part way", () => {
+  it("finishes straight away when the memory already opened there", async () => {
+    const api = fakeApi();
+    open(api);
+    api.answerOffer("opened");
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    expect(screen.getByRole("heading", { name: "Moving your memory" })).toBeInTheDocument();
   });
 });
 
