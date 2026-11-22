@@ -183,17 +183,15 @@ function MovePanel({ view }: { view: MoveView }) {
       body = <Progress value={1} max={1} label={t("moving.receive.checking", { name })} />;
       foot = stopButton;
       break;
+    // The line is the whole of it: the question above it is over.
     case "restarting":
-      body = <p role="status">{t("moving.receive.restarting", { name })}</p>;
+      title = t("moving.receive.restarting", { name });
       break;
     case "failed":
-      body = (
-        <p role="alert">
-          {view.why === "noRoom"
-            ? t("moving.failed.room", { name, size: formatBytes(view.room?.need ?? 0) })
-            : t("moving.failed.notOpened", { name })}
-        </p>
-      );
+      title =
+        view.why === "noRoom"
+          ? t("moving.failed.room", { name, size: formatBytes(view.room?.need ?? 0) })
+          : t("moving.failed.notOpened", { name });
       foot = (
         <Button
           variant="primary"
