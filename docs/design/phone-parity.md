@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Phone and computer as equal starting points
-description: Roadmap proposal for a Nocturne that can start on a phone as well as a computer, with a ladder from a phone alone, to a locked copy online and an online mind, to a household computer that lends its mind to the phones its owner invites, to a computer of one's own with companion phones, plus personas, journeys, what each mode shows, who sees what, consent, invariant and decision changes, phasing, risks and the owner's decisions.
+description: Roadmap proposal for a Nocturne that can start on a phone as well as a computer, with a ladder from a phone alone, to a locked copy online and an online mind, to a household computer that lends its mind to the phones its owner invites, to a computer of one's own with companion phones, plus personas, journeys, what each mode shows, who sees what, consent, invariant and decision changes, phasing, each roadmap item with its decisions and open questions, risks and the owner's decisions.
 status: draft
 tags: [proposal, roadmap, ux, phone, household, online-answers, privacy, copy]
 ---
@@ -382,6 +382,138 @@ flowchart LR
 | 4 | A household computer as someone's home, by pairing | Phase 3 (invitations, roles); one store and key per person; moving a memory | The larger promise: another person's memory on a computer someone else runs |
 | 5 | A household computer with no window (the server image) | Phase 4; 0012's blockers closed; Away from home without a window | Most households have no spare computer with a screen on all night |
 | Later | The phone's own mind | Quality and battery the owner accepts | The moonshot |
+| Alongside | Decision models that label what is kept, holding nothing back | [0016](/adr/0016-decision-models-shadow-first.md)'s shadow results; a mind | Labels help finding; they never decide what goes where |
+
+## Roadmap items
+
+Each item with its final decisions, what is still open (options and a recommendation), and what it
+depends on. Every person-facing part works from the phone unless a reason is written here.
+
+### A phone alone
+
+- **Decided.** The phone keeps its own memory with the computer's engine, no mind yet, one home at a
+  time, moved only by pairing ([0018](/adr/0018-a-phone-as-its-own-home.md)); voice notes in words
+  only by the phone's own offline recogniser (decision 9). Specified to build in [The first
+  release](phone-first.md#the-first-release-a-phone-alone).
+- **Depends on.** The native app; the engine built for the phone; the backup format.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| Voice notes in words where a platform can't do it offline from a recording | A: that platform ships with voice notes waiting. B: hold the release for it | **A**, as the spec allows |
+
+### A locked copy online
+
+- **Decided.** Decisions 1 to 5 and 19: a locked copy of the one home, in iCloud Drive or Google
+  Drive's hidden app folder, or storage the person runs; photos and recordings once each; a
+  passphrase once; the online backup, with the device backup out of scope; no sync of any kind
+  ([0019](/adr/0019-a-locked-copy-online.md)).
+- **Depends on.** A phone alone; 0019 and the invariant 2 change; an Apple developer account with
+  iCloud; Google's sign-in limited to the app folder.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| How often a copy is made | A: after each keep. B: at most once an hour after keeping, and daily. C: daily only | **B**: little is lost, and the phone is not woken for every note |
+| Storage the person runs | A: one kind of address (WebDAV) first. B: WebDAV and S3 | **A**; S3 when someone asks |
+
+### An online mind, and the phone's assistant
+
+- **Decided.** The phone's Claude, Gemini or ChatGPT app is not a route, and Nocturne inside an
+  assistant is parked (decision 21). A service with the person's own key on both phones, Android's
+  default moving to the phone's own mind once it ships (decision 6). Apple Intelligence after a trial
+  on iOS 27 (decision 7). It reads words, writes the page and answers, never photos or recordings
+  (decision 8); check-ins stay home (decision 10); nothing else is held back unless marked private
+  (decision 20) ([0020](/adr/0020-an-online-mind-on-a-phone.md)).
+- **Depends on.** A phone alone; 0020 and the invariant 2 change; for Apple, the trial.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| What makes the Apple trial pass | A: a typical day's reading (about 50 things) and its page fit inside one day's limit, at a quality the owner signs off on a fixed set. B: answers only | **A**; if only answers fit, offer it later as answers only, with its own consent |
+| Reading on mobile data | A: allowed. B: only on Wi-Fi. C: the person chooses | **A**: what goes is words, which are small; photos never go |
+
+### Household: borrowing its mind
+
+- **Decided.** By the owner's invitation only, a mind only, nothing kept of a borrowing phone beyond
+  its name and key, private things never sent, in turn with no daily share per phone, through Simple
+  (decisions 11, 14, 15, 16 and correction 1; [0021](/adr/0021-a-household-mind-for-invited-phones.md)).
+  Specified in [A household computer](household-server.md).
+- **Depends on.** A phone alone (the phone drives its own reading); online first, by the owner's
+  order; the guest calls and turn-taking on the computer.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| A daily share per phone, without keeping counts | A: none; the owner pauses a phone. B: a count kept only in memory, gone at midnight or a restart. C: a stored count | **A**: B is still a record of use, and C breaks correction 1 |
+| The live "Using the mind now" mark on the owner's screen | A: show it, from requests in flight only. B: show nothing | **A**: it tells the owner why their own answer is slow, and nothing is kept |
+
+### Household: hosting on a computer of one's own
+
+- **Decided.** The desktop app hosts first; the server image follows 0012's blockers (decision 12).
+  A Household page in Settings: invite with a chosen way, Allow, pause, remove.
+- **Depends on.** Borrowing its mind; Away from home in Simple.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| Which computers may host | A: any. B: only computers where the mind fits with room to spare, saying why otherwise | **B**, from the existing fit check, so hosting never slows the owner's own Nocturne into uselessness |
+| Managing the household from the owner's phone (phone parity) | A: the computer only. B: the owner's companion phone can see who is invited, pause and remove; inviting shows the code on the phone too | **B**, shipped after the computer page; no reason to keep it off the phone |
+
+### Household: a household computer as someone's home
+
+- **Decided.** Only by a separate invitation and the person's own pairing, then a move (correction
+  2). One store per person, locked with a key their phone holds and their passphrase; the key left
+  for one night so the tidy runs (decision 13); private things read like everything else, since it
+  is their home (decision 15); the phone keeps its recent pages to read while away (decision 17);
+  removal keeps the memory locked, deleted only after 30 days' notice (decision 18). Needs its own
+  decision record.
+- **Depends on.** Borrowing its mind (invitations, roles); moving a memory; a per-person store.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| Whose computer can be someone's home | A: a desktop with its own owner, and a household computer kept for the purpose. B: only one kept for the purpose | **A**: Gran's case is a desktop |
+| How the per-person store is locked at rest | A: the store file itself encrypted with the phone's key. B: a sealed file opened into memory only while read or tidied | **A**, settled in its decision record after a measured trial; B reads a whole store into memory each night |
+
+### Moving a memory between homes
+
+- **Decided.** One home holds the pen; a memory moves only by pairing; the backup format over the
+  sealed channel; nothing deleted until it has arrived and the person confirms; the locked copy stops
+  and the person chooses to delete or keep it (decision 19). Specified in [Moving your
+  memory](moving-memory.md).
+- **Depends on.** A phone alone for the first move (phone to computer); the household home for the
+  rest.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| The computer restarts Nocturne to finish a restore today | A: reopen the memory in place, so the move shows no restart. B: say "Nocturne restarts to finish" on the computer during a move | **A** if the build finds it small; otherwise **B**, with its words agreed here first |
+| A household home to a computer of one's own | A: through the phone, as designed. B: the two computers pair directly | **A**: no new pairing between machines; revisit if large memories make it slow |
+
+### The phone's own mind
+
+- **Decided.** The same engine as the computer's smallest mind, inside the app, with the phone's
+  built-in minds as a quicker way later; phones with 8 GB, Android 12, iOS 17; one more choice, "On
+  this phone", in Choosing a mind; nothing leaves the phone.
+- **Depends on.** An online mind (it fixes the phone's typed mind calls); quality and battery the
+  owner accepts.
+
+| Open | Options | Recommendation |
+|---|---|---|
+| When to try it | A: a trial now. B: after the online mind ships | **B**: the same calls, so the trial measures only the mind |
+| When it reads | A: only while charging. B: any time | **A**: battery is the risk people notice first |
+
+### Labels from decision models
+
+Decision models answer typed questions about a kept thing ([0016](/adr/0016-decision-models-shadow-first.md)).
+Here they label what a thing is, to help finding and grouping.
+
+- **Decided.** Labelling never holds anything back and never changes where anything goes: only what
+  the person marked private is held back. Labels say what a thing is (an appointment, a purchase, a
+  trip, a recipe, a person or place it names), never how sensitive it is or which part of life it
+  belongs to: no work, private, health or sensitive labels. 0016's question about health, money or ID
+  details may never add a mark that holds anything back. Shadow first, as 0016; anything a person sees
+  comes through design first. On a phone it runs wherever its mind runs.
+- **Depends on.** 0016's shadow results beating the rules; a mind (a phone alone has no labels).
+
+| Open | Options | Recommendation |
+|---|---|---|
+| What labels are for | A: finding and grouping only (an Ask filter, "show only" in the journal). B: A, and shown on each item. C: a hidden signal for ranking | **A**, then **B** with "Remove this label" |
+| Can the person change labels | A: remove only. B: remove and add their own | **A** first; B is a different feature (the person's own tags) |
 
 ## Risks
 
