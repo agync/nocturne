@@ -257,6 +257,21 @@ describe("This phone, a backup and Delete everything", () => {
       await screen.findByRole("heading", { name: "Nocturne remembers your day" }),
     ).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Everything was deleted from this phone.");
+    expect(
+      screen.getByText(
+        "Your phone still lets Nocturne read your calendar and Health until you take that back.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "How to take that back" }));
+    expect(await screen.findByRole("heading", { name: "Your phone’s permissions" })).toBeVisible();
+    expect(
+      screen.getByText(
+        /^Nocturne reads your calendar and Health, and uses the microphone, only while your phone allows it\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open phone settings" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByText("Everything was deleted from this phone.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start on this phone" }));
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     expect(
@@ -337,7 +352,7 @@ describe("a backup over a memory that is already here", () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
-    expect(await screen.findByText(/^412 MB · made /)).toBeInTheDocument();
+    expect(await screen.findByText("412 MB")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Passphrase for this backup"), {
       target: { value: "already here" },
     });
@@ -417,7 +432,9 @@ describe("keeping and an item on a phone alone", () => {
     const toggle = await screen.findByRole("switch", { name: /Private/ });
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(
-      screen.getByText("Kept on this phone and never sent to a mind online or at home."),
+      screen.getByText(
+        "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/your computer/)).toBeNull();
     fireEvent.click(toggle);
