@@ -247,6 +247,14 @@ pub fn recover(data: &Path) {
 /// crash at any step: the marker is removed only when the swap is complete, and what is here is
 /// put aside rather than deleted.
 pub fn apply_pending(data: &Path) -> ApplyOutcome {
+    apply_pending_with(data, retake_computer)
+}
+
+/// [`apply_pending`], with the step that takes the computer's own rows into a moved memory given.
+fn apply_pending_with(
+    data: &Path,
+    retake: impl Fn(&Path, &Path) -> nocturne_engine::Result<()>,
+) -> ApplyOutcome {
     recover(data);
     // A check that stopped part way left a plain copy of a backup's database; nothing checks now.
     clear_check(data);
@@ -292,17 +300,25 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
     // so, for the window and for the phone, which keeps its memory.
     if marker.arrival
         && store.is_dir()
-        && let Err(e) = retake_computer(&source_store, &store)
+        && let Err(e) = retake(&source_store, &store)
     {
         abandon_arrival(data, &source, &marker_path);
         return ApplyOutcome::Failed(format!("the memory that moved here did not open ({e})"));
     }
 
+    // A moved memory that cannot go in place changes nothing either: its phone keeps its own
+    // and hears so, rather than waiting on a start that keeps failing.
+    let failed = |reason: String| {
+        if marker.arrival {
+            abandon_arrival(data, &source, &marker_path);
+        }
+        ApplyOutcome::Failed(reason)
+    };
     let mut kept = None;
     if store.exists() {
         if !marker.replace && store_is_empty_and_fresh(&store) {
             if let Err(e) = std::fs::remove_dir_all(&store) {
-                return ApplyOutcome::Failed(format!(
+                return failed(format!(
                     "the empty store could not be removed ({:?})",
                     e.kind()
                 ));
@@ -311,7 +327,7 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
             match keep_aside(data, &marker.stamp, marker.aside.as_ref()) {
                 Ok(folder) => kept = Some(folder),
                 Err(e) => {
-                    return ApplyOutcome::Failed(format!(
+                    return failed(format!(
                         "what is here could not be put aside ({:?})",
                         e.kind()
                     ));
@@ -324,7 +340,7 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
         if let Some(folder) = &kept {
             undo_aside(data, folder);
         }
-        return ApplyOutcome::Failed(format!(
+        return failed(format!(
             "the backup could not be put in place ({:?})",
             e.kind()
         ));
@@ -367,17 +383,8 @@ fn complete(
     marker_path: &Path,
     kept: Option<PathBuf>,
 ) -> ApplyOutcome {
-    let source_selection = source.join("engine").join("selection.json");
-    if let Some(bytes) = sanitised_selection_file(&source_selection)
-        && let Err(e) = write_selection(data, &bytes)
-    {
-        return ApplyOutcome::Failed(format!(
-            "the reading setup could not be kept ({:?})",
-            e.kind()
-        ));
-    }
-
-    // A phone's memory in place: its note says so from now on.
+    // A phone's memory in place: its note says so from now on. First, since the store is the
+    // live one now whatever follows.
     let note = source.join(ARRIVAL_NOTE);
     if marker.arrival && note.is_file() {
         let placed = fsutil::create_private_dir(&backup_dir(data))
@@ -388,6 +395,16 @@ fn complete(
                 e.kind()
             ));
         }
+    }
+
+    let source_selection = source.join("engine").join("selection.json");
+    if let Some(bytes) = sanitised_selection_file(&source_selection)
+        && let Err(e) = write_selection(data, &bytes)
+    {
+        return ApplyOutcome::Failed(format!(
+            "the reading setup could not be kept ({:?})",
+            e.kind()
+        ));
     }
 
     // The stage is spent, and so is a copy brought back: its store is the live one now, and what
@@ -1075,6 +1092,46 @@ mod tests {
         assert_eq!(note["failed"], true);
         assert!(!marker_path(dir.path()).exists());
         assert!(!stage_dir(dir.path()).exists());
+        assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
+    }
+
+    #[test]
+    fn a_moved_memory_that_cannot_go_in_place_is_let_go_and_noted() {
+        let dir = tempfile::tempdir().unwrap();
+        live(dir.path());
+        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
+        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
+        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
+        // What is here cannot be put aside: the folder for it is a file.
+        std::fs::write(dir.path().join(PUT_ASIDE), b"in the way").unwrap();
+        let marker = Marker {
+            version: VERSION,
+            replace: true,
+            stamp: STAMP.into(),
+            source: Source::Stage,
+            aside: None,
+            summary: None,
+            arrival: false,
+        };
+        std::fs::write(
+            marker_path(dir.path()),
+            serde_json::to_vec(&Marker {
+                arrival: true,
+                ..marker
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        // Taking the computer's rows again needs real stores: skipped by marking it done.
+        let outcome = apply_pending_with(dir.path(), |_, _| Ok(()));
+        assert!(matches!(outcome, ApplyOutcome::Failed(_)), "{outcome:?}");
+        assert!(!marker_path(dir.path()).exists(), "it does not try again");
+        assert!(!stage_dir(dir.path()).exists());
+        let note: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(backup_dir(dir.path()).join(ARRIVAL_NOTE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(note["failed"], true);
         assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
     }
 

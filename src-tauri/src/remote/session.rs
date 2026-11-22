@@ -857,8 +857,15 @@ impl Core {
             return Inbound::Continue;
         }
         let begun = match (&req.call, super::incoming::declared(&req.call)) {
-            // A memory already here is answered without taking it again.
-            (RemoteCall::MemoryDone { .. }, _) if self.moves.arrived_for(&device.id) => Ok(None),
+            // A memory already here, a move the person stopped, or a phone asking where its
+            // memory stands (nothing to come) is answered without taking anything.
+            (RemoteCall::MemoryDone { size, .. }, _)
+                if *size == 0.0
+                    || self.moves.arrived_for(&device.id)
+                    || self.moves.stop_waits(&device.id) =>
+            {
+                Ok(None)
+            }
             (RemoteCall::MemoryDone { size, .. }, _) if self.moves.may_upload(&device.id) => self
                 .incoming
                 .begin_memory(&device.id, conv.id, req.id, *size)

@@ -626,6 +626,29 @@ impl Phone {
         }
     }
 
+    /// Where a memory sent up stands on the computer, asked without sending anything again: a
+    /// `memoryDone` with nothing to come. Answered `MemoryArrived` once it opened there.
+    pub async fn memory_status(&self) -> Result<RemoteAnswer, CallError> {
+        let call = RemoteCall::MemoryDone {
+            size: 0.0,
+            sha256: String::new(),
+            passphrase: String::new(),
+        };
+        for again in [true, false] {
+            let s = self.ensure().await?;
+            if needs_build(&call) > self.agreed_build() {
+                return Err(CallError::Phone {
+                    code: PhoneError::ComputerOutdated,
+                });
+            }
+            match call_once(&s, call.clone()).await {
+                Ok(a) => return Ok(a),
+                Err(f) => self.after(&s, f, again).await?,
+            }
+        }
+        Err(gone(Reach::Asleep))
+    }
+
     /// An item's original: its type, from the allowlist, and its bytes.
     pub async fn original(&self, id: &str) -> Result<(String, Vec<u8>), CallError> {
         if crate::crypto::check_id(id).is_err() {
