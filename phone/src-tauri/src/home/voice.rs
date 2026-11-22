@@ -37,6 +37,38 @@ const FRAME: usize = RATE as usize / 50;
 /// The longest language tag the screens may send.
 const MAX_TAG: usize = 35;
 
+/// The title of a voice note that has not been heard.
+pub const VOICE_NOTE: &str = "Voice note";
+/// A voice note's title is cut at a word before this many characters.
+const TITLE_CHARS: usize = 60;
+
+/// The first words of what was heard, cut at a word before about 60 characters, as a note's
+/// title is.
+pub fn spoken_title(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let whole = words.join(" ");
+    if whole.chars().count() <= TITLE_CHARS {
+        return whole;
+    }
+    let mut title = String::new();
+    for word in words {
+        let next = if title.is_empty() {
+            word.to_string()
+        } else {
+            format!("{title} {word}")
+        };
+        if next.chars().count() > TITLE_CHARS {
+            break;
+        }
+        title = next;
+    }
+    if title.is_empty() {
+        title = whole.chars().take(TITLE_CHARS).collect();
+    }
+    let title = title.trim_end_matches([',', ';', ':', '-']).to_string();
+    format!("{title}\u{2026}")
+}
+
 /// What the phone's reader made of one note.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Heard {
@@ -343,6 +375,7 @@ impl Home {
         let mut kept = false;
         match read_in_pieces(reader, &pcm, &ranges, language, &|| self.store_wanted()) {
             Heard::Words(text) if !text.trim().is_empty() => {
+                let title = spoken_title(&text);
                 let t = Transcript {
                     text,
                     language: Some(language.to_string()),
@@ -350,7 +383,14 @@ impl Home {
                     segments: Vec::new(),
                 };
                 match e.record_phone_transcript(id, &leased.lease, t) {
-                    Ok(_) => kept = true,
+                    Ok(_) => {
+                        kept = true;
+                        // A note recorded here is "Voice note" until it is heard; one shared
+                        // with a name of its own keeps that name.
+                        if let Err(x) = e.retitle(id, VOICE_NOTE, &title) {
+                            tracing::warn!("a voice note's title was not changed: {x}");
+                        }
+                    }
                     Err(x) => {
                         // Not tried again this run: a note that outlasts its lease would be
                         // read on every return to the front.

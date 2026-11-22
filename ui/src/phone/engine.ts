@@ -38,6 +38,8 @@ export interface KeepMarks {
   web?: boolean;
   /** How it was kept, which a phone alone notes for the thing's page. Never sent to a computer. */
   how?: KeptHow;
+  /** A shared voice note's file name without its ending: a phone alone titles the note by it. */
+  name?: string;
 }
 
 export interface PhoneEngine {
@@ -164,6 +166,8 @@ export interface PendingKeep {
   web?: boolean;
   /** How it was kept, for its page on a phone alone. */
   how?: KeptHow;
+  /** A shared voice note's file name without its ending. */
+  name?: string;
   /** A check-in kept while the computer was out of reach. */
   checkIn?: CheckInInput;
   /** An answer to the page's question given while the computer was out of reach. */

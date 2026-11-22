@@ -1264,6 +1264,68 @@ fn a_voice_note_gets_its_words_and_stays_waiting_for_a_mind() {
     assert_eq!(home.hear_waiting(&words), 0, "read once");
 }
 
+fn shared_audio(name: &str, client_id: &str, size: usize) -> RemoteCall {
+    RemoteCall::KeepBytes {
+        mime: "audio/wav".into(),
+        size: size as f64,
+        client_id: client_id.into(),
+        caption: Some(name.into()),
+        feeling: None,
+        good: None,
+        captured_at: None,
+    }
+}
+
+#[test]
+fn a_voice_note_is_titled_by_its_words_and_a_shared_one_by_its_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let open = home.open_store().unwrap();
+    let sound = wav(16_000);
+    let mut other = sound.clone();
+    *other.last_mut().unwrap() ^= 1;
+    let keep = |call, bytes: &[u8]| {
+        kept_id(&dispatch::keep_bytes(
+            &open,
+            call,
+            bytes,
+            &home.keeping_dir(),
+        ))
+    };
+    let recorded = keep(recording("audio/wav", "c-1", sound.len()), &sound);
+    let shared = keep(shared_audio("Interview 3", "c-2", other.len()), &other);
+    assert_eq!(item_of(&home, &recorded).title, "Voice note");
+    assert_eq!(item_of(&home, &shared).title, "Interview 3");
+
+    let words = Scripted {
+        ready: true,
+        heard: Heard::Words(
+            "Remember to buy fresh bread and call the dentist tomorrow morning about the check up"
+                .into(),
+        ),
+    };
+    assert!(home.set_language("en-GB"));
+    assert_eq!(home.hear_waiting(&words), 2);
+    assert_eq!(
+        item_of(&home, &recorded).title,
+        "Remember to buy fresh bread and call the dentist tomorrow\u{2026}"
+    );
+    assert_eq!(item_of(&home, &shared).title, "Interview 3");
+}
+
+#[test]
+fn a_spoken_title_is_cut_at_a_word() {
+    use super::voice::spoken_title;
+    assert_eq!(spoken_title("  call   the dentist "), "call the dentist");
+    let long = "word ".repeat(30);
+    let title = spoken_title(&long);
+    assert!(title.ends_with('\u{2026}'));
+    assert!(title.chars().count() <= 61, "{title}");
+    assert!(!title.trim_end_matches('\u{2026}').ends_with(' '));
+    let one = "x".repeat(100);
+    assert_eq!(spoken_title(&one).chars().count(), 61);
+}
+
 /// A reader on a phone that decodes a webm recording to a second of sound, counting its asks.
 #[derive(Default)]
 struct Decoding(std::sync::atomic::AtomicUsize);

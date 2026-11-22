@@ -607,6 +607,45 @@ describe("the phone's own memory behind the screens", () => {
     );
   });
 
+  it("keeps a shared voice note under its own name, and a recorded one under none", async () => {
+    const begun: { cmd: string; caption?: string | null }[] = [];
+    mockIPC((cmd, args) => {
+      if (cmd === "keep_begin") {
+        begun.push((args as { call: { cmd: string; caption?: string | null } }).call);
+        return 1;
+      }
+      if (cmd === "home_keep_end")
+        return {
+          type: "kept",
+          kept: {
+            item: {
+              id: "x",
+              kind: "audio",
+              title: "t",
+              keptAt: "2026-11-21T07:05:00.000Z",
+              durationMs: null,
+              pages: null,
+              hasOriginal: true,
+              summary: null,
+              text: null,
+              truncated: false,
+            },
+            duplicate: false,
+            takeBackUntil: "2026-11-21T07:10:00.000Z",
+          },
+        };
+      return null;
+    });
+    const engine = createLocalEngine({ deviceName: () => "Maya’s phone", version: "1.0.0" });
+    const sound = new Blob([Uint8Array.from(new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt "))], {
+      type: "audio/wav",
+    });
+    await engine.keepRecording(sound, "c-1", { name: "Interview 3" });
+    await engine.keepRecording(sound, "c-2");
+    expect(begun[0]).toMatchObject({ cmd: "keepBytes", caption: "Interview 3" });
+    expect(begun[1]?.cmd).toBe("keepRecording");
+  });
+
   it("turns a home error into a code the screens read", async () => {
     mockIPC((cmd) => (cmd === "home_local" ? { type: "error", code: "wrongPassphrase" } : null), {
       shouldMockEvents: true,

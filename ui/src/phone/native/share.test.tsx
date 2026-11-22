@@ -1,5 +1,5 @@
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockPhoneEngine } from "../mock";
 import { memoryQueue } from "../queue";
@@ -150,5 +150,33 @@ describe("keeping what another app shared", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep" }));
     expect(await screen.findByRole("heading", { name: "Waiting." })).toBeInTheDocument();
     expect(await queue.count()).toBe(1);
+  });
+
+  it("hands a shared voice note's file name, without its ending, to be its title", async () => {
+    const wav = Array.from(new TextEncoder().encode("RIFF\u0000\u0000\u0000\u0000WAVEfmt "));
+    mockIPC((cmd) => (cmd === "plugin:nocturne-system|shared_file" ? wav : null));
+    const base = createMockPhoneEngine({});
+    const keepRecording = vi.fn(base.keepRecording);
+    const queue = memoryQueue();
+    render(
+      <ShareSheet
+        shared={{
+          text: null,
+          subject: null,
+          files: [
+            { name: "0-a.wav", shown: "Interview 3.wav", mime: "audio/wav", size: wav.length },
+          ],
+        }}
+        engine={{ ...base, keepRecording }}
+        queue={queue}
+        connection={base.connection()}
+        now={() => 0}
+        onQueued={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await waitFor(() => expect(keepRecording).toHaveBeenCalledOnce());
+    expect(keepRecording.mock.calls[0]?.[2]).toMatchObject({ name: "Interview 3" });
   });
 });
