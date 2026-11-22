@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Nocturne on a phone of its own
-description: Proposal for steps 1 and 2 of the phone parity roadmap, a phone with its own memory and no computer, then a locked copy online and an online mind, with first run, Today with no mind, finding by words, the consent screens, This phone, states and copy.
+description: Proposal for steps 1 and 2 of the phone parity roadmap, a phone with its own memory and no computer, then a locked copy online and an online mind, with first run, Today with no mind, finding by words, the consent screens, This phone, states and copy, and a build-ready specification of the first release, a phone alone.
 status: draft
 tags: [proposal, ux, phone, online-answers, backup, privacy, copy]
 ---
@@ -11,7 +11,9 @@ tags: [proposal, ux, phone, online-answers, backup, privacy, copy]
 Part of [Phone and computer as equal starting points](phone-parity.md). This page covers a phone
 with its own memory (step 1) and what it can turn on online (step 2): a locked copy, and a mind.
 
-Status: proposed. Nothing here is built. The decisions it depends on are on the roadmap page.
+Status: proposed, with the owner's decisions folded in. Nothing here is built. [The first
+release](#the-first-release-a-phone-alone) is specified to build once approved; the locked copy and
+the online mind follow it, in that order.
 
 ## Mockups
 
@@ -50,6 +52,191 @@ flowchart LR
 Forgetting and fading run on the phone without a mind: they are clocks, not reading. The calendar
 and health come from the phone itself, so the "goes only to your computer" lines of [Nocturne on
 Android and iPhone](phone-apps.md) change to "stays on this phone" (below).
+
+## The first release: a phone alone
+
+Everything a person needs to start on a phone with no computer and no mind, and to move to a
+computer later. It is the whole of phase 1 on the [roadmap](phone-parity.md#phasing). Android ships
+first; iPhone follows the same words once the engine is built and tried there.
+
+### What ships, and what waits
+
+| In the first release | Waits for a later phase |
+|---|---|
+| Welcome with "Start on this phone" and "Connect to my computer" | "Join a household" (phase 3) |
+| Keeping a note, a photo, a voice note, a document, and from other apps' share menus | Reading photos and documents, which needs a mind |
+| The journal: entries, good things, feelings, today's timeline | Reflections and recaps, which need a mind |
+| Check-ins | |
+| The phone's calendar and health readings on Today and in the journal | |
+| Finding what was kept by its words, with receipts | Answers, which need a mind |
+| Forgetting and fading, delete, Delete everything, export | |
+| Backups to a file, and restoring one on a new phone | A locked copy online (phase 2a) |
+| Moving the memory to a computer of one's own | An online mind (phase 2b), a household's mind (phase 3) |
+| Voice notes turned into words by the phone, where it can with no network ([below](#voice-notes-in-words)) | |
+
+A screen whose choice belongs to a later phase does not show that choice until it ships: no
+"coming soon", no greyed rows.
+
+### Screens as they ship
+
+The screens above, with these differences in the first release. Every other word is as written in
+[Screens](#screens).
+
+| Screen | In the first release |
+|---|---|
+| Store listing, growing | "When you want answers and a morning page, give it a mind: Nocturne on your own computer." |
+| Welcome | Two buttons, "Start on this phone" and "Connect to my computer"; the link reads "I have a backup" |
+| Your memory lives on this phone, waits hint | "A mind can come from Nocturne on your own computer. Your memory then moves there." |
+| Your memory lives on this phone, lost phone | "If this phone is lost, what you kept goes with it. Save a backup now and then in {thisPhone}." |
+| Today, lost phone reminder | After 30 days of keeping with no backup, once: "No backup yet. If this phone is lost, what you kept goes with it." with "Save a backup" and "Not now" |
+| Today, no mind card | As written; "Choose a mind" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release) |
+| Ask | As written in [Ask with no mind](#7-ask-with-no-mind) |
+| This phone, Your memory | "Where it is", "Its mind" ("None yet"); no locked copy row |
+| This phone, actions | "Move my memory…", "Save a backup…", "Delete everything…" |
+| This phone, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
+
+### Giving it a mind, in the first release
+
+With one way to give it a mind, the choice screen is one explanation.
+
+| Part | Copy |
+|---|---|
+| Title | "Give Nocturne a mind" |
+| Lead | "A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own." |
+| How | "1. Install Nocturne on your computer." / "2. Choose Add a phone there, and scan its code from this phone." / "3. Your memory moves to the computer, and this phone works with it." |
+| Bar | "Scan the code" · "Not now" |
+
+"Scan the code" opens the approved scan screen, then [Moving your
+memory](moving-memory.md#from-a-phone-to-a-computer). When later phases ship, this becomes [Where
+should Nocturne's mind be?](#where-should-nocturnes-mind-be) with this as its last choice.
+
+### Backups to a file
+
+0013's backup and restore, on the phone. The form, the passphrase rules and every message are
+0013's ([Back up and restore](backup-and-restore.md)); only the places differ.
+
+| Part | Copy |
+|---|---|
+| This phone row | "Save a backup…" / hint "Last backup {day}" or "No backup yet" |
+| Form title | "Save a backup" |
+| Form lead | "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
+| Passphrase | 0013's fields, hint, note and tick |
+| Saving | The phone's own save sheet, so the person chooses where: their files, a drive app, a computer |
+| Done | "Your backup is saved." / "{size}, made {time}." / "OK" |
+| Welcome link | "I have a backup" |
+| Restore title | "Bring back your memory" |
+| Restore lead | "Choose your backup file and type its passphrase." |
+| Restore button | "Choose the file" then "Bring it back" |
+| Restore done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
+
+A restore runs 0013's checks before anything shows. On a phone that already holds a memory, 0013's
+"Replace what's here?" applies, and what was here is put aside, never deleted. When the locked copy
+ships, "I have a backup" offers both: "A locked copy online" and "A backup file".
+
+### Behaviour
+
+**The memory.** One store on the phone, the same as a computer's: what was kept and its originals,
+the journal, check-ins, calendar and health readings, forgetting and fading, the activity list. It
+lives in the app's own space, which the phone locks while it is locked, and stays out of the phone's
+own backup ([decision 5](phone-parity.md#decisions)). Uninstalling the app removes it, which the
+phone does without asking Nocturne, so "What this phone can do" in This phone says so: "Removing
+the app removes your memory from this phone. Save a backup first."
+
+**Keeping.** Kept at once, on the phone, with no network. A kept thing is on today's journal
+straight away. Photos, documents and recordings are kept as they are, marked "waiting to be read".
+Notes and shared text are words already, so they are findable at once.
+
+**The journal and check-ins.** As on the computer, from the phone's own memory. Journal entries and
+good things are never marked private, by the journal's rule ([0015](/adr/0015-journal-privacy-class.md)).
+
+**Calendar and health.** Read from the phone and kept in the phone's own memory, with the asks,
+windows, receipts and rules of [Nocturne on Android and iPhone](phone-apps.md#behaviour) and
+[Health from the phone](phone-health.md), except that nothing is sent anywhere. Every calendar the
+phone has starts on, work-profile calendars included ([decision 20](phone-parity.md#decisions)).
+They are read when Nocturne opens and each time it comes back to the front. Calendar entries become
+appointments on Today and in the journal straight away, from their own fields; nothing needs a mind.
+The receipt chip reads "Calendar · {calendar}" with no phone name, since there is one.
+
+**Finding by words.** Ask searches the words of everything kept: notes, shared text, journal entries
+and good things, voice notes in words, calendar titles and places. Things marked private are found
+too, with their private mark: nothing leaves the phone. Check-ins are not searched, as on the
+computer ([0015](/adr/0015-journal-privacy-class.md)). Results are newest first among equally good
+matches, at most 30, each with its receipt.
+
+**Forgetting.** Fading and letting go run on their clocks, as on the computer. Delete, forget and
+Delete everything use the computer's previews and confirmations, worded for this phone.
+
+**Notifications.** None in the first release: there is no page to announce, and the journal's rule
+keeps it off the lock screen.
+
+#### Voice notes in words
+
+Where the phone can turn a recording into words with no network, it does, after the recording is
+kept, and the voice note's words show and are found like typed ones ([decision
+9](phone-parity.md#decisions)). Where it cannot (an older phone, a language it has no words for
+offline), the voice note stays "waiting to be read". The phone's recogniser is never allowed to send
+a recording online. A voice note's words show with "Heard by this phone" in the secondary ink, so a
+later mind's reading can replace them. If the build check finds a platform cannot do this offline
+from a recording, that platform ships with voice notes waiting, and nothing else changes.
+
+### Empty states
+
+| Where | What shows |
+|---|---|
+| Today, first day | The date, the no-mind card, the check-in card, and "Nothing kept yet today. Tap {keep} to keep something." No calendar or Last night rows until they are brought and have something |
+| Today, calendar on, nothing today | "Nothing in your calendar today." |
+| Journal, a day with nothing | The approved empty day |
+| Ask, before typing | The placeholder and "Find anything you kept by its words." |
+| Ask, nothing kept yet | "Nothing kept yet. What you keep can be found here by its words." |
+| This phone, no backup | "Save a backup…" with "No backup yet" |
+
+### States
+
+| State | What shows |
+|---|---|
+| The phone is nearly full | In This phone and on Keep: "This phone is nearly full. Free some room so Nocturne can keep more." Keeping stops only when a save fails, with "There wasn’t room to keep this. Free some room and try again." and nothing half-kept |
+| The memory can’t be opened (damaged) | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." with "I have a backup" and "Get help". The damaged store is put aside, never deleted |
+| Calendar or health off in the phone's settings | As approved, worded "stays on this phone" |
+| A backup from a newer Nocturne | 0013's words |
+
+### When a computer joins later
+
+A phone alone that pairs with a computer moves its memory there; one home at a time
+([Moving your memory](moving-memory.md#from-a-phone-to-a-computer)).
+
+| Moment | What happens |
+|---|---|
+| Pairing starts from the phone ("Scan the code") or the computer ("Already use Nocturne on your phone?") | Pairing as today. Once the three words match and the computer allows it, the phone offers the move |
+| The person says "Not now" | Pairing is undone on both, and the phone stays a phone alone. A phone never becomes a companion while it holds its own memory |
+| The move | The phone makes a last backup in 0013's format and sends it over the sealed channel; things kept meanwhile wait and go across at the end |
+| The computer already holds a memory | 0013's choice on the computer: put what is there aside and take the phone's, or keep it and move nothing |
+| It has arrived | Every count matches; the phone's memory is put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
+| Calendar and health | Carry on, now sent to the computer. What was already brought arrived with the memory, so nothing is sent twice |
+| What was put aside on the phone | "Remove it from this phone" or "Keep it put aside for 30 days" |
+| Later, the other way | The computer can move the memory back to this phone ([Back to the phone](moving-memory.md#back-to-the-phone)) |
+
+### Phone parity
+
+Everything a person can do with their memory on a computer works on a phone alone, except what
+needs a mind (reading photos and documents, answers, the morning page, reflections and recaps,
+noticing what changed), each of which comes with a mind. Two computer things have no phone form in
+the first release, each with its reason: Print, because a phone prints through its own share sheet
+and the printed page needs a mind's page; and models in advanced details, because a phone alone has
+no model to show.
+
+### Checks before it ships
+
+- A fresh phone with no network starts, keeps a note, a photo and a voice note, writes an entry,
+  checks in, brings its calendar and health, and finds the note by a word from it.
+- Nothing leaves the phone: the release's network check sees no traffic from a phone alone except
+  consented app downloads.
+- A backup saved on one phone restores on another, every count matching, receipts opening their
+  originals.
+- A phone alone moves its memory to a computer; the computer's page cites what the phone kept;
+  calendar and health keep arriving with nothing sent twice; nothing on the phone is deleted until
+  the person confirms.
+- The store is absent from the phone's own backup.
+- Light and dark, Android first, at the phone's text sizes up to 200 per cent.
 
 ## Journeys
 
@@ -540,6 +727,24 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind, turn off | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" / "Keep it on" |
 | Mind, unreachable | "Written {day}. {host} hasn’t answered since {time}." / "Answers are back when {host} is." |
 | Mind, offline | "This phone isn’t online. What you keep waits to be read." |
+| First release, listing growing | "When you want answers and a morning page, give it a mind: Nocturne on your own computer." |
+| First release, Welcome link | "I have a backup" |
+| First release, waits hint | "A mind can come from Nocturne on your own computer. Your memory then moves there." |
+| First release, lost phone | "If this phone is lost, what you kept goes with it. Save a backup now and then in {thisPhone}." |
+| First release, reminder | "No backup yet. If this phone is lost, what you kept goes with it." / "Save a backup" / "Not now" |
+| First release, can do | "Your memory is on this phone. It can keep, find, forget and delete, and save a backup to a file." |
+| Removing the app | "Removing the app removes your memory from this phone. Save a backup first." |
+| Give it a mind | "Give Nocturne a mind" / "A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own." / "1. Install Nocturne on your computer." / "2. Choose Add a phone there, and scan its code from this phone." / "3. Your memory moves to the computer, and this phone works with it." / "Scan the code" / "Not now" |
+| Backup, row | "Save a backup…" / "Last backup {day}" / "No backup yet" |
+| Backup, form | "Save a backup" / "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |
+| Backup, done | "Your backup is saved." / "{size}, made {time}." / "OK" |
+| Restore, file | "Bring back your memory" / "Choose your backup file and type its passphrase." / "Choose the file" / "Bring it back" |
+| Restore, choice | "A locked copy online" / "A backup file" |
+| Heard by this phone | "Heard by this phone" |
+| Empty, Today | "Nothing kept yet today. Tap {keep} to keep something." / "Nothing in your calendar today." |
+| Empty, Ask | "Find anything you kept by its words." / "Nothing kept yet. What you keep can be found here by its words." |
+| Phone full | "This phone is nearly full. Free some room so Nocturne can keep more." / "There wasn’t room to keep this. Free some room and try again." |
+| Store damaged | "Nocturne couldn’t open your memory on this phone." / "Nothing was deleted. Bring back a backup, or ask for help." / "Get help" |
 
 ## Accessibility
 
