@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canCaptureSound, startWavCapture } from "../../app/wavCapture";
-import { formatBytes, formatDuration, formatTime } from "../../copy/format";
+import { formatBytes, formatDuration, formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { FeelingPart, PhoneError, PhoneKept } from "../../engine/bindings";
 import { NearlyFull } from "../alone/screens/parts";
@@ -598,7 +598,7 @@ export function Keep({
             title={state.title || t(KIND_LABEL[state.kind])}
             line={t("phone.keep.waiting.from", {
               kind: t(KIND_LABEL[state.kind]),
-              time: formatTime(new Date(state.at)),
+              time: formatTimeOfDay(new Date(state.at), "locale"),
             })}
             url={state.url}
           />
@@ -651,11 +651,11 @@ export function Keep({
             alone
               ? t("phone.alone.keep.kept.from", {
                   kind: t(KIND_LABEL[kept.kind]),
-                  time: formatTime(kept.kept.item.keptAt),
+                  time: formatTimeOfDay(kept.kept.item.keptAt, "locale"),
                 })
               : t("phone.keep.kept.from", {
                   kind: t(KIND_LABEL[kept.kind]),
-                  time: formatTime(kept.kept.item.keptAt),
+                  time: formatTimeOfDay(kept.kept.item.keptAt, "locale"),
                   name: deviceName,
                 })
           }
@@ -677,7 +677,9 @@ export function Keep({
               <span className="ph-rc">
                 {alone
                   ? t("phone.alone.keep.undo")
-                  : t("phone.keep.undo", { time: formatTime(kept.kept.takeBackUntil) })}
+                  : t("phone.keep.undo", {
+                      time: formatTimeOfDay(kept.kept.takeBackUntil, "locale"),
+                    })}
               </span>
               <button
                 type="button"

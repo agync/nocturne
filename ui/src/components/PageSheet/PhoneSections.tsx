@@ -1,4 +1,4 @@
-import { formatTime12 } from "../../copy/format";
+import { formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { CalendarLine, NightLine, Receipt } from "../../engine/bindings";
 import { NightBar } from "../health/NightBar";
@@ -70,7 +70,7 @@ export function LastNight({
 
 function when(line: CalendarLine): string {
   if (line.allDay) return t("page.calendar.allDay");
-  return formatTime12(line.start);
+  return formatTimeOfDay(line.start);
 }
 
 /** "In your calendar today · 3": the time, the title in the page's serif, the place, and the receipt. */
@@ -97,7 +97,7 @@ export function CalendarToday({
           <li key={line.itemId} className={styles.row}>
             <span className={styles.at}>
               {line.zone && !line.allDay
-                ? t("page.calendar.zone", { time: formatTime12(line.start), place: line.zone })
+                ? t("page.calendar.zone", { time: formatTimeOfDay(line.start), place: line.zone })
                 : when(line)}
             </span>
             <span className={styles.what}>

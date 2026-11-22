@@ -17,7 +17,7 @@ import {
   usualWaiting,
   versusText,
 } from "../../components/health/sentence";
-import { formatTime12 } from "../../copy/format";
+import { formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { DayHealth, HealthSeries } from "../../engine/bindings";
 
@@ -200,7 +200,7 @@ export function FromHealthCard({
             <Head
               key={p.itemId}
               label={kindName("bloodPressure")}
-              say={`${pressureText(p.top, p.bottom)} · ${formatTime12(p.at)}`}
+              say={`${pressureText(p.top, p.bottom)} · ${formatTimeOfDay(p.at)}`}
             />
           ))}
         </div>

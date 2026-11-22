@@ -99,6 +99,31 @@ export function formatTime12(input: string | Date): string {
   );
 }
 
+let hour24: boolean | null = null;
+
+/**
+ * The phone's own 12 or 24-hour setting, once it says: every time on the phone's screens follows
+ * it. Until then, and wherever the phone does not say, a time reads as it always did.
+ */
+export function setHourClock(is24: boolean | null): void {
+  hour24 = is24;
+}
+
+/** Whether the language's own clock reads in 24 hours: en-GB does, en-US does not. */
+function localeIs24(): boolean {
+  return new Intl.DateTimeFormat(LOCALE, { hour: "numeric" }).resolvedOptions().hour12 === false;
+}
+
+/**
+ * "6:10 pm" or "18:10", as the phone's clock is set. Until the phone says, a time reads as it
+ * did before the setting was read: `unknown` is `"12"` for the screens that wrote twelve hours,
+ * `"locale"` for the ones that followed the language.
+ */
+export function formatTimeOfDay(input: string | Date, unknown: "12" | "locale" = "12"): string {
+  const is24 = hour24 ?? (unknown === "locale" ? localeIs24() : false);
+  return is24 ? formatTime(input) : formatTime12(input);
+}
+
 /** `HH:MM` text kept as typed. */
 export function formatClock(hhmm: string): string {
   return hhmm;

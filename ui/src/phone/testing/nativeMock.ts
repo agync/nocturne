@@ -156,6 +156,10 @@ export function installNativeIpc(
           return null;
         case "plugin:nocturne-system|insets":
           return { top: 0, right: 0, bottom: 0, left: 0, keyboard: 0 };
+        case "plugin:nocturne-system|hour_clock": {
+          const clock = new URLSearchParams(location.search).get("h");
+          return clock === null ? null : clock === "24";
+        }
         case "plugin:nocturne-system|device_name":
           return "Pixel 8";
         case "plugin:nocturne-system|take_launch":

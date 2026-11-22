@@ -1,4 +1,4 @@
-import { formatDay, formatDuration, formatTime12 } from "../../copy/format";
+import { formatDay, formatDuration, formatTimeOfDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { JournalAsk, QuestionChoice, Receipt } from "../../engine/bindings";
 
@@ -43,7 +43,7 @@ export function chipText(receipt: Receipt, ask: JournalAsk): string {
   }
   return t("journal.question.chip.entry", {
     day: formatDay(receipt.keptAt),
-    time: formatTime12(receipt.keptAt),
+    time: formatTimeOfDay(receipt.keptAt),
   });
 }
 

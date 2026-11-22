@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { PutAsideMemory } from "../../../engine/bindings";
 import { Group, Row } from "../../native/screens/chrome";
@@ -143,7 +143,7 @@ export function PutAside({
       <main className="ph-main ph-settings">
         <h1 className="ph-steph" tabIndex={-1} ref={heading}>
           {withTime
-            ? t("phone.alone.putAside.titleAt", { day, time: formatTime12(memory.at) })
+            ? t("phone.alone.putAside.titleAt", { day, time: formatTimeOfDay(memory.at) })
             : t("phone.alone.putAside.title", { day })}
         </h1>
         <p className="ph-body ph-ink2">

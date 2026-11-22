@@ -246,6 +246,18 @@ async fn device_name<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, Er
     Ok(named.and_then(|n| n.name).filter(|n| !n.trim().is_empty()))
 }
 
+#[derive(Debug, Deserialize)]
+struct Clock {
+    is24: Option<bool>,
+}
+
+/// Whether the phone is set to 24-hour time; `None` where the platform does not say.
+#[command]
+async fn hour_clock<R: Runtime>(app: AppHandle<R>) -> Result<Option<bool>, Error> {
+    let clock: Option<Clock> = app.state::<System<R>>().run("hourClock")?;
+    Ok(clock.and_then(|c| c.is24))
+}
+
 #[command]
 async fn open_app_settings<R: Runtime>(app: AppHandle<R>) -> Result<(), Error> {
     let _: Option<serde_json::Value> = app.state::<System<R>>().run("openAppSettings")?;
@@ -313,6 +325,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             insets,
             device_name,
+            hour_clock,
             open_app_settings,
             take_launch,
             take_shared,

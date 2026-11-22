@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, PutAsideMemory } from "../../../engine/bindings";
 import type { NativeChannel, ThisPhoneSources } from "../../native/api";
@@ -31,7 +31,7 @@ export function sameDay(m: PutAsideMemory, all: readonly PutAsideMemory[]): bool
 function putAsideLabel(m: PutAsideMemory, all: readonly PutAsideMemory[]): string {
   const day = formatLongDay(m.at);
   return sameDay(m, all)
-    ? t("phone.alone.thisPhone.putAsideAt", { day, time: formatTime12(m.at) })
+    ? t("phone.alone.thisPhone.putAsideAt", { day, time: formatTimeOfDay(m.at) })
     : t("phone.alone.thisPhone.putAside", { day });
 }
 

@@ -17,12 +17,14 @@ async function start() {
       : await loadServices();
   const root = document.getElementById("root");
   if (services.platform.native) {
-    const [{ NativeRoot }, { startInsets }] = await Promise.all([
+    const [{ NativeRoot }, { startInsets }, { startClock }] = await Promise.all([
       import("./native/NativeRoot"),
       import("./native/insets"),
+      import("./native/clock"),
       import("./native/native.css"),
     ]);
     void startInsets();
+    await startClock();
     if (root)
       createRoot(root).render(
         <NativeRoot services={services as import("./native/services").NativeServices} />,
