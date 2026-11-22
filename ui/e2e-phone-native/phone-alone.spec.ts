@@ -168,7 +168,7 @@ for (const scheme of ["light", "dark"] as const) {
     });
 
     test("Welcome after Delete everything", async ({ page }) => {
-      await page.goto("/?m=kept&s=welcome");
+      await page.goto("/?m=kept&s=welcome&g=calendar,health");
       await page.getByRole("button", { name: "This phone" }).click();
       await page.getByRole("button", { name: "Delete everything…" }).click();
       await page.getByLabel("Type “delete everything” to go ahead").fill("delete everything");

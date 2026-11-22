@@ -59,6 +59,21 @@ export function calendarAccess(): Promise<CalendarAccess> {
   return invoke<CalendarAccess>("calendar_status");
 }
 
+/** What the phone still lets Nocturne use: the calendar, Health, the microphone. */
+export interface StillGranted {
+  calendar: boolean;
+  health: boolean;
+  microphone: boolean;
+}
+
+export function stillGranted(): Promise<StillGranted> {
+  return invoke<StillGranted>("permissions_granted").catch(() => ({
+    calendar: false,
+    health: false,
+    microphone: false,
+  }));
+}
+
 /** The phone's own prompt; what it says. */
 export function askCalendar(): Promise<CalendarAccess> {
   return invoke<CalendarAccess>("calendar_request").catch(() => "blocked" as const);

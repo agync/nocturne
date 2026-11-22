@@ -276,7 +276,7 @@ describe("This phone, a backup and Delete everything", () => {
   }, 15_000);
 
   it("deletes everything only once the words are typed", async () => {
-    await app("m=kept&s=welcome");
+    await app("m=kept&s=welcome&g=calendar,health");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete everything…" }));
     expect(
@@ -314,6 +314,42 @@ describe("This phone, a backup and Delete everything", () => {
       await screen.findByText(/Nocturne can show what’s in this phone’s calendar/),
     ).toBeInTheDocument();
   });
+});
+
+describe("Welcome after Delete everything says only what is still allowed", () => {
+  const cases: [string, string | null][] = [
+    ["calendar", "read your calendar"],
+    ["health", "read Health"],
+    ["microphone", "use the microphone"],
+    ["calendar,health", "read your calendar and Health"],
+    ["calendar,microphone", "read your calendar and use the microphone"],
+    ["health,microphone", "read Health and use the microphone"],
+    ["calendar,health,microphone", "read your calendar and Health, and use the microphone"],
+    ["", null],
+  ];
+
+  for (const [granted, what] of cases) {
+    it(what ? `names ${what}` : "has no line and no link with nothing allowed", async () => {
+      await app(`m=kept&s=welcome&g=${granted}`);
+      fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Delete everything…" }));
+      fireEvent.change(await screen.findByLabelText("Type “delete everything” to go ahead"), {
+        target: { value: "delete everything" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Delete everything" }));
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Everything was deleted from this phone.",
+      );
+      const line = `Your phone still lets Nocturne ${what} until you take that back.`;
+      if (what) {
+        expect(screen.getByText(line)).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "How to take that back" })).toBeVisible();
+      } else {
+        expect(screen.queryByText(/Your phone still lets/)).toBeNull();
+        expect(screen.queryByRole("button", { name: "How to take that back" })).toBeNull();
+      }
+    });
+  }
 });
 
 describe("a memory that can't be opened, and bringing back a backup", () => {

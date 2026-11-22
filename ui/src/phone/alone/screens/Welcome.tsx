@@ -1,11 +1,29 @@
-import { t } from "../../../copy/t";
+import { type CopyId, t } from "../../../copy/t";
 import { useHeading } from "../../native/screens/parts";
+import type { StillGranted } from "../../native/sources";
 import { Button, Icon, Page } from "../../screens/ui";
 import { chips } from "./parts";
 
 /** The first screen: start on this phone, connect to a computer, or bring back a backup. */
+const WHAT: Record<string, CopyId> = {
+  c: "phone.alone.welcome.what.c",
+  h: "phone.alone.welcome.what.h",
+  m: "phone.alone.welcome.what.m",
+  ch: "phone.alone.welcome.what.ch",
+  cm: "phone.alone.welcome.what.cm",
+  hm: "phone.alone.welcome.what.hm",
+  chm: "phone.alone.welcome.what.chm",
+};
+
+/** The words for what the phone still lets Nocturne use, or null when it lets it nothing. */
+function whatKey({ calendar, health, microphone }: StillGranted): CopyId | null {
+  const code = `${calendar ? "c" : ""}${health ? "h" : ""}${microphone ? "m" : ""}`;
+  return WHAT[code] ?? null;
+}
+
 export function AloneWelcome({
   deleted = false,
+  granted = null,
   onPermissions,
   onStart,
   onConnect,
@@ -13,6 +31,8 @@ export function AloneWelcome({
 }: {
   /** Just after Delete everything: one line above the buttons says so. */
   deleted?: boolean;
+  /** What the phone still lets Nocturne use; the line and its link show only for what is left. */
+  granted?: StillGranted | null;
   /** "How to take that back": the phone's permissions. */
   onPermissions?(): void;
   onStart(): void;
@@ -20,6 +40,7 @@ export function AloneWelcome({
   onBackup(): void;
 }) {
   const heading = useHeading("welcome");
+  const what = granted ? whatKey(granted) : null;
   return (
     <Page bar={null}>
       <main className="ph-main">
@@ -37,8 +58,12 @@ export function AloneWelcome({
               <p className="ph-body" role="status">
                 {t("phone.alone.welcome.deleted")}
               </p>
-              <p className="ph-small">{t("phone.alone.welcome.stillAllowed")}</p>
-              {onPermissions ? (
+              {what ? (
+                <p className="ph-small">
+                  {t("phone.alone.welcome.stillAllowed", { what: t(what) })}
+                </p>
+              ) : null}
+              {what && onPermissions ? (
                 <button type="button" className="ph-link ph-link--center" onClick={onPermissions}>
                   {t("phone.alone.welcome.howToTakeBack")}
                 </button>

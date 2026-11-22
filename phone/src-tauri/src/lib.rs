@@ -63,6 +63,7 @@ pub fn run() {
             sources::calendar_list,
             sources::calendar_settings,
             sources::calendar_save,
+            sources::permissions_granted,
             sources::health_availability,
             sources::health_older_available,
             sources::health_request,

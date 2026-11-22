@@ -12,7 +12,7 @@ import type { RelinkResult } from "../relink";
 import { defaultScannerEnv } from "../scanner";
 import type { PairingLike, Services } from "../services";
 import { asError, createNativeEngine } from "./engine";
-import { onIphone } from "./sources";
+import { onIphone, type StillGranted, stillGranted } from "./sources";
 import { type DeviceInfo, fromInfo, type NativeKeyStore, nativeKeyStore } from "./store";
 
 /** How a pairing ended on the Rust side without a paired phone. */
@@ -84,6 +84,8 @@ export interface NativeServices extends Services {
   home: HomeApi;
   /** Moving that memory to a computer; the app's own commands when not set. */
   move?: MoveApi;
+  /** What the phone still lets Nocturne use, for Welcome after Delete everything. */
+  granted(): Promise<StillGranted>;
 }
 
 export function nativeServices(): NativeServices {
@@ -109,6 +111,7 @@ export function nativeServices(): NativeServices {
   return {
     store,
     home,
+    granted: stillGranted,
     queue: idbQueue(),
     engineFor: () =>
       home.known() === "alone"

@@ -14,6 +14,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_nocturne_calendar::{self as calendar, CalendarExt};
 use tauri_plugin_nocturne_health::{self as health, HealthExt};
+use tauri_plugin_nocturne_speech::SpeechExt;
 
 use crate::home::Home;
 use crate::state::AppState;
@@ -339,6 +340,31 @@ pub async fn calendar_save<R: Runtime>(
     }
     let takes = takes(&app, &state);
     Ok(state.syncer.sources(&Plugins(app.clone()), &takes))
+}
+
+/// What the phone still lets Nocturne use, whatever Nocturne holds: Welcome after Delete
+/// everything says only these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct StillGranted {
+    pub calendar: bool,
+    pub health: bool,
+    pub microphone: bool,
+}
+
+#[tauri::command]
+pub async fn permissions_granted<R: Runtime>(app: AppHandle<R>) -> StillGranted {
+    waiting(|| {
+        let health = app
+            .health()
+            .granted()
+            .map(|g| !g.kinds.is_empty() || g.history)
+            .unwrap_or(false);
+        StillGranted {
+            calendar: matches!(app.calendar().access(), calendar::Access::Granted),
+            health,
+            microphone: app.speech().access() == tauri_plugin_nocturne_speech::Access::Granted,
+        }
+    })
 }
 
 #[tauri::command]

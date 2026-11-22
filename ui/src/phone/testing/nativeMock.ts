@@ -16,6 +16,7 @@ import {
 import type { CalendarSettings, HealthSettings, ThisPhoneSources } from "../native/api";
 import type { Shared } from "../native/launch";
 import type { NativeServices } from "../native/services";
+import { stillGranted } from "../native/sources";
 import type { NativeKeyStore } from "../native/store";
 import { TODAY } from "./journalFixtures";
 import { mockServices } from "./mockServices";
@@ -130,6 +131,14 @@ export function installNativeIpc(
           return n === "calendarRefused" ? "refused" : "granted";
         case "health_availability":
           return n === "healthMissing" ? "missing" : "available";
+        case "permissions_granted": {
+          const given = new Set((new URLSearchParams(location.search).get("g") ?? "").split(","));
+          return {
+            calendar: given.has("calendar"),
+            health: given.has("health"),
+            microphone: given.has("microphone"),
+          };
+        }
         case "health_older_available":
           return false;
         case "health_settings":
@@ -222,6 +231,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
       };
     },
     platform: { ios: false, standalone: true, native: true },
+    granted: stillGranted,
     deviceName: async () => (alone ? "Maya’s phone" : "Pixel 8"),
   };
 }
