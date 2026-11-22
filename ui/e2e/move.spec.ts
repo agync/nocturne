@@ -20,9 +20,13 @@ const axe = async (page: Page) =>
 const states: Array<[string, string | RegExp]> = [
   ["offered", "Maya’s phone has its own memory. Move it here?"],
   ["here", "Maya’s phone has its own memory. Move it here?"],
+  ["room", "Maya’s phone has its own memory. Move it here?"],
   ["arriving", "Maya’s phone has its own memory. Move it here?"],
   ["checking", "Maya’s phone has its own memory. Move it here?"],
+  ["restarting", "Maya’s phone has its own memory. Move it here?"],
   ["arrived", "The memory from Maya’s phone is here."],
+  ["ranOut", "Maya’s phone has its own memory. Move it here?"],
+  ["notOpened", "Maya’s phone has its own memory. Move it here?"],
 ];
 
 for (const scheme of ["light", "dark"] as const) {

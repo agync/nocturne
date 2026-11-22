@@ -219,6 +219,7 @@ export class TauriEngine implements EngineClient {
   getMove: EngineClient["getMove"] = () => this.call("get_move");
   answerMove: EngineClient["answerMove"] = (choice) => this.call("answer_move", { choice });
   finishMove: EngineClient["finishMove"] = () => this.call("finish_move");
+  stopMove: EngineClient["stopMove"] = () => this.call("stop_move");
 
   getOnline: EngineClient["getOnline"] = () => this.call("get_online");
   checkOnline: EngineClient["checkOnline"] = (form) => this.call("check_online", { form });
