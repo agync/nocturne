@@ -250,3 +250,22 @@ fn a_kept_thing_from_a_paired_phone_names_it_and_the_phones_own_row_does_not() {
     );
     assert!(from.contains(&("Ticket two".into(), None)), "{from:?}");
 }
+
+#[test]
+fn a_found_thing_maps_to_the_contract_type() {
+    let f = fixture();
+    keep(&f.engine, "The plumber is coming on Tuesday morning");
+    let found = f.engine.find_items("plumber", 10).unwrap().remove(0);
+    let receipt = found.receipt.clone();
+    let mapped: nocturne_contract::FoundItem = found.into();
+    assert_eq!(mapped.receipt, receipt);
+    assert!(!mapped.private);
+    let whole: String = mapped.excerpt.iter().map(|p| p.text.as_str()).collect();
+    assert_eq!(whole, "The plumber is coming on Tuesday morning");
+    assert!(
+        mapped
+            .excerpt
+            .iter()
+            .any(|p| p.matched && p.text == "plumber")
+    );
+}
