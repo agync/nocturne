@@ -6,7 +6,8 @@
 //! the note stays waiting to be read.
 //!
 //! The reader takes raw sound (16-bit, mono, 16 kHz, no header). A note kept as such a WAV file
-//! is read; any other recording waits until the reader can take it.
+//! is read as it is; any other recording is decoded by the phone first, and waits where the phone
+//! cannot decode it.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -40,6 +41,11 @@ pub trait Reader {
     /// Whether a file in `language` can be read now, offline.
     fn ready(&self, language: &str) -> bool;
     fn read(&self, pcm: &Path, language: &str) -> Heard;
+    /// Writes a recording that is not plain WAV sound to `dest` as the raw sound `read` takes;
+    /// answers how long it plays. `None` where the phone cannot decode it.
+    fn decode(&self, _src: &Path, _dest: &Path) -> Option<u32> {
+        None
+    }
 }
 
 #[derive(Default)]
@@ -190,7 +196,11 @@ impl Home {
         scratch: &Path,
     ) -> bool {
         let pcm = scratch.join(format!("{id}.pcm"));
-        let Some(duration_ms) = pcm_from_wav(original, &pcm) else {
+        let decoded = pcm_from_wav(original, &pcm).or_else(|| reader.decode(original, &pcm));
+        let Some(duration_ms) = decoded else {
+            // Not tried again this run: the phone cannot decode it.
+            let _ = std::fs::remove_file(&pcm);
+            lock(&self.voice.nothing).insert(id.to_string());
             return false;
         };
         let lease = LEASE + Duration::from_millis(u64::from(duration_ms) * 3);

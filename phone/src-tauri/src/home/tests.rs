@@ -819,6 +819,68 @@ fn a_voice_note_gets_its_words_and_stays_waiting_for_a_mind() {
     assert_eq!(home.hear_waiting(&words), 0, "read once");
 }
 
+/// A reader on a phone that decodes a webm recording to a second of sound, counting its asks.
+#[derive(Default)]
+struct Decoding(std::sync::atomic::AtomicUsize);
+
+impl Reader for Decoding {
+    fn ready(&self, _: &str) -> bool {
+        true
+    }
+
+    fn read(&self, pcm: &Path, _: &str) -> Heard {
+        assert_eq!(std::fs::metadata(pcm).unwrap().len(), 32_000);
+        Heard::Words("decoded words".into())
+    }
+
+    fn decode(&self, src: &Path, dest: &Path) -> Option<u32> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if std::fs::read(src).ok()?.starts_with(b"\x1a\x45\xdf\xa3") {
+            std::fs::write(dest, vec![0u8; 32_000]).ok()?;
+            return Some(1000);
+        }
+        None
+    }
+}
+
+#[test]
+fn a_recording_the_phone_decodes_gets_its_words() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let open = home.open_store().unwrap();
+    let webm = kept_id(&dispatch::keep_bytes(
+        &open,
+        recording("audio/webm", "c-1", 8),
+        b"\x1a\x45\xdf\xa3webm",
+        &home.keeping_dir(),
+    ));
+    let odd = kept_id(&dispatch::keep_bytes(
+        &open,
+        recording("audio/mp4", "c-2", 4),
+        b"odd!",
+        &home.keeping_dir(),
+    ));
+    home.set_language("en-GB");
+    let reader = Decoding::default();
+    assert_eq!(home.hear_waiting(&reader), 1);
+    let item = open.engine.get_item(&webm).unwrap();
+    assert_eq!(item.text.as_deref(), Some("decoded words"));
+    assert_eq!(item.duration_ms, Some(1000));
+    assert_eq!(open.engine.get_item(&odd).unwrap().text, None, "waits");
+    assert_eq!(home.hear_waiting(&reader), 0);
+    assert_eq!(
+        reader.0.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "one that cannot be decoded is not tried again this run"
+    );
+    let scratch: Vec<_> = std::fs::read_dir(home.keeping_dir())
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "pcm"))
+        .collect();
+    assert!(scratch.is_empty(), "no raw sound left behind");
+}
+
 #[test]
 fn nothing_heard_is_not_read_again_this_run() {
     let dir = tempfile::tempdir().unwrap();

@@ -74,6 +74,20 @@ struct Read<'a> {
     language: &'a str,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Decode<'a> {
+    path: &'a str,
+    dest: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Decoded {
+    #[serde(default)]
+    duration_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Error {
     /// No speech reader on this platform.
@@ -129,6 +143,14 @@ impl<R: Runtime> Speech<R> {
     /// may be open for a second.
     pub fn check_support(&self, language: &str) -> Result<Outcome, Error> {
         self.run("checkSupport", Read { path: "", language })
+    }
+
+    /// Writes the recording at `path` (any form the phone can play) to `dest` as the raw sound
+    /// [`Speech::transcribe`] takes. Answers how long it plays, or `None` when the phone cannot
+    /// decode it.
+    pub fn decode(&self, path: &str, dest: &str) -> Result<Option<u64>, Error> {
+        self.run::<Decoded>("decode", Decode { path, dest })
+            .map(|d| d.duration_ms)
     }
 
     /// Reads the sound file at `path` in `language`.
@@ -196,6 +218,20 @@ mod tests {
     fn access_reads_as_the_phone_says_it() {
         let s: Status = serde_json::from_str(r#"{"microphone":"prompt-with-rationale"}"#).unwrap();
         assert_eq!(s.microphone, Access::PromptWithRationale);
+    }
+
+    #[test]
+    fn a_decoded_recording_says_how_long_it_plays() {
+        let d: Decoded = serde_json::from_str(r#"{"durationMs":61250}"#).unwrap();
+        assert_eq!(d.duration_ms, Some(61_250));
+        let none: Decoded = serde_json::from_str("{}").unwrap();
+        assert_eq!(none.duration_ms, None);
+        let json = serde_json::to_value(Decode {
+            path: "originals/a.webm",
+            dest: "keeping/a.pcm",
+        })
+        .unwrap();
+        assert_eq!(json["dest"], "keeping/a.pcm");
     }
 
     #[test]

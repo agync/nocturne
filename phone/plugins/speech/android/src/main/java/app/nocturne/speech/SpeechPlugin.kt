@@ -17,6 +17,12 @@ class ReadArgs {
     var language: String = "en-GB"
 }
 
+@InvokeArg
+class DecodeArgs {
+    var path: String = ""
+    var dest: String = ""
+}
+
 /** The commands the app's Rust side calls; the reading is in [SpeechReader]. */
 @TauriPlugin(
     permissions = [Permission(strings = [Manifest.permission.RECORD_AUDIO], alias = "microphone")],
@@ -45,5 +51,22 @@ class SpeechPlugin(activity: Activity) : Plugin(activity) {
     fun transcribe(invoke: Invoke) {
         val args = invoke.parseArgs(ReadArgs::class.java)
         reader.submit(args.language, File(args.path)) { outcome, text -> answer(invoke, outcome, text) }
+    }
+
+    /**
+     * A recording in any form the phone can play, written as the raw sound [transcribe] takes.
+     * Answers how long it plays, or null when the phone cannot decode it.
+     */
+    @Command
+    fun decode(invoke: Invoke) {
+        val args = invoke.parseArgs(DecodeArgs::class.java)
+        Thread {
+            val ms = try {
+                Decoder.toPcm(File(args.path), File(args.dest))
+            } catch (_: Throwable) {
+                null
+            }
+            invoke.resolve(JSObject().put("durationMs", ms))
+        }.start()
     }
 }
