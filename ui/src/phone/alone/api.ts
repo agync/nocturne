@@ -12,6 +12,7 @@ import type {
   HomeCall,
   HomeError,
   HomeStats,
+  PhoneItem,
   PhoneMode,
   RestoreCheck,
 } from "../../engine/bindings";
@@ -32,6 +33,8 @@ export interface PickedFile {
   path: string;
   name: string;
   bytes: number;
+  /** When the backup was made, when the sheet can tell before the passphrase. */
+  madeAt?: string;
 }
 
 /**
@@ -50,6 +53,9 @@ export const noFiles: HomeFiles = {
 };
 
 export type Progress = (p: BackupProgress) => void;
+
+/** Whether the phone's speech reader may run, as the speech plugin says. */
+export type VoiceAccess = "granted" | "denied" | "prompt" | "prompt-with-rationale";
 
 export interface HomeApi {
   /** Where the memory lives; null before the person has chosen. */
@@ -74,6 +80,10 @@ export interface HomeApi {
   deleteEverything(phrase: string): Promise<void>;
   /** The phone's language, so waiting voice notes can be read into words where it can. */
   hearVoiceNotes(language: string): Promise<boolean>;
+  voiceAccess(): Promise<VoiceAccess>;
+  /** The phone's own prompt; the screens say why first. */
+  voiceRequest(): Promise<VoiceAccess>;
+  setPrivate(id: string, on: boolean): Promise<PhoneItem>;
   files: HomeFiles;
   /** What this phone notes for itself, such as the reminder having been shown. */
   notes: NoteStore;
@@ -161,6 +171,11 @@ export function createHomeApi(files: HomeFiles = noFiles, notes: NoteStore = idb
     },
     async deleteEverything(phrase) {
       expect(await local({ cmd: "deleteEverything", phrase }), "deleted");
+    },
+    voiceAccess: () => invoke<VoiceAccess>("voice_access").catch(() => "denied" as const),
+    voiceRequest: () => invoke<VoiceAccess>("voice_request").catch(() => "denied" as const),
+    async setPrivate(id, on) {
+      return expect(await local({ cmd: "setPrivate", id, private: on }), "privateSet").item;
     },
     hearVoiceNotes: (language) =>
       invoke<boolean>("hear_voice_notes", { language }).catch(() => false),

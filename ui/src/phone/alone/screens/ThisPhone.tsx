@@ -5,8 +5,10 @@ import type { HomeStats } from "../../../engine/bindings";
 import type { NativeChannel, ThisPhoneSources } from "../../native/api";
 import { Group, Row } from "../../native/screens/chrome";
 import { calendarValue, healthValue } from "../../native/screens/Offer";
-import { useHeading } from "../../native/screens/parts";
+import { openPolicy, useHeading } from "../../native/screens/parts";
+import { openAppSettings } from "../../native/sources";
 import { BackBar, Page } from "../../screens/ui";
+import type { VoiceAccess } from "../api";
 
 /** On a phone alone nothing is sent to a computer: the phone takes what it brings itself. */
 export function aloneSources(s: ThisPhoneSources): ThisPhoneSources {
@@ -27,7 +29,8 @@ export function aloneSources(s: ThisPhoneSources): ThisPhoneSources {
 export function HomeThisPhone({
   channel,
   stats,
-  name,
+  version,
+  voice,
   onBack,
   onMind,
   onCalendar,
@@ -37,7 +40,10 @@ export function HomeThisPhone({
 }: {
   channel: NativeChannel;
   stats(): Promise<HomeStats>;
-  name: string;
+  /** This app's version. */
+  version: string;
+  /** Whether voice notes can be read into words, and the way to turn it on. */
+  voice: { access(): Promise<VoiceAccess>; turnOn(): Promise<VoiceAccess> };
   onBack(): void;
   onMind(): void;
   onCalendar(): void;
@@ -47,6 +53,7 @@ export function HomeThisPhone({
 }) {
   const [sources, setSources] = useState<ThisPhoneSources | null>(null);
   const [held, setHeld] = useState<HomeStats | null>(null);
+  const [heard, setHeard] = useState<VoiceAccess | null>(null);
   const heading = useHeading("thisPhone");
 
   useEffect(() => {
@@ -59,10 +66,14 @@ export function HomeThisPhone({
       (s) => !gone && setHeld(s),
       () => undefined,
     );
+    voice.access().then(
+      (a) => !gone && setHeard(a),
+      () => undefined,
+    );
     return () => {
       gone = true;
     };
-  }, [channel, stats]);
+  }, [channel, stats, voice]);
 
   const last = held?.lastBackup ?? null;
   return (
@@ -102,10 +113,31 @@ export function HomeThisPhone({
               value={healthValue(sources)}
               onPress={onHealth}
             />
+            {heard === "denied" ? (
+              <Row
+                label={t("phone.alone.voice.row")}
+                hint={t("phone.alone.voice.offInSettings")}
+                value={t("phone.sources.openPhoneSettings")}
+                onPress={() => void openAppSettings()}
+              />
+            ) : heard && heard !== "granted" ? (
+              <Row
+                label={t("phone.alone.voice.row")}
+                hint={t("phone.alone.voice.off")}
+                value={t("phone.alone.voice.turnOn")}
+                onPress={() => void voice.turnOn().then(setHeard)}
+              />
+            ) : null}
           </Group>
         ) : null}
         <Group title={t("phone.sheet.title")}>
-          <Row label={t("phone.sheet.name")} value={name} />
+          <Row
+            label={t("phone.sheet.version")}
+            value={t("phone.sheet.versionValue", { version })}
+          />
+        </Group>
+        <Group title={t("phone.app.settings.help")}>
+          <Row label={t("phone.sources.privacy")} onPress={openPolicy} />
           <Row
             label={t("phone.app.settings.can")}
             hint={`${t("phone.alone.thisPhone.can")} ${t("phone.alone.thisPhone.removing")}`}

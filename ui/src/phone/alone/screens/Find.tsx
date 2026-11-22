@@ -50,7 +50,7 @@ function Found({
 }: {
   item: FoundItem;
   today: string;
-  onOpen(r: Receipt): void;
+  onOpen(r: Receipt, words: string | null): void;
 }) {
   const r = item.receipt;
   const icon = KIND_ICON[r.kind];
@@ -58,7 +58,11 @@ function Found({
   const day = when(r, today);
   return (
     <li>
-      <button type="button" className="ph-found-row" onClick={() => onOpen(r)}>
+      <button
+        type="button"
+        className="ph-found-row"
+        onClick={() => onOpen(r, item.excerpt.find((p) => p.matched)?.text ?? null)}
+      >
         <span className="sr-only">
           {t("phone.alone.find.result", { words, day, kind: kindWord(r.kind) })}
         </span>
@@ -99,7 +103,8 @@ export function HomeFind({
   empty: boolean;
   today: string;
   find(query: string): Promise<FoundItem[]>;
-  onOpen(receipt: Receipt): void;
+  /** Opens what was found, with the first matched words to mark there. */
+  onOpen(receipt: Receipt, words: string | null): void;
   onMind(): void;
 }) {
   const [draft, setDraft] = useState("");

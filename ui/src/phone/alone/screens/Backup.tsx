@@ -1,10 +1,11 @@
 import { useId, useState } from "react";
-import { formatBytes, formatTime12 } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress, BackupReport, RestoreCheck } from "../../../engine/bindings";
 import { useHeading } from "../../native/screens/parts";
 import { Button, Icon, Page } from "../../screens/ui";
 import { HomeRequestError, type PickedFile, type Progress } from "../api";
+import { chips } from "./parts";
 
 const MIN_PASSPHRASE = 8;
 
@@ -279,8 +280,11 @@ export function SaveBackup({
   );
 }
 
+type RestoreError = "wrong" | "bad" | "newer" | "damaged" | "full" | "failed";
+
 type RestoreStep =
-  | { name: "form"; error: "wrong" | "bad" | "full" | "failed" | "here" | null }
+  | { name: "form"; error: RestoreError | null }
+  | { name: "replace"; check: RestoreCheck }
   | { name: "running"; phase: "checking" | "restoring"; progress: BackupProgress | null }
   | { name: "done"; count: number };
 
@@ -311,31 +315,33 @@ export function Restore({
     }
   };
 
+  const running =
+    (phase: "checking" | "restoring") =>
+    (progress: BackupProgress): void =>
+      setStep({ name: "running", phase, progress });
+
+  const failed = (e: unknown) => setStep({ name: "form", error: restoreError(e) });
+
+  const bringIn = async (checked: RestoreCheck, replace: boolean) => {
+    if (!file) return;
+    try {
+      setStep({ name: "running", phase: "restoring", progress: null });
+      await restore(file.path, passphrase, replace, running("restoring"));
+      setStep({ name: "done", count: checked.summary.items });
+    } catch (e) {
+      failed(e);
+    }
+  };
+
   const bring = async () => {
     if (!file || passphrase === "") return;
-    const running =
-      (phase: "checking" | "restoring") =>
-      (progress: BackupProgress): void =>
-        setStep({ name: "running", phase, progress });
     try {
       setStep({ name: "running", phase: "checking", progress: null });
       const checked = await check(file.path, passphrase, running("checking"));
-      // What is here is never replaced without asking, and the phone's question is not written yet.
-      if (checked.here !== null) return setStep({ name: "form", error: "here" });
-      setStep({ name: "running", phase: "restoring", progress: null });
-      await restore(file.path, passphrase, false, running("restoring"));
-      setStep({ name: "done", count: checked.summary.items });
+      if (checked.here !== null) return setStep({ name: "replace", check: checked });
+      await bringIn(checked, false);
     } catch (e) {
-      const code = e instanceof HomeRequestError ? e.code : "failed";
-      const error =
-        code === "wrongPassphrase"
-          ? "wrong"
-          : code === "notABackup"
-            ? "bad"
-            : code === "full"
-              ? "full"
-              : "failed";
-      setStep({ name: "form", error });
+      failed(e);
     }
   };
 
@@ -346,6 +352,14 @@ export function Restore({
           step.phase === "checking" ? t("restore.checking.title") : t("restore.restoring.title")
         }
         progress={step.progress}
+      />
+    );
+  if (step.name === "replace")
+    return (
+      <Replace
+        check={step.check}
+        onKeep={onBack}
+        onReplace={() => void bringIn(step.check, true)}
       />
     );
   if (step.name === "done")
@@ -370,7 +384,14 @@ export function Restore({
             <Icon name="document" size={22} />
             <span className="ph-srow-text">
               <span className="ph-srow-label">{file.name}</span>
-              <span className="ph-srow-hint">{formatBytes(file.bytes)}</span>
+              <span className="ph-srow-hint">
+                {file.madeAt
+                  ? t("phone.alone.restore.file.hint", {
+                      size: formatBytes(file.bytes),
+                      day: formatLongDay(file.madeAt),
+                    })
+                  : formatBytes(file.bytes)}
+              </span>
             </span>
             <button type="button" className="ph-link" onClick={() => void choose()}>
               {t("phone.alone.restore.change")}
@@ -385,24 +406,7 @@ export function Restore({
             onChange={setPassphrase}
           />
         ) : null}
-        {step.error ? (
-          <div className="ph-stack" role="alert" style={{ gap: 4 }}>
-            {step.error === "bad" ? (
-              <>
-                <p className="ph-card-title">{t("restore.bad.title")}</p>
-                <p className="ph-small">{t("restore.bad.body")}</p>
-              </>
-            ) : (
-              <p className="ph-error">
-                {step.error === "wrong"
-                  ? t("restore.wrong")
-                  : step.error === "full"
-                    ? t("phone.alone.full")
-                    : t("setup.action.failed")}
-              </p>
-            )}
-          </div>
-        ) : null}
+        {step.error ? <RestoreProblem error={step.error} /> : null}
       </main>
       <footer className="ph-foot">
         {file ? (
@@ -417,6 +421,112 @@ export function Restore({
         <button type="button" className="ph-textbtn" onClick={onBack}>
           {t("restore.back")}
         </button>
+      </footer>
+    </Page>
+  );
+}
+
+function restoreError(e: unknown): RestoreError {
+  const code = e instanceof HomeRequestError ? e.code : "failed";
+  switch (code) {
+    case "wrongPassphrase":
+      return "wrong";
+    case "notABackup":
+      return "bad";
+    case "newerBackup":
+      return "newer";
+    case "damagedBackup":
+      return "damaged";
+    case "full":
+      return "full";
+    default:
+      return "failed";
+  }
+}
+
+/** 0013's messages for a backup that did not come back. */
+function RestoreProblem({ error }: { error: RestoreError }) {
+  const [title, body] =
+    error === "bad"
+      ? [t("restore.bad.title"), t("restore.bad.body")]
+      : error === "newer"
+        ? [t("restore.newer.title"), t("restore.newer.body.generic")]
+        : error === "damaged"
+          ? [t("restore.damaged.title"), t("restore.damaged.body")]
+          : error === "full"
+            ? [t("restore.noRoom.title"), null]
+            : [null, error === "wrong" ? t("restore.wrong") : t("setup.action.failed")];
+  return (
+    <div className="ph-stack" role="alert" style={{ gap: 4 }}>
+      {title ? <p className="ph-card-title">{title}</p> : null}
+      {body ? <p className={title ? "ph-small" : "ph-error"}>{body}</p> : null}
+    </div>
+  );
+}
+
+function Count({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="ph-replace-row">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+/** "Replace what's on this phone?": 0013's choice, worded for the phone; neither is the default. */
+function Replace({
+  check,
+  onKeep,
+  onReplace,
+}: {
+  check: RestoreCheck;
+  onKeep(): void;
+  onReplace(): void;
+}) {
+  const heading = useHeading("replace");
+  const { summary, here, putAside } = check;
+  return (
+    <Page bar={null}>
+      <main className="ph-main" style={{ gap: 16 }}>
+        <h1 className="ph-steph" tabIndex={-1} ref={heading}>
+          {t("phone.alone.replace.title")}
+        </h1>
+        <p className="ph-body ph-ink2">{chips("phone.alone.replace.body")}</p>
+        <section className="ph-replace" aria-labelledby="ph-replace-in">
+          <h2 className="ph-see-head" id="ph-replace-in">
+            {t("restore.confirm.in")} · {t("restore.confirm.in.note")}
+          </h2>
+          <dl>
+            <Count label={t("restore.confirm.made")} value={formatLongDay(summary.madeAt)} />
+            <Count label={t("phone.alone.replace.things")} value={summary.items} />
+            <Count label={t("phone.alone.replace.originals")} value={summary.originals} />
+          </dl>
+        </section>
+        {here ? (
+          <section className="ph-replace" aria-labelledby="ph-replace-here">
+            <h2 className="ph-see-head" id="ph-replace-here">
+              {t("phone.alone.replace.here")} · {t("restore.confirm.here.note")}
+            </h2>
+            <dl>
+              {here.lastKept ? (
+                <Count label={t("restore.confirm.lastKept")} value={formatLongDay(here.lastKept)} />
+              ) : null}
+              <Count label={t("phone.alone.replace.originals")} value={here.originals} />
+              {here.keptAfterBackup > 0 ? (
+                <Count label={t("restore.confirm.keptAfter")} value={here.keptAfterBackup} />
+              ) : null}
+            </dl>
+          </section>
+        ) : null}
+        {putAside ? (
+          <p className="ph-small">
+            {t("restore.confirm.already", { day: formatLongDay(putAside) })}
+          </p>
+        ) : null}
+      </main>
+      <footer className="ph-foot">
+        <Button onClick={onKeep}>{t("restore.confirm.keep")}</Button>
+        <Button onClick={onReplace}>{t("restore.confirm.replace")}</Button>
       </footer>
     </Page>
   );

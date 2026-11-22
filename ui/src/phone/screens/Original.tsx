@@ -3,6 +3,7 @@ import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PhoneItem } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
+import { Switch } from "../native/screens/parts";
 import { renderingFor } from "../renderable";
 import { Button, Icon, Page } from "./ui";
 
@@ -40,9 +41,17 @@ interface OriginalProps {
   /** The words of the answer that used this, to be marked in a note. */
   quote: string | null;
   onBack(): void;
+  /** A phone alone opens its own memory, and a thing kept can be marked private here. */
+  alone?: AloneItem;
 }
 
-export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
+export interface AloneItem {
+  setPrivate(id: string, on: boolean): Promise<PhoneItem>;
+  /** Opened from Ask: the marked words are what was looked for. */
+  found: boolean;
+}
+
+export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps) {
   const [load, setLoad] = useState<Load>({ name: "loading" });
   const [attempt, setAttempt] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -83,10 +92,21 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
 
   const bar = (
     <header className="ph-bar ph-bar--back">
-      <button type="button" className="ph-ib ph-ib--ink" onClick={onBack}>
-        <Icon name="back" />
-        {t("phone.original.back")}
-      </button>
+      {alone ? (
+        <button
+          type="button"
+          className="ph-ib ph-ib--ink"
+          onClick={onBack}
+          aria-label={t("phone.back")}
+        >
+          <Icon name="back" />
+        </button>
+      ) : (
+        <button type="button" className="ph-ib ph-ib--ink" onClick={onBack}>
+          <Icon name="back" />
+          {t("phone.original.back")}
+        </button>
+      )}
     </header>
   );
 
@@ -96,7 +116,7 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
         <main className="ph-main" aria-busy="true">
           <p className="ph-status" role="status" style={{ fontSize: "1rem" }}>
             <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
-            {t("phone.original.loading")}
+            {alone ? t("phone.alone.original.loading") : t("phone.original.loading")}
           </p>
         </main>
       </Page>
@@ -111,7 +131,9 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
               ? t("phone.original.private")
               : load.why === "gone"
                 ? t("phone.original.gone")
-                : t("phone.original.failed")}
+                : alone
+                  ? t("phone.alone.original.failed")
+                  : t("phone.original.failed")}
           </h1>
           {load.why === "failed" && (
             <div className="ph-spacer">
@@ -155,10 +177,14 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
             <div className="ph-original-photo">
               <img src={url} alt={item.title} />
             </div>
-            <p className="ph-hint ph-hint--ink2">{t("phone.original.zoom")}</p>
+            <p className="ph-hint ph-hint--ink2">
+              {alone ? t("phone.alone.original.zoom") : t("phone.original.zoom")}
+            </p>
           </>
         )}
-        {item.kind === "audio" && rendering === "audio" && url && <Voice url={url} item={item} />}
+        {item.kind === "audio" && rendering === "audio" && url && (
+          <Voice url={url} item={item} alone={alone !== undefined} />
+        )}
         {item.kind === "document" && rendering === "pdf" && url && (
           <>
             <Button kind="primary" onClick={() => openDocument(url, fileName(item.title, "pdf"))}>
@@ -166,9 +192,11 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
               {t("phone.original.document")}
             </Button>
             <a className="ph-btn ph-btn--quiet" href={url} download={fileName(item.title, "pdf")}>
-              {t("phone.original.download")}
+              {alone ? t("phone.alone.original.download") : t("phone.original.download")}
             </a>
-            <p className="ph-hint ph-hint--ink2">{t("phone.original.document.hint")}</p>
+            <p className="ph-hint ph-hint--ink2">
+              {alone ? t("phone.alone.original.document.hint") : t("phone.original.document.hint")}
+            </p>
           </>
         )}
         {rendering === "download" && url && (
@@ -179,26 +207,47 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
               href={url}
               download={fileName(item.title, "heic")}
             >
-              {t("phone.original.download")}
+              {alone ? t("phone.alone.original.download") : t("phone.original.download")}
             </a>
           </>
         )}
         {blob && !rendering && (
-          <p className="ph-hint ph-hint--ink2">{t("phone.original.cantShow")}</p>
+          <p className="ph-hint ph-hint--ink2">
+            {alone ? t("phone.alone.original.cantShow") : t("phone.original.cantShow")}
+          </p>
         )}
         {(item.kind === "text" || item.kind === "web") && (
           <>
             <article className="ph-text-card">
               {marked(item.text ?? item.summary ?? "", quote)}
             </article>
-            {item.truncated && <p className="ph-hint ph-hint--ink2">{t("phone.original.cut")}</p>}
-            {quote && (item.text ?? "").includes(quote) && (
-              <p className="ph-hint ph-hint--ink2">{t("phone.original.used")}</p>
+            {item.truncated && (
+              <p className="ph-hint ph-hint--ink2">
+                {alone ? t("phone.alone.original.cut") : t("phone.original.cut")}
+              </p>
             )}
-            <div className="ph-spacer" />
-            <p className="ph-hint ph-hint--ink2">{t("phone.original.text")}</p>
+            {quote && (item.text ?? "").includes(quote) && (!alone || alone.found) && (
+              <p className="ph-hint ph-hint--ink2">
+                {alone ? t("phone.alone.original.found") : t("phone.original.used")}
+              </p>
+            )}
+            {alone ? null : (
+              <>
+                <div className="ph-spacer" />
+                <p className="ph-hint ph-hint--ink2">{t("phone.original.text")}</p>
+              </>
+            )}
           </>
         )}
+        {alone ? (
+          <PrivateRow
+            item={item}
+            onChange={async (on) => {
+              const next = await alone.setPrivate(item.id, on);
+              setLoad((now) => (now.name === "ready" ? { ...now, item: next } : now));
+            }}
+          />
+        ) : null}
       </main>
     </Page>
   );
@@ -243,7 +292,26 @@ function marked(text: string, quote: string | null) {
   );
 }
 
-function Voice({ url, item }: { url: string; item: PhoneItem }) {
+/** Marking a thing private, on the phone that holds it. Journal entries never can be. */
+function PrivateRow({ item, onChange }: { item: PhoneItem; onChange(on: boolean): Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  if (item.journal)
+    return <p className="ph-hint ph-hint--ink2">{t("phone.alone.private.journal")}</p>;
+  return (
+    <Switch
+      label={t("phone.alone.private")}
+      hint={t("phone.alone.private.hint")}
+      on={item.private === true}
+      disabled={busy}
+      onChange={(on) => {
+        setBusy(true);
+        void onChange(on).finally(() => setBusy(false));
+      }}
+    />
+  );
+}
+
+function Voice({ url, item, alone = false }: { url: string; item: PhoneItem; alone?: boolean }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [at, setAt] = useState(0);
@@ -298,14 +366,20 @@ function Voice({ url, item }: { url: string; item: PhoneItem }) {
       </div>
       {heard && (
         <div className="ph-stack">
-          <span className="ph-lbl">{t("phone.original.heard")}</span>
+          <span className="ph-lbl">
+            {alone && item.heardBy === "phone" ? t("phone.alone.heard") : t("phone.original.heard")}
+          </span>
           <p className="ph-answer" style={{ fontSize: "1.25rem", lineHeight: 1.5 }}>
             “{heard}”
           </p>
         </div>
       )}
-      <div className="ph-spacer" />
-      <p className="ph-hint ph-hint--ink2">{t("phone.original.voice")}</p>
+      {alone ? null : (
+        <>
+          <div className="ph-spacer" />
+          <p className="ph-hint ph-hint--ink2">{t("phone.original.voice")}</p>
+        </>
+      )}
     </>
   );
 }

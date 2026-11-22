@@ -8,6 +8,8 @@ export const REMINDER_DAYS = 30;
 const DAY_MS = 86_400_000;
 export const SINCE = "keepingSince";
 export const SHOWN = "reminderShown";
+/** The plain line before the phone's voice prompt was shown. */
+export const VOICE_ASKED = "voiceAsked";
 
 export interface NoteStore {
   get(key: string): Promise<string | null>;
