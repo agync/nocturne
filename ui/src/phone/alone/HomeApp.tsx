@@ -529,6 +529,7 @@ export function HomeApp({
           onBack={back}
           onQueued={refresh}
           lastNight
+          alone
         />
       );
       break;

@@ -91,6 +91,7 @@
   "phone.alone.keep.kept.heard": "It’s on today’s journal, in words this phone heard.",
   "phone.alone.keep.kept.from": "{kind} · {time}",
   "phone.alone.keep.undo": "Changed your mind?",
+  "phone.alone.checkin.from": "Check-in · {time}",
   "phone.alone.keep.big.body": "Nocturne keeps files up to 50 MB.",
   "phone.alone.keep.failed.title": "That wasn’t kept.",
   "phone.alone.keep.failed.body": "Nothing was kept. Try again.",
