@@ -25,9 +25,49 @@ struct Status {
     calendar: Access,
 }
 
+/// A calendar as the phone's side answers. Android gives a work profile calendar no name, so it
+/// comes with its place among the work profile's calendars, and is named here.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawCalendar {
+    id: String,
+    name: Option<String>,
+    colour: Option<String>,
+    #[serde(default)]
+    work_index: Option<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 struct Calendars {
-    calendars: Vec<PhoneCalendar>,
+    calendars: Vec<RawCalendar>,
+}
+
+const COPY: &str = include_str!("../../../../ui/src/copy/en-GB/phone-health.json");
+
+/// "Work profile calendar", or with its number when the work profile has several.
+fn work_name(index: u32, several: bool) -> String {
+    let copy: std::collections::HashMap<String, String> =
+        serde_json::from_str(COPY).expect("the copy deck is valid JSON");
+    if several {
+        copy["phone.calendar.workN"].replace("{n}", &index.to_string())
+    } else {
+        copy["phone.calendar.work"].clone()
+    }
+}
+
+fn named(raw: Vec<RawCalendar>) -> Vec<PhoneCalendar> {
+    let several = raw.iter().filter(|c| c.work_index.is_some()).count() > 1;
+    raw.into_iter()
+        .map(|c| PhoneCalendar {
+            name: match (c.name, c.work_index) {
+                (Some(name), _) => name,
+                (None, Some(index)) => work_name(index, several),
+                (None, None) => c.id.clone(),
+            },
+            id: c.id,
+            colour: c.colour,
+        })
+        .collect()
 }
 
 /// The days read, both included, in the phone's own time, and what is on them.
@@ -107,7 +147,7 @@ impl<R: Runtime> Calendar<R> {
 
     pub fn calendars(&self) -> Result<Vec<PhoneCalendar>, Error> {
         self.run::<Calendars>("listCalendars", ())
-            .map(|c| c.calendars)
+            .map(|c| named(c.calendars))
     }
 
     /// From `back` days before today to `ahead` days after it, both included, in the calendars
@@ -179,5 +219,48 @@ mod tests {
         let i: Instances = serde_json::from_str(json).unwrap();
         assert_eq!(i.entries.len(), 1);
         assert_eq!(i.entries[0].repeat_rule, None);
+    }
+
+    fn raw(id: &str, name: Option<&str>, work_index: Option<u32>) -> RawCalendar {
+        RawCalendar {
+            id: id.into(),
+            name: name.map(Into::into),
+            colour: Some("#3F51B5".into()),
+            work_index,
+        }
+    }
+
+    fn names(raw: Vec<RawCalendar>) -> Vec<String> {
+        named(raw).into_iter().map(|c| c.name).collect()
+    }
+
+    #[test]
+    fn a_work_profile_calendar_is_named_for_where_it_is_from() {
+        assert_eq!(
+            names(vec![
+                raw("1", Some("Family"), None),
+                raw("enterprise:4", None, Some(1))
+            ]),
+            vec!["Family", "Work profile calendar"]
+        );
+    }
+
+    #[test]
+    fn several_work_profile_calendars_are_numbered() {
+        assert_eq!(
+            names(vec![
+                raw("enterprise:4", None, Some(1)),
+                raw("enterprise:9", None, Some(2)),
+            ]),
+            vec!["Work profile calendar 1", "Work profile calendar 2"]
+        );
+    }
+
+    #[test]
+    fn the_answer_of_the_iphone_has_no_work_index() {
+        let got: Calendars =
+            serde_json::from_str(r##"{"calendars":[{"id":"A","name":"Home","colour":null}]}"##)
+                .unwrap();
+        assert_eq!(names(got.calendars), vec!["Home"]);
     }
 }

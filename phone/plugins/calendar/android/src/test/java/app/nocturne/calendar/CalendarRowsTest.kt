@@ -24,6 +24,7 @@ class CalendarRowsTest {
         originalId: Long? = null,
         originalInstanceTime: Long? = null,
         eventId: Long = 41,
+        enterprise: Boolean = false,
     ) = InstanceRow(
         eventId = eventId,
         calendarId = 3,
@@ -40,6 +41,7 @@ class CalendarRowsTest {
         originalInstanceTime = originalInstanceTime,
         selfStatus = selfStatus,
         status = status,
+        enterprise = enterprise,
     )
 
     @Test
@@ -131,6 +133,61 @@ class CalendarRowsTest {
     }
 
     @Test
+    fun aWorkCalendarHasAnIdThatNeverMeetsAPersonalOneAndNoName() {
+        val personal = CalendarRows.calendar(CalendarRow(3, "Family", 0xFF3F51B5.toInt(), null))
+        val work = CalendarRows.calendar(CalendarRow(3, null, 0xFF3F51B5.toInt(), null, enterprise = true), 1)
+        assertEquals("3", personal.id)
+        assertEquals("Family", personal.name)
+        assertNull(personal.workIndex)
+        assertEquals("enterprise:3", work.id)
+        assertNull(work.name)
+        assertEquals(1, work.workIndex)
+        assertEquals(personal.colour, work.colour)
+    }
+
+    @Test
+    fun workCalendarsAreListedAfterPersonalOnesAndNumberedFromOne() {
+        val rows = listOf(
+            CalendarRow(1, "Family", 1, "ana@example.com"),
+            CalendarRow(1, null, 2, null, enterprise = true),
+            CalendarRow(5, null, 3, null, enterprise = true),
+        )
+        val got = CalendarRows.list(rows)
+        assertEquals(listOf("1", "enterprise:1", "enterprise:5"), got.map { it.id })
+        assertEquals(listOf(null, 1, 2), got.map { it.workIndex })
+        assertEquals(listOf("Family", null, null), got.map { it.name })
+    }
+
+    @Test
+    fun aWorkEntryCarriesTheWorkCalendarIdAndItsOwnId() {
+        val personal = CalendarRows.entry(row(), emptyList(), false, london)!!
+        val work = CalendarRows.entry(row(enterprise = true), emptyList(), false, london)!!
+        assertEquals("3", personal.calendarId)
+        assertEquals("enterprise:3", work.calendarId)
+        assertEquals(CalendarRows.idOf("41"), personal.phoneId)
+        assertTrue(work.phoneId != personal.phoneId)
+        assertEquals(work.phoneId, CalendarRows.phoneId(row(enterprise = true)))
+        assertEquals("Dentist", work.title)
+        assertEquals("2026-11-23T09:00:00Z", work.start)
+    }
+
+    @Test
+    fun aWorkEntryWithoutNotesOrOriginalLinksHasIdsFromItsEventAndDay() {
+        val oneOff = row(enterprise = true, description = null)
+        assertEquals(CalendarRows.idOf("enterprise:41"), CalendarRows.phoneId(oneOff))
+        assertNull(CalendarRows.entry(oneOff, emptyList(), true, london)!!.notes)
+        val repeat = row(enterprise = true, description = null, rrule = "FREQ=WEEKLY;BYDAY=FR")
+        assertEquals(CalendarRows.idOf("enterprise:41:1795424400000"), CalendarRows.phoneId(repeat))
+    }
+
+    @Test
+    fun theIdsTheComputerAsksForAreSplitByProfile() {
+        val (personal, work) = CalendarRows.split(listOf("3", "enterprise:3", "enterprise:9", "x", "enterprise:y"))
+        assertEquals(setOf(3L), personal)
+        assertEquals(setOf(3L, 9L), work)
+    }
+
+    @Test
     fun peopleAreNamesWithoutThePerson() {
         val got = CalendarRows.people(
             listOf(
@@ -159,7 +216,7 @@ class CalendarRowsTest {
         val long = "a".repeat(CalendarRows.MAX_FIELD + 10)
         assertEquals(CalendarRows.MAX_FIELD, CalendarRows.cut(long).length)
         val named = CalendarRows.calendar(CalendarRow(1, "n".repeat(300), null, null))
-        assertEquals(CalendarRows.MAX_NAME, named.name.length)
+        assertEquals(CalendarRows.MAX_NAME, named.name!!.length)
         assertEquals("#3F51B5", CalendarRows.colour(0xFF3F51B5.toInt()))
     }
 }

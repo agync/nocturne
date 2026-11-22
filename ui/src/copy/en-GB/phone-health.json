@@ -19,6 +19,8 @@
   "phone.calendar.bring": "Bring my calendar",
   "phone.calendar.bring.hint": "Two days back to two weeks ahead, read only.",
   "phone.calendar.which": "Which calendars",
+  "phone.calendar.work": "Work profile calendar",
+  "phone.calendar.workN": "Work profile calendar {n}",
   "phone.calendar.notes": "Notes on each appointment",
   "phone.calendar.notes.hint": "Usually call links and dial-in numbers. Off keeps your page tidy.",
   "phone.calendar.lastSent": "Last sent {time} · {count, plural, one {# appointment} other {# appointments}}",

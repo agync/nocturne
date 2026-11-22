@@ -386,6 +386,7 @@ settings screen, grouped as each platform groups settings.
 | List heading | "Which calendars" |
 | Each row | The calendar's name and colour dot as the phone shows them, with a switch. When two calendars share a name, each also shows its account as a second line, as the phone names it ("Holidays in Germany" / "maya.k@example.com") |
 | Note under the list | "Every calendar starts on. Turn off any you don’t want on your page." |
+| Work profile | On Android 10 and newer, calendars from the work profile are listed with the others when the phone lets this app see them. Android gives their names to no app, so each is named for where it comes from, "Work profile calendar", or "Work profile calendar 2" and so on when there are several, with its colour dot. Their appointments come without notes and without who is invited, because Android shares neither. When the phone does not share them, nothing changes and no message appears |
 | Notes switch | "Notes on each appointment" / "Usually call links and dial-in numbers. Off keeps your page tidy." |
 | Last sent | "Last sent {time} · {count} appointments" |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |
@@ -793,6 +794,7 @@ New strings only; everything marked "Phone page" above is reused as it is.
 | Calendar screen, switch | "Bring my calendar" / "Two days back to two weeks ahead, read only." |
 | Which calendars | "Which calendars" |
 | Calendars note | "Every calendar starts on. Turn off any you don’t want on your page." |
+| Work profile calendar | "Work profile calendar", or "Work profile calendar {n}" when there are several |
 | Notes switch | "Notes on each appointment" / "Usually call links and dial-in numbers. Off keeps your page tidy." |
 | Calendar last sent | "Last sent {time} · {count, plural, one {# appointment} other {# appointments}}" |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |

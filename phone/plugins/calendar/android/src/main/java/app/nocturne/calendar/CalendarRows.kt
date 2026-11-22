@@ -9,15 +9,21 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Base64
 
-/** One row of the phone's Calendars table, as read. */
+/**
+ * One row of the phone's Calendars table, as read. A row from the work profile has [enterprise]
+ * set: its id is only unique within that profile, and Android gives the app no name, owner or
+ * account for it.
+ */
 data class CalendarRow(
     val id: Long,
     val name: String?,
     val colour: Int?,
     val ownerAccount: String?,
+    val enterprise: Boolean = false,
 )
 
-data class Calendar(val id: String, val name: String, val colour: String?)
+/** A calendar as the computer takes it. A work profile calendar has no name, only its [workIndex]. */
+data class Calendar(val id: String, val name: String?, val colour: String?, val workIndex: Int? = null)
 
 /** One row of the Instances table: one appointment on one day. */
 data class InstanceRow(
@@ -37,6 +43,8 @@ data class InstanceRow(
     val originalInstanceTime: Long?,
     val selfStatus: Int,
     val status: Int,
+    /** Read from the work profile, where event and calendar ids are only unique in that profile. */
+    val enterprise: Boolean = false,
 )
 
 data class Attendee(val name: String?, val email: String?)
@@ -72,13 +80,41 @@ object CalendarRows {
     const val ATTENDEE_DECLINED = 2
     const val ATTENDEE_INVITED = 3
 
+    /** The id of a work-profile calendar starts with this, so it never meets a personal one. */
+    const val ENTERPRISE_PREFIX = "enterprise:"
+
+    /** A calendar's id on the wire: the number the phone gives it, with the prefix for the work profile. */
+    fun calendarId(id: Long, enterprise: Boolean): String =
+        if (enterprise) "$ENTERPRISE_PREFIX$id" else id.toString()
+
+    /** The ids the computer asked for, split by profile; ids that are not numbers are dropped. */
+    fun split(ids: Collection<String>): Pair<Set<Long>, Set<Long>> {
+        val personal = mutableSetOf<Long>()
+        val enterprise = mutableSetOf<Long>()
+        for (id in ids) {
+            if (id.startsWith(ENTERPRISE_PREFIX)) {
+                id.removePrefix(ENTERPRISE_PREFIX).toLongOrNull()?.let(enterprise::add)
+            } else {
+                id.toLongOrNull()?.let(personal::add)
+            }
+        }
+        return personal to enterprise
+    }
+
     fun colour(argb: Int?): String? = argb?.let { String.format("#%06X", it and 0xFFFFFF) }
 
-    fun calendar(row: CalendarRow): Calendar = Calendar(
-        id = row.id.toString(),
-        name = cut(row.name?.trim()?.takeIf { it.isNotEmpty() } ?: row.id.toString(), MAX_NAME),
+    fun calendar(row: CalendarRow, workIndex: Int? = null): Calendar = Calendar(
+        id = calendarId(row.id, row.enterprise),
+        name = if (row.enterprise) null else cut(row.name?.trim()?.takeIf { it.isNotEmpty() } ?: row.id.toString(), MAX_NAME),
         colour = colour(row.colour),
+        workIndex = if (row.enterprise) workIndex else null,
     )
+
+    /** Every calendar, the work profile's numbered from 1 in the order read. */
+    fun list(rows: List<CalendarRow>): List<Calendar> {
+        var work = 0
+        return rows.map { calendar(it, if (it.enterprise) ++work else null) }
+    }
 
     /** From `back` days before today to `ahead` days after, both included, in the phone's zone. */
     fun window(today: LocalDate, back: Int, ahead: Int, zone: ZoneId): Window {
@@ -103,10 +139,14 @@ object CalendarRows {
      * event, an edited day of a repeat by the day it replaced (so the edit is a change, not a new
      * entry), and every other day of a repeat by its event and the day it falls on.
      */
-    fun phoneId(row: InstanceRow): String = when {
-        row.originalId != null -> idOf("${row.originalId}:${row.originalInstanceTime ?: row.begin}")
-        row.rrule.isNullOrBlank() && row.rdate.isNullOrBlank() -> idOf("${row.eventId}")
-        else -> idOf("${row.eventId}:${row.begin}")
+    fun phoneId(row: InstanceRow): String {
+        val profile = if (row.enterprise) ENTERPRISE_PREFIX else ""
+        return when {
+            row.originalId != null ->
+                idOf("$profile${row.originalId}:${row.originalInstanceTime ?: row.begin}")
+            row.rrule.isNullOrBlank() && row.rdate.isNullOrBlank() -> idOf("$profile${row.eventId}")
+            else -> idOf("$profile${row.eventId}:${row.begin}")
+        }
     }
 
     private val TIMED = DateTimeFormatter.ISO_OFFSET_DATE_TIME
@@ -155,7 +195,7 @@ object CalendarRows {
         val repeats = rule != null || !row.rdate.isNullOrBlank() || row.originalId != null
         return Entry(
             phoneId = phoneId(row),
-            calendarId = row.calendarId.toString(),
+            calendarId = calendarId(row.calendarId, row.enterprise),
             title = title,
             start = time(row.begin, row.allDay, zone),
             end = time(maxOf(row.end, row.begin), row.allDay, zone),
