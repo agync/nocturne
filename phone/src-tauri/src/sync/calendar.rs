@@ -251,6 +251,12 @@ async fn send(
         Sent::Done => l.calendar.too_many = too_many,
         Sent::Away | Sent::Refused => {}
         Sent::Off => l.calendar.pending.clear(),
+        Sent::Again => {
+            let settings = l.calendar.settings.clone();
+            l.calendar = Default::default();
+            l.calendar.settings = settings;
+            l.calendar.again = true;
+        }
     });
     out.total
 }

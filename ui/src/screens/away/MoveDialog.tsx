@@ -106,6 +106,7 @@ function MovePanel({ view }: { view: MoveView }) {
           </p>
           <p>{t("moving.receive.lead", { name })}</p>
           {view.here ? <p>{t("moving.receive.already", { name })}</p> : null}
+          {view.here && view.others ? <p>{t("moving.receive.others")}</p> : null}
         </>
       );
       foot = (

@@ -6,6 +6,7 @@
   "moving.receive.counts": "{count} things kept · about {size}",
   "moving.receive.lead": "This computer becomes its home: it reads, tidies and writes the page. {name} then works with it like your other phones.",
   "moving.receive.already": "This computer already holds a memory. A computer holds one person’s memory. Move {name}’s here and put what is here aside, or keep what is here and move nothing.",
+  "moving.receive.others": "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside.",
   "moving.receive.move": "Move it here",
   "moving.receive.notNow": "Not now",
   "moving.receive.putAside": "Put this aside and move it here",

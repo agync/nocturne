@@ -60,6 +60,16 @@ describe("a phone with its own memory", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 
+  it("says the other phones send again when a memory is replaced", async () => {
+    const engine = manualEngine("onAlone");
+    await openAway("/settings/away", "onAlone", "Away from home", engine);
+    act(() => engine.setMove({ ...offered(true), others: true }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(
+      "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside.",
+    );
+  });
+
   it("takes focus, and Escape means Not now", async () => {
     const { engine, dialog } = await withOffer();
     await waitFor(() => expect(dialog).toHaveFocus());

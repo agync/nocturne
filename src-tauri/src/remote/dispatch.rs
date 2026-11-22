@@ -437,6 +437,9 @@ impl<R: Runtime> Call<R> {
                 if let Err(code) = shape {
                     return err(code);
                 }
+                if self.resend_due("calendar") {
+                    return err(PhoneError::NotFound);
+                }
                 self.sync(RemoteAction::SentCalendar, move |e, device| {
                     e.take_calendar(&device, batch)
                 })
@@ -445,6 +448,9 @@ impl<R: Runtime> Call<R> {
             RemoteCall::SendReadings { batch } => {
                 if let Err(code) = sync_shape(&batch.sync_id, batch.changes.len(), &batch) {
                     return err(code);
+                }
+                if self.resend_due("health") {
+                    return err(PhoneError::NotFound);
                 }
                 self.sync(RemoteAction::SentReadings, move |e, device| {
                     e.take_readings(&device, batch)
@@ -491,6 +497,14 @@ impl<R: Runtime> Call<R> {
                 None
             }
         }
+    }
+
+    /// What this phone sent of `source` went aside with a replaced memory: it is told once, and
+    /// sends that source again from scratch.
+    fn resend_due(&self, source: &str) -> bool {
+        self.app.try_state::<AppState>().is_some_and(|state| {
+            super::moving::resend_due(&self.core, &state.data_dir, &self.device.id, source)
+        })
     }
 
     /// One batch of a phone app's calendar or health send: one per-phone token, then the store

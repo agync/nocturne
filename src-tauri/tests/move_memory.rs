@@ -807,3 +807,54 @@ fn a_memory_that_does_not_open_changes_nothing_and_the_phone_keeps_its_own() {
         Ok(RemoteAnswer::MemoryAccepted { .. })
     ));
 }
+
+#[test]
+fn after_a_replace_the_other_phones_send_their_calendar_again() {
+    let home = phone_home();
+    let h = harness_with_mind(Arc::new(FakeMind::new()));
+    h.learn("garden", "The gate code is 4512.", "Gate", "4512");
+    let c = computer(h);
+    let tablet = c.phone(c.pair());
+    assert!(matches!(
+        block(tablet.call(RemoteCall::SendCalendar {
+            batch: calendar("t1"),
+        }))
+        .unwrap(),
+        RemoteAnswer::Synced { .. }
+    ));
+    let phone = c.phone(c.pair());
+    let (file, sha) = home.backup();
+    let p = phone.clone();
+    let offer = home.offer(&file);
+    let asked = tauri::async_runtime::spawn(async move { p.call(offer).await });
+    wait_for("asked", || c.view().is_some());
+    let shown = c.h.ok("get_move", json!({}));
+    assert_eq!(shown["here"], true);
+    assert_eq!(shown["others"], true, "it says the other phones send again");
+    c.h.ok("answer_move", json!({"choice": "move"}));
+    assert!(block(asked).unwrap().is_ok());
+    assert!(matches!(
+        block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
+        RemoteAnswer::MemoryArrived { .. }
+    ));
+    let c = c.restart();
+
+    let tablet = c.phone(tablet.identity().unwrap());
+    assert_eq!(
+        block(tablet.call(RemoteCall::SendCalendar {
+            batch: calendar("t2"),
+        }))
+        .err(),
+        Some(CallError::Phone {
+            code: PhoneError::NotFound
+        }),
+        "its calendar went aside with the old memory: send it all again"
+    );
+    let RemoteAnswer::Synced { receipt } = block(tablet.call(RemoteCall::SendCalendar {
+        batch: calendar("t3"),
+    }))
+    .unwrap() else {
+        panic!("a receipt")
+    };
+    assert_eq!(receipt.taken, 1, "taken anew");
+}

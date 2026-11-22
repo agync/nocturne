@@ -190,6 +190,9 @@ pub enum Sent {
     Refused,
     /// The person turned the source off, or took its permission back, during the send.
     Off,
+    /// The computer has none of this source any more (what it had went aside with a memory it
+    /// replaced): everything is sent again from scratch.
+    Again,
 }
 
 /// A send id: random, in the channel's id alphabet.
@@ -341,6 +344,12 @@ pub(crate) async fn send_batch(link: &impl Link, call: RemoteCall) -> Answer {
             {
                 return Answer::Ended(Sent::Away);
             }
+            Ok(RemoteAnswer::Error {
+                code: PhoneError::NotFound,
+            })
+            | Err(CallError::Phone {
+                code: PhoneError::NotFound,
+            }) => return Answer::Ended(Sent::Again),
             Ok(_) | Err(_) => return Answer::Ended(Sent::Refused),
         }
     }
@@ -403,11 +412,18 @@ impl Syncer {
             calendar: None,
             health: None,
         };
+        // A source the computer asks for again from scratch goes once more, whole.
         if takes.contains(&PhoneFeature::Calendar) {
             report.calendar = calendar::sync(&self.ledger, device, link).await;
+            if self.ledger.take_again(|l| &mut l.calendar.again) {
+                report.calendar = calendar::sync(&self.ledger, device, link).await;
+            }
         }
         if takes.contains(&PhoneFeature::Health) {
             report.health = health::sync(&self.ledger, device, link).await;
+            if self.ledger.take_again(|l| &mut l.health.again) {
+                report.health = health::sync(&self.ledger, device, link).await;
+            }
         }
         let taken = |r: &Option<SyncReceipt>| r.map_or(0, |r| r.taken);
         let (cal, readings) = (taken(&report.calendar), taken(&report.health));

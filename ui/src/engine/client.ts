@@ -130,7 +130,15 @@ export interface EngineEvents {
 
 /** A phone's memory moving to this computer, as the window shows it (`get_move`). */
 export type MoveView =
-  | { phase: "offered"; name: string; items: number; bytes: number; here: boolean }
+  | {
+      phase: "offered";
+      name: string;
+      items: number;
+      bytes: number;
+      here: boolean;
+      /** Other phones send their calendar and health again after this replaces a memory. */
+      others?: boolean;
+    }
   | { phase: "arriving"; name: string; done: number; size: number }
   | { phase: "checking"; name: string }
   | { phase: "arrived"; name: string; online: boolean };

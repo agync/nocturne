@@ -195,6 +195,8 @@ enum Mode {
     Cap(u32),
     /// Busy this many times, then takes.
     Busy(u32),
+    /// Has none of it any more, once, then takes.
+    Again,
 }
 
 struct FakeLink {
@@ -286,6 +288,12 @@ impl FakeLink {
                 *mode = Mode::Busy(left - 1);
                 Ok(RemoteAnswer::Error {
                     code: PhoneError::TooMany,
+                })
+            }
+            Mode::Again => {
+                *mode = Mode::Take;
+                Err(CallError::Phone {
+                    code: PhoneError::NotFound,
                 })
             }
         }
@@ -1487,4 +1495,45 @@ fn moving_from_alone_to_a_computer_keeps_the_ledger() {
     let report = sync_to(&s, &d, &ChannelSink(&link)).unwrap();
     assert_eq!(report.calendar, None);
     assert!(link.calls.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_computer_that_lost_what_was_sent_gets_all_of_it_again() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    bring_health(&s);
+    let d = FakeDevice::new();
+    *d.entries.lock().unwrap() = vec![
+        entry("a", "2026-11-21", "1"),
+        entry("b", "2026-11-23", "1"),
+        entry("c", "2026-11-24", "1"),
+    ];
+    *d.readings.lock().unwrap() = vec![steps("2026-11-20", 4000), steps("2026-11-21", 900)];
+    let link = FakeLink::new(Mode::Take);
+    sync(&s, &d, &link);
+
+    // The computer replaced its memory: the next send of each source hears so, and the whole of
+    // that source goes again at once.
+    d.entries.lock().unwrap()[1].start = "2026-11-23T10:00:00Z".into();
+    link.clear();
+    link.set(Mode::Again);
+    let report = sync(&s, &d, &link);
+    assert_eq!(
+        report.calendar.unwrap().taken,
+        3,
+        "every entry, not only the one that moved"
+    );
+    assert!(!s.ledger.get().calendar.again);
+
+    d.readings.lock().unwrap()[1] = steps("2026-11-21", 1500);
+    *d.changes.lock().unwrap() = Some(Changes {
+        readings: vec![steps("2026-11-21", 1500)],
+        token: Some("t5".into()),
+        ..Changes::default()
+    });
+    link.clear();
+    link.set(Mode::Again);
+    let report = sync(&s, &d, &link);
+    assert_eq!(report.health.unwrap().taken, 2, "a whole read again");
+    assert!(!s.ledger.get().health.again);
 }
