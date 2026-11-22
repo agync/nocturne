@@ -207,6 +207,11 @@ pub enum TransportState {
     Restarting {
         attempt: u32,
     },
+    /// The Simple tunnel was deleted by Cloudflare; a new one, with a new address, is on its
+    /// way. Not a crash, so it does not count towards restarting too often.
+    Renewing {
+        attempt: u32,
+    },
     Failed {
         error: HelperError,
     },

@@ -630,6 +630,45 @@ fn down_30_seconds_is_a_problem() {
 }
 
 #[test]
+fn a_renewed_tunnel_needs_relink_even_after_a_problem() {
+    let a = away();
+    a.on();
+    a.pair("Pixel");
+    for attempt in 1..=6 {
+        a.helpers
+            .transport
+            .set(TransportState::Renewing { attempt });
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    a.mono.advance(Duration::from_secs(30));
+    assert!(matches!(a.view().state, RemoteState::Problem { .. }));
+    a.helpers.transport.set(TransportState::Up {
+        address: format!("https://{NEW_HOST}"),
+        route: None,
+    });
+    wait_for("the new code", || {
+        matches!(a.hub.state(), RemoteState::NeedsRelink { .. })
+    });
+    let v = a.view();
+    let RemoteState::NeedsRelink { address, words, .. } = v.state else {
+        panic!("needs re-link: {:?}", v.state)
+    };
+    assert_eq!(address, NEW_HOST);
+    assert_eq!(words, "river maple stone quiet");
+    assert!(v.devices[0].needs_address);
+    assert_eq!(
+        a.h.engine().remote_state().unwrap().address.as_deref(),
+        Some(NEW_HOST)
+    );
+    a.mono.advance(Duration::from_secs(60));
+    a.hub.refresh();
+    assert!(
+        matches!(a.view().state, RemoteState::NeedsRelink { .. }),
+        "renewals are not crashes, so the new code stays shown"
+    );
+}
+
+#[test]
 fn auto_off_stops_when_due() {
     let a = away();
     a.on();
