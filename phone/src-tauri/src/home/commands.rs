@@ -34,6 +34,7 @@ fn emit_mode<R: Runtime>(app: &AppHandle<R>) {
     if let Err(e) = app.emit(EVENT_MODE, mode) {
         tracing::warn!("could not say where the memory lives: {e}");
     }
+    crate::sources::start(app);
 }
 
 /// Where the memory lives: `alone`, `companion`, or none before the person has chosen.

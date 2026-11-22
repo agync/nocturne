@@ -33,6 +33,7 @@ pub fn run() {
                 std::sync::Arc::new(nocturne_engine::SystemClock),
                 exclude_from_backup(app.handle()),
             ));
+            sources::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
