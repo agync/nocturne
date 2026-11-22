@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PairedDevice } from "../engine";
+import { HomeApp } from "../alone/HomeApp";
+import { Restore } from "../alone/screens/Backup";
+import { AloneWelcome, Damaged, Start } from "../alone/screens/Welcome";
 import { Pair } from "../screens/Pair";
 import type { PairingLike } from "../services";
 import { AddressStep, CameraOff, CodeStep, NativeWelcome } from "./Entry";
@@ -19,6 +22,11 @@ const SITE = "https://nocturne.is/";
 
 type Screen =
   | { name: "loading" }
+  | { name: "first" }
+  | { name: "start"; busy: boolean }
+  | { name: "restore" }
+  | { name: "damaged" }
+  | { name: "alone"; offer: boolean }
   | { name: "welcome"; unreached: boolean; wrongCode?: boolean }
   | { name: "cameraOff" }
   | { name: "address"; text: string; busy: boolean; error: "incomplete" | "noAnswer" | null }
@@ -34,18 +42,34 @@ export function routeOf(hash: string): Route | null {
   return r === "rationale" || r === "calendar" || r === "health" ? r : null;
 }
 
+const openSite = () => void invoke("plugin:opener|open_url", { url: SITE }).catch(() => undefined);
+
 /**
- * The phone app until it is paired: Welcome, scanning in the app, and typing the address then
- * the code. Once paired, the phone screens take over, and a pairing that goes away (removed,
- * disconnected) comes back here.
+ * The phone app until it has a home for its memory: Welcome, starting on this phone or bringing
+ * back a backup, and pairing (scanning in the app, or typing the address then the code). A phone
+ * alone opens on its own memory; a paired phone on its computer's. A pairing that goes away
+ * (removed, disconnected) comes back here.
  */
 export function NativeRoot({ services }: { services: NativeServices }) {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [waiting, setWaiting] = useState(0);
   const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
+  const [name, setName] = useState("");
+  // A restore says where the memory lives before its own "back on this phone" is read.
+  const shown = useRef(screen.name);
+  shown.current = screen.name;
+
+  useEffect(() => {
+    void services.deviceName?.().then((n) => setName(n ?? ""));
+  }, [services]);
 
   const home = useCallback(
     async (unreached = false, offer = false) => {
+      if (await services.home.damaged()) return setScreen({ name: "damaged" });
+      if ((await services.home.mode()) === "alone")
+        return setScreen((now) =>
+          now.name === "alone" && !offer ? now : { name: "alone", offer },
+        );
       const device = await services.store.device().catch(() => null);
       if (device)
         return setScreen((now) =>
@@ -54,14 +78,21 @@ export function NativeRoot({ services }: { services: NativeServices }) {
             : { name: "paired", device, offer },
         );
       setWaiting(await services.queue.count().catch(() => 0));
-      setScreen({ name: "welcome", unreached });
+      setScreen(unreached ? { name: "welcome", unreached } : { name: "first" });
     },
     [services],
   );
 
   useEffect(() => {
     void home();
-    return services.store.subscribe(() => void home());
+    const stopStore = services.store.subscribe(() => void home());
+    const stopMode = services.home.onMode(() => {
+      if (shown.current !== "restore") void home();
+    });
+    return () => {
+      stopStore();
+      stopMode();
+    };
   }, [services, home]);
 
   useEffect(() => {
@@ -77,7 +108,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   }, []);
 
   // Not paired: what another app shares waits on this phone, and Welcome counts it.
-  const unpaired = screen.name !== "paired" && screen.name !== "loading";
+  const unpaired = screen.name !== "paired" && screen.name !== "loading" && screen.name !== "alone";
   useEffect(() => {
     if (!unpaired) return;
     return watchLaunch(
@@ -96,10 +127,12 @@ export function NativeRoot({ services }: { services: NativeServices }) {
 
   // The rationale reads without pairing; the calendar and Health need a computer to go to.
   if (route === "rationale") return <Rationale onBack={leave} />;
-  if (screen.name === "paired" && route === "calendar")
-    return <CalendarConnect channel={nativeChannel} onDone={leave} />;
-  if (screen.name === "paired" && route === "health")
-    return <HealthConnect channel={nativeChannel} onDone={leave} />;
+  const homed = screen.name === "paired" || screen.name === "alone";
+  if (homed && route === "calendar")
+    return (
+      <CalendarConnect channel={nativeChannel} onDone={leave} alone={screen.name === "alone"} />
+    );
+  if (homed && route === "health") return <HealthConnect channel={nativeChannel} onDone={leave} />;
 
   const scan = async () => {
     const got = await scanCode();
@@ -117,6 +150,51 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   switch (screen.name) {
     case "loading":
       return null;
+    case "first":
+      return (
+        <AloneWelcome
+          onStart={() => setScreen({ name: "start", busy: false })}
+          onConnect={() => setScreen({ name: "welcome", unreached: false })}
+          onBackup={() => setScreen({ name: "restore" })}
+        />
+      );
+    case "start":
+      return (
+        <Start
+          busy={screen.busy}
+          onStart={async () => {
+            setScreen({ name: "start", busy: true });
+            try {
+              await services.home.startAlone(name);
+              setScreen({ name: "alone", offer: true });
+            } catch {
+              setScreen({ name: "start", busy: false });
+            }
+          }}
+        />
+      );
+    case "restore":
+      return (
+        <Restore
+          pickFile={services.home.files.open}
+          check={services.home.checkBackup}
+          restore={services.home.restoreBackup}
+          onBack={() => void home()}
+          onDone={() => void home()}
+        />
+      );
+    case "damaged":
+      return <Damaged onBackup={() => setScreen({ name: "restore" })} onHelp={openSite} />;
+    case "alone":
+      return (
+        <HomeApp
+          key={screen.offer ? "offer" : "home"}
+          services={services}
+          channel={nativeChannel}
+          offer={screen.offer}
+          name={name}
+        />
+      );
     case "welcome":
       return (
         <NativeWelcome
@@ -125,7 +203,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           wrongCode={screen.wrongCode ?? false}
           onScan={() => void scan()}
           onType={toAddress}
-          onSite={() => void invoke("plugin:opener|open_url", { url: SITE }).catch(() => undefined)}
+          onSite={openSite}
           onClear={async () => {
             await services.queue.clear();
             setWaiting(0);

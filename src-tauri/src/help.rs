@@ -69,7 +69,7 @@ const INDEX_ASKED: &[(&str, &[&str])] = &[
 const CHIPS: &str = include_str!("../../ui/src/components/ControlChip/chips.json");
 
 /// The interface's copy deck, for the words of each chip's control.
-const DECK: [&str; 34] = [
+const DECK: [&str; 35] = [
     include_str!("../../ui/src/copy/en-GB/advanced.json"),
     include_str!("../../ui/src/copy/en-GB/ask.json"),
     include_str!("../../ui/src/copy/en-GB/away.json"),
@@ -94,6 +94,7 @@ const DECK: [&str; 34] = [
     include_str!("../../ui/src/copy/en-GB/online.json"),
     include_str!("../../ui/src/copy/en-GB/page.json"),
     include_str!("../../ui/src/copy/en-GB/phone.json"),
+    include_str!("../../ui/src/copy/en-GB/phone-alone.json"),
     include_str!("../../ui/src/copy/en-GB/phone-app.json"),
     include_str!("../../ui/src/copy/en-GB/phone-health.json"),
     include_str!("../../ui/src/copy/en-GB/phone-native.json"),
