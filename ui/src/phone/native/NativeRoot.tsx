@@ -82,6 +82,10 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       // A damaged memory is found when it is first opened: open it before asking.
       if (mode === "alone") await services.home.stats().catch(() => undefined);
       if (await services.home.damaged()) return setScreen({ name: "damaged" });
+      // A phone alone that holds a pairing is part way through moving its memory (pairing
+      // undone on every other way out): the move carries on where it was.
+      if (mode === "alone" && (await (services.move ?? nativeMoveApi).pending()))
+        return setScreen({ name: "move" });
       if (mode === "alone")
         return setScreen((now) =>
           now.name === "alone" && !offer ? now : { name: "alone", offer },

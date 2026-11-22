@@ -142,6 +142,10 @@ export function MoveSize({
  */
 function useLeft(progress: MoveProgress | null, now: () => number): number | null {
   const start = useRef<{ at: number; done: number } | null>(null);
+  // Measured afresh after a pause, or when the move starts again from the beginning.
+  if (progress?.phase !== "sending" || (start.current && progress.done < start.current.done)) {
+    start.current = null;
+  }
   if (progress?.phase !== "sending") return null;
   if (!start.current) start.current = { at: now(), done: progress.done };
   const elapsed = now() - start.current.at;

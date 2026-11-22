@@ -6,8 +6,8 @@
 //! the memory; the phone keeps its memory, still held, and asks until the computer says the
 //! memory opened. Only then is the store put aside as `store-put-aside-{time}`, read only, and
 //! the phone becomes a companion of that computer. The put-aside memory stays for 30 days unless
-//! the person removes it sooner. Before the backup is made, each thing with no device name takes
-//! the name this phone paired with, so the computer can say where it was kept.
+//! the person removes it sooner. While it waits the phone only asks where its memory stands (a
+//! `memoryDone` that sends nothing), so the wait never starts a new move on the computer.
 //!
 //! Anything kept while the memory moves waits in the screens' queue and goes to the computer
 //! once the phone is its companion. A move that stops part way changes nothing here.
@@ -109,6 +109,16 @@ pub enum MoveError {
     NotOpened,
     /// The person on the computer stopped the move; nothing changed.
     StoppedThere,
+}
+
+/// The computer's answer to the offer, for the screens.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveOffered {
+    /// The memory already opened there: the move only has to finish.
+    pub opened: bool,
+    /// What the computer already holds.
+    pub here: Option<MemoryCounts>,
 }
 
 /// The finished move, for "Your memory is on {computer}."
@@ -220,17 +230,10 @@ impl Home {
     /// the store between this and the put-aside.
     pub(crate) fn prepare_move(
         &self,
-        paired_as: Option<&str>,
         progress: calls::Progress<'_>,
         cancel: &AtomicBool,
     ) -> Result<Prepared, MoveError> {
         let open = self.open_store().map_err(|_| MoveError::Failed)?;
-        // Where each thing was kept goes with it: this phone, by the name it paired with.
-        if let Some(name) = paired_as.filter(|n| !n.trim().is_empty())
-            && let Err(e) = open.engine.name_unnamed_items(name)
-        {
-            tracing::warn!("could not note where things were kept: {e}");
-        }
         let dir = self.moving_dir();
         calls::clear(&dir);
         std::fs::create_dir_all(&dir).map_err(|_| MoveError::Failed)?;
@@ -365,6 +368,8 @@ pub(crate) trait Computer {
         file: &Path,
         sent: impl Fn(u64) + Send + Sync,
     ) -> impl Future<Output = Result<RemoteAnswer, CallError>> + Send;
+    /// Where the memory stands there, sending nothing.
+    fn status(&self) -> impl Future<Output = Result<RemoteAnswer, CallError>> + Send;
 }
 
 impl Computer for Phone {
@@ -379,6 +384,10 @@ impl Computer for Phone {
         sent: impl Fn(u64) + Send + Sync,
     ) -> Result<RemoteAnswer, CallError> {
         self.upload_memory(call, file, sent).await
+    }
+
+    async fn status(&self) -> Result<RemoteAnswer, CallError> {
+        self.memory_status().await
     }
 }
 
@@ -422,15 +431,44 @@ pub(crate) async fn offer(
         CallError::Phone {
             code: PhoneError::TooLarge,
         } => MoveError::NoRoom,
-        CallError::Phone {
-            code: PhoneError::NotFound,
-        } => MoveError::NotOpened,
         e => failure(e),
     })?;
     match answered {
         RemoteAnswer::MemoryAccepted { here } => Ok(Offered::Accepted { here }),
         RemoteAnswer::MemoryArrived { counts } => Ok(Offered::Arrived(counts)),
         _ => Err(MoveError::Failed),
+    }
+}
+
+/// Where the memory stands on the computer.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Stands {
+    /// It opened there, with these counts.
+    Opened(MemoryCounts),
+    /// Not opened yet: being checked, or Nocturne there restarts.
+    Waiting,
+    /// The computer knows nothing of it: it is offered again.
+    Unknown,
+}
+
+/// Ask where the memory stands, sending nothing.
+pub(crate) async fn stands(computer: &impl Computer) -> Result<Stands, MoveError> {
+    match computer.status().await {
+        Ok(RemoteAnswer::MemoryArrived { counts }) => Ok(Stands::Opened(counts)),
+        Ok(_) => Err(MoveError::Failed),
+        Err(CallError::Phone {
+            code: PhoneError::NotFound,
+        }) => Err(MoveError::NotOpened),
+        Err(CallError::Phone {
+            code: PhoneError::NotReady,
+        }) => Ok(Stands::Unknown),
+        Err(CallError::Phone {
+            code: PhoneError::Paused,
+        }) => Err(MoveError::StoppedThere),
+        Err(e) => match failure(e) {
+            MoveError::Paused => Ok(Stands::Waiting),
+            other => Err(other),
+        },
     }
 }
 
@@ -548,15 +586,22 @@ pub async fn move_facts<R: Runtime>(app: AppHandle<R>) -> Result<MoveFacts, Home
 /// Offer the memory to the computer this phone has just paired with, and wait for the person
 /// there. Answers what the computer already holds, if anything.
 #[tauri::command]
-pub async fn move_offer<R: Runtime>(app: AppHandle<R>) -> Result<Option<MemoryCounts>, MoveError> {
+pub async fn move_offer<R: Runtime>(app: AppHandle<R>) -> Result<MoveOffered, MoveError> {
     let facts = move_facts(app.clone())
         .await
         .map_err(|_| MoveError::Failed)?;
-    match offer(&phone(&app)?, &facts).await? {
-        Offered::Accepted { here } => Ok(here),
-        // Already there from a move whose answer was missed: "Move my memory" finishes it.
-        Offered::Arrived(_) => Ok(None),
-    }
+    Ok(match offer(&phone(&app)?, &facts).await? {
+        Offered::Accepted { here } => MoveOffered {
+            opened: false,
+            here,
+        },
+        // Already opened there, from a move whose phone went away part way: moving finishes it
+        // without sending anything again.
+        Offered::Arrived(_) => MoveOffered {
+            opened: true,
+            here: None,
+        },
+    })
 }
 
 /// "Move my memory": make the backup, send it and, once every count matches, put the memory
@@ -583,14 +628,7 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
         let progress = |_: BackupPhase, done: u64, total: u64| {
             emit(&worker, MovePhase::Preparing, done, total);
         };
-        let paired_as = worker
-            .state::<AppState>()
-            .store
-            .identity()
-            .map(|i| i.device_name);
-        worker
-            .state::<Home>()
-            .prepare_move(paired_as.as_deref(), &progress, stop)
+        worker.state::<Home>().prepare_move(&progress, stop)
     })
     .await
     .unwrap_or(Err(MoveError::Failed))?;
@@ -654,7 +692,19 @@ pub(crate) async fn carry(
         since: None,
         bytes: size as f64,
     };
-    // Agreed already when this starts; asked again only after a pause.
+    // First where it stands: a move whose phone went away part way (the app stopped while the
+    // computer restarted) finishes without sending anything again.
+    match stands(computer).await? {
+        Stands::Opened(counts) => return Ok(counts),
+        Stands::Waiting => {
+            if let Some(counts) = finishing(computer, size, report, pause).await? {
+                return Ok(counts);
+            }
+        }
+        Stands::Unknown => {}
+    }
+    // Agreed already when this starts; asked again only after a pause, or once the computer
+    // said it knows nothing of it.
     let mut ask = false;
     loop {
         let again = if ask {
@@ -664,7 +714,6 @@ pub(crate) async fn carry(
         };
         ask = true;
         let out = match again {
-            // Asked again after a pause: the memory already opened there.
             Ok(Offered::Arrived(counts)) => return Ok(counts),
             Ok(Offered::Accepted { .. }) => {
                 send(computer, prepared, |done| {
@@ -684,24 +733,23 @@ pub(crate) async fn carry(
                 report(MovePhase::Paused, 0, size);
                 tokio::time::sleep(pause).await;
             }
-            // Every count matched: wait for the computer to say the memory opened.
-            Ok(_) => match finishing(computer, &facts, size, report, pause).await {
-                // The computer kept nothing of it (its stage was lost) and agreed again: send it.
-                Ok(None) => ask = false,
-                Ok(Some(counts)) => return Ok(counts),
-                Err(e) => return Err(e),
-            },
-            other => return other,
+            // Every count matched: wait for the computer to say the memory opened. Should it
+            // know nothing of it, it is offered again and sent.
+            Ok(_) => {
+                if let Some(counts) = finishing(computer, size, report, pause).await? {
+                    return Ok(counts);
+                }
+            }
+            Err(e) => return Err(e),
         }
     }
 }
 
-/// While Nocturne on the computer restarts: ask until it says the memory opened (`Some`), that
-/// it could not open it, or that it holds nothing of it (`None`, so it goes again). An answer
-/// that has to wait (the restart, the connection) just waits.
+/// While Nocturne on the computer restarts: ask where the memory stands, sending nothing, until
+/// it opened there (`Some`), it could not open it, or the computer knows nothing of it (`None`).
+/// An answer that has to wait (the restart, the connection) just waits.
 async fn finishing(
     computer: &impl Computer,
-    facts: &MoveFacts,
     size: u64,
     report: &(dyn Fn(MovePhase, u64, u64) + Sync),
     pause: std::time::Duration,
@@ -709,11 +757,10 @@ async fn finishing(
     loop {
         report(MovePhase::Finishing, size, size);
         tokio::time::sleep(pause.min(ASK_EVERY)).await;
-        match offer(computer, facts).await {
-            Ok(Offered::Arrived(counts)) => return Ok(Some(counts)),
-            Ok(Offered::Accepted { .. }) => return Ok(None),
-            Err(MoveError::Paused) => {}
-            Err(e) => return Err(e),
+        match stands(computer).await? {
+            Stands::Opened(counts) => return Ok(Some(counts)),
+            Stands::Unknown => return Ok(None),
+            Stands::Waiting => {}
         }
     }
 }
@@ -739,6 +786,14 @@ pub async fn move_undo<R: Runtime>(app: AppHandle<R>) -> Result<(), MoveError> {
     state.store.clear();
     state.drop_phone();
     Ok(())
+}
+
+/// A move is part way: the phone holds its own memory and a pairing made for moving it (every
+/// other way out undoes that pairing), so the screens carry the move on.
+#[tauri::command]
+pub fn move_pending<R: Runtime>(app: AppHandle<R>) -> bool {
+    let paired = app.state::<AppState>().store.identity().is_some();
+    paired && app.state::<Home>().mode(true) == Some(PhoneMode::Alone)
 }
 
 /// "Remove it from this phone", or keep it put aside for 30 days (nothing to do then).
@@ -802,6 +857,10 @@ mod tests {
         offers: Mutex<std::collections::VecDeque<Result<RemoteAnswer, CallError>>>,
         /// Answers to the next sends, in turn, before what it found.
         sends: Mutex<std::collections::VecDeque<CallError>>,
+        /// Answers to the next asks of where it stands, before what it last took.
+        statuses: Mutex<std::collections::VecDeque<Result<RemoteAnswer, CallError>>>,
+        /// What it took last, as it would answer once opened.
+        took: Mutex<Option<MemoryCounts>>,
         skew: u32,
         calls: Mutex<Vec<RemoteCall>>,
     }
@@ -813,6 +872,8 @@ mod tests {
                 offered: Ok(RemoteAnswer::MemoryAccepted { here: None }),
                 offers: Mutex::default(),
                 sends: Mutex::default(),
+                statuses: Mutex::default(),
+                took: Mutex::default(),
                 skew: 0,
                 calls: Mutex::default(),
             }
@@ -849,14 +910,26 @@ mod tests {
             .unwrap();
             sent(std::fs::metadata(file).unwrap().len());
             self.calls.lock().unwrap().push(call);
-            Ok(RemoteAnswer::MemoryArrived {
-                counts: MemoryCounts {
-                    items: summary.items + self.skew,
-                    memories: summary.memories,
-                    pages: summary.pages,
-                    originals: summary.originals,
-                },
-            })
+            let counts = MemoryCounts {
+                items: summary.items + self.skew,
+                memories: summary.memories,
+                pages: summary.pages,
+                originals: summary.originals,
+            };
+            *self.took.lock().unwrap() = Some(counts);
+            Ok(RemoteAnswer::MemoryArrived { counts })
+        }
+
+        async fn status(&self) -> Result<RemoteAnswer, CallError> {
+            if let Some(next) = self.statuses.lock().unwrap().pop_front() {
+                return next;
+            }
+            match *self.took.lock().unwrap() {
+                Some(counts) => Ok(RemoteAnswer::MemoryArrived { counts }),
+                None => Err(CallError::Phone {
+                    code: PhoneError::NotReady,
+                }),
+            }
         }
     }
 
@@ -887,9 +960,7 @@ mod tests {
 
         let only = home.exclusive();
         let stop = std::sync::atomic::AtomicBool::new(false);
-        let prepared = home
-            .prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-            .unwrap();
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
         assert_eq!(prepared.passphrase.len(), 32);
         let arrived = block(send(&computer, &prepared, |_| {})).unwrap();
         let moved = home.finish_move(&prepared, arrived).unwrap();
@@ -925,9 +996,7 @@ mod tests {
         computer.skew = 1;
         let only = home.exclusive();
         let stop = std::sync::atomic::AtomicBool::new(false);
-        let prepared = home
-            .prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-            .unwrap();
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
         let arrived = block(send(&computer, &prepared, |_| {})).unwrap();
         assert_eq!(
             home.finish_move(&prepared, arrived),
@@ -949,8 +1018,7 @@ mod tests {
         let stop = std::sync::atomic::AtomicBool::new(true);
         let only = home.exclusive();
         assert_eq!(
-            home.prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-                .err(),
+            home.prepare_move(&|_, _, _| {}, &stop).err(),
             Some(MoveError::Stopped)
         );
         drop(only);
@@ -963,9 +1031,7 @@ mod tests {
             let (home, clock) = alone(dir);
             let only = home.exclusive();
             let stop = std::sync::atomic::AtomicBool::new(false);
-            let prepared = home
-                .prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-                .unwrap();
+            let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
             let arrived = block(send(&Fake::new(), &prepared, |_| {})).unwrap();
             home.finish_move(&prepared, arrived).unwrap();
             drop(only);
@@ -1043,9 +1109,7 @@ mod tests {
     /// phase it reported.
     fn carried(home: &Home, computer: &Fake) -> (Result<MemoryCounts, MoveError>, Vec<MovePhase>) {
         let stop = std::sync::atomic::AtomicBool::new(false);
-        let prepared = home
-            .prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-            .unwrap();
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
         let phases = Mutex::new(Vec::new());
         let out = block(carry(
             computer,
@@ -1062,20 +1126,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let computer = Fake::new();
-        let facts = home.move_facts().unwrap();
-        let opened = RemoteAnswer::MemoryArrived {
-            counts: MemoryCounts {
-                items: 2,
-                ..facts.counts
-            },
-        };
-        // The computer restarts: it asks the phone to wait, then cannot be reached, then opened.
-        computer.offers.lock().unwrap().extend([
+        // Nothing known before it goes; then the computer restarts: wait, unreachable, opened.
+        computer.statuses.lock().unwrap().extend([
+            Err(phone_code(PhoneError::NotReady)),
             Err(phone_code(PhoneError::Busy)),
             Err(CallError::Connection {
                 state: Reach::CantConnect,
             }),
-            Ok(opened),
         ]);
         let (out, phases) = carried(&home, &computer);
         assert_eq!(out.unwrap().items, 2);
@@ -1083,6 +1140,17 @@ mod tests {
         assert!(
             !phases.contains(&MovePhase::Paused),
             "finishing is not a pause"
+        );
+        assert_eq!(
+            computer
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| matches!(c, RemoteCall::OfferMemory { .. }))
+                .count(),
+            0,
+            "waiting never offers it again"
         );
         assert_eq!(
             home.mode(true),
@@ -1097,11 +1165,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let computer = Fake::new();
-        computer
-            .offers
-            .lock()
-            .unwrap()
-            .push_back(Err(phone_code(PhoneError::NotFound)));
+        computer.statuses.lock().unwrap().extend([
+            Err(phone_code(PhoneError::NotReady)),
+            Err(phone_code(PhoneError::NotFound)),
+        ]);
         let (out, _) = carried(&home, &computer);
         assert_eq!(out.err(), Some(MoveError::NotOpened));
         assert_eq!(home.mode(true), Some(PhoneMode::Alone));
@@ -1109,18 +1176,41 @@ mod tests {
     }
 
     #[test]
-    fn a_computer_that_lost_it_after_its_restart_is_sent_it_again() {
+    fn a_computer_that_knows_nothing_of_it_after_its_restart_is_offered_it_again() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let computer = Fake::new();
-        let counts = home.move_facts().unwrap().counts;
-        computer.offers.lock().unwrap().extend([
-            Ok(RemoteAnswer::MemoryAccepted { here: None }),
-            Ok(RemoteAnswer::MemoryArrived { counts }),
+        computer.statuses.lock().unwrap().extend([
+            Err(phone_code(PhoneError::NotReady)),
+            Err(phone_code(PhoneError::NotReady)),
         ]);
         let (out, _) = carried(&home, &computer);
         assert!(out.is_ok());
         assert_eq!(sends(&computer), 2);
+        let offers = computer
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|c| matches!(c, RemoteCall::OfferMemory { .. }))
+            .count();
+        assert_eq!(offers, 1, "asked again before it went again");
+    }
+
+    #[test]
+    fn a_move_that_already_opened_there_finishes_without_sending() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, _) = alone(dir.path());
+        let computer = Fake::new();
+        let counts = home.move_facts().unwrap().counts;
+        computer
+            .statuses
+            .lock()
+            .unwrap()
+            .push_back(Ok(RemoteAnswer::MemoryArrived { counts }));
+        let (out, _) = carried(&home, &computer);
+        assert_eq!(out.unwrap(), counts);
+        assert_eq!(sends(&computer), 0);
     }
 
     #[test]
@@ -1154,23 +1244,22 @@ mod tests {
     }
 
     #[test]
-    fn things_take_the_name_the_phone_paired_with_before_they_go() {
+    fn a_move_leaves_the_store_here_as_it_was_until_it_opened() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let facts = home.move_facts().unwrap();
         assert_eq!((facts.things, facts.journal), (2, 0));
         let stop = std::sync::atomic::AtomicBool::new(false);
-        home.prepare_move(Some("Ana’s Pixel"), &|_, _, _| {}, &stop)
-            .unwrap();
+        home.prepare_move(&|_, _, _| {}, &stop).unwrap();
         home.drop_move();
         let open = home.open_store().unwrap();
         let items = open
             .engine
             .items(nocturne_contract::ItemFilter::default())
             .unwrap();
-        assert!(!items.is_empty());
-        for item in items {
-            assert_eq!(item.from_device.as_deref(), Some("Ana’s Pixel"));
-        }
+        assert!(
+            items.iter().all(|i| i.from_device.is_none()),
+            "nothing written here"
+        );
     }
 }
