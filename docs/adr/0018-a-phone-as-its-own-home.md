@@ -36,7 +36,7 @@ SQLite bundled. The phone app today links only the channel and the contract.
   runs its tidy; every other device reads it or keeps things waiting to go across.
 - **A memory moves only by pairing.** The one way a memory comes to be held by another machine is
   its person pairing with that machine to make it their home: their own computer, or a household
-  computer whose owner invited them to keep it there. Using a mind never moves a memory or leaves a
+  computer whose owner gave them a code to keep it there. Using a mind never moves a memory or leaves a
   copy of it on the mind's machine. A move uses the backup format of
   [0013](0013-passphrase-backup.md) over the sealed channel; the old home puts its memory aside
   once every count matches, and deletes it only when the person confirms.
@@ -48,8 +48,9 @@ SQLite bundled. The phone app today links only the channel and the contract.
 
 ## Proposed contract changes
 
-These change `AGENTS.md`, so each needs the owner's explicit approval. They are written here so the
-phone parity records share one wording. Each clause takes effect only with the record it names.
+These change `AGENTS.md`. The owner approved them clause by clause: each clause goes into
+`AGENTS.md` when the record it names is accepted, and not before. They are written here so the phone
+parity records share one wording.
 
 **First line.** "Nocturne is a private app for the computer and the phone that remembers your day,
 tidies its memory overnight, and hands you one page each morning. It is a Tauri 2 app (Rust core,
@@ -70,13 +71,13 @@ web-view interface); on a computer it ships and supervises a private, embedded L
 > servers through the phone's own system (the words of what it reads, each question with the few
 > remembered sentences it needs, and the lines a page is written from; never photos or recordings
 > themselves, check-ins, or anything marked private), plus one look at that service's list of models
-> when it is checked (0020); and, while the person has joined a household they were invited to,
-> sealed traffic between their phone and that household's computer through the connection its owner
-> chose, carrying only what the request in flight needs and never anything marked private, plus, on
-> that computer while its owner lends its mind, the same sealed traffic to the phones they invited
-> (0021). A household computer keeps nothing of a phone that only borrows its mind beyond the name,
-> key and paused mark it was invited with. A memory is held by another machine only when its person pairs to
-> make that machine its home. The phone app is held to the same rule. The embedded `lemond` binds
+> when it is checked (0020); and, while the person borrows a household's mind with the code its
+> owner showed them, sealed traffic between their phone and that household's computer through the
+> connection its owner chose, carrying only what the request in flight needs and never anything
+> marked private, plus, on that computer while its owner lends its mind, the same sealed traffic to
+> the phones holding its current code (0021). A household computer keeps nothing about a phone that
+> only borrows its mind. A memory is held by another machine only when its person pairs to make that
+> machine its home. The phone app is held to the same rule. The embedded `lemond` binds
 > loopback with a per-launch key.
 
 A household computer as someone's home, entered by pairing, needs one more clause for that person's

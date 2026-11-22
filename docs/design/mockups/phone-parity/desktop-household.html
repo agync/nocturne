@@ -6,11 +6,11 @@
 <title>Household, on the computer · Nocturne</title>
 <link rel="stylesheet" href="parity.css">
 </head>
-<body data-frame="app" data-section="Settings" data-states="household add allow remove off">
+<body data-frame="app" data-section="Settings" data-states="household code new allow remove off">
 <div id="content" class="sheet">
 
   <!-- Household -->
-  <div data-state="household allow remove off" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 760px">
+  <div data-state="household new allow remove off" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 760px">
     <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
     <h1 class="stepTitle">Household</h1>
     <p class="lead">Lend this computer’s mind to people in your household. Their memories stay theirs: you can’t see what they keep or ask, and they can’t see yours.</p>
@@ -21,22 +21,21 @@
     </ul>
 
     <div class="section" style="padding-top: var(--s-3)">
-      <h2 class="label">Phones in your household · 3</h2>
+      <h2 class="label">The household code</h2>
+      <p class="small" style="color: var(--ink)">Anyone you show this code to can borrow this computer’s mind from their phone. This computer keeps nothing about them, not even a list.</p>
+      <p class="small" style="display: flex; align-items: center; gap: 8px; color: var(--ink)"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent)"></span>In use now</p>
+      <div class="buttons" style="padding-top: var(--s-2)"><span class="button" data-variant="primary">Show the code</span><span class="button" data-variant="secondary">New code…</span></div>
+    </div>
+
+    <div class="section" style="padding-top: var(--s-3)">
+      <h2 class="label">Memories kept here · 1</h2>
       <ul class="oRows">
         <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Leo’s phone <span class="wayTag">Borrows the mind</span></span><span class="oHint">Using the mind now</span></span>
-          <span class="oActs"><span class="button" data-variant="secondary">Pause</span><span class="button" data-variant="quiet">Remove…</span></span>
-        </li>
-        <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Gran’s phone <span class="wayTag">Keeps its memory here</span></span><span class="oHint">2.1 GB · last connected yesterday 6:40 pm</span></span>
-          <span class="oActs"><span class="button" data-variant="secondary">Pause</span><span class="button" data-variant="quiet">Remove…</span></span>
-        </li>
-        <li class="oRow hhRow">
-          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Mo’s phone <span class="wayTag">Borrows the mind</span> <span class="tagPaused">Paused</span></span></span>
-          <span class="oActs"><span class="button" data-variant="secondary">Resume</span><span class="button" data-variant="quiet">Remove…</span></span>
+          <span class="oText"><span class="oLabel"><span data-icon="phone" data-size="18"></span>Gran’s phone</span><span class="oHint">2.1 GB · last connected yesterday 6:40 pm</span></span>
+          <span class="oActs"><span class="button" data-variant="quiet">Remove…</span></span>
         </li>
       </ul>
-      <div class="buttons" style="padding-top: var(--s-3)"><span class="button" data-variant="primary">Add someone…</span></div>
+      <div class="buttons" style="padding-top: var(--s-3)"><span class="button" data-variant="secondary">Keep someone’s memory here…</span></div>
     </div>
 
     <div class="section" style="padding-top: var(--s-3)">
@@ -46,20 +45,15 @@
 
     <div class="section" style="padding-top: var(--s-3)">
       <h2 class="label">What you can see</h2>
-      <p class="small" style="color: var(--ink)">Each phone’s name and how it was invited. For a memory kept here, how much room it takes and when its phone last connected. Never what anyone kept, asked or read, and no record of when a phone borrowed the mind.</p>
+      <p class="small" style="color: var(--ink)">Whether the mind is in use now, nothing more about the phones that borrow it: not which, not when, not how much. For a memory kept here, how much room it takes and when its phone last connected. Never what anyone kept, asked or read.</p>
     </div>
     <p class="small">Household phones connect through Simple, like your own phones. Cloudflare sees when they connect and from where, not what they send.</p>
   </div>
 
-  <!-- Add someone -->
-  <div data-state="add" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+  <!-- Show the code -->
+  <div data-state="code" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
     <a class="back" href="#"><span aria-hidden="true">←</span> Household</a>
-    <h1 class="stepTitle">Add someone to your household</h1>
-    <p class="label" style="margin: 0">How should this computer help them?</p>
-    <div class="choices" style="display: flex; flex-direction: column; gap: var(--s-2)">
-      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="way" checked> <span class="oText"><span class="oLabel">Borrow its mind</span><span class="oHint">Their memory stays on their phone. This computer reads and answers for them and keeps nothing of theirs.</span></span></label>
-      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="way"> <span class="oText"><span class="oLabel">Keep their memory here</span><span class="oHint">Their memory moves here and lives here, locked with a key their phone holds. Their phone then works with it.</span></span></label>
-    </div>
+    <h1 class="stepTitle">The household code</h1>
     <p class="lead">Ask them to open Nocturne on their phone, choose Join a household, and scan this.</p>
     <div style="display: flex; gap: var(--s-6); align-items: flex-start">
       <span class="qrBox"><span data-qr="200"></span></span>
@@ -67,22 +61,34 @@
         <p class="small">Can’t scan? In the app, choose Type the code, then type:</p>
         <p class="small" style="display: flex; flex-direction: column; gap: 2px"><span>The four words</span><span class="codeLine">maple lantern quiet harbour</span></p>
         <p class="small" style="display: flex; flex-direction: column; gap: 2px"><span>The code</span><span class="codeLine">R4TN8Q W2KXPA 7HDM3C L9VB6E</span></p>
-        <p class="small">This code works for 5 minutes, once.</p>
       </div>
     </div>
-    <p class="notice" style="padding: var(--s-3); border-radius: var(--r-md); background: var(--accent-soft)">Anyone with this code can ask to join, only in the way you chose. You still choose Allow.</p>
+    <p class="notice" style="padding: var(--s-3); border-radius: var(--r-md); background: var(--accent-soft)">Anyone with this code can borrow this computer’s mind until you make a new one. It never lets anyone see your memory.</p>
     <div class="buttons"><span class="button" data-variant="primary">Done</span></div>
   </div>
 </div>
 
-<div id="overlay" data-state="allow">
+<div id="overlay" data-state="new">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="nt" style="width: min(100%, 560px)">
+      <h2 id="nt" class="dialogTitle">Make a new household code?</h2>
+      <p class="muted">Every phone using the current code stops at once. Show the new code to the people who should keep borrowing this computer’s mind.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Cancel</span>
+        <span class="button" data-variant="forget" data-filled>Make a new code</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay2" data-state="allow">
   <div class="dialog">
     <div class="panel" role="dialog" aria-labelledby="at" style="width: min(100%, 560px)">
-      <h2 id="at" class="dialogTitle">Allow Leo’s phone to join your household?</h2>
-      <p class="muted">Check Leo’s phone shows the same three words.</p>
+      <h2 id="at" class="dialogTitle">Keep Gran’s phone’s memory here?</h2>
+      <p class="muted">Check Gran’s phone shows the same three words.</p>
       <p style="font: 400 1.5rem / 1.3 var(--font-serif)">harbour · violet · kettle</p>
-      <p><strong style="font-weight: 500">You invited it to borrow this computer’s mind.</strong><br>Its memory stays on its phone. This computer reads and answers for it and keeps nothing of it.</p>
-      <p class="small">If a phone that isn’t showing three words asks to join, someone else is trying. Don’t allow it.</p>
+      <p>Its memory will be kept on this computer, locked with a key its phone holds. About 2.1 GB to start.</p>
+      <p class="small">If a phone that isn’t showing three words asks, someone else is trying. Don’t allow it.</p>
       <div class="buttons" style="justify-content: flex-end">
         <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Don’t allow</span>
         <span class="button" data-variant="primary">Allow</span>
@@ -91,7 +97,7 @@
   </div>
 </div>
 
-<div id="overlay2" data-state="remove">
+<div id="overlay3" data-state="remove">
   <div class="dialog">
     <div class="panel" role="dialog" aria-labelledby="rt" style="width: min(100%, 560px)">
       <h2 id="rt" class="dialogTitle">Remove Gran’s phone from your household?</h2>
@@ -104,11 +110,11 @@
   </div>
 </div>
 
-<div id="overlay3" data-state="off">
+<div id="overlay4" data-state="off">
   <div class="dialog">
     <div class="panel" role="dialog" aria-labelledby="ot" style="width: min(100%, 560px)">
       <h2 id="ot" class="dialogTitle">Stop lending this computer’s mind?</h2>
-      <p class="muted">Every household phone stops at once. Memories kept here stay, locked, until their people take them home.</p>
+      <p class="muted">Phones that borrow this computer’s mind stop at once. People whose memory is kept here carry on. Turning it back on lets the same code work again.</p>
       <div class="buttons" style="justify-content: flex-end">
         <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep lending</span>
         <span class="button" data-variant="forget" data-filled>Stop lending</span>
@@ -118,7 +124,7 @@
 </div>
 <script src="../phone-apps/shell.js"></script>
 <script>
-  for (const id of ["overlay2", "overlay3"]) { const o = document.getElementById(id); if (o) document.body.appendChild(o); }
+  for (const id of ["overlay2", "overlay3", "overlay4"]) { const o = document.getElementById(id); if (o) document.body.appendChild(o); }
   const sv = document.querySelector(".statusValue");
   if (sv) sv.textContent = "Away from home and Household";
 </script>

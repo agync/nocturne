@@ -50,6 +50,10 @@ flowchart LR
 | Finding what you kept by its words, with receipts | Noticing what changed, what needs you, what fades |
 | Voice notes turned into words by the phone itself, where it can do that with no network ([decision 9](phone-parity.md#decisions)) | |
 
+A phone alone is complete as it is, and so is a phone alone with an online mind: a person can use
+either for good. Nothing on these screens suggests a computer or a household beyond listing them
+where a mind is chosen.
+
 Forgetting and fading run on the phone without a mind: they are clocks, not reading. The calendar
 and health come from the phone itself, so the "goes only to your computer" lines of [Nocturne on
 Android and iPhone](phone-apps.md) change to "stays on this phone" (below).
@@ -57,7 +61,7 @@ Android and iPhone](phone-apps.md) change to "stays on this phone" (below).
 ## The first release: a phone alone
 
 Everything a person needs to start on a phone with no computer and no mind, and to move to a
-computer later. It is the whole of phase 1 on the [roadmap](phone-parity.md#phasing). Android ships
+computer if they ever want one. It is the whole of phase 1 on the [roadmap](phone-parity.md#phasing). Android ships
 first; iPhone follows the same words once the engine is built and tried there.
 
 ### What ships, and what waits
@@ -434,7 +438,7 @@ passphrase. The phone's own device backup leaves the memory out, so this is the 
 
 ```mermaid
 flowchart LR
-    DB[(This phone's memory)] -->|after you keep something, and daily| SN[A numbered copy, locked]
+    DB[(This phone's memory)] -->|every day, or each week or month if chosen| SN[A numbered copy, locked]
     OR[Photos and recordings] -->|once each, locked| PL
     SN --> PL[(iCloud Drive, or Google Drive's hidden app folder)]
     KY[The key, locked with your passphrase] --> PL
@@ -449,7 +453,7 @@ Light first step, as Online answers step 1 ([Keeping the next step in view](step
 |---|---|
 | Step label | "A locked copy online · step 1 of 2" |
 | Title | "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
-| What goes | "Everything you kept, in one locked copy, made again after you keep something. Photos and recordings go once each." |
+| What goes | "Everything you kept, in one locked copy, made again every day. Photos and recordings go once each." |
 | Who can open it | iPhone: "Only someone with your passphrase. Apple stores it but can’t open it, and neither can Nocturne’s makers." Android: "Only someone with your passphrase. Google stores it but can’t open it, and neither can Nocturne’s makers." |
 | You need | iPhone: "iCloud Drive turned on, and room for about {size}." Android: "A Google account, and room for about {size} in its Drive." |
 | Expander, closed | "Everything about the copy" |
@@ -461,6 +465,7 @@ Behind the expander, in this order:
 |---|---|
 | Where | iPhone: "In iCloud Drive, in a folder only Nocturne uses. It doesn’t show among your files." Android: "In your Google Drive, in a hidden folder only Nocturne can reach. Nocturne asks Google for that folder and nothing else in your Drive." |
 | What the company sees | "{company} can see that the copy is there, how big it is and when it changes. It can’t see what is in it." |
+| How often | "Every day. You can change it to every week or every month in {thisPhone}." |
 | How many | "The last seven copies are kept. When you forget something for good, the older copies go at once, so it leaves the copy too." |
 | Your phone’s own backup | "Your phone’s own backup leaves your memory out, so this is the one copy." |
 | A new phone | "Install Nocturne, choose I have a locked copy, and type your passphrase." |
@@ -499,7 +504,7 @@ kept in the phone's own safe place, so later copies need no passphrase.
 | Title | "Making the first copy" |
 | Progress | "{done} of {size}" |
 | Note | "You can use Nocturne while this runs." |
-| Done | "Your locked copy is online." / "Made {time}. It is made again after you keep something." / "OK" |
+| Done | "Your locked copy is online." / "Made {time}. It is made again every day." / "OK" |
 
 The first copy is read back and checked before the switch shows as on. If the phone leaves the app,
 it carries on when the phone allows and the row in This phone says how far it got.
@@ -510,6 +515,7 @@ it carries on when the phone allows and the row in This phone says how far it go
 |---|---|
 | Switch | "A locked copy online" |
 | Hint, on | "Last copy {time} · {size} in iCloud Drive" or "in Google Drive" |
+| Row | "How often" / "Every day" (selected), "Every week", "Every month" |
 | Row | "Change the passphrase…" |
 | Row | "Turn off…" |
 | About heading | "About the copy", then the expander's "What the company sees", "How many", "Your phone’s own backup" and "A new phone", each under its label |
@@ -558,7 +564,7 @@ other way, sending memories to the assistant's company. Nothing is shown for wha
 |---|---|
 | Title | "Where should Nocturne’s mind be?" |
 | Lead | "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
-| Choice, from phase 3 | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
+| Choice, from phase 3 | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and shows you its code. It reads and answers for you, and keeps nothing of yours." |
 | Choice | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Choice, iPhone, after the trial | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
 | Choice | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
@@ -615,7 +621,7 @@ disabled reasons.
 | Example | "Kept 7:40 am · Dentist moved to Thursday at 9, Bridge Street." |
 | Where it goes | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Who can see it | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." / "Nocturne can’t check what the service keeps, for how long, or whether it learns from what you send. Read its privacy page before you turn this on." (0011) |
-| Never sent | "Photos and recordings themselves" · "Your check-ins. Reflections and recaps wait until your memory has a mind at home." · "Things you marked private" |
+| Never sent | "Photos and recordings themselves" · "Your check-ins. With a mind online, Nocturne writes no reflections or recaps, since they are written from your check-ins." · "Things you marked private" |
 | What changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Changing your mind | "{limit line}" · "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." · "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Bar | "Turn on" · "Not now" |
@@ -719,7 +725,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Type “delete everything” to go ahead" / "Delete everything" / "Keep everything" |
 | Item, private | "Private" / "Kept on this phone and never sent to a mind online or at home." / "Journal entries can’t be marked private." |
 | Copy, step 1 | "A locked copy online · step 1 of 2" / "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
-| Copy, what goes | "Everything you kept, in one locked copy, made again after you keep something. Photos and recordings go once each." |
+| Copy, what goes | "Everything you kept, in one locked copy, made again every day. Photos and recordings go once each." |
 | Copy, who opens | "Only someone with your passphrase. {company} stores it but can’t open it, and neither can Nocturne’s makers." |
 | Copy, you need | iPhone: "iCloud Drive turned on, and room for about {size}." / Android: "A Google account, and room for about {size} in its Drive." |
 | Copy, expander | "Everything about the copy" |
@@ -736,9 +742,10 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, keep safe body | "Nocturne doesn’t keep it anywhere you can read. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Copy, bar | "Turn on" / "Back" |
 | Copy, making | "Making the first copy" / "{done} of {size}" / "You can use Nocturne while this runs." |
-| Copy, made | "Your locked copy is online." / "Made {time}. It is made again after you keep something." / "OK" |
+| Copy, made | "Your locked copy is online." / "Made {time}. It is made again every day." / "OK" |
 | Copy, row hint | "Last copy {time} · {size} in iCloud Drive" / "Last copy {time} · {size} in Google Drive" |
-| Copy, rows | "Change the passphrase…" / "Turn off…" |
+| Copy, rows | "How often" / "Every day" / "Every week" / "Every month" / "Change the passphrase…" / "Turn off…" |
+| Copy, how often | "Every day. You can change it to every week or every month in {thisPhone}." |
 | Copy, turn off | "Turn off the locked copy?" / "No new copies are made. The copy that is there stays until you delete it." / "Also delete the copy online" / "Turn off" / "Keep it on" |
 | Restore | "Bring back your memory" / "Type the passphrase you chose for your locked copy." / "Copy from {time} · {size}" / "Passphrase for this copy" / "Bring it back" |
 | Restore, wrong | "That passphrase doesn’t open this copy. Check capital letters, and try again." |
@@ -750,7 +757,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, access gone | "Google no longer allows the folder. Choose the account again to keep making copies." / "Choose account" |
 | Copy, another phone | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." / "Make this phone the one in use" |
 | Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
-| Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and invites you. It reads and answers for you, and keeps nothing of yours." |
+| Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and shows you its code. It reads and answers for you, and keeps nothing of yours." |
 | Mind, service | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
 | Mind, Apple | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
 | Mind, own computer | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
@@ -764,7 +771,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind online, what is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
 | Mind online, where | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Mind online, sees | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." |
-| Mind online, never list | "Photos and recordings themselves" / "Your check-ins. Reflections and recaps wait until your memory has a mind at home." / "Things you marked private" |
+| Mind online, never list | "Photos and recordings themselves" / "Your check-ins. With a mind online, Nocturne writes no reflections or recaps, since they are written from your check-ins." / "Things you marked private" |
 | Mind online, changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Mind online, changing | "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." / "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Mind online, bar | "Turn on" / "Not now" |

@@ -22,4 +22,4 @@ not deleted.
 - [0018 A phone as its own home](0018-a-phone-as-its-own-home.md) - Proposed: the phone keeps its own memory with the same engine, no mind at first, one home at a time, moved only by pairing; with the proposed contract wording.
 - [0019 A locked copy online](0019-a-locked-copy-online.md) - Proposed: numbered copies of a phone's memory, locked with a key only the person holds, in the one place they chose, as its online backup.
 - [0020 An online mind on a phone](0020-an-online-mind-on-a-phone.md) - Proposed: a service with the person's own key, or Apple's servers after a trial, reads the words of what a phone keeps, writes its page and answers.
-- [0021 A household mind for invited phones](0021-a-household-mind-for-invited-phones.md) - Proposed: a computer lends its mind to phones its owner invites, keeping nothing of them beyond their name and key.
+- [0021 A household mind for invited phones](0021-a-household-mind-for-invited-phones.md) - Proposed: a computer lends its mind to any phone holding its one household code, keeping nothing about them.

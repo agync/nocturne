@@ -27,6 +27,7 @@ online](/design/phone-first.md#a-locked-copy-online).
   itself sealed with a passphrase the person chooses once; the key is kept in the phone's own safe
   place so later copies need no passphrase. Neither the storage company nor Nocturne's makers can
   open a copy.
+- **Daily by default.** A copy is made every day; the person can choose every week or every month.
 - **Numbered and never overwritten.** Each copy is new; photos and recordings go once each, locked.
   The last seven copies are kept. Forgetting for good prunes older copies at once, so forgetting
   reaches the copy.
