@@ -479,13 +479,14 @@ Nothing open.
 - **Decided.** One home holds the pen; a memory moves only by pairing; the backup format over the
   sealed channel; nothing deleted until it has arrived and the person confirms; the locked copy stops
   and the person chooses to delete or keep it (decision 19). Specified in [Moving your
-  memory](moving-memory.md).
+  memory](moving-memory.md). The computer restarts Nocturne to open a moved memory, with its words in
+  the move's screens (decision 31: B, decided by build cost, reopening in place being a large change;
+  for the owner to confirm).
 - **Depends on.** A phone alone for the first move (phone to computer); the household home for the
   rest.
 
 | Open | Options | Recommendation |
 |---|---|---|
-| The computer restarts Nocturne to finish a restore today | A: reopen the memory in place, so the move shows no restart. B: say "Nocturne restarts to finish" on the computer during a move | **A** if the build finds it small; otherwise **B**, with its words agreed here first |
 | A household home to a computer of one's own | A: through the phone, as designed. B: the two computers pair directly | **A**: no new pairing between machines; revisit if large memories make it slow |
 
 ### The phone's own mind
@@ -616,4 +617,5 @@ The owner then answered the questions the first pass left open:
 | 28 | Managing the household from the owner's phone | A: the computer only. B: the owner's companion phone too | **B**: the lending switch, Show the code and New code (decision 22 leaves nothing per phone to manage) |
 | 29 | Whose computer can be someone's home | A: a desktop with its own owner, and a computer kept for the purpose. B: only one kept for the purpose | **A** |
 | 30 | What labels from decision models are for | A: finding and grouping only. B: also shown on items. C: a hidden ranking signal | **A, then B** with "Remove this label" |
+| 31 | Finishing a move on the computer (question 9) | A: reopen the memory in place. B: restart Nocturne, saying so before and after | **B**, decided by build cost: reopening in place is a large change to how the computer opens its memory. The computer says "Nocturne restarts to open the memory from {name}. It opens again by itself." and the phone "Finishing on {computer}…". For the owner to confirm |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |
