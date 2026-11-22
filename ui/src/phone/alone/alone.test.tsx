@@ -356,6 +356,23 @@ describe("a backup over a memory that is already here", () => {
     ).toBeVisible();
   });
 
+  it("is reached from This phone, and always asks what to do with what is here", async () => {
+    await app("m=kept");
+    fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
+    expect(
+      await screen.findByText("What’s on this phone now is put aside first, never deleted."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Restore a backup/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
+    fireEvent.change(await screen.findByLabelText("Passphrase for this backup"), {
+      target: { value: "correct horse battery" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    expect(
+      await screen.findByRole("heading", { name: "Replace what’s on this phone?" }),
+    ).toBeVisible();
+  }, 15_000);
+
   it("keeps what is here when the person says so", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));

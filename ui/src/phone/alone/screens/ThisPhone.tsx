@@ -49,6 +49,7 @@ export function HomeThisPhone({
   onCalendar,
   onHealth,
   onBackup,
+  onRestore,
   onDelete,
   putAside,
   onPutAside,
@@ -82,6 +83,7 @@ export function HomeThisPhone({
   onCalendar(): void;
   onHealth(): void;
   onBackup(): void;
+  onRestore(): void;
   onDelete(): void;
 }) {
   const [sources, setSources] = useState<ThisPhoneSources | null>(null);
@@ -207,6 +209,11 @@ export function HomeThisPhone({
                 : t("phone.alone.thisPhone.noBackup")
             }
             onPress={onBackup}
+          />
+          <Row
+            label={t("phone.alone.thisPhone.restore")}
+            hint={t("phone.alone.thisPhone.restoreHint")}
+            onPress={onRestore}
           />
           <Row label={t("phone.alone.thisPhone.delete")} danger onPress={onDelete} />
         </Group>

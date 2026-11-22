@@ -53,6 +53,8 @@
   "phone.alone.thisPhone.removing": "Removing the app removes your memory from this phone. Save a backup first.",
   "phone.alone.thisPhone.move": "Move my memory…",
   "phone.alone.thisPhone.save": "Save a backup…",
+  "phone.alone.thisPhone.restore": "Restore a backup…",
+  "phone.alone.thisPhone.restoreHint": "What’s on this phone now is put aside first, never deleted.",
   "phone.alone.thisPhone.lastBackup": "Last backup {day}",
   "phone.alone.thisPhone.noBackup": "No backup yet",
   "phone.alone.thisPhone.delete": "Delete everything…",
