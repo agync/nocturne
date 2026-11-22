@@ -4,6 +4,7 @@ import type { PhoneDeletePreview, PhoneSource } from "../../../engine/bindings";
 import { useHeading } from "../../native/screens/parts";
 import { Button, Icon, Page } from "../../screens/ui";
 import { HomeRequestError } from "../api";
+import { Done } from "./Backup";
 
 type Load =
   | { name: "loading" }
@@ -36,10 +37,11 @@ export function DeleteKept({
   const [busy, setBusy] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [done, setDone] = useState(false);
   const latest = useRef(0);
   const stopId = useId();
   const calendar = source === "calendar";
-  const heading = useHeading(`deleteKept-${source}`);
+  const heading = useHeading("deleteKept");
 
   const get = useCallback(async () => {
     const mine = ++latest.current;
@@ -65,7 +67,7 @@ export function DeleteKept({
     setFailed(false);
     try {
       await remove(ready.token, source, calendar && alsoStop);
-      onClose(true);
+      setDone(true);
     } catch (e) {
       setBusy(false);
       if (e instanceof HomeRequestError && e.code === "tooLate") {
@@ -76,6 +78,20 @@ export function DeleteKept({
       }
     }
   };
+
+  if (done)
+    return (
+      <Done
+        title={t("phones.delete.done")}
+        body={
+          calendar
+            ? t("phones.delete.untouched.calendar")
+            : t("phone.alone.deleteKept.untouched.health")
+        }
+        button={t("phone.sources.ok")}
+        onDone={() => onClose(true)}
+      />
+    );
 
   return (
     <Page
@@ -166,7 +182,7 @@ export function DeleteKept({
             </ul>
           </>
         )}
-        {calendar && load.name !== "nothing" ? (
+        {calendar && ready !== null ? (
           <label className="ph-check" htmlFor={stopId}>
             <input
               id={stopId}
