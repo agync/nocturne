@@ -17,6 +17,7 @@ import journalLookback from "./en-GB/journal-lookback.json";
 import journalQuestion from "./en-GB/journal-question.json";
 import memories from "./en-GB/memories.json";
 import models from "./en-GB/models.json";
+import moving from "./en-GB/moving.json";
 import needsYou from "./en-GB/needs-you.json";
 import notice from "./en-GB/notice.json";
 import online from "./en-GB/online.json";
@@ -62,6 +63,7 @@ export const enGB = {
   ...phoneApp,
   ...phoneHealth,
   ...phoneAlone,
+  ...moving,
   ...phones,
   ...health,
   ...online,

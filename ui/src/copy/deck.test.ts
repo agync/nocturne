@@ -32,6 +32,7 @@ describe("the copy deck is split by area", () => {
       "journal-question",
       "memories",
       "models",
+      "moving",
       "needs-you",
       "notice",
       "online",
