@@ -104,6 +104,23 @@ impl Engine {
         self.take_from(here, None)
     }
 
+    /// As a memory leaves this home: every thing kept here with no device name yet takes `name`,
+    /// the name this home goes by (a phone, the name it paired with), so the next home can say
+    /// "Kept on {device}". A thing kept through a paired phone already names it. Answers how many
+    /// took the name.
+    pub fn name_unnamed_items(&self, name: &str) -> Result<usize> {
+        self.write(|tx| {
+            Ok(tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.keptOn', ?1) \
+                 WHERE json_extract(metadata, '$.keptOn') IS NULL AND NOT EXISTS ( \
+                   SELECT 1 FROM remote_keeps rk JOIN remote_devices rd \
+                   ON rd.id = rk.device_id AND rd.connection != 'local' \
+                   WHERE rk.item_id = items.id)",
+                [name],
+            )?)
+        })
+    }
+
     fn take_from(&self, here: &Path, paired: Option<&str>) -> Result<()> {
         let db = here.join(crate::DB_FILE);
         if !db.is_file() {

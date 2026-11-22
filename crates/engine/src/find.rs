@@ -95,8 +95,8 @@ impl Engine {
 fn find(conn: &Connection, q: &str, limit: usize) -> Result<Vec<FoundItem>> {
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT i.id, i.kind, i.source, i.title, i.kept_at, i.duration_ms, i.trust, i.private, \
-         (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
-          ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), \
+         COALESCE((SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+          ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), json_extract(i.metadata, '$.keptOn')), \
          snippet(items_stem, -1, char({open}), char({close}), '…', {words}) \
          FROM items_stem f JOIN items i ON i.rowid = f.rowid \
          WHERE items_stem MATCH ?1 AND {FIND_RULES} \
@@ -152,8 +152,8 @@ fn by_place(
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT i.id, i.title, i.kept_at, i.duration_ms, i.trust, i.private, \
          json_extract(i.metadata, '$.entry.place'), \
-         (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
-          ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id) \
+         COALESCE((SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+          ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), json_extract(i.metadata, '$.keptOn')) \
          FROM items i WHERE i.kind = 'calendar' \
          AND json_extract(i.metadata, '$.entry.place') IS NOT NULL AND {FIND_RULES} \
          ORDER BY i.kept_at DESC, i.id"
