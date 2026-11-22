@@ -40,6 +40,9 @@ pub enum LocalReason {
     /// this computer was kept back from it; this computer, which has it, answered instead. The
     /// sent log keeps what went out.
     NotSureOnline,
+    /// The person agreed to Online answers before only what they mark private was held back,
+    /// and has not yet seen the notice that says so.
+    Changed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -158,6 +161,9 @@ pub struct OnlineView {
     pub phones: bool,
     pub phones_available: bool,
     pub send_sensitive: bool,
+    /// Online answers is on and the person agreed before only what they mark private was held
+    /// back: the next question that would go online waits for the one-time notice.
+    pub change_notice: bool,
     pub limit: OnlineLimit,
     pub questions_this_month: u32,
     pub spent_this_month_usd: Option<f64>,

@@ -628,3 +628,17 @@ fn the_sent_log_says_which_lines_came_from_the_journal() {
     assert_eq!(journal.len(), 1);
     assert_eq!((journal[0].n, journal[0].day.as_str()), (2, "2026-11-12"));
 }
+
+#[test]
+fn the_change_is_unseen_until_recorded_and_goes_with_delete_everything() {
+    let f = fixture();
+    assert!(!f.engine.online_change_seen().unwrap());
+    f.engine.see_online_change().unwrap();
+    f.engine.see_online_change().unwrap();
+    assert!(f.engine.online_change_seen().unwrap());
+    assert!(f.engine.settings().is_ok(), "other settings still read");
+    f.engine
+        .delete_everything(nocturne_engine::DELETE_PHRASE)
+        .unwrap();
+    assert!(!f.engine.online_change_seen().unwrap());
+}

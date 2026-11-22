@@ -54,6 +54,13 @@ pub async fn turn_off_online<R: Runtime>(
     hub(&app)?.turn_off(forget).await
 }
 
+/// The person has seen that only what they mark private is held back: on the consent step, or in
+/// the one-time notice before their next online question.
+#[tauri::command]
+pub async fn see_online_change<R: Runtime>(app: AppHandle<R>) -> Result<OnlineView, CommandError> {
+    hub(&app)?.see_change().await
+}
+
 /// Leave setup before saying yes: the key and the route are dropped.
 #[tauri::command]
 pub async fn abandon_online_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {

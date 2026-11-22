@@ -506,11 +506,15 @@ describe("setup", () => {
   it("turns on at the last step with the choices made, then shows the page on", async () => {
     const { engine } = await toLimit();
     const on = vi.spyOn(engine, "turnOnOnline");
+    const see = vi.spyOn(engine, "seeOnlineChange");
     await click("Continue");
     await heading(STEP5);
     expect(on).not.toHaveBeenCalled();
     await click("Turn on online answers");
     await waitFor(() => expect(on).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(see).toHaveBeenCalledTimes(1));
+    expect(on.mock.invocationCallOrder[0] ?? 0).toBeLessThan(see.mock.invocationCallOrder[0] ?? 0);
+    expect(engine.online.view().changeNotice).toBe(false);
     expect(on).toHaveBeenCalledWith({
       phones: false,
       sendSensitive: false,
@@ -526,6 +530,7 @@ describe("setup", () => {
     await click("Continue");
     await heading(STEP5);
     const on = vi.spyOn(engine, "turnOnOnline").mockRejectedValueOnce(new Error("no"));
+    const see = vi.spyOn(engine, "seeOnlineChange");
     await click("Turn on online answers");
     const alerts = await screen.findAllByRole("alert");
     expect(alerts).toHaveLength(1);
@@ -534,6 +539,7 @@ describe("setup", () => {
     );
     expect(screen.queryByText("That didn’t work. Nothing was changed.")).toBeNull();
     expect(on).toHaveBeenCalledTimes(1);
+    expect(see).not.toHaveBeenCalled();
     expect(engine.online.view().state).toEqual({ type: "off" });
     expect(window.location.hash).toBe("#/settings/online/setup?step=send");
     expect(screen.queryByRole("switch", { name: "Online answers are on" })).toBeNull();

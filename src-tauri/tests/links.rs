@@ -340,6 +340,7 @@ mod online {
         )
         .unwrap()
         .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
+        h.ok("see_online_change", json!({}));
         let out = h.ok(
             "check_online",
             json!({"form": {"baseUrl": "https://api.example.com/v1",

@@ -1877,6 +1877,7 @@ const ONLINE_AND_MODEL_COMMANDS: &[&str] = &[
     "turn_on_online",
     "turn_off_online",
     "abandon_online_setup",
+    "see_online_change",
     "update_online_settings",
     "list_online_sends",
     "get_models",

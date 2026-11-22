@@ -1854,6 +1854,7 @@ export class MockEngine implements EngineClient {
   turnOnOnline = (settings: OnlineSettings): Promise<OnlineView> => this.online.turnOn(settings);
   turnOffOnline = (forget: boolean): Promise<OnlineView> => this.online.turnOff(forget);
   abandonOnlineSetup = (): Promise<void> => this.online.abandonSetup();
+  seeOnlineChange = (): Promise<OnlineView> => this.online.seeChange();
   updateOnlineSettings = (patch: OnlineSettingsPatch): Promise<OnlineView> =>
     this.online.update(patch);
   listOnlineSends = (limit: number, before: number | null): Promise<OnlineSend[]> =>

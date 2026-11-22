@@ -31,6 +31,8 @@ export function reasonText(reason: LocalReason, host: string | null): string {
       return t("ask.reason.turnedOff");
     case "notSureOnline":
       return t("ask.reason.notSureOnline");
+    case "changed":
+      return t("ask.reason.changed");
   }
 }
 

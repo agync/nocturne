@@ -7,7 +7,12 @@ export type OnlineView = { state: OnlineState, setUp: boolean,
 /**
  * The provider's host, shown as "your provider (host)".
  */
-host: string | null, baseUrl: string | null, model: string | null, phones: boolean, phonesAvailable: boolean, sendSensitive: boolean, limit: OnlineLimit, questionsThisMonth: number, spentThisMonthUsd: number | null, 
+host: string | null, baseUrl: string | null, model: string | null, phones: boolean, phonesAvailable: boolean, sendSensitive: boolean, 
+/**
+ * Online answers is on and the person agreed before only what they mark private was held
+ * back: the next question that would go online waits for the one-time notice.
+ */
+changeNotice: boolean, limit: OnlineLimit, questionsThisMonth: number, spentThisMonthUsd: number | null, 
 /**
  * True when the provider reported cost on the last three answers.
  */

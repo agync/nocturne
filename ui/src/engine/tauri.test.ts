@@ -181,6 +181,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ],
   ["turnOffOnline", [true], "turn_off_online", ["forget"]],
   ["abandonOnlineSetup", [], "abandon_online_setup", []],
+  ["seeOnlineChange", [], "see_online_change", []],
   [
     "updateOnlineSettings",
     [{ phones: false, sendSensitive: null, limit: null }],

@@ -17,11 +17,12 @@ import { t } from "../../copy/t";
 import type { AskPhase, AskPlace, HelpView, MemoryView, Receipt } from "../../engine/bindings";
 import { useAsk, useEngine, useStatus } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
-import { useOnline } from "../online/useOnline";
+import { useOnline, useOnlineAct } from "../online/useOnline";
 import { Actions } from "./Actions";
 import { AnswerMark, hasMark, spokenMark } from "./AnswerMark";
 import { AnswerText } from "./AnswerText";
 import styles from "./Ask.module.css";
+import { ChangeNotice } from "./ChangeNotice";
 import {
   DidYouMean,
   GuideReceiptCard,
@@ -84,8 +85,17 @@ export default function Ask() {
   const request = useAskRequest();
   const asking = useAsk();
   const { data: status } = useStatus();
-  const { data: online } = useOnline();
+  const { data: online, isError: onlineUnread } = useOnline();
+  // Until Online answers is read, a question from the bar waits, so the notice is never missed.
+  const onlineRead = online !== undefined || onlineUnread;
   const host = online?.host ?? null;
+  // Someone who agreed to Online answers before only what is marked private was held back sees
+  // the notice before their next question goes online; the question waits for it.
+  const noticeDue = useRef(false);
+  noticeDue.current = online?.changeNotice === true;
+  const [held, setHeld] = useState<{ question: string; place: AskPlace } | null>(null);
+  const [noticeFailed, setNoticeFailed] = useState(false);
+  const { run: runOnline, busy: seeing } = useOnlineAct();
   const stored = useRef(askSession.get()).current;
   const toCheck = useRef(
     new Set([
@@ -223,6 +233,12 @@ export default function Ask() {
       replace = false,
       asHelp = false,
     ) => {
+      if (!asHelp && place !== "thisComputer" && noticeDue.current) {
+        setNoticeFailed(false);
+        setHeld({ question, place });
+        return;
+      }
+      setHeld(null);
       const now = latest.current;
       // A finished answer steps up into Earlier; one still being written is simply replaced, and
       // so is one asked again on this computer.
@@ -321,12 +337,12 @@ export default function Ask() {
   }, [current, shown, extras, earlier]);
 
   useEffect(() => {
-    if (!request || handled.current === request.id) return;
+    if (!request || handled.current === request.id || !onlineRead) return;
     handled.current = request.id;
     const question = askRequests.take();
     const place = askPlace.take();
     if (question) start(question, false, place);
-  }, [request, start]);
+  }, [request, start, onlineRead]);
 
   useEffect(() => {
     if (!current || restored) return;
@@ -461,6 +477,18 @@ export default function Ask() {
     heading.current?.focus({ preventScroll: true });
     start(current, false, "thisComputer", waiting);
   };
+  // Seen: the notice never comes back, and the question that waited goes on its way.
+  const continueHeld = async () => {
+    if (!held) return;
+    setNoticeFailed(false);
+    const done = await runOnline(() => engine.seeOnlineChange(), { quiet: true });
+    if (!done) {
+      setNoticeFailed(true);
+      return;
+    }
+    noticeDue.current = false;
+    start(held.question, true, held.place);
+  };
   const memoriesHref = hashHref("/memories", { q: current });
   // "Show the guide's answer": the same question again, answered from the guide, in place.
   const askGuide = () => {
@@ -532,7 +560,19 @@ export default function Ask() {
           </section>
         ) : null}
 
-        {current ? (
+        {held ? (
+          <ChangeNotice
+            question={held.question}
+            busy={seeing}
+            failed={noticeFailed}
+            onContinue={() => void continueHeld()}
+            onSettings={() => {
+              setHeld(null);
+              navigate("/settings/online");
+            }}
+          />
+        ) : null}
+        {current && !held ? (
           <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && !shown.failed}>
             {helpDone && written ? (
               <HelpMark help={written} count={items} />
@@ -865,7 +905,7 @@ export default function Ask() {
               ) : null}
             </div>
           </article>
-        ) : (
+        ) : held ? null : (
           <EmptyAsk onAsk={(question) => start(question, true)} />
         )}
       </div>

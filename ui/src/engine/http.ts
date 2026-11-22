@@ -339,6 +339,7 @@ export class HttpEngine implements EngineClient {
   turnOffOnline: EngineClient["turnOffOnline"] = (forget) =>
     this.call("turn_off_online", { forget });
   abandonOnlineSetup: EngineClient["abandonOnlineSetup"] = () => this.call("abandon_online_setup");
+  seeOnlineChange: EngineClient["seeOnlineChange"] = () => this.call("see_online_change");
   updateOnlineSettings: EngineClient["updateOnlineSettings"] = (patch) =>
     this.call("update_online_settings", { patch });
   listOnlineSends: EngineClient["listOnlineSends"] = (limit, before) =>
