@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- Android 13 themed icon: one colour, shape only. The ring and the lit upper half; the lower half is empty so the system's background shows through. -->
+  <path d="M31.48 54a22.52 22.52 0 0 1 45.04 0z" fill="#FFFFFF"/>
+  <circle cx="54" cy="54" r="22.52" fill="none" stroke="#FFFFFF" stroke-width="2.96"/>
+</svg>
