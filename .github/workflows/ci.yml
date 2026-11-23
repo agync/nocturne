@@ -24,7 +24,8 @@
 #
 # `android` builds the phone app's debug APK for arm64 and runs its plugins' JVM tests and lint.
 # It runs no emulator; the phone app's Rust side is linted and tested on the host in `rust`.
-# `android-engine` only checks that the engine builds for the phone, and runs on its own paths.
+# `android-engine` only checks that the engine and the mind build for the phone, and runs on its own
+# paths.
 #
 # A pull request that touches what the packages are built from also builds them, on the platforms
 # release.yml builds on, unsigned and with nothing uploaded:
@@ -692,9 +693,9 @@ jobs:
           path: phone/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 7
 
-  # The engine alone on the phone target, so a change to it does not wait for the whole APK build
-  # above. The bundled SQLite is compiled by the NDK's clang, at the API level the app's
-  # minSdk names.
+  # The engine and the mind alone on the phone target, so a change to them does not wait for the
+  # whole APK build above. The bundled SQLite is compiled by the NDK's clang, at the API level
+  # the app's minSdk names.
   android-engine:
     name: android (engine)
     needs: changes
@@ -712,13 +713,13 @@ jobs:
         with:
           key: android-engine
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Check the engine
+      - name: Check the engine and the mind
         run: |
           set -euo pipefail
           bin=$(echo "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/*/bin)
           export CC_aarch64_linux_android="$bin/aarch64-linux-android26-clang"
           export AR_aarch64_linux_android="$bin/llvm-ar"
-          cargo check -p nocturne-engine --target aarch64-linux-android
+          cargo check -p nocturne-engine -p nocturne-mind --target aarch64-linux-android
 
   # The one job to require in branch protection: it fails when any job above failed or was
   # cancelled, and it says what this workflow does not cover. A job that was skipped because its

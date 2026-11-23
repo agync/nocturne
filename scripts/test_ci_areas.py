@@ -22,6 +22,7 @@ CASES = (
     ("lemonade.lock", RUST | PACKAGE | {"site"}),
     ("crates/engine/src/lib.rs", RUST | {"phone-engine"}),
     ("crates/engine/tests/round2.rs", RUST | {"phone-engine"}),
+    ("crates/mind/src/prompts.rs", RUST | {"phone-engine"}),
     ("crates/helpers/fixtures/help/tailnet/1.104.6/help.txt", RUST),
     ("crates/channel/src/words.txt", RUST | {"ui"} | {"android"}),
     ("crates/contract/src/lib.rs", RUST | {"phone-engine"}),

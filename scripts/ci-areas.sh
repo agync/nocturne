@@ -41,8 +41,8 @@ declare -A areas=(
     [package-linux]="^($package|flatpak/)"
     # The phone app: its shell, the channel it links, and the phone screens it carries.
     [android]='^(phone/|crates/channel/|ui/src/phone/|ui/phone/|ui/vite\.phone\.config\.ts$|ui/package(-lock)?\.json$|Cargo\.(toml|lock)$)'
-    # The engine builds for the phone: a check of the engine alone, with no APK.
-    [phone-engine]='^(crates/(contract|engine)/|Cargo\.(toml|lock)$|\.cargo/)'
+    # The engine and the mind build for the phone: a check of them alone, with no APK.
+    [phone-engine]='^(crates/(contract|engine|mind)/|Cargo\.(toml|lock)$|\.cargo/)'
 )
 
 # grep exits 1 when nothing matches and 2 on a bad pattern, which must fail rather than skip.
