@@ -301,11 +301,18 @@ impl Engine {
         format!("Nocturne backup {day}.{BACKUP_EXT}")
     }
 
-    /// The bytes a backup would roughly take: the store and the kept originals as they are.
+    /// The bytes a backup would roughly take: the store and the kept originals as they are. The
+    /// store counts as its pages in use, not its file: until a checkpoint most of a new store
+    /// sits in its write-ahead log, and the file alone said a few kilobytes.
     pub fn backup_estimate(&self) -> Result<u64> {
-        let mut total = std::fs::metadata(self.db_path())
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let mut total = self.read(|conn| {
+            let pragma = |name: &str| -> Result<u64> {
+                let n: i64 = conn.query_row(&format!("PRAGMA {name}"), [], |r| r.get(0))?;
+                Ok(n.max(0) as u64)
+            };
+            let in_use = pragma("page_count")?.saturating_sub(pragma("freelist_count")?);
+            Ok(in_use.saturating_mul(pragma("page_size")?))
+        })?;
         if let Ok(entries) = std::fs::read_dir(self.originals_dir()) {
             for entry in entries.flatten() {
                 if let Ok(meta) = entry.metadata()

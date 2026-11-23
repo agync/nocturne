@@ -1357,6 +1357,18 @@ fn the_estimate_covers_the_kept_originals() {
 }
 
 #[test]
+fn the_estimate_covers_a_store_not_yet_checkpointed() {
+    let f = fixture();
+    for n in 0..5 {
+        keep(&f.engine, &format!("note {n}"));
+    }
+    let estimate = f.engine.backup_estimate().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let made = std::fs::metadata(backup(&f, dir.path())).unwrap().len();
+    assert!(estimate * 2 >= made, "{estimate} for a backup of {made}");
+}
+
+#[test]
 fn has_data_says_whether_the_store_holds_anything_of_the_persons() {
     let f = fixture();
     assert!(!f.engine.has_data().unwrap());
