@@ -306,6 +306,7 @@ This phone's "Health" row opens:
 | Last sent | "Last sent {time} · {count} readings" |
 | Fixed line | "Nocturne can’t tell what your numbers mean for your health. A doctor or nurse can." |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |
+| At the bottom | "Done", the main button, which goes back to This phone. Choices save as they are made ([Your calendar](phone-apps.md#9-this-phone)) |
 | Taken back | "Health is off in {Health Connect or the Health app}." and "Nothing is read until you turn it back on there." with "Open Health Connect" on Android |
 
 ## On the computer

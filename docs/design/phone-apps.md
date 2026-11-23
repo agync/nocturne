@@ -384,11 +384,19 @@ settings screen, grouped as each platform groups settings.
 | Switch | "Bring my calendar" |
 | Hint | "Two days back to two weeks ahead, read only." |
 | List heading | "Which calendars" |
-| Each row | The calendar's name and colour dot as the phone shows them, with a switch |
+| Each row | The calendar's name and colour dot as the phone shows them, with a switch. When two calendars share a name, each also shows its account as a second line, as the phone names it ("Holidays in Germany" / "maya.k@example.com") |
 | Note under the list | "Every calendar starts on. Turn off any you don’t want on your page." |
 | Notes switch | "Notes on each appointment" / "Usually call links and dial-in numbers. Off keeps your page tidy." |
 | Last sent | "Last sent {time} · {count} appointments" |
 | Already sent | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." |
+| At the bottom | "Done", the main button, which goes back to This phone |
+
+Choices save as they are made: there is no Save or Cancel, and "Done" only goes back. It is there so
+the way out is at the bottom, where the thumb is, as well as the back arrow at the top. On a phone
+that holds its own memory, the last part before "Done" is a quiet group "Kept so far", holding the
+delete link, so a destructive link is never the last thing on the screen ([A phone of its
+own](phone-first.md#reused-screens-worded-for-a-phone-alone)). Every phone settings screen that
+changes choices follows this: Your calendar and Health.
 
 Turning "Bring my calendar" off stops sending at once and says "Stopped. Nothing more goes across."
 The phone cannot delete what the computer already has, as a phone cannot delete anything.
