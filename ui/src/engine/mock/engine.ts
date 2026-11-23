@@ -145,8 +145,8 @@ function remoteFromAddress(): RemoteOptions {
 }
 
 /**
- * `?mockMove=offered|here|room|preparing|arriving|checking|restarting|arrived|ranOut|notOpened` opens with a
- * phone's memory moving here.
+ * `?mockMove=offered|here|room|preparing|arriving|checking|restarting|arrived|ranOut|notOpened|
+ * bringing|adding|brought|used` opens with a phone's memory moving here.
  */
 function moveFromAddress(): MoveView | null {
   if (typeof location === "undefined") return null;
@@ -155,7 +155,22 @@ function moveFromAddress(): MoveView | null {
     case "offered":
       return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: false };
     case "here":
-      return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: true };
+      return {
+        phase: "offered",
+        name,
+        items: 1284,
+        bytes: 1_400_000_000,
+        here: true,
+        since: "2026-03-03",
+      };
+    case "bringing":
+      return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000, bring: true };
+    case "adding":
+      return { phase: "adding", name };
+    case "brought":
+      return { phase: "brought", name, added: { things: 1284, entries: 212, checkins: 96 } };
+    case "used":
+      return { phase: "used", name };
     case "preparing":
       return { phase: "preparing", name };
     case "arriving":
@@ -1945,10 +1960,22 @@ export class MockEngine implements EngineClient {
   answerMove = async (choice: MoveChoice): Promise<void> => {
     const now = this.moving;
     if (now?.phase !== "offered") throw new Error("There is no offer to answer");
-    this.setMove(choice === "move" ? { phase: "preparing", name: now.name } : null);
+    const fits =
+      choice === "notNow" ||
+      (now.here ? choice === "bring" || choice === "useHere" : choice === "move");
+    if (!fits) throw new Error("There is no offer to answer");
+    const name = now.name;
+    this.setMove(
+      choice === "move" || choice === "bring"
+        ? { phase: "preparing", name, bring: choice === "bring" }
+        : choice === "useHere"
+          ? { phase: "used", name }
+          : null,
+    );
   };
   finishMove = async (): Promise<void> => {
-    if (this.moving?.phase !== "arrived" && this.moving?.phase !== "failed")
+    const phase = this.moving?.phase;
+    if (phase !== "arrived" && phase !== "failed" && phase !== "brought" && phase !== "used")
       throw new Error("No memory is waiting");
     this.setMove(null);
   };
