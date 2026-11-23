@@ -153,6 +153,19 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `mind-sent-${scheme}`);
     });
 
+    test("Ask with a mind", async ({ page }) => {
+      await page.goto("/?m=kept&mind=on&v=ask");
+      await page.getByRole("textbox", { name: "Your question" }).fill("What did I mean to ask?");
+      await page.getByRole("textbox", { name: "Your question" }).press("Enter");
+      await expect(page.getByText("You meant to ask about the swap for the 28th.")).toBeVisible();
+      await expect(
+        page.getByText("Answered online by your provider (answers.example)"),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Choose a mind" })).toHaveCount(0);
+      await clean(page);
+      await shot(page, `mind-ask-${scheme}`);
+    });
+
     test("The service doesn't answer", async ({ page }) => {
       await page.goto("/?m=kept&mind=on&trouble=unreachable");
       await expect(

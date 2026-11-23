@@ -602,10 +602,27 @@ describe("the phone's own memory behind the screens", () => {
   it("answers the shared calls from home_call and says answers need a mind", async () => {
     mockIPC((cmd, args) => {
       if (cmd !== "home_call") return null;
-      const call = (args as { call: { cmd: string } }).call;
-      return call.cmd === "getStatus"
-        ? { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } }
-        : { type: "error", code: "notFound" };
+      const call = (args as { call: { cmd: string; question?: string } }).call;
+      if (call.cmd === "getStatus")
+        return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
+      if (call.cmd === "ask")
+        return call.question === "When is the dentist?"
+          ? { type: "error", code: "notReady" }
+          : {
+              type: "askDelta",
+              delta: {
+                askId: "a1",
+                phase: "done",
+                textDelta: "On Thursday at 9.",
+                receipts: [],
+                memoryIds: [],
+                near: [],
+                found: 1,
+                etaSeconds: null,
+                plain: true,
+              },
+            };
+      return { type: "error", code: "notFound" };
     });
     const engine = createLocalEngine({ deviceName: () => "Maya’s phone", version: "1.0.0" });
     expect(engine.connection().kind).toBe("connected");
@@ -614,6 +631,9 @@ describe("the phone's own memory behind the screens", () => {
     await expect(engine.ask("When is the dentist?", () => undefined)).rejects.toEqual(
       new PhoneRequestError("notReady"),
     );
+    const heard: string[] = [];
+    await engine.ask("What time is it?", (d) => heard.push(`${d.phase}:${d.textDelta}`));
+    expect(heard).toEqual(["done:On Thursday at 9."]);
   });
 
   it("keeps a shared voice note under its own name, and a recorded one under none", async () => {
