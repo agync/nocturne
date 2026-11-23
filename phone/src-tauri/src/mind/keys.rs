@@ -1,6 +1,6 @@
 //! Where the mind's key is held. On a phone it is the phone's own safe place, through the system
-//! plugin ([`SafeKeys`]): Android's keystore or the iPhone's keychain, never the memory, a file
-//! of the app's or a backup. [`MemoryKeys`] holds it for this run alone, for tests and for a
+//! plugin ([`SafeKeys`]): sealed by Android's keystore in a folder no backup takes, or in the
+//! iPhone's keychain for this device only. Never in the memory or a backup. [`MemoryKeys`] holds it for this run alone, for tests and for a
 //! computer, which has no safe place here.
 
 use std::sync::Mutex;
