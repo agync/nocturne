@@ -253,6 +253,11 @@ describe("What Nocturne remembers", () => {
           ]
         : [],
     );
+    const status = engine.getStatus.bind(engine);
+    vi.spyOn(engine, "getStatus").mockImplementation(async () => ({
+      ...(await status()),
+      state: "gettingReady",
+    }));
     await browse("#/memories?q=marmalade", engine);
     const found = await screen.findByRole("region", {
       name: "Found by their words. Answers need a mind.",
@@ -262,6 +267,30 @@ describe("What Nocturne remembers", () => {
     expect(screen.getAllByText(/Nothing matches “marmalade”/)).toHaveLength(1);
     await userEvent.click(within(found).getByRole("button"));
     await waitFor(() => expect(window.location.hash).toBe("#/items/item-letter"));
+  });
+
+  it("says things found by their words are read tonight once there is a mind", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "findUnread").mockResolvedValue([
+      {
+        receipt: {
+          itemId: "item-letter",
+          kind: "text",
+          source: "phone",
+          label: "Seville oranges",
+          keptAt: "2026-11-23T05:30:00Z",
+          durationMs: null,
+          span: null,
+          unconfirmed: false,
+          fromDevice: null,
+        },
+        excerpt: [{ text: "Make marmalade", matched: false }],
+        private: false,
+      },
+    ]);
+    await browse("#/memories?q=marmalade", engine);
+    expect(await screen.findByRole("region", { name: "Kept · reads tonight" })).toBeInTheDocument();
+    expect(screen.queryByText("Found by their words. Answers need a mind.")).toBeNull();
   });
 
   it("puts the tab of the entity's own kind under it", async () => {
