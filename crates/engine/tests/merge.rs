@@ -486,3 +486,98 @@ fn a_forget_here_that_is_not_done_never_swallows_the_phones_copy() {
         "the phone's copy came with its original"
     );
 }
+
+fn heron() -> nocturne_engine::Candidate {
+    common::cand(
+        "heron",
+        nocturne_engine::Predicate::Prefers,
+        "the feeder",
+        "The heron prefers the feeder.",
+    )
+}
+
+/// Forget the memory `memory` on `e`, leaving the thing it came from; `begin_only` stops part way.
+fn forget_memory(e: &Engine, memory: &str, originals: bool, begin_only: bool) {
+    let preview = e.preview_forget(&[memory.to_string()], originals).unwrap();
+    if begin_only {
+        e.forget_begin_only(&preview.token).unwrap();
+    } else {
+        e.forget(&preview.token).unwrap();
+    }
+}
+
+fn says_heron(e: &Engine, item: &str) -> bool {
+    use common::EngineExt;
+    !e.apply(item, vec![heron()]).unwrap().created.is_empty()
+}
+
+#[test]
+fn what_the_person_forgot_on_the_phone_is_never_read_again_on_the_computer() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let (note, memory) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    forget_memory(&phone.engine, &memory, false, false);
+
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.things, 1, "the thing itself stays and travels");
+    let e = &computer.engine;
+    assert_eq!(e.get_item(&note).unwrap().status, ItemStatus::Kept);
+    assert_eq!(
+        sql_count(computer.dir.path(), "SELECT COUNT(*) FROM forgotten_claims"),
+        1
+    );
+    assert!(
+        !says_heron(e, &note),
+        "the forgotten claim is not said again"
+    );
+}
+
+#[test]
+fn a_forget_on_the_phone_that_is_not_done_still_holds_on_the_computer() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    // Forgetting the memory alone: the thing stays, and what was forgotten comes with it.
+    let (stays, memory) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    forget_memory(&phone.engine, &memory, false, true);
+    // Forgetting the memory with its original: the thing goes, so it does not come.
+    let (goes, memory) = common::learn(
+        &phone.engine,
+        "The fox prefers the shed.",
+        common::cand(
+            "fox",
+            nocturne_engine::Predicate::Prefers,
+            "the shed",
+            "The fox prefers the shed.",
+        ),
+    );
+    forget_memory(&phone.engine, &memory, true, true);
+
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.things, 1, "{brought:?}");
+    let e = &computer.engine;
+    assert!(
+        e.get_item(&goes).is_err(),
+        "a thing being forgotten does not come"
+    );
+    assert!(e.get_item(&stays).is_ok(), "a thing a forget leaves comes");
+    assert!(!says_heron(e, &stays));
+}
+
+#[test]
+fn a_forget_on_the_phone_holds_for_the_same_thing_already_here() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let here = keep(&computer.engine, "The heron prefers the feeder.");
+    let (_, memory) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    forget_memory(&phone.engine, &memory, false, false);
+
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.same, 1, "{brought:?}");
+    assert!(
+        !says_heron(&computer.engine, &here),
+        "the one here never says what was forgotten on the phone"
+    );
+}
