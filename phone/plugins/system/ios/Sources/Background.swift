@@ -18,7 +18,8 @@ final class Background {
     return (names as? [String])?.contains(Background.name) ?? false
   }
 
-  /// Registers the task. iOS takes this only while the app is starting.
+  /// Registers the task. iOS takes this only before the app has finished starting, so it is
+  /// called as the plugin is made, during the app's setup. Not yet tried on an iPhone.
   func register() {
     guard permitted, !registered else { return }
     registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: Background.name, using: nil) {

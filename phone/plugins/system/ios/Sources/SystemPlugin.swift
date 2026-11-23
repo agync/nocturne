@@ -2,7 +2,6 @@ import Foundation
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
-import WebKit
 
 struct FolderArgs: Decodable {
   var path: String
@@ -64,11 +63,6 @@ private final class Sheet: NSObject, UIDocumentPickerDelegate, UIAdaptivePresent
 /// phone's own sheets to save a file and to choose one. Every other command answers its stand-in.
 class SystemPlugin: Plugin {
   private var sheet: Sheet?
-
-  override func load(webview: WKWebView) {
-    super.load(webview: webview)
-    Background.shared.register()
-  }
 
   /// Keeps a secret in the keychain, in place of one of the same name.
   @objc public func secretKeep(_ invoke: Invoke) throws {
@@ -252,5 +246,7 @@ class SystemPlugin: Plugin {
 
 @_cdecl("init_plugin_nocturne_system")
 func initPlugin() -> Plugin {
+  // iOS takes a background task only while the app starts, as the app's setup makes its plugins.
+  Background.shared.register()
   return SystemPlugin()
 }
