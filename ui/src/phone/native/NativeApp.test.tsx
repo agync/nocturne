@@ -204,6 +204,26 @@ describe("Bring more from this phone", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens on Today when the phone alone left its own screen in history before a move", async () => {
+    history.replaceState({ view: { name: "mind" } }, "", "/");
+    history.pushState({ view: { name: "moveFound" } }, "");
+    const services = await nativeMockServices();
+    const device = await services.store.device();
+    if (!device) throw new Error("paired");
+    render(
+      <NativeApp
+        services={services}
+        channel={nativeChannel}
+        initial={device}
+        offer={false}
+        onUnpaired={vi.fn()}
+      />,
+    );
+    expect(await screen.findByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { view: { name: "mind" } } }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
+  });
+
   it("comes back to the offer with the calendar refused", async () => {
     await app("n=calendarRefused&v=offer");
     fireEvent.click(await screen.findByRole("button", { name: /Your calendar/ }));
