@@ -7,15 +7,33 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+nocturne-contract.workspace = true
 nocturne-engine.workspace = true
+nocturne-mind.workspace = true
 base64.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-tokio = { workspace = true, features = ["net"] }
+# The phone's own TLS, as the sealed channel's client: rustls with ring and the public roots,
+# no proxy and no redirects.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "sync", "time"] }
+tracing.workspace = true
 url.workspace = true
 zeroize.workspace = true
+axum = { version = "0.8", optional = true }
+
+[features]
+# An OpenAI-compatible stand-in on loopback, for tests here and in the phone app. Never in
+# `default`, never in a build that ships.
+stand-in = ["dep:axum", "tokio/rt"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt"] }
+nocturne-provider = { path = ".", features = ["stand-in"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 
 [lints]
 workspace = true

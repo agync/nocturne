@@ -3892,11 +3892,22 @@ dependencies = [
 name = "nocturne-provider"
 version = "0.7.2"
 dependencies = [
+ "axum",
  "base64 0.23.1",
  "image",
+ "nocturne-contract",
  "nocturne-engine",
+ "nocturne-mind",
+ "nocturne-provider",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
+ "tracing",
  "url",
+ "webpki-roots",
  "zeroize",
 ]
 

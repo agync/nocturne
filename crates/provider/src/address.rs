@@ -321,6 +321,22 @@ pub async fn resolved_reach(url: &Url, lookup: &Lookup) -> Result<Reach, UrlProb
     Ok(reach)
 }
 
+/// Whether an address found for a provider's name may be connected to at `port`: never one
+/// that is never a provider, nor one of Nocturne's own ports on this device, and over plain
+/// HTTP only one on this device or the person's own network. The client's resolver lets only
+/// these through, so the addresses judged are the ones connected to.
+pub fn may_connect(ip: IpAddr, port: u16, plain_http: bool) -> bool {
+    let loopback = match ip {
+        IpAddr::V4(a) => a.is_loopback(),
+        IpAddr::V6(a) => a.is_loopback() || carried_v4(a).is_some_and(|v4| v4.is_loopback()),
+    };
+    match class_of_ip(ip) {
+        Class::Never => false,
+        Class::Own => !(loopback && own_port(port)),
+        Class::Public => !plain_http,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Class {
     Never,
@@ -706,6 +722,27 @@ mod tests {
             reach_of(&format!("http://gpubox:{}/v1", port + 1), &loopback),
             Ok(Reach::Own)
         );
+    }
+
+    #[test]
+    fn only_allowed_addresses_may_be_connected_to() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        assert!(may_connect(ip("192.168.1.10"), 80, true));
+        assert!(may_connect(ip("fd00::1"), 80, true));
+        assert!(!may_connect(ip("8.8.8.8"), 80, true));
+        assert!(may_connect(ip("8.8.8.8"), 443, false));
+        for never in [
+            "169.254.169.254",
+            "::ffff:169.254.169.254",
+            "0.0.0.0",
+            "224.0.0.1",
+        ] {
+            assert!(!may_connect(ip(never), 443, false), "{never}");
+        }
+        let port = 9;
+        let _held = OwnPort::hold(port);
+        assert!(!may_connect(ip("127.0.0.1"), port, true));
+        assert!(may_connect(ip("127.0.0.1"), port + 1, true));
     }
 
     #[test]
