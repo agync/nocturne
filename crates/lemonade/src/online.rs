@@ -26,6 +26,7 @@ pub use nocturne_provider::address::{
     Address, Lookup, NEVER_NAMES, NEVER_NETS, OWN_NAMES, OWN_NETS, OnlineKey, OwnPort, Reach,
     UrlProblem, host_of, plain_http_allowed, resolved_reach, system_lookup, validate_url,
 };
+use nocturne_provider::client::by_status;
 
 /// The provider's name in `cloud_providers`. Underscore only, so the key's environment name is
 /// settable everywhere.
@@ -252,15 +253,10 @@ pub fn classify(status: Option<u16>, engine_error: &str) -> OnlineFailure {
     let says = |words: &[&str]| words.iter().any(|w| text.contains(w));
     match status {
         None => OnlineFailure::Unreachable,
-        Some(401 | 403) => OnlineFailure::KeyRefused,
-        Some(402) => OnlineFailure::NoCredit,
-        Some(404) => OnlineFailure::ModelMissing,
-        Some(429) => OnlineFailure::Busy,
+        Some(s @ (401 | 402 | 403 | 404 | 429)) => by_status(s, false),
         Some(_) if says(NO_INTERNET) => OnlineFailure::NoInternet,
         Some(_) if says(NOT_REACHED) => OnlineFailure::Unreachable,
-        Some(400) if text.contains("model") => OnlineFailure::ModelMissing,
-        Some(s @ 500..=599) => OnlineFailure::Other(s),
-        Some(_) => OnlineFailure::Refused,
+        Some(s) => by_status(s, text.contains("model")),
     }
 }
 

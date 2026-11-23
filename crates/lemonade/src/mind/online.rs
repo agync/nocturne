@@ -17,6 +17,8 @@ use nocturne_mind::judge::{conclude, judge};
 use nocturne_mind::online::{self, Question};
 use tokio::sync::mpsc;
 
+pub use nocturne_provider::client::check_outcome;
+
 use crate::client::{Client, Message, OnlineRequest};
 use crate::online::{CHECK_QUESTION, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classify};
 
@@ -196,20 +198,4 @@ pub async fn check(client: &Client, host: &str, model: &str) -> (CheckOutcome, O
         }
     };
     (outcome, receipt)
-}
-
-/// What a failure means for a check.
-pub fn check_outcome(f: OnlineFailure) -> CheckOutcome {
-    match f {
-        OnlineFailure::NoInternet => CheckOutcome::NoInternet,
-        OnlineFailure::KeyRefused => CheckOutcome::KeyRefused,
-        OnlineFailure::NoCredit => CheckOutcome::NoCredit,
-        OnlineFailure::ModelMissing => CheckOutcome::ModelMissing,
-        OnlineFailure::Busy => CheckOutcome::Busy,
-        OnlineFailure::Other(s) if (500..600).contains(&s) => CheckOutcome::ServerError,
-        OnlineFailure::Unreachable
-        | OnlineFailure::Slow
-        | OnlineFailure::Refused
-        | OnlineFailure::Other(_) => CheckOutcome::Unreachable,
-    }
 }
