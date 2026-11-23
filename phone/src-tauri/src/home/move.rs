@@ -1019,8 +1019,10 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     let finished = tauri::async_runtime::spawn_blocking(move || {
         let home = worker.state::<Home>();
         let out = home.finish_move(&prepared, arrival);
-        if out.is_err() {
-            home.drop_move();
+        match &out {
+            // The memory lives on the computer now, whose own mind reads it.
+            Ok(_) => worker.state::<crate::mind::PhoneMind>().turn_off(),
+            Err(_) => home.drop_move(),
         }
         out
     })
