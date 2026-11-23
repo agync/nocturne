@@ -255,14 +255,23 @@ const SENT: MindSent[] = [
   },
 ];
 
-/** What a screen test changes while the app runs: how the service is doing, over `&trouble=`. */
+/**
+ * What a screen test changes while the app runs: how the service is doing (over `&trouble=`),
+ * and the questions stopped.
+ */
 export const scriptedMind = {
   trouble: undefined as string | null | undefined,
+  stopped: [] as string[],
 };
 
 export function resetScriptedMind(): void {
   scriptedMind.trouble = undefined;
+  scriptedMind.stopped = [];
+  waiting.clear();
 }
+
+/** Questions under way that wait to be stopped, by their ids. */
+const waiting = new Map<string, () => void>();
 
 /**
  * `&trouble=` names how the service is doing once the mind is on: `unreachable`, `offline`,
@@ -589,6 +598,24 @@ export function homeState(scenario: HomeScenario) {
     }
   }
 
+  /**
+   * A question for the online mind: one that says "slowly" waits until it is stopped. Anything
+   * else is answered.
+   */
+  function asked(question: string, askId: string): RemoteAnswer | Promise<RemoteAnswer> {
+    if (mind.state !== "on") return { type: "error", code: "notReady" };
+    const reply = answered(mind.host);
+    if (reply.type !== "askDelta") return reply;
+    const delta = { ...reply.delta, askId };
+    const ended: RemoteAnswer = {
+      type: "askDelta",
+      delta: { ...delta, phase: "unavailable", textDelta: null, receipts: [] },
+    };
+    if (question.includes("slowly"))
+      return new Promise((done) => waiting.set(askId, () => done(ended)));
+    return { type: "askDelta", delta };
+  }
+
   /** The app's home commands; undefined for a command that is not one. */
   function answer(cmd: string, args: Record<string, unknown>): unknown {
     switch (cmd) {
@@ -607,6 +634,15 @@ export function homeState(scenario: HomeScenario) {
         return remote(args.call as RemoteCall);
       case "home_local":
         return local(args.call as HomeCall);
+      case "home_ask":
+        return asked(String(args.question), String(args.askId));
+      case "home_cancel_ask": {
+        const askId = String(args.askId);
+        scriptedMind.stopped.push(askId);
+        waiting.get(askId)?.();
+        waiting.delete(askId);
+        return null;
+      }
       case "hear_voice_notes":
         return false;
       case "voice_access":

@@ -186,7 +186,7 @@ mod tests {
             bytes_up: 120,
             bytes_down: 40,
             seconds: 0.5,
-            cost_usd: None,
+            ..Exchange::default()
         }
     }
 

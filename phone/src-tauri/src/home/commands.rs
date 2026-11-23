@@ -77,7 +77,7 @@ pub async fn home_call<R: Runtime>(app: AppHandle<R>, call: RemoteCall) -> Remot
             let rt = tokio::runtime::Handle::current();
             return app
                 .state::<crate::mind::PhoneMind>()
-                .answer_call(&home, &rt, question);
+                .answer_call(&home, &rt, None, question);
         }
         match home.using() {
             Ok((_use, open)) => dispatch::answer(&open, call),
@@ -90,6 +90,35 @@ pub async fn home_call<R: Runtime>(app: AppHandle<R>, call: RemoteCall) -> Remot
     .unwrap_or(RemoteAnswer::Error {
         code: PhoneError::Busy,
     })
+}
+
+/// A question for the online mind, named `ask_id` so `home_cancel_ask` can stop it. Answered
+/// whole, as `home_call`'s `ask`.
+#[tauri::command]
+pub async fn home_ask<R: Runtime>(
+    app: AppHandle<R>,
+    question: String,
+    ask_id: String,
+) -> RemoteAnswer {
+    blocking(move || {
+        let rt = tokio::runtime::Handle::current();
+        app.state::<crate::mind::PhoneMind>().answer_call(
+            &app.state::<Home>(),
+            &rt,
+            Some(&ask_id),
+            &question,
+        )
+    })
+    .await
+    .unwrap_or(RemoteAnswer::Error {
+        code: PhoneError::Busy,
+    })
+}
+
+/// Stops the question `ask_id`: its request to the online mind is dropped.
+#[tauri::command]
+pub fn home_cancel_ask(mind: State<'_, crate::mind::PhoneMind>, ask_id: String) {
+    mind.stop_ask(&ask_id);
 }
 
 /// Every slice of a keep with bytes is in (`keep_begin`, `keep_part`): keep it here.

@@ -30,7 +30,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use crate::client::{Exchange, Failed, Provider, Reply};
+use crate::client::{Exchange, Failed, Provider, Reply, Stop};
 
 const READ_SECONDS: u64 = 180;
 const ANSWER_SECONDS: u64 = 60;
@@ -177,7 +177,21 @@ impl ProviderMind {
     }
 
     async fn ask(&self, job: Job, body: Value, seconds: u64) -> Result<Reply, Failed> {
-        let reply = self.provider.chat(body, Duration::from_secs(seconds)).await;
+        self.ask_until(job, body, seconds, None).await
+    }
+
+    /// One request for `job`, ended by `stop`.
+    async fn ask_until(
+        &self,
+        job: Job,
+        body: Value,
+        seconds: u64,
+        stop: Option<Stop>,
+    ) -> Result<Reply, Failed> {
+        let reply = self
+            .provider
+            .chat_until(body, Duration::from_secs(seconds), stop)
+            .await;
         match &reply {
             Ok(r) => self.note(job, &r.exchange),
             Err(f) if !f.refused => self.note(job, &f.exchange),
@@ -188,6 +202,18 @@ impl ProviderMind {
             }
         }
         reply
+    }
+
+    /// Answers `question` as [`Mind::answer`] does, ended as soon as `stop` turns true: nothing
+    /// is asked once it has, and a request under way is dropped.
+    pub async fn answer_until(
+        &self,
+        question: &str,
+        facts: &[Fact],
+        out: mpsc::Sender<String>,
+        stop: Stop,
+    ) -> Result<AnswerMeta, MindError> {
+        self.answer_impl(question, facts, out, Some(stop)).await
     }
 
     /// `body` asking for a reply matching `schema`, and asked again by the prompt alone when
@@ -345,6 +371,7 @@ impl ProviderMind {
         question: &str,
         facts: &[Fact],
         out: mpsc::Sender<String>,
+        stop: Option<Stop>,
     ) -> Result<AnswerMeta, MindError> {
         // This device is the person's home: every line found may go.
         let all = |ids: &[String]| vec![true; ids.len()];
@@ -368,7 +395,9 @@ impl ProviderMind {
             line_hashes: q.line_hashes,
             ..OnlineReceipt::default()
         };
-        let reply = self.ask(Job::Answer, body, ANSWER_SECONDS).await;
+        let reply = self
+            .ask_until(Job::Answer, body, ANSWER_SECONDS, stop)
+            .await;
         let exchange = match &reply {
             Ok(r) => &r.exchange,
             Err(f) => &f.exchange,
@@ -529,7 +558,7 @@ impl Mind for ProviderMind {
         facts: &'a [Fact],
         out: mpsc::Sender<String>,
     ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
-        Box::pin(self.answer_impl(question, facts, out))
+        Box::pin(self.answer_impl(question, facts, out, None))
     }
 
     fn write_headline<'a>(

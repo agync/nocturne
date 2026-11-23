@@ -599,14 +599,12 @@ describe("keeping and an item on a phone alone", () => {
 });
 
 describe("the phone's own memory behind the screens", () => {
-  it("answers the shared calls from home_call and says answers need a mind", async () => {
+  it("answers the shared calls from home_call, asks the mind by name and stops it", async () => {
+    const stopped: unknown[] = [];
     mockIPC((cmd, args) => {
-      if (cmd !== "home_call") return null;
-      const call = (args as { call: { cmd: string; question?: string } }).call;
-      if (call.cmd === "getStatus")
-        return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
-      if (call.cmd === "ask")
-        return call.question === "When is the dentist?"
+      if (cmd === "home_cancel_ask") return void stopped.push(args);
+      if (cmd === "home_ask")
+        return (args as { question: string }).question === "When is the dentist?"
           ? { type: "error", code: "notReady" }
           : {
               type: "askDelta",
@@ -622,6 +620,10 @@ describe("the phone's own memory behind the screens", () => {
                 plain: true,
               },
             };
+      if (cmd !== "home_call") return null;
+      const call = (args as { call: { cmd: string } }).call;
+      if (call.cmd === "getStatus")
+        return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
       return { type: "error", code: "notFound" };
     });
     const engine = createLocalEngine({ deviceName: () => "Maya’s phone", version: "1.0.0" });
@@ -633,7 +635,10 @@ describe("the phone's own memory behind the screens", () => {
     );
     const heard: string[] = [];
     await engine.ask("What time is it?", (d) => heard.push(`${d.phase}:${d.textDelta}`));
-    expect(heard).toEqual(["done:On Thursday at 9."]);
+    expect(heard).toEqual(["searching:null", "done:On Thursday at 9."]);
+    const id = await engine.ask("Again?", () => undefined);
+    await engine.cancelAsk(id);
+    expect(stopped).toEqual([{ askId: id }]);
   });
 
   it("keeps a shared voice note under its own name, and a recorded one under none", async () => {

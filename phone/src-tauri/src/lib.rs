@@ -92,6 +92,8 @@ pub fn run() {
             home::commands::memory_damaged,
             home::commands::start_alone,
             home::commands::home_call,
+            home::commands::home_ask,
+            home::commands::home_cancel_ask,
             home::commands::home_keep_end,
             home::commands::home_original,
             home::commands::home_local,
