@@ -5,60 +5,126 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phone alone · backup · Nocturne</title>
 <link rel="stylesheet" href="parity.css">
+<link rel="stylesheet" href="backup.css">
 <script type="application/json" id="frames">
 {
   "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "This phone" },
-  "on": { "title": "Backup", "back": "This phone" }
+  "key": { "bar": "none" },
+  "first": { "bar": "none" },
+  "done": { "bar": "none" },
+  "on": { "title": "Backup", "back": "This phone" },
+  "wifi": { "title": "Backup", "back": "This phone" },
+  "stopped": { "title": "Backup", "back": "This phone" },
+  "off": { "title": "Backup", "back": "This phone" },
+  "today": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "delete": { "bar": "modal", "title": "Delete everything", "back": "Cancel" }
 }
 </script>
 </head>
-<body data-frame="duo" data-states="why passphrase on">
+<body data-frame="duo" data-states="why blocked passphrase own check key first done on wifi stopped today off delete">
 <main id="content">
 
-  <!-- Step 1 -->
-  <p class="stepLbl" data-state="why">Backup · step 1 of 2</p>
-  <h1 class="stepH" data-state="why">Back up your memory every night, so a lost phone doesn’t lose it.</h1>
-  <ul class="lines" data-state="why">
+  <!-- Step 1: why, and when it can't go on -->
+  <p class="stepLbl" data-state="why blocked">Backup · step 1 of 3</p>
+  <h1 class="stepH" data-state="why blocked">Back up your memory every night, so a lost phone doesn’t lose it.</h1>
+  <ul class="lines" data-state="why blocked">
     <li><b>What goes</b><span>Everything you kept, locked. Each night, while this phone charges, only what changed goes.</span></li>
     <li><b>Who can open it</b><span data-os="ios">Only someone with your phrase. Apple keeps it in your iCloud but can’t open it, and neither can Nocturne’s makers.</span><span data-os="android">Only someone with your phrase. Google keeps it in your Drive but can’t open it, and neither can Nocturne’s makers.</span></li>
     <li><b>You need</b><span data-os="ios">iCloud turned on, with room for about 1.4 GB.</span><span data-os="android">Your Google account on this phone, with room for about 1.4 GB in its Drive.</span></li>
   </ul>
-  <div class="expander" data-state="why"><span>Everything about the backup</span><span data-icon="chevron-down" data-size="18"></span></div>
-  <div class="foot" data-state="why">
-    <span class="btn" data-kind="primary">Continue</span>
-    <span class="btn" data-kind="quiet">Not now</span>
-    <p class="barLine">Nothing is turned on until the last step.</p>
-  </div>
+  <p class="limit" data-state="blocked" data-os="android">Nothing was turned on. Google didn’t allow it.</p>
+  <p class="limit" data-state="blocked" data-os="ios">Turn on iCloud for Nocturne in Settings to back up.</p>
+  <div class="expander" data-state="why blocked"><span>Everything about the backup</span><span data-icon="chevron-down" data-size="18"></span></div>
+  <div class="foot" data-state="why"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nothing is turned on until the last step.</p></div>
+  <div class="foot" data-state="blocked" data-os="android"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nothing is turned on until the last step.</p></div>
+  <div class="foot" data-state="blocked" data-os="ios"><span class="btn" data-kind="primary" data-off>Continue</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nothing is turned on until the last step.</p></div>
 
-  <!-- Step 2: the phrase -->
-  <p class="stepLbl" data-state="passphrase">Backup · step 2 of 2</p>
-  <h1 class="stepH" data-state="passphrase">Your phrase for the backup</h1>
+  <!-- Step 2: Nocturne's phrase -->
+  <p class="stepLbl" data-state="passphrase own">Backup · step 2 of 3</p>
+  <h1 class="stepH" data-state="passphrase own">Your phrase for the backup</h1>
   <p class="plead" data-state="passphrase">It opens your backup on a new phone. Nocturne made this one up for you.</p>
-  <div class="card2" data-state="passphrase" style="gap: 10px; align-items: flex-start">
-    <p style="font-family: var(--serif, Georgia, serif); font-size: 1.375rem; line-height: 1.45; margin: 0">harbour violet pencil<br>maple drift oven</p>
-    <span class="link2">Another phrase</span>
+  <div class="card2" data-state="passphrase">
+    <p class="phrase"><span>harbour</span> <span>violet</span> <span>pencil</span> <span>maple</span> <span>drift</span> <span>oven</span></p>
+    <div class="linkRow"><span class="link2">Another phrase</span><span class="link2">Copy</span></div>
   </div>
   <p class="link2" data-state="passphrase">Use my own phrase instead</p>
-  <div class="card2" data-state="passphrase" style="gap: 8px">
-    <strong style="font-weight: 500">Keep this phrase safe</strong>
-    <p class="small" style="color: var(--ink)">Nocturne doesn’t keep it. Without it, nobody can open your backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager.</p>
-    <div style="display: flex; gap: 10px; align-items: center"><span class="tick" style="width: 18px; height: 18px; border: 1.5px solid var(--ink3); border-radius: 4px"></span><span style="font-size: 0.9375rem">I’ve written it down or saved it somewhere safe</span></div>
-  </div>
-  <div class="foot" data-state="passphrase">
-    <span class="btn" data-kind="primary" style="opacity: 0.45">Turn on</span>
-    <span class="btn" data-kind="quiet">Back</span>
-    <p class="barLine">Tick the box to go on.</p>
-  </div>
 
-  <!-- On, in This phone -->
-  <div class="group" data-state="on">
+  <!-- Step 2: your own phrase -->
+  <p class="plead" data-state="own">It opens your backup on a new phone.</p>
+  <div class="fieldWrap" data-state="own">
+    <span class="fieldLabel">Your phrase</span>
+    <div class="fieldInput"><span>summer garden 2024</span></div>
+    <span class="fieldHint">A few words that don’t go together are strong and easy to remember.</span>
+  </div>
+  <div class="limit" data-state="own">This phrase is easy to guess. Someone who finds your backup could try it. Nocturne’s own phrase is harder to guess. <span class="link2">Use Nocturne’s phrase</span></div>
+
+  <div class="card2 note" data-state="passphrase own">
+    <strong>Keep this phrase safe</strong>
+    <p class="small">Nocturne doesn’t keep it. Without it, nobody can open your backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager.</p>
+  </div>
+  <div class="foot" data-state="passphrase own"><span class="btn" data-kind="primary">Next</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Step 3: type it back, Wi-Fi only -->
+  <p class="stepLbl" data-state="check">Backup · step 3 of 3</p>
+  <h1 class="stepH" data-state="check">Type your phrase</h1>
+  <p class="plead" data-state="check">Type it from where you wrote it down or saved it, so you know you have it.</p>
+  <div class="fieldWrap" data-state="check">
+    <span class="fieldLabel">Your phrase</span>
+    <div class="fieldInput"><span>harbour violet pencil</span></div>
+  </div>
+  <div class="group" data-state="check">
     <div class="rows">
-      <div class="row"><span class="rowText"><span class="rowLabel">Back up every night</span><span class="rowHint" data-os="ios">Last backup today, 3:12 am · 1.4 GB in your iCloud</span><span class="rowHint" data-os="android">Last backup today, 3:12 am · 1.4 GB in your Google Drive</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span><span class="rowHint">Backups use mobile data too: about 1.4 GB the first time, then a little each night.</span></span><span class="sw off"></span></div>
     </div>
   </div>
-  <div class="group" data-state="on">
+  <div class="foot" data-state="check"><span class="btn" data-kind="primary" data-off>Turn on</span><span class="btn" data-kind="quiet">Back</span><p class="barLine">Type your phrase to go on.</p></div>
+
+  <!-- A recovery key, offered once -->
+  <div class="hero" data-state="key" style="padding-top: 40px">
+    <span data-icon="shield" data-size="32"></span>
+    <h1 class="stepH">A recovery key, if you want one</h1>
+    <p class="plead">If you ever lose your phrase, a recovery key opens your backup instead. Print it or save it, and keep it away from this phone.</p>
+  </div>
+  <p class="rkey" data-state="key"><span>K7QM</span> <span>2XWD</span> <span>9HRT</span> <span>P4NC</span> <span>B8LZ</span> <span>6VFJ</span></p>
+  <div class="foot plain" data-state="key"><span class="btn" data-kind="primary">Print or save…</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nocturne shows this only once.</p></div>
+
+  <!-- The first backup -->
+  <div class="hero" data-state="first" style="padding-top: 96px">
+    <span data-icon="refresh" data-size="32"></span>
+    <h1 class="stepH">Backing up for the first time</h1>
+    <div class="prog"><span style="width: 38%"></span></div>
+    <p class="small">540 MB of 1.4 GB</p>
+    <p class="plead">You can use Nocturne while this runs. If it doesn’t finish now, it carries on tonight while this phone charges.</p>
+  </div>
+  <div class="foot plain" data-state="first"><span class="btn">Use Nocturne</span></div>
+
+  <!-- Backed up -->
+  <div class="hero" data-state="done" style="padding-top: 96px">
+    <span data-icon="check" data-size="32"></span>
+    <h1 class="heroTitle">Your memory is backed up.</h1>
+    <p class="plead" data-os="ios">9:52 pm, in your iCloud.</p>
+    <p class="plead" data-os="android">9:52 pm, in your Google Drive.</p>
+    <p class="plead">From now on, each night while this phone charges.</p>
+  </div>
+  <div class="foot plain" data-state="done"><span class="btn" data-kind="primary">OK</span></div>
+
+  <!-- This phone: Backup -->
+  <div class="group" data-state="on wifi stopped off">
     <div class="rows">
-      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span></span><span class="sw off"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Back up every night</span>
+        <span class="rowHint" data-state="on off" data-os="ios">Last backup today, 3:12 am · 1.4 GB in your iCloud</span>
+        <span class="rowHint" data-state="on off" data-os="android">Last backup today, 3:12 am · 1.4 GB in your Google Drive</span>
+        <span class="rowHint" data-state="wifi">Last backup Sunday, 2:40 am · waiting for Wi-Fi</span>
+        <span class="rowHint" data-state="stopped">Stopped · last backup Friday, 3:05 am</span>
+      </span><span class="sw"></span></div>
+    </div>
+    <div class="say calm" data-state="wifi">Wi-Fi only is on, so the backup waits until this phone is on Wi-Fi and charging. <span class="link2">Back up now over mobile data</span></div>
+    <div class="say" data-state="stopped" data-os="ios">There’s no room in your iCloud for tonight’s backup. Your last backup from Friday is still there. <span class="link2">Open iCloud settings</span></div>
+    <div class="say" data-state="stopped" data-os="android">The Google account your backup uses isn’t on this phone any more, so the backup has stopped. <span class="link2">Choose account</span></div>
+  </div>
+  <div class="group" data-state="on wifi stopped off">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span></span><span class="sw off" data-state="on stopped off"></span><span class="sw" data-state="wifi"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Back up now</span></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Change the phrase…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Turn off…</span></span></div>
@@ -70,9 +136,46 @@
       <li><b>Where</b><span data-os="ios">In your iCloud, in a place only Nocturne uses. It doesn’t show among your files.</span><span data-os="android">In your Google Drive, in a folder called Nocturne backup. Nocturne can reach only what it puts there, nothing else in your Drive.</span></li>
       <li><b>When</b><span>Each night while this phone charges, at a time your phone chooses. Over mobile data too, unless you choose Wi-Fi only.</span></li>
       <li><b>How many</b><span>You can go back up to seven nights. When you forget something for good, it goes from the backup at once.</span></li>
+      <li><b>Private things</b><span>Things you mark private are backed up too, locked like everything else. Private only keeps them out of notifications, reminders and the lock screen.</span></li>
       <li><b>A new phone</b><span data-os="ios">Sign in with the same Apple Account, install Nocturne, choose I have a backup, and type your phrase.</span><span data-os="android">Install Nocturne, choose I have a backup, choose the same Google account, and type your phrase.</span></li>
     </ul>
   </div>
+
+  <!-- Turn off -->
+  <div class="over" data-state="off">
+    <div class="sheetCard">
+      <h2>Turn off backup?</h2>
+      <p data-os="ios">No new backups are made. The backup in your iCloud stays as it is until you delete it.</p>
+      <p data-os="android">No new backups are made. The backup in your Google Drive stays as it is until you delete it.</p>
+      <div class="tickRow"><span class="tickBox"></span><span>Also delete the backup</span></div>
+      <div class="btns"><span class="btn" data-kind="primary">Turn off</span><span class="btn" data-kind="quiet">Keep it on</span></div>
+    </div>
+  </div>
+
+  <!-- Today: the backup has stopped -->
+  <p class="pstatus" data-state="today"><span class="pdot"></span>Your memory is on this phone</p>
+  <p class="plbl" data-state="today">Tuesday 24 November</p>
+  <div class="todayCard" data-state="today">
+    <strong>Your backup has stopped.</strong>
+    <p data-os="ios">There’s no room in your iCloud for tonight’s backup. Your last backup from Friday is still there.</p>
+    <p data-os="android">The Google account your backup uses isn’t on this phone any more, so the backup has stopped.</p>
+    <div class="pair"><span class="btn" data-kind="primary">Open backup</span><span class="btn" data-kind="quiet">Not now</span></div>
+  </div>
+  <div class="noMind" data-state="today">
+    <h2>Your page needs a mind to write it.</h2>
+    <p class="plead">A mind reads what you keep, writes this page each morning and answers your questions.</p>
+    <span class="btn" data-kind="tonal">Choose a mind</span>
+  </div>
+
+  <!-- Delete everything, with a backup -->
+  <h1 class="stepH" data-state="delete">Delete everything on this phone?</h1>
+  <p class="plead" data-state="delete" data-os="ios">Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. Your backup in your iCloud is deleted too. A backup file you saved elsewhere isn’t touched.</p>
+  <p class="plead" data-state="delete" data-os="android">Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. Your backup in your Google Drive is deleted too. A backup file you saved elsewhere isn’t touched.</p>
+  <div class="fieldWrap" data-state="delete">
+    <span class="fieldLabel">Type “delete everything” to go ahead</span>
+    <div class="fieldInput"><span>delete everything</span></div>
+  </div>
+  <div class="foot" data-state="delete"><span class="btn" data-kind="primary" data-careful>Delete everything</span><span class="btn" data-kind="quiet">Keep everything</span></div>
 </main>
 <script src="../phone-apps/shell.js"></script>
 </body>

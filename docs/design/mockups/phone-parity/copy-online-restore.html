@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone alone · restoring a backup · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<link rel="stylesheet" href="backup.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "Back" },
+  "nights": { "bar": "modal", "title": "Which night?", "back": "Cancel", "done": "Done" },
+  "getting": { "bar": "none" },
+  "restored": { "bar": "none" },
+  "in-use": { "bar": "none" },
+  "adding": { "bar": "none" },
+  "merged": { "bar": "none" },
+  "merge": { "back": "This phone" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="where found nights wrong none getting missing restored in-use merge adding merged">
+<main id="content">
+
+  <!-- Where is your backup? -->
+  <h1 class="stepH" data-state="where">Where is your backup?</h1>
+  <div class="choices" data-state="where">
+    <div class="choice" data-on><span class="rad"></span><span><strong data-os="ios">Your backup in iCloud</strong><strong data-os="android">Your backup in Google Drive</strong><span class="hint">Made by Nocturne each night.</span></span></div>
+    <div class="choice"><span class="rad"></span><span><strong>A backup file</strong><span class="hint">One file you saved.</span></span></div>
+  </div>
+  <div class="foot" data-state="where"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Found: type the phrase, or the recovery key -->
+  <h1 class="stepH" data-state="found wrong">Bring back your memory</h1>
+  <p class="plead" data-state="found">Type the phrase for your backup.</p>
+  <p class="plead" data-state="wrong">Type the recovery key for your backup.</p>
+  <div class="found" data-state="found wrong">
+    <span data-icon="shield" data-size="22"></span>
+    <span class="rowText"><span class="rowLabel">Backup from today, 3:12 am · 1.4 GB</span><span class="link2">An earlier night…</span></span>
+  </div>
+  <div class="fieldWrap" data-state="found">
+    <span class="fieldLabel">Your phrase</span>
+    <div class="fieldInput"><span></span></div>
+  </div>
+  <p class="link2" data-state="found">Use the recovery key instead</p>
+  <div class="fieldWrap" data-state="wrong">
+    <span class="fieldLabel">Recovery key</span>
+    <div class="fieldInput" data-err><span>K7QM 2XWD 9HRT P4NC B8LZ 6VFI</span></div>
+    <span class="fieldErr">That recovery key doesn’t open this backup. Check each group of letters and numbers, and try again.</span>
+  </div>
+  <p class="link2" data-state="wrong">Use the phrase instead</p>
+  <div class="foot" data-state="found wrong"><span class="btn" data-kind="primary">Bring it back</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Which night? -->
+  <p class="plead" data-state="nights">The newest is chosen unless you pick another.</p>
+  <ul class="nights" data-state="nights">
+    <li data-on><span class="rad"></span><span>Today, 3:12 am</span><span class="newest">Newest</span><span class="size">1.4 GB</span></li>
+    <li><span class="rad"></span><span>Monday, 2:58 am</span><span class="size">1.4 GB</span></li>
+    <li><span class="rad"></span><span>Sunday, 2:40 am</span><span class="size">1.4 GB</span></li>
+    <li><span class="rad"></span><span>Saturday, 3:21 am</span><span class="size">1.3 GB</span></li>
+    <li><span class="rad"></span><span>Friday, 3:05 am</span><span class="size">1.3 GB</span></li>
+    <li><span class="rad"></span><span>Thursday, 2:47 am</span><span class="size">1.3 GB</span></li>
+    <li><span class="rad"></span><span>Wednesday, 3:30 am</span><span class="size">1.3 GB</span></li>
+  </ul>
+
+  <!-- No backup found -->
+  <div class="hero" data-state="none" style="padding-top: 72px">
+    <span data-icon="info" data-size="32"></span>
+    <h1 class="stepH" data-os="ios">No backup found in this iCloud.</h1>
+    <h1 class="stepH" data-os="android">No backup found in this Google account’s Drive.</h1>
+    <p class="plead" data-os="ios">Sign in with the Apple Account your old phone used.</p>
+  </div>
+  <div class="foot plain" data-state="none" data-os="android"><span class="btn" data-kind="primary">Try another account</span><span class="btn" data-kind="quiet">Back</span></div>
+  <div class="foot plain" data-state="none" data-os="ios"><span class="btn" data-kind="primary">Back</span></div>
+
+  <!-- Getting your backup -->
+  <div class="hero" data-state="getting" style="padding-top: 96px">
+    <h1 class="stepH">Bringing back your memory</h1>
+    <p class="secH">Getting your backup</p>
+    <div class="prog"><span style="width: 46%"></span></div>
+    <p class="small">650 MB of 1.4 GB · about 4 minutes left</p>
+    <p class="plead">Keep Nocturne open until this finishes. If it closes, nothing on this phone changes, and what has come down is kept, so starting again carries on.</p>
+  </div>
+  <div class="foot plain" data-state="getting"><span class="btn">Stop</span></div>
+
+  <!-- Part of this backup is missing -->
+  <div class="hero" data-state="missing" style="padding-top: 96px">
+    <span data-icon="info" data-size="32" style="color: var(--ember)"></span>
+    <h1 class="stepH">Part of this backup is missing</h1>
+    <p class="plead">Nocturne can’t bring it back safely, so nothing changed. An earlier night may be whole.</p>
+  </div>
+  <div class="foot plain" data-state="missing"><span class="btn" data-kind="primary">Choose an earlier night</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Restored onto an empty phone -->
+  <div class="hero" data-state="restored" style="padding-top: 96px">
+    <span data-icon="check" data-size="32"></span>
+    <h1 class="heroTitle">Your memory is back on this phone.</h1>
+    <p class="plead">2,140 things, every page and your journal.</p>
+    <p class="small">Its mind stays off until you choose it again in <span class="cc">This phone</span>.</p>
+    <p class="small">Your calendar and Health on this phone stay off until you turn them on again.</p>
+  </div>
+  <div class="foot plain" data-state="restored"><span class="btn" data-kind="primary">Continue</span></div>
+
+  <!-- Make the backups from this phone? -->
+  <div class="hero" data-state="in-use" style="padding-top: 96px">
+    <span data-icon="phone" data-size="32"></span>
+    <h1 class="stepH">Make the backups from this phone?</h1>
+    <p class="plead">This phone now makes the nightly backup, with the same phrase. If your old phone turns up, it stops making them.</p>
+  </div>
+  <div class="foot plain" data-state="in-use"><span class="btn" data-kind="primary">Back up from this phone</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- This phone has a memory too -->
+  <h1 class="stepH" data-state="merge">Your backup has its own memory, and this phone has one too.</h1>
+  <div class="both" data-state="merge">
+    <div><b>In the backup</b><span>1,912 things</span><span class="small">from 3 March to 18 November · about 1.2 GB</span></div>
+    <div><b>On this phone</b><span>64 things</span><span class="small">from 19 November to today</span></div>
+  </div>
+  <p class="plead" data-state="merge">A phone holds one person’s memory, so the backup’s things join the one here.</p>
+  <p data-state="merge" style="margin: 0; font-size: 0.9375rem; line-height: 1.5">What was in the backup, with its journal, check-ins and pages, joins the memory on this phone. Nothing here is put aside or deleted. What is on both is kept once.</p>
+  <div class="foot" data-state="merge"><span class="btn" data-kind="primary">Bring them in</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- Bringing in your backup -->
+  <div class="hero" data-state="adding" style="padding-top: 96px">
+    <h1 class="stepH">Bringing in your backup</h1>
+    <p class="secH">Adding them to the memory on this phone…</p>
+    <div class="prog"><span style="width: 82%"></span></div>
+    <p class="plead">Keep Nocturne open until this finishes.</p>
+  </div>
+
+  <!-- Your backup's things are here -->
+  <div class="hero" data-state="merged" style="padding-top: 96px">
+    <span data-icon="check" data-size="32"></span>
+    <h1 class="heroTitle">Your backup’s things are here.</h1>
+    <p class="plead">1,900 things, 240 journal entries and 118 check-ins were added to the memory on this phone.</p>
+    <p class="small">12 were already here, so they were kept once.</p>
+  </div>
+  <div class="foot plain" data-state="merged"><span class="btn" data-kind="primary">Continue</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
