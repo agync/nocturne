@@ -1,6 +1,7 @@
 //! What the reader and the scheduler ask of a phone. Whether it charges is told to it from
-//! outside ([`PhoneHost::set_charging`]); until then it is not known, which the reader and the
-//! scheduler take as on mains. A phone tells no idle time and holds nothing awake.
+//! outside ([`PhoneHost::set_charging`]). Until it is told, or when the phone cannot say, it is
+//! taken as on battery: nothing that waits for the charger runs on a guess. A phone tells no
+//! idle time and holds nothing awake.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
@@ -25,15 +26,16 @@ impl PhoneHost {
         };
         self.charging.store(v, Ordering::SeqCst);
     }
+
+    /// Whether the phone is known to charge.
+    pub fn charging(&self) -> bool {
+        self.charging.load(Ordering::SeqCst) == CHARGING
+    }
 }
 
 impl Host for PhoneHost {
     fn on_ac_power(&self) -> Option<bool> {
-        match self.charging.load(Ordering::SeqCst) {
-            CHARGING => Some(true),
-            ON_BATTERY => Some(false),
-            _ => None,
-        }
+        Some(self.charging())
     }
 
     fn battery_percent(&self) -> Option<u8> {
@@ -46,5 +48,23 @@ impl Host for PhoneHost {
 
     fn inhibit_sleep(&self) -> Option<SleepGuard> {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_phone_known_to_charge_counts_as_plugged_in() {
+        let host = PhoneHost::default();
+        assert_eq!(host.on_ac_power(), Some(false));
+        host.set_charging(Some(true));
+        assert_eq!(host.on_ac_power(), Some(true));
+        host.set_charging(None);
+        assert_eq!(host.on_ac_power(), Some(false));
+        host.set_charging(Some(false));
+        assert_eq!(host.on_ac_power(), Some(false));
+        assert!(!host.charging());
     }
 }

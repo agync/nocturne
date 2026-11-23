@@ -17,7 +17,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use jiff::Timestamp;
 use nocturne_contract::CheckOutcome;
+use nocturne_engine::Clock;
 use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
 };
@@ -65,6 +67,8 @@ pub enum Chosen {
 pub enum Pass {
     /// No mind is on: nothing was asked.
     Off,
+    /// The phone is not known to charge: reading and the page wait for the charger.
+    NotCharging,
     /// The phone holds no memory now (not alone, or the store will not open).
     NotReady,
     /// How many things were read to an end (understood, or not readable), and whether the
@@ -101,6 +105,18 @@ impl Keys for MemoryKeys {
 struct Saved {
     url: String,
     model: String,
+    /// When it was turned on: the first page waits for the next morning, as the screens promise.
+    #[serde(default)]
+    since: Option<String>,
+}
+
+/// The mind in the slot, with its host and model.
+#[derive(Clone)]
+struct On {
+    mind: Arc<ProviderMind>,
+    host: String,
+    model: String,
+    since: Option<Timestamp>,
 }
 
 /// The reader, the tidy and the scheduler over one open store.
@@ -117,10 +133,10 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 pub struct PhoneMind {
     dir: PathBuf,
     keys: Box<dyn Keys>,
+    clock: Arc<dyn Clock>,
     slot: MindSlot,
     host: Arc<PhoneHost>,
-    /// The mind in the slot, with its host and model.
-    on: Mutex<Option<(Arc<ProviderMind>, String, String)>>,
+    on: Mutex<Option<On>>,
     thinking: Arc<Mutex<Option<Thinking>>>,
     /// A new mind is in the slot: the next pass tries again what waited for the last one.
     retry: AtomicBool,
@@ -128,10 +144,11 @@ pub struct PhoneMind {
 
 impl PhoneMind {
     /// The mind kept in `dir`, on again when its key is held.
-    pub fn new(dir: PathBuf, keys: Box<dyn Keys>) -> PhoneMind {
+    pub fn new(dir: PathBuf, keys: Box<dyn Keys>, clock: Arc<dyn Clock>) -> PhoneMind {
         let mind = PhoneMind {
             dir,
             keys,
+            clock,
             slot: new_mind_slot(),
             host: Arc::new(PhoneHost::default()),
             on: Mutex::new(None),
@@ -174,8 +191,14 @@ impl PhoneMind {
         let mind = Arc::new(ProviderMind::new(provider));
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
         *self.slot.write().unwrap_or_else(|e| e.into_inner()) = Some(slotted);
-        if let Some((before, _, _)) = lock(&self.on).replace((mind, host, model)) {
-            before.provider().stop();
+        let on = On {
+            mind,
+            host,
+            model,
+            since: saved.since.as_deref().and_then(|s| s.parse().ok()),
+        };
+        if let Some(before) = lock(&self.on).replace(on) {
+            before.mind.provider().stop();
         }
         self.retry.store(true, Ordering::SeqCst);
         Ok(())
@@ -192,11 +215,13 @@ impl PhoneMind {
         }
     }
 
-    /// Turns the mind on with `settings`, in place of any chosen before.
+    /// Turns the mind on with `settings`, in place of any chosen before. The first page it
+    /// writes is the next morning's.
     pub fn turn_on(&self, settings: ProviderSettings) -> Result<(), UrlProblem> {
         let saved = Saved {
             url: settings.url.trim().to_string(),
             model: settings.model.trim().to_string(),
+            since: Some(self.clock.now().to_string()),
         };
         let key = OnlineKey::new(settings.key.trim().to_string());
         Provider::new(&saved.url, &saved.model, key.clone())?;
@@ -213,15 +238,15 @@ impl PhoneMind {
     /// nothing more goes, and a request under way is dropped. What was already read stays.
     pub fn turn_off(&self) {
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
-        if let Some((mind, _, _)) = lock(&self.on).take() {
-            mind.provider().stop();
+        if let Some(on) = lock(&self.on).take() {
+            on.mind.provider().stop();
         }
         self.keys.forget();
         let _ = std::fs::remove_file(self.path());
     }
 
     pub fn chosen(&self) -> Chosen {
-        if let Some((_, host, model)) = lock(&self.on).clone() {
+        if let Some(On { host, model, .. }) = lock(&self.on).clone() {
             return Chosen::On { host, model };
         }
         match self.saved().and_then(|s| {
@@ -238,6 +263,17 @@ impl PhoneMind {
         lock(&self.on).is_some()
     }
 
+    /// Whether the morning after the mind was turned on has come, so a page may be written.
+    fn morning_come(&self) -> bool {
+        let clock = &self.clock;
+        let since = lock(&self.on).as_ref().and_then(|on| on.since);
+        let Some(since) = since else {
+            return true;
+        };
+        let tz = clock.tz();
+        clock.now().to_zoned(tz.clone()).date() > since.to_zoned(tz).date()
+    }
+
     /// One pass: up to a few things read, then one look by the scheduler. Blocks on `rt`: call
     /// it off the async workers. The store is held for use throughout, so nothing swaps it
     /// under the reader.
@@ -249,6 +285,9 @@ impl PhoneMind {
             }
             return Pass::Off;
         }
+        if !self.host.charging() {
+            return Pass::NotCharging;
+        }
         let Ok((_use, open)) = home.using() else {
             return Pass::NotReady;
         };
@@ -258,8 +297,8 @@ impl PhoneMind {
             return Pass::Off;
         }
         let generation = home.generation();
+        let clock = home.clock();
         if thinking.as_ref().is_none_or(|t| t.generation != generation) {
-            let clock = home.clock();
             let events: Arc<dyn nocturne_intelligence::Events> = Arc::new(NullEvents);
             let host: Arc<dyn nocturne_intelligence::Host> = self.host.clone();
             let reader = Reader::new(
@@ -282,7 +321,7 @@ impl PhoneMind {
                 reader.clone(),
                 tidy,
                 host,
-                clock,
+                clock.clone(),
                 events,
             );
             scheduler.set_reflecting(self.slot.clone(), Arc::new(|| true));
@@ -326,8 +365,8 @@ impl PhoneMind {
                     reading.await
                 }
             };
-            // Turned off meanwhile: nothing more is written.
-            if home.store_wanted() || !self.is_on() {
+            // Turned off meanwhile, or before the first morning: nothing more is written.
+            if home.store_wanted() || !self.is_on() || !self.morning_come() {
                 return (
                     Pass::Ran {
                         read,
