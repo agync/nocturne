@@ -760,3 +760,57 @@ fn the_screens_read_the_sent_list_and_the_month_as_mind_ts_says() {
         serde_json::json!({"kind": "none"})
     );
 }
+
+/// The phone's net check, in-process (ADR 0020): off reaches nothing; on reaches the one host
+/// entered, and the Sent online list matches it request for request; after turning off nothing
+/// more goes. The emulator's packet capture proves the same of the whole app.
+#[test]
+fn net_check_off_is_silent_and_on_reaches_only_the_chosen_host() {
+    let w = world();
+    let elsewhere = w.rt.block_on(StandIn::start());
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    let quiet = |w: &World| {
+        for _ in 0..3 {
+            w.pass();
+        }
+        w.ask("Where does Ana live?");
+    };
+    quiet(&w);
+    assert!(w.stand_in.seen().is_empty());
+
+    w.rt.block_on(w.mind.check(&w.settings()));
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    w.clock.advance_days(1);
+    for _ in 0..5 {
+        w.pass();
+    }
+    w.stand_in.then(Answer::text("Ana lives in Hull [m1]."));
+    w.ask("Where does Ana live?");
+    let seen = w.stand_in.seen();
+    assert!(seen.len() > 3);
+    assert!(
+        seen.iter()
+            .all(|s| s.path == "/v1/models" || s.path == "/v1/chat/completions")
+    );
+    assert_eq!(w.mind.sent(10_000, None).len(), seen.len());
+    assert!(elsewhere.seen().is_empty());
+
+    w.mind.turn_off();
+    w.keep("Sam's dentist moved to Thursday at 9.", "c2");
+    w.clock.advance_days(1);
+    quiet(&w);
+    assert_eq!(w.stand_in.seen().len(), seen.len());
+    assert!(elsewhere.seen().is_empty());
+}
+
+#[test]
+fn the_platform_network_rules_name_no_host() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest =
+        std::fs::read_to_string(root.join("gen/android/app/src/main/AndroidManifest.xml")).unwrap();
+    assert!(!manifest.contains("networkSecurityConfig"));
+    let plist = std::fs::read_to_string(root.join("Info.ios.plist")).unwrap();
+    assert!(!plist.contains("NSAppTransportSecurity"));
+    assert!(!plist.contains("NSExceptionDomains"));
+}
