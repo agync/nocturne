@@ -7,12 +7,15 @@ struct CalendarRow {
   let name: String?
   /// Red, green and blue from 0 to 1, when the calendar has a colour.
   let rgb: (Double, Double, Double)?
+  /// The title of the calendar's source, such as "iCloud" or an account name.
+  var account: String? = nil
 }
 
 struct PhoneCalendar: Encodable, Equatable {
   let id: String
   let name: String
   let colour: String?
+  var account: String? = nil
 }
 
 /// How an appointment repeats, as EventKit holds it.
@@ -88,12 +91,18 @@ enum CalendarRows {
     return String(format: "#%02X%02X%02X", byte(r), byte(g), byte(b))
   }
 
+  static func account(_ title: String?) -> String? {
+    let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : cut(trimmed, maxName)
+  }
+
   static func calendar(_ row: CalendarRow) -> PhoneCalendar {
     let name = row.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return PhoneCalendar(
       id: row.id,
       name: cut(name.isEmpty ? row.id : name, maxName),
-      colour: colour(row.rgb))
+      colour: colour(row.rgb),
+      account: account(row.account))
   }
 
   static func gregorian(_ zone: TimeZone) -> Calendar {

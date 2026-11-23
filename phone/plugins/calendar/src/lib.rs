@@ -34,6 +34,8 @@ struct RawCalendar {
     name: Option<String>,
     colour: Option<String>,
     #[serde(default)]
+    account: Option<String>,
+    #[serde(default)]
     work_index: Option<u32>,
 }
 
@@ -66,6 +68,10 @@ fn named(raw: Vec<RawCalendar>) -> Vec<PhoneCalendar> {
             },
             id: c.id,
             colour: c.colour,
+            account: c
+                .account
+                .map(|a| a.trim().to_owned())
+                .filter(|a| !a.is_empty()),
         })
         .collect()
 }
@@ -226,6 +232,7 @@ mod tests {
             id: id.into(),
             name: name.map(Into::into),
             colour: Some("#3F51B5".into()),
+            account: None,
             work_index,
         }
     }
@@ -253,6 +260,22 @@ mod tests {
                 raw("enterprise:9", None, Some(2)),
             ]),
             vec!["Work profile calendar 1", "Work profile calendar 2"]
+        );
+    }
+
+    #[test]
+    fn the_account_comes_through_trimmed_and_blank_is_none() {
+        let got: Calendars = serde_json::from_str(
+            r##"{"calendars":[{"id":"1","name":"Holidays","colour":null,"account":" maya.k@example.com "},{"id":"2","name":"Holidays","colour":null,"account":"  "},{"id":"3","name":"Home","colour":null}]}"##,
+        )
+        .unwrap();
+        let accounts: Vec<_> = named(got.calendars)
+            .into_iter()
+            .map(|c| c.account)
+            .collect();
+        assert_eq!(
+            accounts,
+            vec![Some("maya.k@example.com".to_owned()), None, None]
         );
     }
 

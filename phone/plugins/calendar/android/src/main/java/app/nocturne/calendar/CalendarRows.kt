@@ -20,10 +20,11 @@ data class CalendarRow(
     val colour: Int?,
     val ownerAccount: String?,
     val enterprise: Boolean = false,
+    val account: String? = null,
 )
 
 /** A calendar as the computer takes it. A work profile calendar has no name, only its [workIndex]. */
-data class Calendar(val id: String, val name: String?, val colour: String?, val workIndex: Int? = null)
+data class Calendar(val id: String, val name: String?, val colour: String?, val workIndex: Int? = null, val account: String? = null)
 
 /** One row of the Instances table: one appointment on one day. */
 data class InstanceRow(
@@ -108,6 +109,7 @@ object CalendarRows {
         name = if (row.enterprise) null else cut(row.name?.trim()?.takeIf { it.isNotEmpty() } ?: row.id.toString(), MAX_NAME),
         colour = colour(row.colour),
         workIndex = if (row.enterprise) workIndex else null,
+        account = if (row.enterprise) null else row.account?.trim()?.takeIf { it.isNotEmpty() }?.let { cut(it, MAX_NAME) },
     )
 
     /** Every calendar, the work profile's numbered from 1 in the order read. */

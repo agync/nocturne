@@ -67,6 +67,7 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
                 CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
                 CalendarContract.Calendars.CALENDAR_COLOR,
                 CalendarContract.Calendars.OWNER_ACCOUNT,
+                CalendarContract.Calendars.ACCOUNT_NAME,
             ),
             "${CalendarContract.Calendars.VISIBLE} = 1",
             null,
@@ -78,6 +79,7 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
                     name = cur.str(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME),
                     colour = cur.int(CalendarContract.Calendars.CALENDAR_COLOR),
                     ownerAccount = cur.str(CalendarContract.Calendars.OWNER_ACCOUNT),
+                    account = cur.str(CalendarContract.Calendars.ACCOUNT_NAME),
                 )
             }
         }
@@ -136,6 +138,7 @@ class CalendarPlugin(private val activity: Activity) : Plugin(activity) {
                     .put("id", cal.id)
                     .put("name", cal.name)
                     .put("colour", cal.colour)
+                    .put("account", cal.account)
                     .put("workIndex", cal.workIndex),
             )
         }

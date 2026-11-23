@@ -148,6 +148,14 @@ final class CalendarRowsTests: XCTestCase {
     XCTAssertNil(CalendarRows.colour(nil))
   }
 
+  func testACalendarCarriesTheTitleOfItsSource() {
+    let named = CalendarRows.calendar(
+      CalendarRow(id: "A", name: "Holidays", rgb: nil, account: " Hospital "))
+    XCTAssertEqual(named.account, "Hospital")
+    XCTAssertNil(CalendarRows.calendar(CalendarRow(id: "B", name: "Holidays", rgb: nil, account: "  ")).account)
+    XCTAssertNil(CalendarRows.calendar(CalendarRow(id: "C", name: "Holidays", rgb: nil)).account)
+  }
+
   func testTheWindowIsWholeDaysInThePhonesZone() {
     let w = CalendarRows.window(today: nine, back: 2, ahead: 14, zone: london)
     XCTAssertEqual(w.from, "2026-11-21")

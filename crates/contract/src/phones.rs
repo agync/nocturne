@@ -41,6 +41,10 @@ pub struct PhoneCalendar {
     pub id: String,
     pub name: String,
     pub colour: Option<String>,
+    /// The account the phone files the calendar under, shown when two calendars share a name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub account: Option<String>,
 }
 
 /// One appointment on one day. A repeating entry goes as the separate days it falls on inside

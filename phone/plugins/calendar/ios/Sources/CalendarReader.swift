@@ -37,7 +37,7 @@ enum CalendarReader {
         rgb = (Double(r), Double(g), Double(b))
       }
     }
-    return CalendarRow(id: cal.calendarIdentifier, name: cal.title, rgb: rgb)
+    return CalendarRow(id: cal.calendarIdentifier, name: cal.title, rgb: rgb, account: cal.source?.title)
   }
 
   static func calendars(_ store: EKEventStore) -> [PhoneCalendar] {

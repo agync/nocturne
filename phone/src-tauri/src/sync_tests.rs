@@ -28,6 +28,7 @@ fn cal(id: &str) -> PhoneCalendar {
         id: id.into(),
         name: format!("Calendar {id}"),
         colour: Some("#3F51B5".into()),
+        account: None,
     }
 }
 
