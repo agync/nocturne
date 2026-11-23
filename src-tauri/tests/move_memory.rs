@@ -908,3 +908,31 @@ fn a_phone_that_asks_where_its_memory_stands_starts_nothing() {
     assert!(c.view().is_none(), "no question is asked");
     let _ = file;
 }
+
+/// As the phone app does it: an offer that guesses the size low, then, once agreed and the backup
+/// is made, an ask of where its memory stands before anything is sent.
+#[test]
+fn the_phone_asks_where_its_memory_stands_then_sends_it() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, sha) = home.backup();
+    let offer = RemoteCall::OfferMemory {
+        counts: home.counts(),
+        bytes: 4096.0,
+        schema: nocturne_engine::store::latest_version(),
+    };
+    let accepted = offer_and_answer(&c, &phone, offer, "move");
+    assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
+    assert_eq!(
+        block(phone.memory_status()).err(),
+        Some(CallError::Phone {
+            code: PhoneError::NotReady
+        })
+    );
+    let arrived = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
+    assert!(
+        matches!(arrived, RemoteAnswer::MemoryArrived { .. }),
+        "{arrived:?}"
+    );
+}
