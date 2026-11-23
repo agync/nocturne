@@ -147,7 +147,8 @@ this phone holds" after "becomes the home of your memory".
 | Part | Copy |
 |---|---|
 | Title | "Moving your memory" |
-| Progress | "{done} of {size}", and once 10 seconds of the move have been measured, "About {minutes} minutes left" |
+| Preparing | While the phone makes the copy that will travel, before anything is sent: "Getting your memory ready to move…" with a moving bar that shows no amount. It can take a few minutes for a large memory. "Stop" stays |
+| Progress | Once sending starts: "{done} of {size}", and once 10 seconds of the move have been measured, "About {minutes} minutes left" |
 | Note | "You can still keep things. They go across at the end." |
 | Cancel | "Stop" with "Stop moving? Nothing has changed here, and {computer} keeps nothing of it." / "Stop moving" (careful) · "Keep moving" |
 | Finishing | After every count matches: "Finishing on {computer}. Nocturne there restarts to open your memory; this takes a moment." The phone's memory is put aside only after {computer} says the memory opened |
@@ -174,7 +175,8 @@ this phone holds" after "becomes the home of your memory".
 | Buttons | "Move it here" · "Not now"; with a memory here: "Put this aside and move it here" · "Keep what’s here" |
 | Not enough room | Before the buttons, when free space is short: "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}." The move button waits until there is room |
 | Already a memory, other phones | "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside." |
-| Arriving | "Arriving from {name} · {done} of {size}" with "Stop" |
+| Preparing | After "Move it here" and before anything arrives: "{name} is getting its memory ready…" with a moving bar that shows no amount, and "Stop" |
+| Arriving | Once the first part arrives: "Arriving from {name} · {done} of {size}" with "Stop" |
 | Stop | "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" (careful) · "Keep moving" |
 | Checking | "Checking · every count must match before {name} lets go of it" |
 | Restarting | Once every count matches, for about two seconds: "Nocturne restarts to open the memory from {name}. It opens again by itself." Then it closes and opens again, or opens in the tray if it was started there |
@@ -230,13 +232,13 @@ the restart; after it, the move finishes or changes nothing.
 | What moves | "What moves" / "{count} things you kept since {date}" / "{count} journal entries" / "{count} pages" / "About {size}, most of it photos and recordings" / "Keep Nocturne open; it carries on if the phone allows." |
 | What changes | "Your memory here is put aside once it has arrived. You choose then whether to remove it." / "Your locked copy online stops being made. You choose then whether to delete it." / "Nocturne’s mind online turns off on this phone. {computer} has its own." |
 | Buttons | "Move my memory" / "Back" / "Not now" |
-| Moving | "Moving your memory" / "{done} of {size}" / "About {minutes} minutes left" / "You can still keep things. They go across at the end." / "Stop" / "Stop moving? Nothing has changed here, and {computer} keeps nothing of it." / "Stop moving" / "Keep moving" |
+| Moving | "Moving your memory" / "Getting your memory ready to move…" / "{done} of {size}" / "About {minutes} minutes left" / "You can still keep things. They go across at the end." / "Stop" / "Stop moving? Nothing has changed here, and {computer} keeps nothing of it." / "Stop moving" / "Keep moving" |
 | Finishing | "Finishing on {computer}. Nocturne there restarts to open your memory; this takes a moment." |
 | Moved | "Your memory is on {computer}." / "{count} things arrived, and every count matches. This phone now works with {computer}." / "Your memory on this phone" / "Remove it from this phone" / "Keep it put aside for 30 days" / "Your locked copy online" / "Delete the copy online" / "Keep it as it is" / "Done" |
 | Leaving a household | "Delete your memory from {household}?" |
 | Computer, receive | "{name} has its own memory. Move it here?" / "{count} things kept since {date} · about {size}" / "This computer becomes its home: it reads, tidies and writes the page. {name} then works with it like your other phones." |
 | Computer, already | "This computer already holds a memory. A computer holds one person’s memory. Move {name}’s here and put what is here aside, or keep what is here and move nothing." / "Put this aside and move it here" / "Keep what’s here" / "Move it here" |
-| Computer, arriving | "Arriving from {name} · {done} of {size}" / "Stop" / "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" / "Keep moving" / "Checking · every count must match before {name} lets go of it" / "Nocturne restarts to open the memory from {name}. It opens again by itself." |
+| Computer, arriving | "{name} is getting its memory ready…" / "Arriving from {name} · {done} of {size}" / "Stop" / "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" / "Keep moving" / "Checking · every count must match before {name} lets go of it" / "Nocturne restarts to open the memory from {name}. It opens again by itself." |
 | Computer, room | "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}." / "There wasn’t room for {name}’s memory, so nothing changed. Free about {size} here, then move it again from {name}." |
 | Computer, didn't open | "The memory from {name} couldn’t be opened here, so nothing changed. What was on this computer is as it was." / "OK" |
 | Computer, other phones | "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside." |
