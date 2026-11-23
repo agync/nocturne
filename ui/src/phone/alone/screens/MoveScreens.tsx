@@ -173,6 +173,8 @@ export function MoveMoving({
   const [asking, setAsking] = useState(false);
   const title = t("moving.phone.moving.title");
   const sent = progress && progress.phase !== "preparing" ? progress : null;
+  // Until the first part goes: the copy that travels is being made, and its size is not known.
+  const preparing = !progress || progress.phase === "preparing";
   const share = sent && sent.total > 0 ? Math.min(1, sent.done / sent.total) : 0;
   const paused = progress?.phase === "paused";
   const finishing = progress?.phase === "finishing";
@@ -187,16 +189,28 @@ export function MoveMoving({
           <span className="ph-mark" aria-hidden="true" />
           <Hero title={title} />
         </div>
-        <div
-          className="ph-progress"
-          role="progressbar"
-          aria-label={title}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(share * 100)}
-        >
-          <span style={{ width: `${Math.round(share * 100)}%` }} />
-        </div>
+        {preparing ? (
+          <div
+            className="ph-progress ph-progress--unknown"
+            role="progressbar"
+            aria-label={title}
+            aria-valuetext={t("moving.phone.moving.preparing")}
+          >
+            <span />
+          </div>
+        ) : (
+          <div
+            className="ph-progress"
+            role="progressbar"
+            aria-label={title}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(share * 100)}
+          >
+            <span style={{ width: `${Math.round(share * 100)}%` }} />
+          </div>
+        )}
+        {preparing ? <p className="ph-small">{t("moving.phone.moving.preparing")}</p> : null}
         {sent && !paused && !finishing ? (
           <p className="ph-small">
             {t("moving.phone.moving.progress", {

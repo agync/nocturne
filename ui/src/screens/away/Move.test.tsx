@@ -43,7 +43,7 @@ describe("a phone with its own memory", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Move it here" }));
     expect(answer).toHaveBeenCalledWith("move");
     expect(await screen.findByRole("progressbar")).toHaveAccessibleName(
-      "Arriving from Maya’s phone · 0 B of 1.4 GB",
+      "Maya’s phone is getting its memory ready…",
     );
   });
 
@@ -76,6 +76,19 @@ describe("a phone with its own memory", () => {
     const answer = vi.spyOn(engine, "answerMove");
     await userEvent.keyboard("{Escape}");
     expect(answer).toHaveBeenCalledWith("notNow");
+  });
+
+  it("says the phone is getting its memory ready, with a bar of no amount and Stop, until the first part arrives", async () => {
+    const { engine } = await withOffer();
+    await userEvent.click(screen.getByRole("button", { name: "Move it here" }));
+    const bar = await screen.findByRole("progressbar");
+    expect(bar).toHaveAccessibleName("Maya’s phone is getting its memory ready…");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(screen.queryByText(/0\sB of/)).toBeNull();
+    const stop = vi.spyOn(engine, "stopMove");
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await userEvent.click(screen.getByRole("button", { name: "Stop moving" }));
+    expect(stop).toHaveBeenCalled();
   });
 
   it("stays while the memory arrives and is checked, and can be stopped until the restart", async () => {

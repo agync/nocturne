@@ -354,6 +354,29 @@
   background: var(--ink);
 }
 
+/* Getting ready: the amount is not known, so a short stretch travels along the bar. */
+.ph-progress--unknown span {
+  width: 30%;
+  animation: ph-travel 1.6s ease-in-out infinite;
+}
+
+@keyframes ph-travel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-progress--unknown span {
+    width: 100%;
+    animation: none;
+    opacity: 0.35;
+  }
+}
+
 .ph-textbtn {
   min-height: 48px;
   width: 100%;
