@@ -16,8 +16,9 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use age::secrecy::SecretString;
+use jiff::civil::Date;
 use nocturne_contract::{BackupPhase, BackupReport, BackupSummary, Holdings, KeptCounts};
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
@@ -817,20 +818,44 @@ pub struct LeftBehind {
     pub names: u32,
     /// Memories the person confirmed, and conflicts they settled.
     pub choices: u32,
+    /// Calendar entries dated before the days the phone sends again.
+    pub appointments: u32,
+    /// Health readings dated before the days the phone sends again.
+    pub readings: u32,
     /// It holds settings of its own.
     pub settings: bool,
 }
 
 impl LeftBehind {
     pub fn any(&self) -> bool {
-        self.pages + self.reflections + self.answers + self.names + self.choices > 0
+        self.pages
+            + self.reflections
+            + self.answers
+            + self.names
+            + self.choices
+            + self.appointments
+            + self.readings
+            > 0
             || self.settings
     }
 }
 
+/// Days of the calendar a phone sends again before today, as the phone's own window reads them.
+const CALENDAR_DAYS_BACK: i64 = 2;
+/// Days of health readings a phone sends again, today included.
+const READING_DAYS: i64 = 30;
+
 /// What a store folder that is not open holds that bringing its things in leaves behind. Read
-/// only.
-pub fn store_left_behind(dir: &Path) -> Result<LeftBehind> {
+/// only. `today` is the phone's day: a calendar entry or reading dated before the days the phone
+/// sends again is never sent, so it stays only in this store.
+pub fn store_left_behind(dir: &Path, today: Date) -> Result<LeftBehind> {
+    let day = |back: i64| -> Result<String> {
+        Ok(today
+            .checked_sub(jiff::Span::new().days(back))
+            .map_err(|e| Error::invalid(format!("a day out of range: {e}")))?
+            .to_string())
+    };
+    let (calendar_from, readings_from) = (day(CALENDAR_DAYS_BACK)?, day(READING_DAYS - 1)?);
     let conn = Connection::open_with_flags(
         dir.join(crate::DB_FILE),
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -842,8 +867,14 @@ pub fn store_left_behind(dir: &Path) -> Result<LeftBehind> {
              + (SELECT COUNT(*) FROM name_questions WHERE answered_at IS NOT NULL), \
            (SELECT COUNT(*) FROM memories WHERE confirmed = 1) \
              + (SELECT COUNT(*) FROM conflicts WHERE resolved_at IS NOT NULL), \
-           EXISTS(SELECT 1 FROM settings)",
-        [],
+           EXISTS(SELECT 1 FROM settings), \
+           (SELECT COUNT(*) FROM phone_records r JOIN items i ON i.id = r.item_id \
+            WHERE r.source = 'calendar' AND r.removed_at IS NULL \
+              AND COALESCE(json_extract(i.metadata, '$.endDay'), json_extract(i.metadata, '$.day')) < ?1), \
+           (SELECT COUNT(*) FROM phone_records r JOIN items i ON i.id = r.item_id \
+            WHERE r.source = 'health' AND r.removed_at IS NULL \
+              AND json_extract(i.metadata, '$.day') < ?2)",
+        params![calendar_from, readings_from],
         |r| {
             Ok(LeftBehind {
                 pages: r.get(0)?,
@@ -852,6 +883,8 @@ pub fn store_left_behind(dir: &Path) -> Result<LeftBehind> {
                 names: r.get(3)?,
                 choices: r.get(4)?,
                 settings: r.get(5)?,
+                appointments: r.get(6)?,
+                readings: r.get(7)?,
             })
         },
     )?)

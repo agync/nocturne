@@ -53,7 +53,9 @@ function fakeAside(put: MoveAside | null): Fake {
 }
 
 function open(aside: AsideApi) {
-  const channel = { sources: vi.fn(async () => sources) } as unknown as NativeChannel;
+  const channel = {
+    sources: vi.fn(async () => sources),
+  } as unknown as NativeChannel;
   render(
     <ThisPhone
       channel={channel}
@@ -75,11 +77,15 @@ describe("the memory a move put aside, in This phone", () => {
     const aside = fakeAside({ onComputer: false, keepUntil: null });
     open(aside);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     expect(
-      await screen.findByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      await screen.findByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
     act(() => aside.progress?.({ phase: "checking", done: 10, total: 10 }));
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -91,7 +97,9 @@ describe("the memory a move put aside, in This phone", () => {
       keepUntil: null,
     });
     expect(
-      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "Your things are on Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     // It was the only copy, so bringing it in never makes it go by itself.
     expect(screen.getByRole("radio", { name: "Keep it put aside" })).toBeChecked();
@@ -104,11 +112,18 @@ describe("the memory a move put aside, in This phone", () => {
       onComputer: false,
       keepUntil: null,
       at: "2026-11-23T08:00:00Z",
-      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
+      counts: {
+        things: 12,
+        journalEntries: 1,
+        photosAndRecordings: 3,
+        checkins: 4,
+      },
     });
     open(aside);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     );
     expect(
       await screen.findByRole("heading", {
@@ -123,12 +138,17 @@ describe("the memory a move put aside, in This phone", () => {
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     expect(aside.bring).not.toHaveBeenCalled();
     expect(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     ).toBeInTheDocument();
   });
 
   it("only offers to remove it once its things are on the computer", async () => {
-    const aside = fakeAside({ onComputer: true, keepUntil: "2026-12-23T09:00:00Z" });
+    const aside = fakeAside({
+      onComputer: true,
+      keepUntil: "2026-12-23T09:00:00Z",
+    });
     open(aside);
     expect(await screen.findByRole("button", { name: "Remove…" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Bring its things/ })).toBeNull();
@@ -139,7 +159,12 @@ describe("the memory a move put aside, in This phone", () => {
       onComputer: false,
       keepUntil: null,
       at: "2026-11-23T08:00:00Z",
-      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
+      counts: {
+        things: 12,
+        journalEntries: 1,
+        photosAndRecordings: 3,
+        checkins: 4,
+      },
     });
     open(aside);
     fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
@@ -163,13 +188,29 @@ describe("the memory a move put aside, in This phone", () => {
       onComputer: true,
       keepUntil: "2026-12-23T08:00:00Z",
       at: "2026-11-23T08:00:00Z",
-      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
-      behind: { pages: 1, reflections: 2, answers: 0, names: 0, choices: 1, settings: false },
+      counts: {
+        things: 12,
+        journalEntries: 1,
+        photosAndRecordings: 3,
+        checkins: 4,
+      },
+      behind: {
+        pages: 1,
+        reflections: 2,
+        answers: 0,
+        names: 0,
+        choices: 1,
+        appointments: 3,
+        readings: 1,
+        settings: false,
+      },
     });
     open(aside);
     fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
     expect(
-      screen.getByRole("heading", { name: "Remove what was put aside Monday 23 November?" }),
+      screen.getByRole("heading", {
+        name: "Remove what was put aside Monday 23 November?",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -178,7 +219,7 @@ describe("the memory a move put aside, in This phone", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "These stay only on this phone, so removing it deletes them for good: 1 page, 2 reflections and 1 thing you confirmed or settled.",
+        "These stay only on this phone, so removing it deletes them for good: 1 page, 2 reflections, 1 thing you confirmed or settled, 3 appointments and 1 health reading.",
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
@@ -189,7 +230,9 @@ describe("the memory a move put aside, in This phone", () => {
     const aside = fakeAside({ onComputer: false, keepUntil: null });
     open(aside);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
@@ -205,7 +248,9 @@ describe("the memory a move put aside, in This phone", () => {
     const aside = fakeAside({ onComputer: false, keepUntil: null });
     open(aside);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
@@ -227,13 +272,17 @@ describe("the memory a move put aside, in This phone", () => {
     aside.stop = vi.fn(async () => Promise.reject("failed"));
     open(aside);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+      await screen.findByRole("button", {
+        name: "Bring its things to Maya’s laptop…",
+      }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     fireEvent.click(
-      within(await screen.findByRole("dialog")).getByRole("button", { name: "Stop" }),
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Stop",
+      }),
     );
     await waitFor(() => expect(aside.stop).toHaveBeenCalled());
     aside.finish({
@@ -242,7 +291,9 @@ describe("the memory a move put aside, in This phone", () => {
       keepUntil: null,
     });
     expect(
-      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "Your things are on Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/^Stopped\./)).toBeNull();
   });

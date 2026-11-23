@@ -377,7 +377,8 @@ impl Home {
         let Some(note) = self.put_aside_note() else {
             return LeftBehind::default();
         };
-        nocturne_engine::store_left_behind(&self.path(&note.folder)).unwrap_or_else(|e| {
+        let today = self.clock.now().to_zoned(self.clock.tz()).date();
+        nocturne_engine::store_left_behind(&self.path(&note.folder), today).unwrap_or_else(|e| {
             tracing::warn!("could not read what stays in the memory put aside: {e}");
             LeftBehind {
                 settings: true,
@@ -1584,6 +1585,67 @@ mod tests {
             "no 30 days while something stays only here"
         );
         assert_eq!(home.move_aside().unwrap().keep_until, None);
+        clock.advance_days(400);
+        home.clear_old_put_aside();
+        assert_eq!(
+            home.put_aside_names().len(),
+            1,
+            "only the person removes it"
+        );
+    }
+
+    #[test]
+    fn a_calendar_entry_the_phone_never_sends_again_stays_only_here() {
+        use nocturne_contract::{CalendarBatch, CalendarChange, CalendarEntry, PhoneCalendar};
+        let dir = tempfile::tempdir().unwrap();
+        let (home, clock) = alone(dir.path());
+        let open = home.open_store().unwrap();
+        let entry = CalendarEntry {
+            phone_id: "e1".into(),
+            calendar_id: "c1".into(),
+            title: "Dentist".into(),
+            start: "2026-11-01T10:00:00Z".into(),
+            end: "2026-11-01T10:30:00Z".into(),
+            time_zone: None,
+            all_day: false,
+            place: None,
+            people: Vec::new(),
+            repeats: false,
+            notes: None,
+            repeat_rule: None,
+        };
+        let batch = CalendarBatch {
+            sync_id: "s1".into(),
+            seq: 0,
+            last: true,
+            window_from: "2026-10-31".into(),
+            window_to: "2026-11-16".into(),
+            calendars: vec![PhoneCalendar {
+                id: "c1".into(),
+                name: "Home".into(),
+                colour: None,
+                account: None,
+            }],
+            changes: vec![CalendarChange::Upsert { entry }],
+        };
+        open.engine.take_calendar(&open.device, batch).unwrap();
+        // Let go of the store before the move: Windows cannot rename an open one.
+        drop(open);
+        let only = home.exclusive();
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
+        let arrival = block(carry(
+            &Fake::new(),
+            &prepared,
+            &|_, _, _| {},
+            std::time::Duration::ZERO,
+            false,
+        ))
+        .unwrap();
+        let moved = home.finish_move(&prepared, arrival).unwrap();
+        drop(only);
+        assert_eq!(moved.behind.appointments, 1);
+        assert_eq!(moved.keep_until, None, "it never lapses");
         clock.advance_days(400);
         home.clear_old_put_aside();
         assert_eq!(

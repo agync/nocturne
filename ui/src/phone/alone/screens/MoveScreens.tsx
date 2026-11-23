@@ -36,10 +36,17 @@ export interface LeftBehind {
   names: number;
   /** Memories confirmed and conflicts settled. */
   choices: number;
+  /** Calendar entries dated before the days the phone sends again. */
+  appointments: number;
+  /** Health readings dated before the days the phone sends again. */
+  readings: number;
   settings: boolean;
 }
 
-const AND = new Intl.ListFormat("en-GB", { style: "long", type: "conjunction" });
+const AND = new Intl.ListFormat("en-GB", {
+  style: "long",
+  type: "conjunction",
+});
 
 /**
  * "These stay only on this phone, so removing it deletes them for good: …", or none when
@@ -55,6 +62,10 @@ export function staysLine(behind: LeftBehind | null | undefined): string | null 
     behind.answers > 0 ? t("moving.phone.stays.answers", { count: behind.answers }) : null,
     behind.names > 0 ? t("moving.phone.stays.names", { count: behind.names }) : null,
     behind.choices > 0 ? t("moving.phone.stays.choices", { count: behind.choices }) : null,
+    behind.appointments > 0
+      ? t("moving.phone.stays.appointments", { count: behind.appointments })
+      : null,
+    behind.readings > 0 ? t("moving.phone.stays.readings", { count: behind.readings }) : null,
     behind.settings ? t("moving.phone.stays.settings") : null,
   ].filter((p): p is string => p !== null);
   return parts.length > 0 ? t("moving.phone.stays", { list: AND.format(parts) }) : null;
@@ -65,9 +76,11 @@ export const MEASURE_MS = 10_000;
 
 /** "3 March", for a `YYYY-MM-DD` day. */
 const dayAndMonth = (day: string) =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }).format(
-    new Date(`${day}T12:00:00Z`),
-  );
+  new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T12:00:00Z`));
 
 /** Whole minutes left for `left` bytes at `perSecond`, never less than one. */
 export function minutesLeft(left: number, perSecond: number): number {

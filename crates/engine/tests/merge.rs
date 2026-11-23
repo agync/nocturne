@@ -600,7 +600,7 @@ fn a_forget_on_the_phone_holds_for_the_same_thing_already_here() {
 fn what_bringing_in_leaves_behind_on_the_phone_is_counted() {
     use common::EngineExt;
     let phone = fixture();
-    let before = nocturne_engine::store_left_behind(phone.dir.path()).unwrap();
+    let before = nocturne_engine::store_left_behind(phone.dir.path(), date("2026-11-13")).unwrap();
     assert_eq!(
         (
             before.pages,
@@ -613,13 +613,83 @@ fn what_bringing_in_leaves_behind_on_the_phone_is_counted() {
     let item = keep(&phone.engine, "The heron prefers the feeder.");
     let memory = phone.engine.apply(&item, vec![heron()]).unwrap().created[0].clone();
     phone.engine.confirm(&memory, true).unwrap();
-    let after = nocturne_engine::store_left_behind(phone.dir.path()).unwrap();
+    let after = nocturne_engine::store_left_behind(phone.dir.path(), date("2026-11-13")).unwrap();
     assert_eq!(
         after.choices,
         before.choices + 1,
         "what the person confirmed"
     );
     assert!(after.any());
+}
+
+fn dated_entry(id: &str, day: &str) -> nocturne_contract::CalendarEntry {
+    nocturne_contract::CalendarEntry {
+        start: format!("{day}T10:00:00Z"),
+        end: format!("{day}T10:30:00Z"),
+        ..dentist(id, id)
+    }
+}
+
+fn resting(id: &str, day: &str) -> nocturne_contract::ReadingChange {
+    nocturne_contract::ReadingChange::Upsert {
+        reading: nocturne_contract::Reading {
+            phone_id: id.into(),
+            day: day.into(),
+            start: format!("{day}T08:00:00Z"),
+            end: None,
+            source_device: None,
+            value: nocturne_contract::ReadingValue::RestingHeartRate { bpm: 52.0 },
+        },
+    }
+}
+
+#[test]
+fn calendar_and_health_older_than_the_resend_window_stay_only_on_the_phone() {
+    let phone = fixture();
+    let local = phone.engine.ensure_local_device("This phone").unwrap();
+    let today = date("2026-11-13");
+    let none = nocturne_engine::store_left_behind(phone.dir.path(), today).unwrap();
+    assert_eq!((none.appointments, none.readings), (0, 0));
+    assert!(!none.any());
+
+    let entries = vec![
+        dated_entry("three-weeks-ago", "2026-10-23"),
+        dated_entry("two-days-ago", "2026-11-11"),
+        dated_entry("next-week", "2026-11-20"),
+    ];
+    phone
+        .engine
+        .take_calendar(&local, calendar("s1", entries))
+        .unwrap();
+    let changes = vec![
+        resting("old", "2026-10-04"),
+        resting("edge", "2026-10-15"),
+        resting("last-day-out", "2026-10-14"),
+        resting("recent", "2026-11-10"),
+    ];
+    phone
+        .engine
+        .take_readings(
+            &local,
+            nocturne_contract::ReadingBatch {
+                sync_id: "h1".into(),
+                seq: 0,
+                last: true,
+                changes,
+            },
+        )
+        .unwrap();
+
+    let behind = nocturne_engine::store_left_behind(phone.dir.path(), today).unwrap();
+    assert_eq!(
+        behind.appointments, 1,
+        "only the entry the phone never sends"
+    );
+    assert_eq!(
+        behind.readings, 2,
+        "the readings before the 30 days the phone sends again"
+    );
+    assert!(behind.any(), "so the put aside never lapses");
 }
 
 #[test]
