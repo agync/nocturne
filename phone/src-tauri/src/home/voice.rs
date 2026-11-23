@@ -379,6 +379,7 @@ impl Home {
         };
         let Ok(ranges) = pieces_of(&pcm) else {
             let _ = std::fs::remove_file(&pcm);
+            lock(&self.voice.nothing).insert(id.to_string());
             return false;
         };
         let lease = LEASE
