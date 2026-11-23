@@ -125,10 +125,18 @@ pub enum MoveView {
     Adding {
         name: String,
     },
-    /// "{name}'s things are here." with what was added.
+    /// "{name}'s things are here." with what was added. `removed`: the phone was removed while
+    /// they were added, so it still holds its own memory.
     Brought {
         name: String,
         added: BroughtCounts,
+        removed: bool,
+    },
+    /// A bring-in that ended with nothing added: the phone was removed here while its things
+    /// arrived, or the person stopped it on the phone.
+    Ended {
+        name: String,
+        why: EndedWhy,
     },
     /// "{name} now works with this computer.": the person chose this computer's memory.
     Used {
@@ -159,6 +167,16 @@ pub enum MoveView {
 pub struct Room {
     pub need: f64,
     pub free: f64,
+}
+
+/// Why a bring-in ended with nothing added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EndedWhy {
+    /// "{name} was removed, so nothing came in from it."
+    Removed,
+    /// "{name} stopped bringing its things in. Nothing changed here."
+    Stopped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -199,6 +217,8 @@ enum Phase {
     Brought(BroughtCounts),
     /// The person chose this computer's memory; shown until they say OK. It holds no place.
     Used,
+    /// A bring-in ended with nothing added; shown until the person says OK. It holds no place.
+    Ended(EndedWhy),
 }
 
 /// Each move's own id. What it stages and what it notes carry it, so letting go of one move
@@ -228,6 +248,10 @@ struct Move {
     gone: bool,
     /// The person stopped it here: its phone hears so.
     stopped: bool,
+    /// A bring-in that ends with nothing added, and why, once its check lets go.
+    ended: Option<EndedWhy>,
+    /// Its phone was removed while its things were added.
+    removed: bool,
     /// Room short when it was offered.
     room: Option<Room>,
     /// The conversation carrying the memory, while it is on its way or being checked.
@@ -258,6 +282,8 @@ impl Move {
             data: data.to_path_buf(),
             gone: false,
             stopped: false,
+            ended: None,
+            removed: false,
             room: None,
             conv: None,
             shown: None,
@@ -299,8 +325,10 @@ impl Move {
             Phase::Brought(added) => MoveView::Brought {
                 name,
                 added: *added,
+                removed: self.removed,
             },
             Phase::Used => MoveView::Used { name },
+            Phase::Ended(why) => MoveView::Ended { name, why: *why },
             Phase::Arrived(_) => MoveView::Restarting { name },
             Phase::Failed(why) => MoveView::Failed {
                 name,
@@ -535,10 +563,12 @@ impl Moves {
                 *stopped = None;
             }
         }
-        if slot
-            .as_ref()
-            .is_some_and(|m| matches!(m.phase, Phase::Failed(_) | Phase::Brought(_) | Phase::Used))
-        {
+        if slot.as_ref().is_some_and(|m| {
+            matches!(
+                m.phase,
+                Phase::Failed(_) | Phase::Brought(_) | Phase::Used | Phase::Ended(_)
+            )
+        }) {
             *slot = None;
         }
         let busy = slot.as_ref().is_some_and(|m| {
@@ -677,14 +707,43 @@ impl Moves {
     /// today's page" once a phone's things were added.
     fn dismiss(&self) -> bool {
         let mut slot = lock(&self.slot);
-        if slot
-            .as_ref()
-            .is_some_and(|m| matches!(m.phase, Phase::Failed(_) | Phase::Brought(_) | Phase::Used))
-        {
+        if slot.as_ref().is_some_and(|m| {
+            matches!(
+                m.phase,
+                Phase::Failed(_) | Phase::Brought(_) | Phase::Used | Phase::Ended(_)
+            )
+        }) {
             *slot = None;
             return true;
         }
         false
+    }
+
+    /// The person stopped bringing this phone's things in, on the phone: until they are being
+    /// added, nothing is added and the person here hears so. True when there was one to stop.
+    pub fn phone_stopped(&self, device: &str) -> bool {
+        let mut slot = lock(&self.slot);
+        let Some(m) = slot
+            .as_mut()
+            .filter(|m| m.device == device && !m.gone && m.bring)
+        else {
+            return false;
+        };
+        match m.phase {
+            Phase::Accepted | Phase::Arriving { .. } => {
+                m.phase = Phase::Ended(EndedWhy::Stopped);
+                m.conv = None;
+            }
+            // The check lets go of what it unpacked once it ends, and adds nothing.
+            Phase::Checking => {
+                m.gone = true;
+                m.ended = Some(EndedWhy::Stopped);
+            }
+            _ => return false,
+        }
+        drop(slot);
+        self.settled.notify_waiters();
+        true
     }
 
     /// An offer nobody answered, or whose phone went, is let go.
@@ -801,6 +860,15 @@ impl Moves {
                 m.conv = None;
                 (shown(&slot), RemoteAnswer::MemoryBrought { counts, added })
             }
+            // Its phone was removed while its things were added: adding finished, since
+            // everything had arrived whole, and the person here hears so.
+            (Ok(Outcome::Brought(counts, added)), Some(m)) => {
+                m.phase = Phase::Brought(added);
+                m.conv = None;
+                m.gone = false;
+                m.removed = true;
+                (shown(&slot), RemoteAnswer::MemoryBrought { counts, added })
+            }
             // This computer could not finish it now (no room, its disk, a long backup): nothing
             // changed, and the phone carries on without the person being asked again.
             (Err(PhoneError::Busy), Some(m)) if !m.gone && !removed => {
@@ -819,8 +887,15 @@ impl Moves {
                     unstage(data, owner);
                 }
                 let stopped = ours.as_ref().is_some_and(|m| m.stopped);
-                if ours.is_some() {
-                    *slot = None;
+                match ours {
+                    // A bring-in that adds nothing says why until the person says OK.
+                    Some(m) if m.ended.is_some() => {
+                        m.phase = Phase::Ended(m.ended.unwrap_or(EndedWhy::Removed));
+                        m.conv = None;
+                        m.gone = false;
+                    }
+                    Some(_) => *slot = None,
+                    None => {}
                 }
                 let answer = match checked {
                     Ok(_) if stopped => err(PhoneError::Paused),
@@ -841,6 +916,17 @@ impl Moves {
             return false;
         };
         match m.phase {
+            // A bring-in the phone stopped says so, though its pairing goes with it.
+            Phase::Ended(_) => return false,
+            // A bring-in's things arriving: nothing is added, and the person here hears why.
+            Phase::Accepted | Phase::Arriving { .. } if m.bring => {
+                m.phase = Phase::Ended(EndedWhy::Removed);
+                m.conv = None;
+            }
+            Phase::Checking if m.bring => {
+                m.gone = true;
+                m.ended = Some(EndedWhy::Removed);
+            }
             Phase::Checking | Phase::Adding => m.gone = true,
             Phase::Arrived(_) => {
                 unstage(&m.data, &m.owner);
@@ -1499,6 +1585,17 @@ pub fn stop<R: Runtime>(app: &AppHandle<R>, core: &Core) -> bool {
     core.incoming.fail(&device, PhoneError::Paused);
     emit(app, core.moves.view());
     true
+}
+
+/// The person stopped bringing the phone's things in, on the phone (`stopMemory`, or the
+/// pairing it undid for it): nothing is added, and the person here hears so.
+pub fn phone_stopped<R: Runtime>(app: &AppHandle<R>, core: &Core, device: &str) {
+    if !core.moves.phone_stopped(device) {
+        return;
+    }
+    tracing::info!(device, "the phone stopped bringing its things in");
+    core.incoming.cancel(device);
+    emit(app, core.moves.view());
 }
 
 /// What the phone sent with `memoryDone`.
@@ -2566,11 +2663,62 @@ mod tests {
         let (view, answer) = moves.conclude(
             dir.path(),
             &owner,
-            false,
+            true,
             Ok(Outcome::Brought(counts(3), added())),
         );
-        assert_eq!((view, answer), (None, err(PhoneError::Revoked)));
-        assert!(lock(&moves.slot).is_none());
+        assert_eq!(
+            view,
+            Some(MoveView::Brought {
+                name: "a".into(),
+                added: added(),
+                removed: true
+            }),
+            "adding finished, and the person here hears the phone still holds its memory"
+        );
+        assert!(matches!(answer, RemoteAnswer::MemoryBrought { .. }));
+        let mut b = Move::new(&phone("b"), dir.path(), counts(1), 1.0);
+        b.phase = Phase::Accepted;
+        assert!(moves.claim(b).is_some(), "the place is free after");
+    }
+
+    #[test]
+    fn a_bring_in_whose_phone_went_while_checked_says_nothing_came_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        let owner = checked_bring(&moves, dir.path(), "a");
+        assert!(moves.forget("a"));
+        assert!(!moves.begin_adding(&owner), "nothing may be added");
+        let (view, answer) = moves.conclude(dir.path(), &owner, true, Err(PhoneError::Revoked));
+        assert_eq!(answer, err(PhoneError::Revoked));
+        assert_eq!(
+            view,
+            Some(MoveView::Ended {
+                name: "a".into(),
+                why: EndedWhy::Removed
+            })
+        );
+        assert!(moves.dismiss());
+        assert_eq!(moves.view(), None);
+    }
+
+    #[test]
+    fn a_bring_in_the_phone_stopped_while_checked_adds_nothing_and_says_so() {
+        let dir = tempfile::tempdir().unwrap();
+        let moves = Moves::default();
+        let owner = checked_bring(&moves, dir.path(), "a");
+        assert!(moves.phone_stopped("a"));
+        assert!(!moves.begin_adding(&owner), "nothing may be added");
+        // The pairing it undid for it takes nothing more away.
+        assert!(!moves.forget("a"));
+        let (view, _) = moves.conclude(dir.path(), &owner, true, Err(PhoneError::Revoked));
+        assert_eq!(
+            view,
+            Some(MoveView::Ended {
+                name: "a".into(),
+                why: EndedWhy::Stopped
+            })
+        );
+        assert!(!moves.phone_stopped("a"), "once");
     }
 
     #[test]

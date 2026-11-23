@@ -158,7 +158,10 @@ export type MoveView =
   | { phase: "checking"; name: string }
   /** A bring-in arrived whole and is being added: it can no longer be stopped. */
   | { phase: "adding"; name: string }
-  | { phase: "brought"; name: string; added: BroughtCounts }
+  /** `removed`: the phone was removed while they were added, so it still holds its memory. */
+  | { phase: "brought"; name: string; added: BroughtCounts; removed?: boolean }
+  /** A bring-in that added nothing: the phone was removed here, or stopped it there. */
+  | { phase: "ended"; name: string; why: "removed" | "stopped" }
   /** The person chose this computer's memory: nothing came in. */
   | { phase: "used"; name: string }
   | { phase: "restarting"; name: string }

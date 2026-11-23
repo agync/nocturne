@@ -594,6 +594,9 @@ pub enum RemoteCall {
         sha256: String,
         passphrase: String,
     },
+    /// The person stopped bringing this phone's things in, until they are being added: the
+    /// computer stops too and nothing changes there. Answered with `Done`.
+    StopMemory,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

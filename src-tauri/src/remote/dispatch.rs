@@ -261,6 +261,7 @@ impl<R: Runtime> Call<R> {
                     | RemoteCall::Introduce { .. }
                     | RemoteCall::OfferMemory { .. }
                     | RemoteCall::MemoryDone { .. }
+                    | RemoteCall::StopMemory
                     | RemoteCall::Disconnect
             )
         {
@@ -492,8 +493,14 @@ impl<R: Runtime> Call<R> {
                 let (app, core) = (&self.app, &self.core);
                 super::moving::done(app, core, &self.out, &self.device, upload, sent).await
             }
+            RemoteCall::StopMemory => {
+                super::moving::phone_stopped(&self.app, &self.core, me);
+                Some(RemoteAnswer::Done)
+            }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
+                // A phone bringing its things in undoes its pairing when the person there stops.
+                super::moving::phone_stopped(&self.app, &self.core, me);
                 let e = self.engine()?;
                 let id = me.clone();
                 let removed = blocking(move || e.revoke_device(&id)).await;
