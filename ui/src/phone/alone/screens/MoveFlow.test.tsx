@@ -217,6 +217,18 @@ describe("moving the memory to a computer", () => {
     expect(onExit).not.toHaveBeenCalled();
   }, 12_000);
 
+  it("says this phone was removed when it opens again part way and the computer refuses it", async () => {
+    const api = fakeApi();
+    const onExit = vi.fn();
+    render(<MoveFlow api={api} resumed onExit={onExit} onDone={vi.fn()} />);
+    await screen.findByRole("button", { name: "Continue" });
+    api.answerOffer("declined");
+    expect(
+      await screen.findByRole("heading", { name: "This phone was removed from Nocturne." }),
+    ).toBeInTheDocument();
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
   it("names the computer kept from the pairing when it is out of reach", async () => {
     mockIPC((cmd) => {
       if (cmd === "connect") throw "unreached";
