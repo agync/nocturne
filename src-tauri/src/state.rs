@@ -522,7 +522,7 @@ impl AppState {
 
     /// Run the exit hooks once. They block on the async runtime to stop the engine and Away from
     /// home, which panics on a thread that drives async tasks, so from inside the runtime (the
-    /// restart after a restore or a move) they run on a thread of their own.
+    /// restart after a restore) they run on a thread of their own.
     pub fn run_exit_hooks(&self) {
         let hooks = std::mem::take(&mut *self.exit_hooks.lock().unwrap_or_else(|e| e.into_inner()));
         if hooks.is_empty() {
@@ -753,7 +753,7 @@ mod tests {
         ran
     }
 
-    /// The restart after a restore or a move calls the restarter from an async task, and the
+    /// The restart after a restore calls the restarter from an async task, and the
     /// restarter runs the exit hooks, which block on the runtime.
     #[test]
     fn exit_hooks_run_from_an_async_task() {

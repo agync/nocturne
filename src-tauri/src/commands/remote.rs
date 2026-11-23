@@ -146,7 +146,7 @@ pub async fn new_computer_key<R: Runtime>(app: AppHandle<R>) -> Result<RemoteVie
 /// A phone's memory moving here, as it stands, if one is.
 #[tauri::command]
 pub async fn get_move<R: Runtime>(app: AppHandle<R>) -> Result<Option<MoveView>, CommandError> {
-    Ok(moving::view(&app, &hub(&app)?.core))
+    Ok(moving::view(&hub(&app)?.core))
 }
 
 /// The person's answer to a phone that offers its memory.
@@ -162,19 +162,18 @@ pub async fn answer_move<R: Runtime>(
     }
 }
 
-/// "Open today's page" once a phone's memory is here, or "OK" on a move that changed nothing:
+/// "Open today's page" once a phone's things are here, or "OK" on a move that changed nothing:
 /// the person has seen it.
 #[tauri::command]
 pub async fn finish_move<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    let data = app.state::<crate::state::AppState>().data_dir.clone();
-    if moving::finish(&hub(&app)?.core, &data) {
+    if moving::finish(&hub(&app)?.core) {
         Ok(())
     } else {
         Err(CommandError::not_found("no memory is waiting"))
     }
 }
 
-/// "Stop moving" while a phone's memory arrives: nothing changes here, and the phone keeps it.
+/// "Stop" while a phone's things arrive: nothing changes here, and the phone keeps them.
 #[tauri::command]
 pub async fn stop_move<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     if moving::stop(&app, &hub(&app)?.core) {

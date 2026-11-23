@@ -370,7 +370,7 @@ fn an_empty_computer_brings_the_phones_things_in_with_no_restart() {
 
     assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
     assert!(
-        matches!(c.view(), Some(MoveView::Preparing { bring: true, .. })),
+        matches!(c.view(), Some(MoveView::Preparing { .. })),
         "nothing is asked: it waits for the phone's things"
     );
     assert!(
@@ -927,13 +927,7 @@ fn a_computer_with_a_memory_brings_the_phones_things_in() {
     let asked = tauri::async_runtime::spawn(async move { p.call(offer).await });
     wait_for("the computer asks", || c.view().is_some());
     let shown = c.h.ok("get_move", json!({}));
-    assert_eq!(shown["phase"], "offered");
-    assert_eq!(shown["here"], true, "it asks how the phone joins");
-    assert_eq!(
-        c.h.code("answer_move", json!({"choice": "move"})),
-        "notFound",
-        "a memory here is never put aside in a move"
-    );
+    assert_eq!(shown["phase"], "offered", "it asks how the phone joins");
     c.h.ok("answer_move", json!({"choice": "bring"}));
     let RemoteAnswer::MemoryAccepted {
         here: Some(_),
@@ -942,10 +936,7 @@ fn a_computer_with_a_memory_brings_the_phones_things_in() {
     else {
         panic!("the phone hears it brings its things in")
     };
-    assert!(matches!(
-        c.view(),
-        Some(MoveView::Preparing { bring: true, .. })
-    ));
+    assert!(matches!(c.view(), Some(MoveView::Preparing { .. })));
 
     let brought = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
     let RemoteAnswer::MemoryBrought { counts, added } = brought else {
@@ -1052,7 +1043,6 @@ fn what_a_move_put_aside_is_brought_in_later_without_asking() {
     );
     let shown = c.h.ok("get_move", json!({}));
     assert_eq!(shown["phase"], "preparing", "nothing is asked here");
-    assert_eq!(shown["bring"], true);
     let brought = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
     assert!(
         matches!(brought, RemoteAnswer::MemoryBrought { added, .. } if added.things == 1),
@@ -1096,10 +1086,7 @@ fn stopping_a_bring_in_before_its_things_are_added_changes_nothing() {
     wait_for("part of it went", || {
         c.relay.sent() > sent + 2 * 1024 * 1024
     });
-    assert!(matches!(
-        c.view(),
-        Some(MoveView::Arriving { bring: true, .. })
-    ));
+    assert!(matches!(c.view(), Some(MoveView::Arriving { .. })));
     c.h.ok("stop_move", json!({}));
     assert_eq!(
         block(going).unwrap().err(),
