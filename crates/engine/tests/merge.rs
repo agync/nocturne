@@ -528,6 +528,10 @@ fn what_the_person_forgot_on_the_phone_is_never_read_again_on_the_computer() {
         1
     );
     assert!(
+        e.find_items("heron feeder", 10).unwrap().is_empty(),
+        "nor is it found by its words, as after a forget here"
+    );
+    assert!(
         !says_heron(e, &note),
         "the forgotten claim is not said again"
     );
