@@ -13,7 +13,7 @@
 //! once the phone is its companion. A move that stops part way changes nothing here.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use jiff::{SignedDuration, Timestamp};
@@ -432,16 +432,33 @@ pub(crate) async fn offer(
         bytes: facts.bytes.max(1.0),
         schema: nocturne_engine::store::latest_version(),
     };
-    let answered = computer.offer(call).await.map_err(|e| match e {
-        CallError::Phone {
-            code: PhoneError::TooLarge,
-        } => MoveError::NoRoom,
-        e => failure(e),
+    tracing::info!(
+        "offering the memory: {} items, about {} bytes",
+        facts.counts.items,
+        facts.bytes
+    );
+    let answered = computer.offer(call).await.map_err(|e| {
+        tracing::info!("the offer was not taken: {e:?}");
+        match e {
+            CallError::Phone {
+                code: PhoneError::TooLarge,
+            } => MoveError::NoRoom,
+            e => failure(e),
+        }
     })?;
     match answered {
-        RemoteAnswer::MemoryAccepted { here } => Ok(Offered::Accepted { here }),
-        RemoteAnswer::MemoryArrived { counts } => Ok(Offered::Arrived(counts)),
-        _ => Err(MoveError::Failed),
+        RemoteAnswer::MemoryAccepted { here } => {
+            tracing::info!(here = here.is_some(), "the computer agreed to the move");
+            Ok(Offered::Accepted { here })
+        }
+        RemoteAnswer::MemoryArrived { counts } => {
+            tracing::info!("the memory already opened on the computer");
+            Ok(Offered::Arrived(counts))
+        }
+        _ => {
+            tracing::info!("the computer answered the offer with something else");
+            Err(MoveError::Failed)
+        }
     }
 }
 
@@ -498,9 +515,11 @@ pub(crate) async fn send(
         sha256: prepared.sha256.clone(),
         passphrase: prepared.passphrase.clone(),
     };
+    tracing::info!("sending the memory: {size} bytes");
     let answered = computer
         .send(call, &prepared.file, sent)
         .await
+        .inspect_err(|e| tracing::info!("the memory did not go across: {e:?}"))
         .map_err(|e| match e {
             CallError::Phone {
                 code: PhoneError::TooLarge,
@@ -511,8 +530,20 @@ pub(crate) async fn send(
             e => failure(e),
         })?;
     match answered {
-        RemoteAnswer::MemoryArrived { counts } => Ok(counts),
-        _ => Err(MoveError::Failed),
+        RemoteAnswer::MemoryArrived { counts } => {
+            tracing::info!(
+                "the computer has the memory: {} items, {} memories, {} pages, {} originals",
+                counts.items,
+                counts.memories,
+                counts.pages,
+                counts.originals
+            );
+            Ok(counts)
+        }
+        _ => {
+            tracing::info!("the computer answered the memory with something else");
+            Err(MoveError::Failed)
+        }
     }
 }
 
@@ -619,13 +650,19 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     }
     let _busy = Busy(&moving);
     moving.stop.store(false, Ordering::SeqCst);
+    tracing::info!("moving the memory: making its backup");
     let computer = phone(&app)?;
+    let began = std::time::Instant::now();
     let hold = {
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || Hold::take(&app))
             .await
             .map_err(|_| MoveError::Failed)?
     };
+    tracing::info!(
+        "nothing else uses the memory now, after {} ms",
+        began.elapsed().as_millis()
+    );
     let worker = app.clone();
     let prepared = tauri::async_runtime::spawn_blocking(move || {
         let stop = &worker.state::<Moving>().stop;
@@ -636,7 +673,13 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
         worker.state::<Home>().prepare_move(&progress, stop)
     })
     .await
-    .unwrap_or(Err(MoveError::Failed))?;
+    .unwrap_or(Err(MoveError::Failed))
+    .inspect_err(|e| tracing::info!("the backup for the move was not made: {e:?}"))?;
+    tracing::info!(
+        "the backup for the move is made: {} bytes in {} ms",
+        prepared.report.bytes,
+        began.elapsed().as_millis()
+    );
     let report = |phase, done, total| emit(&app, phase, done, total);
     let arrived = tokio::select! {
         arrived = carry(&computer, &prepared, &report, RETRY_EVERY) => arrived,
@@ -646,6 +689,7 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     let counts = match arrived {
         Ok(counts) => counts,
         Err(e) => {
+            tracing::info!("the move ended with nothing changed here: {e:?}");
             home.drop_move();
             drop(hold);
             return Err(e);
@@ -664,6 +708,13 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     .await
     .unwrap_or(Err(MoveError::Failed));
     drop(hold);
+    match &finished {
+        Ok(moved) => tracing::info!(
+            "the memory is on the computer with {} items: this phone follows it now",
+            moved.items
+        ),
+        Err(e) => tracing::info!("the move did not finish here: {e:?}"),
+    }
     if finished.is_ok() {
         // The ledger is kept: what was sent into the store went with it.
         if let Err(e) = app.emit(super::commands::EVENT_MODE, home.mode(true)) {
@@ -699,7 +750,9 @@ pub(crate) async fn carry(
     };
     // First where it stands: a move whose phone went away part way (the app stopped while the
     // computer restarted) finishes without sending anything again.
-    match stands(computer).await? {
+    let first = stands(computer).await;
+    tracing::info!("where the memory stands on the computer: {first:?}");
+    match first? {
         Stands::Opened(counts) => return Ok(counts),
         Stands::Waiting => {
             if let Some(counts) = finishing(computer, size, report, pause).await? {
@@ -711,6 +764,8 @@ pub(crate) async fn carry(
     // Agreed already when this starts; asked again only after a pause, or once the computer
     // said it knows nothing of it.
     let mut ask = false;
+    let last = AtomicU64::new(0);
+    let mut paused = false;
     loop {
         let again = if ask {
             offer(computer, &facts).await
@@ -722,6 +777,10 @@ pub(crate) async fn carry(
             Ok(Offered::Arrived(counts)) => return Ok(counts),
             Ok(Offered::Accepted { .. }) => {
                 send(computer, prepared, |done| {
+                    let before = last.swap(done, Ordering::Relaxed);
+                    if tenths(before, size) != tenths(done, size) {
+                        tracing::info!("sent {done} of {size} bytes");
+                    }
                     let phase = if done >= size {
                         MovePhase::Checking
                     } else {
@@ -735,6 +794,11 @@ pub(crate) async fn carry(
         };
         match out {
             Err(MoveError::Paused) => {
+                if !paused {
+                    tracing::info!("the computer cannot be reached: trying again until it answers");
+                }
+                paused = true;
+                last.store(0, Ordering::Relaxed);
                 report(MovePhase::Paused, 0, size);
                 tokio::time::sleep(pause).await;
             }
@@ -759,6 +823,7 @@ async fn finishing(
     report: &(dyn Fn(MovePhase, u64, u64) + Sync),
     pause: std::time::Duration,
 ) -> Result<Option<MemoryCounts>, MoveError> {
+    tracing::info!("waiting for the memory to open on the computer");
     loop {
         report(MovePhase::Finishing, size, size);
         tokio::time::sleep(pause.min(ASK_EVERY)).await;
@@ -770,10 +835,16 @@ async fn finishing(
     }
 }
 
+/// Whole tenths of `size` that `done` makes, for a progress line each tenth of the way.
+fn tenths(done: u64, size: u64) -> u64 {
+    done.saturating_mul(10) / size.max(1)
+}
+
 /// "Stop": the move ends and nothing changes here. The pairing is undone, so the computer
 /// keeps nothing of it.
 #[tauri::command]
 pub async fn move_stop<R: Runtime>(app: AppHandle<R>) -> Result<(), MoveError> {
+    tracing::info!("the person stopped the move");
     let moving = app.state::<Moving>();
     moving.stop.store(true, Ordering::SeqCst);
     moving.stopped.notify_waiters();
