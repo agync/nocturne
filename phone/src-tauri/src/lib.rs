@@ -98,6 +98,9 @@ pub fn run() {
             home::r#move::move_undo,
             home::r#move::move_put_aside,
             home::r#move::move_pending,
+            home::r#move::move_bring_aside,
+            home::r#move::move_bring_stop,
+            home::r#move::move_aside,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
