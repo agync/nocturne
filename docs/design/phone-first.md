@@ -894,8 +894,9 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 |---|---|
 | Reading | Nothing on Today; This phone: "Reading · {done} of {count}" |
 | Service unreachable | Today keeps the last page with "Written {day}. {host} hasn’t answered since {time}." Ask finds by words with "Answers are back when {host} is." |
-| Key refused, no credit | 0011's titles and bodies, with "this computer answers" replaced by "Ask finds by words" |
-| Paused by the limit | 0011's words, "until {day}" |
+| Key refused | On Today and Ask: "Your provider refused the key" / "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words." with "Check the key…", which opens the details step |
+| No credit | On Today and Ask: "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." with "Check again", which opens the details step |
+| Paused by the limit | On Today and Ask: "Paused by your limit" / "You’ve reached this month’s limit. Ask finds by words until {day}." with "Change limit", which opens the details step, then the limit |
 | No connection | "This phone isn’t online. What you keep waits to be read." |
 
 ### Checks before the online mind ships
@@ -1029,6 +1030,9 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind rows | "What goes" / "What you keep, and questions" / "This month" / "{count} things read and answered · limit {limit}" / "{count} things read and answered · no limit" |
 | Mind, turn off | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" / "Keep it on" |
 | Mind, unreachable | "Written {day}. {host} hasn’t answered since {time}." / "Answers are back when {host} is." |
+| Mind, key refused | "Your provider refused the key" / "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words." / "Check the key…" |
+| Mind, no credit | "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." / "Check again" |
+| Mind, paused | "Paused by your limit" / "You’ve reached this month’s limit. Ask finds by words until {day}." / "Change limit" |
 | Mind, offline | "This phone isn’t online. What you keep waits to be read." |
 | First release, listing growing | "When you want answers and a morning page, give it a mind: Nocturne on your own computer." |
 | First release, Welcome link | "I have a backup" |
