@@ -15,4 +15,9 @@ maxPhoneBuild?: number,
 /**
  * What this computer takes from a phone app. A computer from before phone apps sends none.
  */
-features?: Array<PhoneFeature>, };
+features?: Array<PhoneFeature>, 
+/**
+ * This computer already holds a memory: a phone that offers its own waits while the person
+ * here chooses how it joins.
+ */
+memoryHere?: boolean, };

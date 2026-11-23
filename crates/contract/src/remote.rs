@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind,
-    JournalDay, MemoryCounts, PageSummary, PageView, Period, PhoneFeature, QuestionChoice,
-    ReadingBatch, ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
+    AppPlatform, AskDelta, AskPlace, BroughtCounts, CalendarBatch, CheckIn, CheckInInput, Feeling,
+    ItemKind, JournalDay, MemoryCounts, PageSummary, PageView, Period, PhoneFeature,
+    QuestionChoice, ReadingBatch, ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -313,6 +313,11 @@ pub struct PhoneHello {
     #[serde(default)]
     #[ts(as = "Option<Vec<PhoneFeature>>", optional)]
     pub features: Vec<PhoneFeature>,
+    /// This computer already holds a memory: a phone that offers its own waits while the person
+    /// here chooses how it joins.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
+    pub memory_here: bool,
 }
 
 impl PhoneHello {
@@ -558,12 +563,22 @@ pub enum RemoteCall {
         app: PhoneAppIntro,
     },
     /// A phone that keeps its own memory offers it to this computer, with what it holds.
-    /// Answered with `MemoryAccepted`, or an error (`TooLarge` over `MAX_MEMORY_BYTES`).
+    /// Answered with `MemoryAccepted`, `UseComputerMemory` (the computer holds one and the person
+    /// there chose it), or an error (`TooLarge` over `MAX_MEMORY_BYTES`).
     OfferMemory {
         counts: MemoryCounts,
         bytes: f64,
         /// The store's schema version, so a computer that is older says so before any bytes move.
         schema: u32,
+        /// The first day something was kept, for "{count} things kept on {name} since {date}".
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        since: Option<String>,
+        /// The person chose on the phone to bring its things in from what a move put aside: the
+        /// computer adds them to its memory without asking again.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(as = "Option<bool>", optional)]
+        bring: bool,
     },
     /// The backup file of the offered memory goes up as the chunks of this call, `size` bytes
     /// in all (at most `MAX_MEMORY_BYTES`), after `OfferMemory` was accepted. `sha256` is the
@@ -639,13 +654,26 @@ pub enum RemoteAnswer {
         agreed: u32,
     },
     /// The offer is welcome. `here` is what this computer already holds, so the phone can say
-    /// so before the upload; none when it holds nothing.
+    /// so before the upload; none when it holds nothing. `bring`: the phone's things are added
+    /// to the memory here, with no restart, rather than the memory moving whole.
     MemoryAccepted {
         here: Option<MemoryCounts>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(as = "Option<bool>", optional)]
+        bring: bool,
     },
     /// The memory is checked and in place on this computer.
     MemoryArrived {
         counts: MemoryCounts,
+    },
+    /// The person on this computer chose its memory: nothing comes in, and the phone works with
+    /// it like any other phone.
+    UseComputerMemory,
+    /// The phone's things are checked (`counts`, as the backup held them) and were added to the
+    /// memory here (`added`).
+    MemoryBrought {
+        counts: MemoryCounts,
+        added: BroughtCounts,
     },
     Done,
     Error {

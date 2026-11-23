@@ -73,6 +73,7 @@ impl Computer {
             min_phone_build: MIN_PHONE_BUILD,
             max_phone_build: Some(PHONE_BUILD),
             features: Vec::new(),
+            memory_here: false,
         }
     }
 

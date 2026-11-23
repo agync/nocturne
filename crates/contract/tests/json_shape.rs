@@ -330,18 +330,56 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         counts,
         bytes: 10.0,
         schema: 14,
+        since: None,
+        bring: false,
     };
     assert_eq!(
         serde_json::to_string(&offer).unwrap(),
         r#"{"cmd":"offerMemory","counts":{"items":3,"memories":2,"pages":1,"originals":3},"bytes":10.0,"schema":14}"#
+    );
+    let bring = RemoteCall::OfferMemory {
+        counts,
+        bytes: 10.0,
+        schema: 14,
+        since: Some("2026-03-03".into()),
+        bring: true,
+    };
+    assert_eq!(
+        serde_json::to_string(&bring).unwrap(),
+        r#"{"cmd":"offerMemory","counts":{"items":3,"memories":2,"pages":1,"originals":3},"bytes":10.0,"schema":14,"since":"2026-03-03","bring":true}"#
     );
     assert_eq!(
         serde_json::to_string(&RemoteAnswer::MemoryArrived { counts }).unwrap(),
         r#"{"type":"memoryArrived","counts":{"items":3,"memories":2,"pages":1,"originals":3}}"#
     );
     assert_eq!(
-        serde_json::to_string(&RemoteAnswer::MemoryAccepted { here: None }).unwrap(),
+        serde_json::to_string(&RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false
+        })
+        .unwrap(),
         r#"{"type":"memoryAccepted","here":null}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&RemoteAnswer::MemoryAccepted {
+            here: Some(counts),
+            bring: true
+        })
+        .unwrap(),
+        r#"{"type":"memoryAccepted","here":{"items":3,"memories":2,"pages":1,"originals":3},"bring":true}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&RemoteAnswer::UseComputerMemory).unwrap(),
+        r#"{"type":"useComputerMemory"}"#
+    );
+    let added = BroughtCounts {
+        things: 4,
+        entries: 2,
+        checkins: 1,
+    };
+    assert_eq!(
+        serde_json::to_string(&RemoteAnswer::MemoryBrought { counts, added }).unwrap(),
+        r#"{"type":"memoryBrought","counts":{"items":3,"memories":2,"pages":1,"originals":3},"added":{"things":4,"entries":2,"checkins":1}}"#
     );
     assert_eq!(
         serde_json::to_value(PhoneFeature::HoldsMemory).unwrap(),
@@ -354,6 +392,15 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         hello.features,
         [PhoneFeature::Calendar, PhoneFeature::Unknown]
     );
+    assert!(
+        !hello.memory_here,
+        "a computer from before says nothing of its memory"
+    );
+    let holds = PhoneHello {
+        memory_here: true,
+        ..hello
+    };
+    assert_eq!(serde_json::to_value(&holds).unwrap()["memoryHere"], true);
 }
 
 #[test]

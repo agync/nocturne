@@ -983,6 +983,8 @@ mod tests {
             counts: Default::default(),
             bytes: 0.0,
             schema: 1,
+            since: None,
+            bring: false,
         };
         let done = RemoteCall::MemoryDone {
             size: 0.0,

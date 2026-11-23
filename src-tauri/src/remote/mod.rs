@@ -108,6 +108,7 @@ impl<R: Runtime> session::Shell for AppShell<R> {
                 PhoneFeature::Health,
                 PhoneFeature::HoldsMemory,
             ],
+            memory_here: false,
         }
     }
 
@@ -603,6 +604,8 @@ mod tests {
                 counts: MemoryCounts::default(),
                 bytes: 0.0,
                 schema: 1,
+                since: None,
+                bring: false,
             },
             RemoteCall::MemoryDone {
                 size: 0.0,

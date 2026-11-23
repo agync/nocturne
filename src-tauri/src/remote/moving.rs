@@ -963,7 +963,7 @@ pub async fn offer<R: Runtime>(
             dropped,
             "the move was agreed before: the phone carries on"
         );
-        return Some(RemoteAnswer::MemoryAccepted { here });
+        return Some(RemoteAnswer::MemoryAccepted { here, bring: false });
     }
     // A restore that waits for the next start is not replaced by a move.
     if restore::marker_path(&data).exists() {
@@ -1022,7 +1022,7 @@ pub async fn offer<R: Runtime>(
                 device = id,
                 "the move is agreed: the phone makes its backup"
             );
-            Some(RemoteAnswer::MemoryAccepted { here })
+            Some(RemoteAnswer::MemoryAccepted { here, bring: false })
         }
         Some(Ok(MoveChoice::NotNow)) => {
             tracing::info!(

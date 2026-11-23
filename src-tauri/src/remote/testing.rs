@@ -187,6 +187,7 @@ impl Shell for TestShell {
                 .then_some(super::protocol::PHONE_BUILD),
             version: "0.0.0".into(),
             features: Vec::new(),
+            memory_here: false,
         }
     }
 

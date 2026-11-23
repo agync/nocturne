@@ -31,4 +31,13 @@ place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage
 /**
  * The store's schema version, so a computer that is older says so before any bytes move.
  */
-schema: number, } | { "cmd": "memoryDone", size: number, sha256: string, passphrase: string, };
+schema: number, 
+/**
+ * The first day something was kept, for "{count} things kept on {name} since {date}".
+ */
+since?: string, 
+/**
+ * The person chose on the phone to bring its things in from what a move put aside: the
+ * computer adds them to its memory without asking again.
+ */
+bring?: boolean, } | { "cmd": "memoryDone", size: number, sha256: string, passphrase: string, };
