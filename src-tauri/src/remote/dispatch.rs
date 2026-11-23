@@ -252,21 +252,6 @@ impl<R: Runtime> Call<R> {
         upload: Option<super::incoming::UploadDone>,
     ) -> Option<RemoteAnswer> {
         let me = &self.device.id;
-        // A memory that moved here is checked or waits for the next start: what a phone sends
-        // now would land in the store about to be put aside, so it waits on the phone.
-        if self.core.moves.holding()
-            && !matches!(
-                call,
-                RemoteCall::GetStatus
-                    | RemoteCall::Introduce { .. }
-                    | RemoteCall::OfferMemory { .. }
-                    | RemoteCall::MemoryDone { .. }
-                    | RemoteCall::StopMemory
-                    | RemoteCall::Disconnect
-            )
-        {
-            return err(PhoneError::Busy);
-        }
         match call {
             RemoteCall::GetStatus => Some(self.status().await),
             RemoteCall::KeepText {
@@ -438,9 +423,6 @@ impl<R: Runtime> Call<R> {
                 if let Err(code) = shape {
                     return err(code);
                 }
-                if self.resend_due("calendar") {
-                    return err(PhoneError::NotFound);
-                }
                 self.sync(RemoteAction::SentCalendar, move |e, device| {
                     e.take_calendar(&device, batch)
                 })
@@ -449,9 +431,6 @@ impl<R: Runtime> Call<R> {
             RemoteCall::SendReadings { batch } => {
                 if let Err(code) = sync_shape(&batch.sync_id, batch.changes.len(), &batch) {
                     return err(code);
-                }
-                if self.resend_due("health") {
-                    return err(PhoneError::NotFound);
                 }
                 self.sync(RemoteAction::SentReadings, move |e, device| {
                     e.take_readings(&device, batch)
@@ -491,7 +470,7 @@ impl<R: Runtime> Call<R> {
                     passphrase,
                 };
                 let (app, core) = (&self.app, &self.core);
-                super::moving::done(app, core, &self.out, &self.device, upload, sent).await
+                super::moving::done(app, core, &self.device, upload, sent).await
             }
             RemoteCall::StopMemory => {
                 match super::moving::phone_stopped(&self.app, &self.core, me) {
@@ -516,14 +495,6 @@ impl<R: Runtime> Call<R> {
                 None
             }
         }
-    }
-
-    /// What this phone sent of `source` went aside with a replaced memory: it is told once, and
-    /// sends that source again from scratch.
-    fn resend_due(&self, source: &str) -> bool {
-        self.app.try_state::<AppState>().is_some_and(|state| {
-            super::moving::resend_due(&self.core, &state.data_dir, &self.device.id, source)
-        })
     }
 
     /// One batch of a phone app's calendar or health send: one per-phone token, then the store

@@ -199,12 +199,6 @@ pub fn hub<R: Runtime>(app: &AppHandle<R>) -> Option<Arc<RemoteHub>> {
     )
 }
 
-/// A phone's memory is being checked here or waits for the next start.
-pub fn move_holds<R: Runtime>(app: &AppHandle<R>) -> bool {
-    app.try_state::<Hub>()
-        .is_some_and(|h| h.0.core.moves.holding())
-}
-
 /// Called once the app is ready. Starts nothing unless the person left Away from home on and
 /// auto-off is not due.
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {

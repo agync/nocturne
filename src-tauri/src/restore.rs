@@ -61,10 +61,6 @@ struct Marker {
     aside: Option<Aside>,
     #[serde(default)]
     summary: Option<BackupSummary>,
-    /// A phone's memory that moved here: it takes this computer's own settings and paired
-    /// phones again as it goes in place.
-    #[serde(default)]
-    arrival: bool,
 }
 
 /// The partial file of a backup being written.
@@ -126,11 +122,7 @@ pub fn clear_check(data: &Path) {
     prune(&restore);
 }
 
-/// The note a phone's move leaves in its stage; it goes beside the backup state once the memory
-/// is in place, and never before.
-pub const ARRIVAL_NOTE: &str = "moved.json";
-
-/// The prefix of a stage a phone's move let go of, renamed away to be shredded.
+/// The prefix of what a phone's move unpacked, named to be shredded should it be left behind.
 pub const LET_GO: &str = "let-go-";
 
 /// Shred what a move let go of and a stop left behind.
@@ -164,29 +156,6 @@ pub fn schedule(
     aside: Option<Aside>,
     summary: Option<BackupSummary>,
 ) -> io::Result<()> {
-    write_marker(data, replace, stamp, source, aside, summary, false)
-}
-
-/// Ask the next start to put a phone's memory, settled in the stage, in place. `stamp` names
-/// the copy of what is here that will be put aside, and `aside` what it holds.
-pub fn schedule_arrival(
-    data: &Path,
-    replace: bool,
-    stamp: &str,
-    aside: Option<Aside>,
-) -> io::Result<()> {
-    write_marker(data, replace, stamp, Source::Stage, aside, None, true)
-}
-
-fn write_marker(
-    data: &Path,
-    replace: bool,
-    stamp: &str,
-    source: Source,
-    aside: Option<Aside>,
-    summary: Option<BackupSummary>,
-    arrival: bool,
-) -> io::Result<()> {
     match &source {
         Source::Stage => {
             if !stage_dir(data).join("store").join("nocturne.db").is_file() {
@@ -213,16 +182,10 @@ fn write_marker(
         source,
         aside,
         summary,
-        arrival,
     };
     let bytes = serde_json::to_vec(&marker).map_err(io::Error::other)?;
     fsutil::create_private_dir(&data.join(RESTORE))?;
     fsutil::write_private(&marker_path(data), &bytes)
-}
-
-/// A phone's memory waits for the next start to take its place.
-pub fn arrival_waits(data: &Path) -> bool {
-    read_marker(&marker_path(data)).is_ok_and(|m| m.arrival)
 }
 
 /// Clean up a backup or a restore that stopped unexpectedly. Runs before the store is opened.
@@ -247,14 +210,6 @@ pub fn recover(data: &Path) {
 /// crash at any step: the marker is removed only when the swap is complete, and what is here is
 /// put aside rather than deleted.
 pub fn apply_pending(data: &Path) -> ApplyOutcome {
-    apply_pending_with(data, retake_computer)
-}
-
-/// [`apply_pending`], with the step that takes the computer's own rows into a moved memory given.
-fn apply_pending_with(
-    data: &Path,
-    retake: impl Fn(&Path, &Path) -> nocturne_engine::Result<()>,
-) -> ApplyOutcome {
     recover(data);
     // A check that stopped part way left a plain copy of a backup's database; nothing checks now.
     clear_check(data);
@@ -294,31 +249,11 @@ fn apply_pending_with(
         return ApplyOutcome::Failed("the copy to bring back is not there".into());
     }
 
-    // What changed on this computer since the memory was settled (a phone removed or added,
-    // a new address) holds: its own rows are taken again from the store still in use.
-    // A moved memory that does not open here changes nothing: it is let go, and its note says
-    // so, for the window and for the phone, which keeps its memory.
-    if marker.arrival
-        && store.is_dir()
-        && let Err(e) = retake(&source_store, &store)
-    {
-        abandon_arrival(data, &source, &marker_path);
-        return ApplyOutcome::Failed(format!("the memory that moved here did not open ({e})"));
-    }
-
-    // A moved memory that cannot go in place changes nothing either: its phone keeps its own
-    // and hears so, rather than waiting on a start that keeps failing.
-    let failed = |reason: String| {
-        if marker.arrival {
-            abandon_arrival(data, &source, &marker_path);
-        }
-        ApplyOutcome::Failed(reason)
-    };
     let mut kept = None;
     if store.exists() {
         if !marker.replace && store_is_empty_and_fresh(&store) {
             if let Err(e) = std::fs::remove_dir_all(&store) {
-                return failed(format!(
+                return ApplyOutcome::Failed(format!(
                     "the empty store could not be removed ({:?})",
                     e.kind()
                 ));
@@ -327,7 +262,7 @@ fn apply_pending_with(
             match keep_aside(data, &marker.stamp, marker.aside.as_ref()) {
                 Ok(folder) => kept = Some(folder),
                 Err(e) => {
-                    return failed(format!(
+                    return ApplyOutcome::Failed(format!(
                         "what is here could not be put aside ({:?})",
                         e.kind()
                     ));
@@ -340,38 +275,12 @@ fn apply_pending_with(
         if let Some(folder) = &kept {
             undo_aside(data, folder);
         }
-        return failed(format!(
+        return ApplyOutcome::Failed(format!(
             "the backup could not be put in place ({:?})",
             e.kind()
         ));
     }
     complete(data, &source, &marker, &marker_path, kept)
-}
-
-/// Let go of a moved memory that did not open: its note goes beside the backup state marked as
-/// failed, and the stage and the marker go.
-fn abandon_arrival(data: &Path, source: &Path, marker_path: &Path) {
-    let note = std::fs::read(source.join(ARRIVAL_NOTE))
-        .ok()
-        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
-    if let Some(mut note) = note {
-        note["failed"] = serde_json::Value::Bool(true);
-        let written = fsutil::create_private_dir(&backup_dir(data)).and_then(|()| {
-            let bytes = serde_json::to_vec(&note).map_err(io::Error::other)?;
-            fsutil::write_private(&backup_dir(data).join(ARRIVAL_NOTE), &bytes)
-        });
-        if let Err(e) = written {
-            tracing::warn!("could not note that a moved memory did not open: {e}");
-        }
-    }
-    let _ = std::fs::remove_file(marker_path);
-    fsutil::shred_tree(source);
-    prune(&data.join(RESTORE));
-}
-
-fn retake_computer(arriving: &Path, here: &Path) -> nocturne_engine::Result<()> {
-    let clock = std::sync::Arc::new(nocturne_engine::SystemClock);
-    nocturne_engine::Engine::open(arriving, clock)?.retake_computer(here)
 }
 
 /// The steps after the store is in place: the reading setup, the spent source folder and the
@@ -383,20 +292,6 @@ fn complete(
     marker_path: &Path,
     kept: Option<PathBuf>,
 ) -> ApplyOutcome {
-    // A phone's memory in place: its note says so from now on. First, since the store is the
-    // live one now whatever follows.
-    let note = source.join(ARRIVAL_NOTE);
-    if marker.arrival && note.is_file() {
-        let placed = fsutil::create_private_dir(&backup_dir(data))
-            .and_then(|()| std::fs::copy(&note, backup_dir(data).join(ARRIVAL_NOTE)).map(drop));
-        if let Err(e) = placed {
-            return ApplyOutcome::Failed(format!(
-                "the note of the memory that moved could not be kept ({:?})",
-                e.kind()
-            ));
-        }
-    }
-
     let source_selection = source.join("engine").join("selection.json");
     if let Some(bytes) = sanitised_selection_file(&source_selection)
         && let Err(e) = write_selection(data, &bytes)
@@ -1054,88 +949,6 @@ mod tests {
     }
 
     #[test]
-    fn a_moves_note_counts_only_once_its_memory_is_in_place() {
-        // Stopped before the marker: the stage and its note go, and nothing says it arrived.
-        let dir = tempfile::tempdir().unwrap();
-        live(dir.path());
-        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
-        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
-        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
-        assert_eq!(apply_pending(dir.path()), ApplyOutcome::NothingPending);
-        assert!(!backup_dir(dir.path()).join(ARRIVAL_NOTE).exists());
-
-        // With its marker the store goes in place and the note with it.
-        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
-        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
-        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
-        let marker = Marker {
-            version: VERSION,
-            replace: true,
-            stamp: STAMP.into(),
-            source: Source::Stage,
-            aside: None,
-            summary: None,
-            arrival: true,
-        };
-        std::fs::write(
-            marker_path(dir.path()),
-            serde_json::to_vec(&marker).unwrap(),
-        )
-        .unwrap();
-        // The arriving store here is not a real one, so it does not open: nothing changes, the
-        // stage goes and the note says it failed.
-        assert!(matches!(apply_pending(dir.path()), ApplyOutcome::Failed(_)));
-        let note: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(backup_dir(dir.path()).join(ARRIVAL_NOTE)).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(note["failed"], true);
-        assert!(!marker_path(dir.path()).exists());
-        assert!(!stage_dir(dir.path()).exists());
-        assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
-    }
-
-    #[test]
-    fn a_moved_memory_that_cannot_go_in_place_is_let_go_and_noted() {
-        let dir = tempfile::tempdir().unwrap();
-        live(dir.path());
-        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
-        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
-        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
-        // What is here cannot be put aside: the folder for it is a file.
-        std::fs::write(dir.path().join(PUT_ASIDE), b"in the way").unwrap();
-        let marker = Marker {
-            version: VERSION,
-            replace: true,
-            stamp: STAMP.into(),
-            source: Source::Stage,
-            aside: None,
-            summary: None,
-            arrival: false,
-        };
-        std::fs::write(
-            marker_path(dir.path()),
-            serde_json::to_vec(&Marker {
-                arrival: true,
-                ..marker
-            })
-            .unwrap(),
-        )
-        .unwrap();
-        // Taking the computer's rows again needs real stores: skipped by marking it done.
-        let outcome = apply_pending_with(dir.path(), |_, _| Ok(()));
-        assert!(matches!(outcome, ApplyOutcome::Failed(_)), "{outcome:?}");
-        assert!(!marker_path(dir.path()).exists(), "it does not try again");
-        assert!(!stage_dir(dir.path()).exists());
-        let note: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(backup_dir(dir.path()).join(ARRIVAL_NOTE)).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(note["failed"], true);
-        assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
-    }
-
-    #[test]
     fn what_a_move_let_go_of_is_gone_at_the_next_start() {
         let dir = tempfile::tempdir().unwrap();
         live(dir.path());
@@ -1160,7 +973,6 @@ mod tests {
             source: Source::Stage,
             aside: None,
             summary: None,
-            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -1188,7 +1000,6 @@ mod tests {
             source: Source::Stage,
             aside: None,
             summary: None,
-            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -1223,7 +1034,6 @@ mod tests {
             source: Source::Stage,
             aside: Some(aside()),
             summary: Some(summary()),
-            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -1448,7 +1258,6 @@ mod tests {
             source: Source::PutAside("2026-11-14 090000".into()),
             aside: None,
             summary: None,
-            arrival: false,
         };
         std::fs::create_dir_all(restore_dir(dir.path())).unwrap();
         std::fs::write(
