@@ -59,5 +59,18 @@
   "toggle.off": "Off",
   "forget.title": "{count, plural, one {Delete # memory?} other {Delete # memories?}}",
   "forget.title.things": "{count, plural, one {Delete # thing?} other {Delete # things?}}",
-  "forget.keep": "{count, plural, one {Keep it} other {Keep them}}"
+  "forget.keep": "{count, plural, one {Keep it} other {Keep them}}",
+  "away.phones.add": "Add a phone",
+  "setup.action.failed": "That didn’t work. Nothing was lost, so try again in a moment.",
+  "online.limit.option.questions": "{count, number} questions",
+  "online.limit.option.usd": "{amount} a month",
+  "online.limit.option.none": "No limit",
+  "rail.privacy": "Privacy",
+  "rail.settings": "Settings",
+  "rail.away.relink": "Your phones need the new address",
+  "away.row.label": "Away from home",
+  "away.pair.deny": "Don’t allow",
+  "away.pair.allow": "Allow",
+  "setup.welcome.restore": "Restore from a backup",
+  "online.row.label": "Online answers"
 }
