@@ -479,6 +479,7 @@ pub const PHONE_ONLY_CALLS: &[&str] = &[
     "introduce",
     "offer_memory",
     "memory_done",
+    "stop_memory",
 ];
 
 #[cfg(test)]
@@ -613,6 +614,7 @@ mod tests {
                 sha256: s(),
                 passphrase: s(),
             },
+            RemoteCall::StopMemory,
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -640,7 +642,8 @@ mod tests {
                 | RemoteCall::SendReadings { .. }
                 | RemoteCall::Introduce { .. }
                 | RemoteCall::OfferMemory { .. }
-                | RemoteCall::MemoryDone { .. } => {}
+                | RemoteCall::MemoryDone { .. }
+                | RemoteCall::StopMemory => {}
             }
         }
         let snake = |camel: &str| {

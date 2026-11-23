@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use common::*;
-use nocturne_app_lib::remote::moving::MoveView;
+use nocturne_app_lib::remote::moving::{EndedWhy, MoveView};
 use nocturne_app_lib::remote::testing;
 use nocturne_channel::client::{self, CallError, Connection, OnIdentity, Options, Phone, Reach};
 use nocturne_channel::phone::{PhoneIdentity, PhonePairing};
@@ -1221,6 +1221,48 @@ fn stopping_a_bring_in_before_its_things_are_added_changes_nothing() {
 }
 
 #[test]
+fn the_phone_stopping_a_bring_in_stops_it_here_and_says_so() {
+    let home = phone_home();
+    let c = computer_with_a_memory();
+    let before = c.h.engine().stats().unwrap().item_count;
+    let phone = c.phone(c.pair());
+    let (big, sha, size) = big_backup(&home);
+    let offer = RemoteCall::OfferMemory {
+        counts: home.counts(),
+        bytes: size,
+        schema: nocturne_engine::store::latest_version(),
+        since: None,
+        things: None,
+        bring: false,
+    };
+    offer_and_answer(&c, &phone, offer, "bring");
+    let sent = c.relay.sent();
+    let p = phone.clone();
+    let (call, path) = (done(&big, &sha), big.clone());
+    let going =
+        tauri::async_runtime::spawn(async move { p.upload_memory(call, &path, |_| {}).await });
+    wait_for("part of it went", || {
+        c.relay.sent() > sent + 2 * 1024 * 1024
+    });
+    assert_eq!(
+        block(phone.call(RemoteCall::StopMemory)).unwrap(),
+        RemoteAnswer::Done
+    );
+    assert!(block(going).unwrap().is_err());
+    assert_eq!(
+        c.view(),
+        Some(MoveView::Ended {
+            name: NAME.into(),
+            why: EndedWhy::Stopped
+        })
+    );
+    assert_eq!(c.h.engine().stats().unwrap().item_count, before);
+    assert_eq!(c.hub.core.incoming.in_flight(), 0);
+    c.h.ok("finish_move", json!({}));
+    assert!(c.view().is_none());
+}
+
+#[test]
 fn removing_the_phone_while_it_is_asked_how_it_joins_takes_the_question_away() {
     let home = phone_home();
     let c = computer_with_a_memory();
@@ -1265,8 +1307,17 @@ fn removing_the_phone_while_its_things_arrive_adds_nothing() {
     });
     c.h.ok("remove_device", json!({"id": c.device_id()}));
     assert!(block(going).unwrap().is_err());
-    assert!(c.view().is_none());
+    assert_eq!(
+        c.view(),
+        Some(MoveView::Ended {
+            name: NAME.into(),
+            why: EndedWhy::Removed
+        }),
+        "the person here hears that nothing came in"
+    );
     assert_eq!(c.h.engine().stats().unwrap().item_count, before);
+    c.h.ok("finish_move", json!({}));
+    assert!(c.view().is_none());
     assert!(
         block(phone.call(home.bring(&big))).is_err(),
         "removed, it cannot offer again"

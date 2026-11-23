@@ -4,5 +4,13 @@
     "counts": { "items": 212, "memories": 87, "pages": 9, "originals": 140 },
     "bytes": 52428800.0,
     "schema": 14
+  },
+  {
+    "cmd": "offerMemory",
+    "counts": { "items": 212, "memories": 87, "pages": 9, "originals": 140 },
+    "bytes": 52428800.0,
+    "schema": 14,
+    "since": "2026-03-03",
+    "things": 140
   }
 ]

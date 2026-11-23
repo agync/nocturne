@@ -299,17 +299,29 @@ function MovePanel({ view }: { view: MoveView }) {
     case "brought":
       title = t("moving.brought.title", { name });
       body = (
-        <p>
-          {t("moving.brought.body", {
-            count: view.added.things,
-            entries: view.added.entries,
-            checkins: view.added.checkins,
-          })}
-        </p>
+        <>
+          <p>
+            {t("moving.brought.body", {
+              count: view.added.things,
+              entries: view.added.entries,
+              checkins: view.added.checkins,
+            })}
+          </p>
+          {view.removed ? <p>{t("moving.brought.removed", { name })}</p> : null}
+        </>
       );
       foot = (
         <Button variant="primary" disabled={busy} onClick={() => finish(() => goTo("/today"))}>
           {t("moving.arrived.open")}
+        </Button>
+      );
+      break;
+    // The line is the whole of it: nothing came in.
+    case "ended":
+      title = t(view.why === "removed" ? "moving.ended.removed" : "moving.ended.stopped", { name });
+      foot = (
+        <Button variant="primary" disabled={busy} onClick={() => finish()}>
+          {t("moving.failed.ok")}
         </Button>
       );
       break;

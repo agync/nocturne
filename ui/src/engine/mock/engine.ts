@@ -1975,7 +1975,13 @@ export class MockEngine implements EngineClient {
   };
   finishMove = async (): Promise<void> => {
     const phase = this.moving?.phase;
-    if (phase !== "arrived" && phase !== "failed" && phase !== "brought" && phase !== "used")
+    if (
+      phase !== "arrived" &&
+      phase !== "failed" &&
+      phase !== "brought" &&
+      phase !== "used" &&
+      phase !== "ended"
+    )
       throw new Error("No memory is waiting");
     this.setMove(null);
   };

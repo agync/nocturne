@@ -308,6 +308,41 @@ describe("a phone joining a computer that already holds a memory", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/today"));
   });
 
+  it("says the phone was removed, so nothing came in, or that the phone stopped it", async () => {
+    const { engine } = await withChoice();
+    act(() => engine.setMove({ phase: "ended", name: "Maya’s phone", why: "removed" }));
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Maya’s phone was removed, so nothing came in from it.",
+      }),
+    ).toBeInTheDocument();
+    act(() => engine.setMove({ phase: "ended", name: "Maya’s phone", why: "stopped" }));
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Maya’s phone stopped bringing its things in. Nothing changed here.",
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("says what was added though the phone was removed while it was added", async () => {
+    const { engine } = await withChoice();
+    act(() =>
+      engine.setMove({
+        phase: "brought",
+        name: "Maya’s phone",
+        added: { things: 3, entries: 2, checkins: 1 },
+        removed: true,
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog", { name: "Maya’s phone’s things are here." });
+    expect(dialog).toHaveTextContent(
+      "Maya’s phone was removed while they were added, so it still holds its own memory.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Open today’s page" })).toBeInTheDocument();
+  });
+
   it("uses this computer's memory, and says nothing came in", async () => {
     const { engine, dialog } = await withChoice();
     await userEvent.click(

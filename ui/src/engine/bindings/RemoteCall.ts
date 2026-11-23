@@ -45,4 +45,4 @@ things?: number,
  * The person chose on the phone to bring its things in from what a move put aside: the
  * computer adds them to its memory without asking again.
  */
-bring?: boolean, } | { "cmd": "memoryDone", size: number, sha256: string, passphrase: string, };
+bring?: boolean, } | { "cmd": "memoryDone", size: number, sha256: string, passphrase: string, } | { "cmd": "stopMemory" };

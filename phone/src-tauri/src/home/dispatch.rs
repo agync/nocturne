@@ -160,6 +160,7 @@ pub fn answer(open: &Open, call: RemoteCall) -> RemoteAnswer {
         | RemoteCall::SeeOnlineChange
         | RemoteCall::OfferMemory { .. }
         | RemoteCall::MemoryDone { .. }
+        | RemoteCall::StopMemory
         | RemoteCall::Disconnect => err(PhoneError::Invalid),
     }
 }

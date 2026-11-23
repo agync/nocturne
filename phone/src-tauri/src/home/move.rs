@@ -1089,9 +1089,15 @@ pub async fn move_bring_aside<R: Runtime>(app: AppHandle<R>) -> Result<Moved, Mo
 /// "Stop" while what was put aside is brought in: it ends and nothing changes here. This phone
 /// stays with its computer.
 #[tauri::command]
-pub fn move_bring_stop<R: Runtime>(app: AppHandle<R>) {
+pub async fn move_bring_stop<R: Runtime>(app: AppHandle<R>) {
     tracing::info!("the person stopped bringing what was put aside");
     app.state::<Moving>().halt();
+    // The computer stops too, and says so there.
+    if let Some(phone) = app.state::<AppState>().phone(&app)
+        && let Err(e) = phone.call(RemoteCall::StopMemory).await
+    {
+        tracing::info!("the computer did not hear the stop: {e:?}");
+    }
 }
 
 /// The memory a move put aside here, if any, for This phone.
