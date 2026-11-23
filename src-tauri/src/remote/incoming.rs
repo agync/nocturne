@@ -221,6 +221,8 @@ impl Incoming {
             Upload {
                 conv,
                 call_id,
+                // A memory move is not a keep: it has no keep id.
+                client_id: String::new(),
                 mime: String::new(),
                 declared: size as u64,
                 received: 0,
