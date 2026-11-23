@@ -300,8 +300,17 @@ them, each only when there is one: "{pages, plural, one {# page}
 other {# pages}}", "{reflections, plural, one {# reflection} other {# reflections}}", "{answers,
 plural, one {# answer to the morning question} other {# answers to the morning question}}",
 "{names, plural, one {# name you taught it} other {# names you taught it}}", "{choices, plural, one
-{# thing you confirmed or settled} other {# things you confirmed or settled}}" and "its settings",
-joined with commas and a last "and". With none of them, the line is left out.
+{# thing you confirmed or settled} other {# things you confirmed or settled}}", "{calendar, plural,
+one {# calendar entry from before {calendarFrom}} other {# calendar entries from before
+{calendarFrom}}}", "{health, plural, one {# health reading from before {healthFrom}} other {#
+health readings from before {healthFrom}}}" and "its settings", joined with commas and a last
+"and". With none of them, the line is left out. The calendar and health items count what the phone
+kept that is older than what it sends again: {calendarFrom} is the day two days before the move and
+{healthFrom} the day 30 days before it, written as the phone writes a day ("12 November"). The entries
+and readings themselves stay in the phone's calendar and health app; what removing deletes is
+Nocturne's copy of them, with what the person forgot of them and their marks. For example: "These stay only on this phone, so removing
+it deletes them for good: 12 pages, 3 reflections, 140 calendar entries from before 21 November and
+2,310 health readings from before 24 October."
 
 **Edge cases.**
 
@@ -361,7 +370,7 @@ joined with commas and a last "and". With none of them, the line is left out.
 | Phone, waiting for the choice | "{computer} already holds a memory." / "Choose on {computer} what happens to yours. Nothing changes until you do." / "Waiting for {computer}…" |
 | Phone, bringing in | "Bringing your things to {computer}" / "Getting your things ready…" / "{done} of {size}" / "Adding them to the memory on {computer}…" |
 | Phone, brought in | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." / "Your memory on this phone" / "Keep it put aside for 30 days" (selected; "Keep it put aside" when anything stays only on the phone) / "Remove it from this phone" / "Done" |
-| Phone, what stays only here | "These stay only on this phone, so removing it deletes them for good: {list}." / "{pages, plural, one {# page} other {# pages}}" / "{reflections, plural, one {# reflection} other {# reflections}}" / "{answers, plural, one {# answer to the morning question} other {# answers to the morning question}}" / "{names, plural, one {# name you taught it} other {# names you taught it}}" / "{choices, plural, one {# thing you confirmed or settled} other {# things you confirmed or settled}}" / "its settings" |
+| Phone, what stays only here | "These stay only on this phone, so removing it deletes them for good: {list}." / "{pages, plural, one {# page} other {# pages}}" / "{reflections, plural, one {# reflection} other {# reflections}}" / "{answers, plural, one {# answer to the morning question} other {# answers to the morning question}}" / "{names, plural, one {# name you taught it} other {# names you taught it}}" / "{choices, plural, one {# thing you confirmed or settled} other {# things you confirmed or settled}}" / "{calendar, plural, one {# calendar entry from before {calendarFrom}} other {# calendar entries from before {calendarFrom}}}" / "{health, plural, one {# health reading from before {healthFrom}} other {# health readings from before {healthFrom}}}" / "its settings" |
 | Phone, use the computer's | "This phone now works with {computer}." / "Nothing went to {computer}. What this phone held is put aside here, and its calendar and health go to {computer} from now on." / "Keep it put aside" / "Remove it from this phone" / "Nothing from this phone went to {computer}, so removing it deletes it for good." |
 | Put aside, later | "Bring its things to {computer}…" |
 | Phone, stop bringing in | "Stop bringing your things in? Nothing changes on {computer}, and your memory stays on this phone." / "Stop" / "Keep going" / "Stopped. Nothing changed on {computer}." |
