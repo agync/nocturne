@@ -56,9 +56,14 @@ pub enum Job {
 /// Called after every request the mind makes, whatever came of it.
 pub type Record = Arc<dyn Fn(Job, &Exchange) + Send + Sync>;
 
+/// Turns a recording the provider does not take as it is (m4a, aac, webm) into WAV bytes, as
+/// the device's own decoder can; `None` where it cannot.
+pub type Decode = Arc<dyn Fn(&Path) -> Option<Vec<u8>> + Send + Sync>;
+
 pub struct ProviderMind {
     provider: Provider,
     record: Option<Record>,
+    decode: Option<Decode>,
     /// The provider refused a reply by a JSON schema once: replies are asked for by the
     /// prompt alone from then on.
     schema_refused: AtomicBool,
@@ -130,6 +135,7 @@ impl ProviderMind {
         ProviderMind {
             provider,
             record: None,
+            decode: None,
             schema_refused: AtomicBool::new(false),
             photos_refused: AtomicU32::new(0),
             sound_refused: AtomicU32::new(0),
@@ -139,6 +145,12 @@ impl ProviderMind {
     /// Tells `record` of every request made, for the Sent online list.
     pub fn with_record(mut self, record: Record) -> ProviderMind {
         self.record = Some(record);
+        self
+    }
+
+    /// Sends a recording in another format as WAV, through `decode`.
+    pub fn with_decoder(mut self, decode: Decode) -> ProviderMind {
+        self.decode = Some(decode);
         self
     }
 
@@ -249,23 +261,36 @@ impl ProviderMind {
         if self.sound_refused.load(Ordering::Relaxed) >= REFUSED_IN_A_ROW {
             return Err(MindError::NotTaken("recordings".into()));
         }
-        let format = match audio
+        // Providers take WAV and MP3 sound; anything else goes as WAV once decoded here.
+        let (format, decode) = match audio
             .extension()
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase)
             .as_deref()
         {
-            Some("wav") => "wav",
-            Some("mp3") => "mp3",
-            _ => return Err(MindError::NotTaken("this kind of recording".into())),
+            Some("wav") => ("wav", None),
+            Some("mp3") => ("mp3", None),
+            _ => match &self.decode {
+                Some(d) => ("wav", Some(d.clone())),
+                None => return Err(MindError::NotTaken("this kind of recording".into())),
+            },
         };
         let path = audio.to_path_buf();
         let data = tokio::task::spawn_blocking(move || -> Result<String, MindError> {
             let fail = |e: std::io::Error| MindError::Failed(e.to_string());
-            if std::fs::metadata(&path).map_err(fail)?.len() > MAX_RECORDING {
+            let bytes = match decode {
+                Some(decode) => decode(&path)
+                    .ok_or_else(|| MindError::NotTaken("this kind of recording".into()))?,
+                None => {
+                    if std::fs::metadata(&path).map_err(fail)?.len() > MAX_RECORDING {
+                        return Err(MindError::NotTaken("a recording this long".into()));
+                    }
+                    std::fs::read(&path).map_err(fail)?
+                }
+            };
+            if bytes.len() as u64 > MAX_RECORDING {
                 return Err(MindError::NotTaken("a recording this long".into()));
             }
-            let bytes = std::fs::read(&path).map_err(fail)?;
             Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
         })
         .await

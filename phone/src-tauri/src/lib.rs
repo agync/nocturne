@@ -40,6 +40,7 @@ pub fn run() {
             let thinking =
                 mind::PhoneMind::new(dir, Box::new(mind::SafeKeys(app.handle().clone())), clock);
             thinking.follow(&home);
+            thinking.decode_with(mind::sound::decoder(app.handle()));
             thinking.tell(std::sync::Arc::new(mind::events::PhoneEvents(
                 app.handle().clone(),
             )));

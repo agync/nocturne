@@ -14,6 +14,7 @@ pub mod events;
 pub mod host;
 pub mod keys;
 pub mod sent;
+pub mod sound;
 pub mod status;
 #[cfg(test)]
 mod tests;
@@ -158,6 +159,8 @@ pub struct PhoneMind {
     trouble: Arc<Mutex<Option<status::Trouble>>>,
     /// Held while this month's count is written.
     counting: Mutex<()>,
+    /// The phone's decoder, for recordings the provider takes only as WAV.
+    decode: Arc<std::sync::OnceLock<nocturne_provider::Decode>>,
     /// Who hears of things read and pages saved.
     events: Mutex<Arc<dyn nocturne_intelligence::Events>>,
     slot: MindSlot,
@@ -175,6 +178,7 @@ impl PhoneMind {
             sent: Arc::new(SentLog::new(dir.clone(), clock.clone())),
             events: Mutex::new(Arc::new(NullEvents)),
             trouble: Arc::default(),
+            decode: Arc::default(),
             counting: Mutex::new(()),
             dir,
             keys,
@@ -200,6 +204,11 @@ impl PhoneMind {
         home.on_close(Box::new(move || {
             lock(&thinking).take();
         }));
+    }
+
+    /// Decodes recordings with `decode`; the first one given stays.
+    pub fn decode_with(&self, decode: nocturne_provider::Decode) {
+        let _ = self.decode.set(decode);
     }
 
     /// Tells `events` of things read and pages saved, from the next store opened.
@@ -233,7 +242,15 @@ impl PhoneMind {
                 *trouble = status::Trouble::after(exchange.status, clock.now(), *trouble);
             })
         };
-        let mind = Arc::new(ProviderMind::new(provider).with_record(record));
+        let decode: nocturne_provider::Decode = {
+            let decode = self.decode.clone();
+            Arc::new(move |path| decode.get().and_then(|d| d(path)))
+        };
+        let mind = Arc::new(
+            ProviderMind::new(provider)
+                .with_record(record)
+                .with_decoder(decode),
+        );
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
         *self.slot.write().unwrap_or_else(|e| e.into_inner()) = Some(slotted);
         let on = On {
