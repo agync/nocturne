@@ -28,8 +28,8 @@ use std::sync::mpsc;
 use jiff::{SignedDuration, Timestamp};
 use nocturne_channel::client::{CallError, Phone, Reach};
 use nocturne_contract::{
-    BackupPhase, BackupReport, BroughtCounts, HomeError, MemoryCounts, PhoneError, PhoneMode,
-    RemoteAnswer, RemoteCall,
+    BackupPhase, BackupReport, BroughtCounts, HomeError, KeptCounts, MemoryCounts, PhoneError,
+    PhoneMode, RemoteAnswer, RemoteCall,
 };
 use nocturne_engine::BackupRun;
 use serde::{Deserialize, Serialize};
@@ -176,6 +176,12 @@ pub struct MoveAside {
     pub on_computer: bool,
     /// When it goes by itself, if it does.
     pub keep_until: Option<String>,
+    /// When it was put aside, for "Remove what was put aside {day}?".
+    pub at: Option<String>,
+    /// What it holds, for deleting it for good; none when it cannot be read.
+    pub counts: Option<KeptCounts>,
+    /// It holds pages or reflections written on this phone.
+    pub writing: bool,
 }
 
 /// How the computer took what was sent.
@@ -421,9 +427,13 @@ impl Home {
     /// The memory a move put aside here, for This phone.
     pub fn move_aside(&self) -> Option<MoveAside> {
         let note = self.put_aside_note()?;
-        self.path(&note.folder).exists().then_some(MoveAside {
+        let dir = self.path(&note.folder);
+        dir.exists().then(|| MoveAside {
             on_computer: note.on_computer,
             keep_until: note.keep_until,
+            at: self.put_aside_at(&note.folder),
+            counts: nocturne_engine::store_kept_counts(&dir).ok(),
+            writing: nocturne_engine::store_has_writing(&dir).unwrap_or(false),
         })
     }
 
@@ -1508,13 +1518,18 @@ mod tests {
         drop(only);
         assert_eq!(home.mode(true), Some(PhoneMode::Companion));
         assert!(!home.store_dir().exists());
-        assert_eq!(
-            home.move_aside(),
-            Some(super::MoveAside {
-                on_computer: false,
-                keep_until: None,
-            })
+        let aside = home.move_aside().unwrap();
+        assert!(!aside.on_computer);
+        assert_eq!(aside.keep_until, None);
+        assert!(
+            aside.at.is_some(),
+            "when it was put aside, for the question"
         );
+        let counts = aside
+            .counts
+            .expect("what it holds, for deleting it for good");
+        assert!(counts.things + counts.journal_entries > 0, "{counts:?}");
+        assert!(!aside.writing, "no pages or reflections were written here");
         clock.advance_days(400);
         home.clear_old_put_aside();
         assert_eq!(home.put_aside_names().len(), 1, "it is the only copy");

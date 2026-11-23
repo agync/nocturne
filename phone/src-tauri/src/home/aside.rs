@@ -25,7 +25,7 @@ fn folder_bytes(dir: &Path) -> u64 {
 
 impl Home {
     /// When a memory was put aside, from its folder's name, written in the phone's time zone.
-    fn put_aside_at(&self, name: &str) -> Option<String> {
+    pub(super) fn put_aside_at(&self, name: &str) -> Option<String> {
         let stamp = name.strip_prefix(PUT_ASIDE)?;
         let stamp = stamp.get(..17)?;
         let civil = jiff::civil::DateTime::strptime("%Y-%m-%d-%H%M%S", stamp).ok()?;

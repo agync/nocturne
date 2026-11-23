@@ -100,17 +100,54 @@ describe("the memory a move put aside, in This phone", () => {
     expect(screen.queryByRole("button", { name: /Bring its things/ })).toBeNull();
   });
 
-  it("says removing deletes it for good when nothing of it went", async () => {
-    const aside = fakeAside({ onComputer: false, keepUntil: null });
+  it("asks to delete it for good, with what it holds, when nothing of it went", async () => {
+    const aside = fakeAside({
+      onComputer: false,
+      keepUntil: null,
+      at: "2026-11-23T08:00:00Z",
+      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3 },
+      writing: false,
+    });
     open(aside);
     fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
     expect(
+      screen.getByRole("heading", {
+        name: "Delete what was put aside Monday 23 November for good?",
+      }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(
-        "Nothing from this phone went to Maya’s laptop, so removing it deletes it for good.",
+        "Nothing from it went to Maya’s laptop. This deletes 12 things kept, 1 journal entry and 3 photos and recordings, and they can’t be brought back.",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Remove it from this phone" }));
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete for good" }));
     await waitFor(() => expect(aside.putAside).toHaveBeenCalledWith(true));
+  });
+
+  it("asks to remove the copy left here once its things are on the computer", async () => {
+    const aside = fakeAside({
+      onComputer: true,
+      keepUntil: "2026-12-23T08:00:00Z",
+      at: "2026-11-23T08:00:00Z",
+      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3 },
+      writing: true,
+    });
+    open(aside);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
+    expect(
+      screen.getByRole("heading", { name: "Remove what was put aside Monday 23 November?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Its things are on Maya’s laptop now. This removes the copy left on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Pages and reflections written on this phone go with it."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(aside.putAside).not.toHaveBeenCalled();
   });
 
   it("says why bringing them in did not finish, and nothing changed", async () => {

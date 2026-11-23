@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import { type AsideApi, endedFor, type MoveAside, type Moved } from "../../alone/screens/MoveFlow";
 import {
@@ -140,22 +141,47 @@ export function ThisPhone({
       />
     );
   if (step?.name === "remove" && put) {
+    // Its things are on the computer: this removes a copy. Otherwise it is the only one, and
+    // removing it deletes it for good.
+    const day = put.at ? formatLongDay(put.at) : null;
+    const counts = put.counts ?? null;
+    const title = !day
+      ? t("moving.phone.moved.choice")
+      : put.onComputer
+        ? t("moving.phone.aside.removeAsk", { day })
+        : t("moving.phone.aside.deleteAsk", { day });
     return (
       <Page bar={<BackBar title={t("phone.sheet.title")} onBack={() => setStep(null)} />}>
         <main className="ph-main">
           <h2 className="ph-h1" tabIndex={-1} ref={heading}>
-            {t("moving.phone.moved.choice")}
+            {title}
           </h2>
-          {put.onComputer ? null : (
+          {put.onComputer ? (
+            <>
+              <p className="ph-body">{t("moving.phone.aside.removeBody", { computer })}</p>
+              {put.writing ? (
+                <p className="ph-body">{t("moving.phone.aside.removeWriting")}</p>
+              ) : null}
+            </>
+          ) : counts ? (
+            <p className="ph-body">
+              {t("moving.phone.aside.deleteBody", {
+                computer,
+                things: counts.things,
+                entries: counts.journalEntries,
+                media: counts.photosAndRecordings,
+              })}
+            </p>
+          ) : (
             <p className="ph-body">{t("moving.phone.used.warning", { computer })}</p>
           )}
           <div className="ph-spacer" />
           <div className="ph-stack">
             <Button kind="danger" disabled={step.busy} onClick={() => settle(true)}>
-              {t("moving.phone.used.remove")}
+              {t(put.onComputer ? "moving.phone.aside.removeYes" : "moving.phone.aside.deleteYes")}
             </Button>
             <Button kind="quiet" onClick={() => setStep(null)}>
-              {t("moving.phone.used.keep")}
+              {t("moving.phone.aside.keepIt")}
             </Button>
           </div>
         </main>
