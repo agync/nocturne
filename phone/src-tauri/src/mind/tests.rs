@@ -590,3 +590,41 @@ fn the_screens_hear_of_each_thing_read() {
     w.pass();
     assert!(heard.0.lock().unwrap().contains(&id));
 }
+
+#[test]
+fn a_voice_note_waits_for_the_phones_own_reader() {
+    use nocturne_contract::{ItemKind, ItemStatus};
+    let w = world();
+    let open = w.home.open_store().unwrap();
+    let wav = w._dir.path().join("note.wav");
+    std::fs::write(&wav, b"RIFF....WAVE").unwrap();
+    let kept = open
+        .engine
+        .keep_file(&wav, nocturne_contract::Source::Recording)
+        .unwrap();
+    let nocturne_contract::Kept::New { item } = kept else {
+        panic!("kept before");
+    };
+    assert_eq!(item.kind, ItemKind::Audio);
+    w.mind.turn_on(w.settings()).unwrap();
+    w.pass();
+    assert_eq!(w.status(&item.id), ItemStatus::Kept);
+    assert!(w.stand_in.chats().is_empty());
+    // The phone's reader has had its turn and could not decode it: the mind may take it.
+    assert!(w.home.set_language("en-GB"));
+    w.home.hear_waiting(&NoWords);
+    w.pass();
+    assert!(!w.stand_in.chats().is_empty());
+}
+
+/// A speech reader that is ready and hears nothing.
+struct NoWords;
+
+impl crate::home::voice::Reader for NoWords {
+    fn ready(&self, _: &str) -> bool {
+        true
+    }
+    fn read(&self, _: &Path, _: &str) -> crate::home::voice::Heard {
+        crate::home::voice::Heard::Nothing
+    }
+}

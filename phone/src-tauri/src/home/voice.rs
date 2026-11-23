@@ -97,6 +97,17 @@ pub struct Voice {
     running: AtomicBool,
     /// Notes read this run that gave no words to keep: not read again until the app starts.
     nothing: Mutex<HashSet<String>>,
+    /// The reader said it cannot read the phone's language now.
+    unready: AtomicBool,
+}
+
+impl Voice {
+    /// Whether the phone's own reader has had its turn at a voice note still without words:
+    /// it found none, could not decode it, or cannot read the phone's language. Until then a
+    /// mind leaves the note to it.
+    pub fn turn_over(&self, id: &str) -> bool {
+        self.unready.load(Ordering::SeqCst) || lock(&self.nothing).contains(id)
+    }
 }
 
 struct Running<'a>(&'a AtomicBool);
@@ -317,7 +328,9 @@ impl Home {
                 break;
             }
             if !asked {
-                if !reader.ready(&language) {
+                let ready = reader.ready(&language);
+                self.voice.unready.store(!ready, Ordering::SeqCst);
+                if !ready {
                     break;
                 }
                 asked = true;

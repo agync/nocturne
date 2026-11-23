@@ -218,6 +218,8 @@ impl DrainHandle {
 
 #[derive(Default)]
 struct State {
+    /// What waits for something else before this reader takes it (`Reader::hold_while`).
+    hold: Option<Hold>,
     paused: bool,
     asks: u32,
     read_now: HashSet<String>,
@@ -249,6 +251,9 @@ struct Inner {
     readings: AtomicU64,
     second_looks: AtomicU64,
 }
+
+/// Whether a waiting item is to be left for now, for another reader that goes first.
+pub type Hold = Arc<dyn Fn(&PendingItem) -> bool + Send + Sync>;
 
 /// The reader. Cheap to clone; clones share one queue.
 #[derive(Clone)]
@@ -365,6 +370,12 @@ impl Reader {
         AskGuard {
             reader: self.clone(),
         }
+    }
+
+    /// Leaves each waiting item `hold` says to leave, until it no longer says so: on a phone,
+    /// a voice note waits for the phone's own speech reader before the mind takes it.
+    pub fn hold_while(&self, hold: Hold) {
+        self.state().hold = Some(hold);
     }
 
     /// Pause (the person's pause) or resume. Pausing gives back the item in flight; the app
@@ -592,14 +603,16 @@ impl Reader {
         on_ac: bool,
         now: Timestamp,
     ) -> Result<Option<(u8, PendingItem, bool)>, EngineError> {
-        let (read_now, read_all, drain, cooldown) = {
+        let (read_now, read_all, drain, cooldown, hold) = {
             let mut st = self.state();
             st.cooldown.retain(|_, until| *until > now);
+            let hold = st.hold.clone();
             (
                 st.read_now.clone(),
                 st.read_all_now,
                 st.drain.clone(),
                 st.cooldown.clone(),
+                hold,
             )
         };
         self.eng(move |e| {
@@ -608,7 +621,7 @@ impl Reader {
             let waiting = e.pending_items(PEEK)?;
             let waiting_ids: HashSet<String> = waiting.iter().map(|p| p.id.clone()).collect();
             for p in waiting {
-                if cooldown.contains_key(&p.id) {
+                if cooldown.contains_key(&p.id) || hold.as_ref().is_some_and(|h| h(&p)) {
                     continue;
                 }
                 let class = if read_all || read_now.contains(&p.id) {

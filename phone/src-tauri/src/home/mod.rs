@@ -82,7 +82,7 @@ pub struct Home {
     pub(crate) sheet: AtomicBool,
     /// Callers waiting to swap, reopen or empty the store; long reads let go for them.
     writers: AtomicUsize,
-    pub(crate) voice: voice::Voice,
+    pub(crate) voice: Arc<voice::Voice>,
     /// Held while fading runs, so a second ask for the same day waits and then finds it done.
     fading: Mutex<()>,
     /// The passphrase work a backup asks of whoever opens it; `None` is what Nocturne writes.
@@ -155,7 +155,7 @@ impl Home {
             stop: AtomicBool::new(false),
             sheet: AtomicBool::new(false),
             writers: AtomicUsize::new(0),
-            voice: voice::Voice::default(),
+            voice: Arc::default(),
             fading: Mutex::new(()),
             work_factor: None,
             generation: AtomicU64::new(0),
@@ -170,6 +170,11 @@ impl Home {
 
     /// Runs `f` each time the open store is let go, under [`Home::exclusive`], so whatever
     /// holds it lets go too before the store changes.
+    /// The phone's own speech reader, for what a mind leaves to it.
+    pub(crate) fn voice(&self) -> Arc<voice::Voice> {
+        self.voice.clone()
+    }
+
     pub fn on_close(&self, f: OnClose) {
         lock(&self.on_close).push(f);
     }
