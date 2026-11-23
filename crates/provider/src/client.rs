@@ -52,8 +52,8 @@ pub struct Reply {
 pub struct Failed {
     pub failure: OnlineFailure,
     pub exchange: Exchange,
-    /// The request never left: its address was refused, its name could not be looked up
-    /// (`NoInternet`), or the provider was stopped.
+    /// The request never left: its address was refused, there was no way to the internet
+    /// (`NoInternet`: its name could not be looked up, or no route), or it was stopped first.
     pub refused: bool,
 }
 
@@ -391,6 +391,9 @@ impl Provider {
             Ok(r) => r,
             Err(e) if caused_by::<AddressRefused>(&e) => return Err(refused()),
             Err(e) if caused_by::<LookupFailed>(&e) => {
+                return Err(never_left(OnlineFailure::NoInternet));
+            }
+            Err(e) if transport(&e) == OnlineFailure::NoInternet => {
                 return Err(never_left(OnlineFailure::NoInternet));
             }
             Err(e) => {

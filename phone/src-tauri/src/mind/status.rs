@@ -59,6 +59,10 @@ pub enum MindStatus {
         host: String,
         since: String,
     },
+    /// This phone has no way to the internet: nothing left it.
+    Offline {
+        host: String,
+    },
     KeyRefused {
         host: String,
     },
@@ -107,11 +111,21 @@ impl From<Sent> for MindSent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Trouble {
     Unreachable(Timestamp),
+    /// No way to the internet since then.
+    Offline(Timestamp),
     KeyRefused,
     NoCredit,
 }
 
 impl Trouble {
+    /// A request found no way to the internet: offline since it was first found so.
+    pub(super) fn offline(now: Timestamp, was: Option<Trouble>) -> Trouble {
+        match was {
+            Some(Trouble::Offline(since)) => Trouble::Offline(since),
+            _ => Trouble::Offline(now),
+        }
+    }
+
     /// After a request: `None` clears what was wrong, the rest is kept until a request works.
     pub(super) fn after(
         status: Option<u16>,
@@ -266,6 +280,7 @@ impl PhoneMind {
                 host,
                 since: since.to_string(),
             },
+            Some(Trouble::Offline(_)) => MindStatus::Offline { host },
             Some(Trouble::KeyRefused) => MindStatus::KeyRefused { host },
             Some(Trouble::NoCredit) => MindStatus::NoCredit { host },
         }

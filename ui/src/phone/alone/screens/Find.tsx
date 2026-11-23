@@ -4,7 +4,7 @@ import { t } from "../../../copy/t";
 import type { FoundItem, ItemKind, Receipt } from "../../../engine/bindings";
 import { Icon, type IconName, Page } from "../../screens/ui";
 import type { MindTrouble } from "../mind";
-import { MindNotice, UnreachableAsk } from "./MindNotice";
+import { MindNotice, Offline, UnreachableAsk } from "./MindNotice";
 
 type State =
   | { name: "idle" }
@@ -148,6 +148,7 @@ export function HomeFind({
       <main className="ph-main ph-main--tight" style={{ gap: 16 }}>
         {status && onFixMind ? <MindNotice status={status} onFix={onFixMind} /> : null}
         {status?.state === "unreachable" ? <UnreachableAsk host={status.host} /> : null}
+        {status?.state === "offline" ? <Offline /> : null}
         <form onSubmit={submit}>
           <div className="ph-find">
             <input

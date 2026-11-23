@@ -56,6 +56,10 @@ pub enum Job {
 /// Called after every request the mind makes, whatever came of it.
 pub type Record = Arc<dyn Fn(Job, &Exchange) + Send + Sync>;
 
+/// Called for a request that never left, with why: no way to the internet, an address refused,
+/// or stopped before it went.
+pub type Unsent = Arc<dyn Fn(Job, OnlineFailure) + Send + Sync>;
+
 /// Turns a recording the provider does not take as it is (m4a, aac, webm) into WAV bytes, as
 /// the device's own decoder can; `None` where it cannot.
 pub type Decode = Arc<dyn Fn(&Path) -> Option<Vec<u8>> + Send + Sync>;
@@ -63,6 +67,7 @@ pub type Decode = Arc<dyn Fn(&Path) -> Option<Vec<u8>> + Send + Sync>;
 pub struct ProviderMind {
     provider: Provider,
     record: Option<Record>,
+    unsent: Option<Unsent>,
     decode: Option<Decode>,
     /// The provider refused a reply by a JSON schema once: replies are asked for by the
     /// prompt alone from then on.
@@ -135,6 +140,7 @@ impl ProviderMind {
         ProviderMind {
             provider,
             record: None,
+            unsent: None,
             decode: None,
             schema_refused: AtomicBool::new(false),
             photos_refused: AtomicU32::new(0),
@@ -145,6 +151,12 @@ impl ProviderMind {
     /// Tells `record` of every request made, for the Sent online list.
     pub fn with_record(mut self, record: Record) -> ProviderMind {
         self.record = Some(record);
+        self
+    }
+
+    /// Tells `unsent` of every request that never left.
+    pub fn with_unsent(mut self, unsent: Unsent) -> ProviderMind {
+        self.unsent = Some(unsent);
         self
     }
 
@@ -169,7 +181,11 @@ impl ProviderMind {
         match &reply {
             Ok(r) => self.note(job, &r.exchange),
             Err(f) if !f.refused => self.note(job, &f.exchange),
-            Err(_) => {}
+            Err(f) => {
+                if let Some(unsent) = &self.unsent {
+                    unsent(job, f.failure);
+                }
+            }
         }
         reply
     }

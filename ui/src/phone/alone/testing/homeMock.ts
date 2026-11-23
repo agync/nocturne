@@ -265,8 +265,8 @@ export function resetScriptedMind(): void {
 }
 
 /**
- * `&trouble=` names how the service is doing once the mind is on: `unreachable`, `keyRefused`,
- * `noCredit` or `paused`. With none it is fine.
+ * `&trouble=` names how the service is doing once the mind is on: `unreachable`, `offline`,
+ * `keyRefused`, `noCredit` or `paused`. With none it is fine.
  */
 function mindStatus(mind: MindChosen): MindStatus {
   if (mind.state !== "on") return { state: "off" };
@@ -276,6 +276,8 @@ function mindStatus(mind: MindChosen): MindStatus {
       ? scriptedMind.trouble
       : new URLSearchParams(location.search).get("trouble");
   switch (trouble) {
+    case "offline":
+      return { state: "offline", host };
     case "unreachable":
       return { state: "unreachable", host, since: `${HOME_DAY}T06:40:00.000Z` };
     case "keyRefused":

@@ -416,7 +416,17 @@ describe("Today and Ask with a mind", () => {
   });
 });
 
-describe("When the service stops answering", () => {
+describe("When the service or the phone is not online", () => {
+  it("says this phone isn't online on Today and Ask, and finds by words", async () => {
+    await app("m=kept&mind=on&trouble=offline");
+    const line = "This phone isn’t online. What you keep waits to be read.";
+    expect(await screen.findByText(line)).toBeVisible();
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(line)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Find something you kept" })).toBeVisible();
+    expect(screen.queryByText(/Answers are back/)).toBeNull();
+  });
+
   it("turns Ask back to the mind when the service answers again", async () => {
     await app("m=kept&mind=on&trouble=unreachable");
     await screen.findByText(/answers\.example hasn’t answered/);

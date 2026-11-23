@@ -30,7 +30,7 @@ use nocturne_engine::Clock;
 use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
 };
-use nocturne_provider::address::{OnlineKey, UrlProblem, host_of, validate_url};
+use nocturne_provider::address::{OnlineKey, Reach, UrlProblem, host_of, validate_url};
 use nocturne_provider::client::Exchange;
 use nocturne_provider::{Job, Provider, ProviderMind};
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,8 @@ const TICK: std::time::Duration = std::time::Duration::from_secs(30);
 const FEW: usize = 3;
 /// How often a pass looks whether the store is wanted.
 const WANTED_POLL: std::time::Duration = std::time::Duration::from_millis(200);
-/// Minutes between looks at a service that stopped answering: the last one repeats.
+/// Minutes between looks at a service that stopped answering, or while this phone is offline:
+/// the last one repeats.
 const LOOK_AGAIN: [i64; 4] = [1, 5, 15, 30];
 
 /// The person's provider, as typed into the form.
@@ -136,6 +137,9 @@ struct Noting {
     clock: Arc<dyn Clock>,
     host: String,
     model: String,
+    /// The service is on the person's own network, where a name not found or no route means
+    /// the service is away, not this phone.
+    at_home: bool,
     /// Cleared as it is turned off or replaced: a request that ends after that is not noted.
     live: AtomicBool,
 }
@@ -148,6 +152,24 @@ impl Noting {
         self.sent.note(job, &self.host, &self.model, exchange);
         let mut trouble = lock(&self.trouble);
         *trouble = status::Trouble::after(exchange.status, self.clock.now(), *trouble);
+    }
+
+    /// A request that never left for want of a way there: this phone is offline, or, for a
+    /// service on the person's own network, the service is not answering. Nothing is listed,
+    /// since nothing went.
+    fn unsent(&self, failure: nocturne_engine::OnlineFailure) {
+        if !self.live.load(Ordering::SeqCst)
+            || failure != nocturne_engine::OnlineFailure::NoInternet
+        {
+            return;
+        }
+        let now = self.clock.now();
+        let mut trouble = lock(&self.trouble);
+        *trouble = if self.at_home {
+            status::Trouble::after(None, now, *trouble)
+        } else {
+            Some(status::Trouble::offline(now, *trouble))
+        };
     }
 }
 
@@ -209,6 +231,10 @@ pub struct PhoneMind {
     /// A new mind is in the slot: the next pass tries again what waited for the last one.
     retry: AtomicBool,
     looks: Mutex<Looks>,
+    /// Looks names up in place of the phone, and whether the service then counts as online
+    /// rather than at home, so a test can take it offline.
+    #[cfg(test)]
+    lookup: Mutex<Option<(nocturne_provider::address::Lookup, bool)>>,
 }
 
 impl PhoneMind {
@@ -229,6 +255,8 @@ impl PhoneMind {
             thinking: Arc::default(),
             retry: AtomicBool::new(false),
             looks: Mutex::default(),
+            #[cfg(test)]
+            lookup: Mutex::default(),
         };
         if let Some(saved) = mind.saved()
             && let Some(key) = mind.keys.key().and_then(|held| unbound(&saved.url, &held))
@@ -273,6 +301,12 @@ impl PhoneMind {
 
     fn fill(&self, saved: &Saved, key: OnlineKey) -> Result<(), UrlProblem> {
         let provider = Provider::new(&saved.url, &saved.model, key)?;
+        let at_home = validate_url(&saved.url).is_ok_and(|a| a.reach == Reach::Own);
+        #[cfg(test)]
+        let (provider, at_home) = match lock(&self.lookup).clone() {
+            Some((lookup, online)) => (provider.with_lookup(lookup), at_home && !online),
+            None => (provider, at_home),
+        };
         let (host, model) = (provider.host().to_string(), provider.model().to_string());
         let noting = Arc::new(Noting {
             sent: self.sent.clone(),
@@ -280,11 +314,16 @@ impl PhoneMind {
             clock: self.clock.clone(),
             host: host.clone(),
             model: model.clone(),
+            at_home,
             live: AtomicBool::new(true),
         });
         let record: nocturne_provider::Record = {
             let noting = noting.clone();
             Arc::new(move |job, exchange| noting.note(job, exchange))
+        };
+        let unsent: nocturne_provider::Unsent = {
+            let noting = noting.clone();
+            Arc::new(move |_job, failure| noting.unsent(failure))
         };
         let decode: nocturne_provider::Decode = {
             let decode = self.decode.clone();
@@ -293,6 +332,7 @@ impl PhoneMind {
         let mind = Arc::new(
             ProviderMind::new(provider)
                 .with_record(record)
+                .with_unsent(unsent)
                 .with_decoder(decode),
         );
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
@@ -399,15 +439,15 @@ impl PhoneMind {
         lock(&self.on).is_some()
     }
 
-    /// While the service is not answering, one look at its list of models when it is due
-    /// ([`LOOK_AGAIN`]), noted as a connection check. Never while
+    /// While the service is not answering or this phone is offline, one look at the service's
+    /// list of models when it is due ([`LOOK_AGAIN`]), noted as a connection check. Never while
     /// paused by the limit. When it is answered, the trouble ends and the next pass reads what
     /// waited. True when a look was made. Blocks on `rt`: call it off the async workers.
     pub fn look_again(&self, rt: &tokio::runtime::Handle) -> bool {
         use status::Trouble;
         let trouble = *lock(&self.trouble);
         let since = match trouble {
-            Some(Trouble::Unreachable(since)) => since,
+            Some(Trouble::Unreachable(since) | Trouble::Offline(since)) => since,
             _ => {
                 *lock(&self.looks) = Looks::default();
                 return false;
@@ -438,7 +478,7 @@ impl PhoneMind {
         }
         match rt.block_on(on.mind.provider().models()) {
             Ok((_, exchange)) => on.noting.note(Job::Check, &exchange),
-            Err(f) if f.refused => {}
+            Err(f) if f.refused => on.noting.unsent(f.failure),
             Err(f) => on.noting.note(Job::Check, &f.exchange),
         }
         if lock(&self.trouble).is_none() {
@@ -447,10 +487,13 @@ impl PhoneMind {
         true
     }
 
-    /// The service stopped answering: only [`PhoneMind::look_again`] reaches it until it
-    /// answers.
+    /// The service stopped answering, or this phone is offline: only [`PhoneMind::look_again`]
+    /// reaches it until it answers.
     fn waiting(&self) -> bool {
-        matches!(*lock(&self.trouble), Some(status::Trouble::Unreachable(_)))
+        matches!(
+            *lock(&self.trouble),
+            Some(status::Trouble::Unreachable(_) | status::Trouble::Offline(_))
+        )
     }
 
     /// Whether the morning after the mind was turned on has come, so a page may be written.
