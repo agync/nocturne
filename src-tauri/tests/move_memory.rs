@@ -492,6 +492,57 @@ fn the_computer_counts_the_things_as_the_phone_does() {
 }
 
 #[test]
+fn what_was_forgotten_on_the_phone_stays_forgotten_on_the_computer() {
+    let home = phone_home();
+    let said = || {
+        nocturne_engine::Candidate::new(
+            "heron feeder",
+            nocturne_engine::Predicate::Scheduled,
+            "Thursday",
+            "The heron feeder is refilled on Thursday.",
+            0.8,
+        )
+    };
+    let read = |e: &Engine, item: &str| {
+        let lease = e
+            .lease_item(item, std::time::Duration::from_secs(60))
+            .unwrap()
+            .lease;
+        e.apply_candidates(item, &lease, vec![said()]).unwrap()
+    };
+    let note = home.engine.find_items("heron feeder", 1).unwrap()[0]
+        .receipt
+        .item_id
+        .clone();
+    let memory = read(&home.engine, &note).created.remove(0);
+    let forget = home.engine.preview_forget(&[memory], false).unwrap();
+    home.engine.forget(&forget.token).unwrap();
+
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, sha) = home.backup();
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
+    let brought = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
+    assert!(
+        matches!(brought, RemoteAnswer::MemoryBrought { .. }),
+        "{brought:?}"
+    );
+    let e = c.h.engine();
+    let here = e
+        .remote_keep(&c.device_id(), "c-note-1")
+        .unwrap()
+        .expect("the thing itself came");
+    assert!(
+        e.find_items("heron feeder", 10).unwrap().is_empty(),
+        "nor is it found by its words, as after a forget here"
+    );
+    assert!(
+        read(&e, &here).created.is_empty(),
+        "the computer never reads what was forgotten from it again"
+    );
+}
+
+#[test]
 fn removing_the_phone_while_its_things_come_to_an_empty_computer_adds_nothing() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
