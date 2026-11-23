@@ -591,6 +591,55 @@ fn the_screens_hear_of_each_thing_read() {
     assert!(heard.0.lock().unwrap().contains(&id));
 }
 
+/// Whether a request the stand-in received after the first `from` carried `words`.
+fn reached(w: &World, from: usize, words: &str) -> bool {
+    w.stand_in.chats()[from..]
+        .iter()
+        .any(|c| c.body.to_string().contains(words))
+}
+
+#[test]
+fn a_memory_being_forgotten_never_reaches_the_provider() {
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    let e = w.home.open_store().unwrap().engine;
+    let ana: Vec<String> = e
+        .retrieve("Ana Hull", None, 12)
+        .unwrap()
+        .into_iter()
+        .filter(|h| h.memory.sentence.contains("Hull"))
+        .map(|h| h.memory.id)
+        .collect();
+    assert!(!ana.is_empty());
+    let preview = e.preview_forget(&ana, false).unwrap();
+    e.forget_begin_only(&preview.token).unwrap();
+    let asked = w.stand_in.chats().len();
+    let steps = w.ask("Ana Hull");
+    let phase = steps.last().unwrap().phase;
+    assert!(
+        matches!(phase, AskPhase::NotSure | AskPhase::Nothing),
+        "{steps:?}"
+    );
+    assert_eq!(w.stand_in.chats().len(), asked);
+    assert!(!reached(&w, asked, "has lived in Hull"));
+}
+
+#[test]
+fn a_private_memory_still_goes_to_the_mind_the_person_chose() {
+    let w = world();
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    let e = w.home.open_store().unwrap().engine;
+    e.set_item_private(&id, true).unwrap();
+    let asked = w.stand_in.chats().len();
+    w.stand_in.then(Answer::text("Ana lives in Hull [m1]."));
+    w.ask("Where does Ana live?");
+    assert!(reached(&w, asked, "has lived in Hull"));
+}
+
 #[test]
 fn a_voice_note_waits_for_the_phones_own_reader() {
     use nocturne_contract::{ItemKind, ItemStatus};

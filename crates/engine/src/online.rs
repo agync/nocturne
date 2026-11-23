@@ -453,6 +453,28 @@ impl Engine {
         self.read(|conn| ids.iter().map(|id| verdict(conn, id)).collect())
     }
 
+    /// For each memory, whether the person's own online mind may be given it (ADR 0020): known,
+    /// not being forgotten and not let go. A private one may: private decides only what comes
+    /// up on its own.
+    pub fn mind_may_read(&self, ids: &[String]) -> Result<Vec<bool>> {
+        self.read(|conn| {
+            ids.iter()
+                .map(|id| {
+                    let row: Option<(bool, Option<String>, String)> = conn
+                        .query_row(
+                            "SELECT forgetting, let_go_at, status FROM memories WHERE id = ?1",
+                            [id],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                        )
+                        .optional()?;
+                    Ok(row.is_some_and(|(forgetting, let_go, status)| {
+                        !forgetting && let_go.is_none() && status != "letGo"
+                    }))
+                })
+                .collect()
+        })
+    }
+
     /// Writes one attempt to the sent log and returns its id.
     pub fn log_online_send(&self, s: NewSend) -> Result<i64> {
         let lines: Vec<Value> = s

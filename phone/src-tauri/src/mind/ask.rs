@@ -81,14 +81,36 @@ impl PhoneMind {
                     return Err(());
                 }
             };
-            Ok(e.with_source_lines(question, hits.clone(), LINES)
-                .unwrap_or(hits))
+            // Nothing being forgotten or let go goes; a line of an original is given only
+            // from an original with nothing of it forgotten (`with_source_lines`).
+            let found = !hits.is_empty();
+            let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
+            let may = e.mind_may_read(&ids).map_err(|x| {
+                tracing::warn!("could not check what the mind may read: {x}");
+            })?;
+            let hits: Vec<Hit> = hits
+                .into_iter()
+                .zip(may)
+                .filter_map(|(h, may)| may.then_some(h))
+                .collect();
+            if hits.is_empty() {
+                return Ok((hits, found));
+            }
+            let hits = e
+                .with_source_lines(question, hits.clone(), LINES)
+                .unwrap_or(hits);
+            Ok((hits, found))
         });
-        let Ok(hits) = found else {
+        let Ok((hits, found)) = found else {
             return out(end(AskPhase::Unavailable));
         };
+        // All it found is being forgotten or let go: not sure, and nothing is asked.
         if hits.is_empty() {
-            return out(end(AskPhase::Nothing));
+            return out(end(if found {
+                AskPhase::NotSure
+            } else {
+                AskPhase::Nothing
+            }));
         }
         let facts: Vec<Fact> = hits.iter().map(|h| Fact::from(h.memory.clone())).collect();
         let mut found = delta(&ask_id, AskPhase::Reading);
