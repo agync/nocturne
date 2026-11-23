@@ -24,19 +24,32 @@ pub struct Declared {
     pub mime: String,
     pub size: f64,
     pub recording: bool,
+    pub client_id: String,
 }
 
 pub fn declared(call: &RemoteCall) -> Option<Declared> {
     match call {
-        RemoteCall::KeepBytes { mime, size, .. } => Some(Declared {
+        RemoteCall::KeepBytes {
+            mime,
+            size,
+            client_id,
+            ..
+        } => Some(Declared {
             mime: mime.clone(),
             size: *size,
             recording: false,
+            client_id: client_id.clone(),
         }),
-        RemoteCall::KeepRecording { mime, size, .. } => Some(Declared {
+        RemoteCall::KeepRecording {
+            mime,
+            size,
+            client_id,
+            ..
+        } => Some(Declared {
             mime: mime.clone(),
             size: *size,
             recording: true,
+            client_id: client_id.clone(),
         }),
         _ => None,
     }
@@ -55,6 +68,7 @@ pub type UploadDone = oneshot::Receiver<Result<Uploaded, PhoneError>>;
 struct Upload {
     conv: ConvId,
     call_id: u32,
+    client_id: String,
     mime: String,
     declared: u64,
     received: u64,
@@ -129,7 +143,9 @@ impl Incoming {
         // The day is charged by the keep itself, once admitted (see `charge_day`).
         let mut uploads = self.uploads();
         if let Some(old) = uploads.get(device) {
-            if core.conv_alive(old.conv) {
+            // The same keep sent again is a retry of the one still here: a cut the computer has
+            // not noticed yet (a phone that lost its signal) must not turn the retry away.
+            if core.conv_alive(old.conv) && old.client_id != decl.client_id {
                 return Err(PhoneError::Busy);
             }
             // A retry from a new session replaces the dead session's partial upload.
@@ -152,6 +168,7 @@ impl Incoming {
             Upload {
                 conv,
                 call_id,
+                client_id: decl.client_id,
                 mime: decl.mime,
                 declared: size,
                 received: 0,
