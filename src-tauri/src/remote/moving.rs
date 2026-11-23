@@ -215,6 +215,8 @@ struct Move {
     here: Option<MemoryCounts>,
     /// The first day something was kept on the phone, as it said.
     since: Option<String>,
+    /// Things kept, as the phone counts them on its own "What moves".
+    things: Option<u32>,
     /// The phone's things are added to the memory here rather than taking its place.
     bring: bool,
     online: bool,
@@ -249,6 +251,7 @@ impl Move {
             bytes,
             here: None,
             since: None,
+            things: None,
             bring: false,
             online: false,
             phase: Phase::Accepted,
@@ -274,7 +277,7 @@ impl Move {
         match &self.phase {
             Phase::Offered(_) => MoveView::Offered {
                 name,
-                items: self.offer.items,
+                items: self.things.unwrap_or(self.offer.items),
                 bytes: self.bytes,
                 here: self.here.is_some(),
                 since: self.since.clone(),
@@ -1145,6 +1148,7 @@ pub struct Offer {
     pub bytes: f64,
     pub schema: u32,
     pub since: Option<String>,
+    pub things: Option<u32>,
     pub bring: bool,
 }
 
@@ -1167,6 +1171,7 @@ pub async fn offer<R: Runtime>(
         bytes,
         schema,
         since,
+        things,
         bring,
     } = offered;
     let id = device.id.as_str();
@@ -1246,6 +1251,7 @@ pub async fn offer<R: Runtime>(
     let mut new = Move::new(device, &data, counts, bytes);
     new.here = here;
     new.since = since;
+    new.things = things.map(|n| n.min(counts.items));
     new.online = online;
     new.room = room;
     if bring {
