@@ -19,12 +19,9 @@ export interface MoveFacts {
   media: number;
 }
 
-/**
- * How the move goes: getting it ready, sending, the computer checking, paused, or finishing while
- * Nocturne on the computer restarts to open it.
- */
+/** How the move goes: getting it ready, sending, the computer checking and adding, or paused. */
 export interface MoveProgress {
-  phase: "preparing" | "sending" | "checking" | "paused" | "finishing";
+  phase: "preparing" | "sending" | "checking" | "paused";
   done: number;
   total: number;
 }
@@ -129,7 +126,7 @@ export function MoveSize({
   onMove(): void;
   onBack(): void;
 }) {
-  const { counts, things, journal, since, bytes, media } = facts;
+  const { things, journal, since, bytes, media } = facts;
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14, paddingTop: 32 }}>
@@ -144,9 +141,6 @@ export function MoveSize({
             </li>
           ) : null}
           {journal > 0 ? <li>{t("moving.phone.size.journal", { count: journal })}</li> : null}
-          {counts.pages > 0 ? (
-            <li>{t("moving.phone.size.pages", { count: counts.pages })}</li>
-          ) : null}
           <li>
             {t(media * 2 >= bytes ? "moving.phone.size.bytes" : "moving.phone.size.bytesOnly", {
               size: formatBytes(bytes),
@@ -188,9 +182,8 @@ function useLeft(progress: MoveProgress | null, now: () => number): number | nul
 
 /**
  * "Moving your memory": how far and, once measured, how long is left; kept things waiting; Stop
- * with its question. While the computer restarts to open it, it says so, and there is nothing
- * left to stop. With `bring`, "Bringing your things to {computer}": once everything went, the
- * computer adds them to its memory, and there is nothing left to stop either.
+ * with its question. With `bring`, "Bringing your things to {computer}": once everything went,
+ * the computer adds them to its memory, and there is nothing left to stop.
  */
 export function MoveMoving({
   computer,
@@ -215,9 +208,8 @@ export function MoveMoving({
   const preparing = !progress || progress.phase === "preparing";
   const share = sent && sent.total > 0 ? Math.min(1, sent.done / sent.total) : 0;
   const paused = progress?.phase === "paused";
-  const finishing = progress?.phase === "finishing";
   const adding = bring && progress?.phase === "checking";
-  const settled = finishing || adding;
+  const settled = adding;
   const left = useLeft(progress, now);
   useEffect(() => {
     if (settled) setAsking(false);
@@ -270,11 +262,7 @@ export function MoveMoving({
             {t("moving.phone.paused", { computer })}
           </p>
         ) : null}
-        {finishing ? (
-          <p className="ph-body" role="status">
-            {t("moving.phone.moving.finishing", { computer })}
-          </p>
-        ) : adding ? (
+        {adding ? (
           <p className="ph-body" role="status">
             {t("moving.phone.bringing.adding", { computer })}
           </p>
