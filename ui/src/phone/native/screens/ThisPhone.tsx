@@ -177,7 +177,6 @@ export function ThisPhone({
     return (
       <MoveMoved
         computer={computer}
-        items={step.moved.items}
         brought={step.moved.brought}
         busy={step.busy}
         onDone={settle}

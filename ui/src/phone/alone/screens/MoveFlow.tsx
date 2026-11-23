@@ -26,12 +26,11 @@ export type MoveError =
   | "failed"
   | "noRoom"
   | "ranOutOfRoom"
-  | "notOpened"
   | "stoppedThere";
 
 /** The computer's answer to the offer. */
 export interface MoveOffered {
-  /** It already opened there, or its things were added: the move only has to finish. */
+  /** Its things were added there already: the move only has to finish. */
   opened: boolean;
   here: MemoryCounts | null;
   /** The person there chose to bring this phone's things in: the move starts by itself. */
@@ -40,10 +39,10 @@ export interface MoveOffered {
   useHere?: boolean;
 }
 
-/** A finished move: how many things arrived, and with `brought` what was added there. */
+/** A finished move: how many things arrived, and what was added there. */
 export interface Moved {
   items: number;
-  brought?: BroughtCounts | null;
+  brought: BroughtCounts;
 }
 
 /** The phone's way to move its memory to the computer it has just paired with. */
@@ -54,8 +53,8 @@ export interface MoveApi {
   holds(): Promise<boolean>;
   facts(): Promise<MoveFacts>;
   /**
-   * Offers the memory and waits for the person on the computer: what it holds, or that the
-   * memory already opened there (a move whose phone went away part way, which only has to
+   * Offers the memory and waits for the person on the computer: what it holds, or that its
+   * things were added there already (a move whose phone went away part way, which only has to
    * finish).
    */
   offer(): Promise<MoveOffered>;
@@ -81,7 +80,6 @@ const ENDED: Partial<Record<MoveError, MoveEnded>> = {
   computerOutdated: "outdated",
   noRoom: "noRoom",
   ranOutOfRoom: "ranOut",
-  notOpened: "notOpened",
   stoppedThere: "stoppedThere",
 };
 
@@ -130,7 +128,7 @@ type Step =
   | { name: "size" }
   | { name: "moving"; bring: boolean }
   | { name: "failed"; why: MoveEnded; bring: boolean }
-  | { name: "moved"; items: number; brought: BroughtCounts | null; busy: boolean }
+  | { name: "moved"; moved: Moved; busy: boolean }
   | { name: "used"; busy: boolean };
 
 /**
@@ -257,7 +255,7 @@ export function MoveFlow({
         setStep({ name: "moving", bring });
       }
       const moved = await api.move(setProgress);
-      setStep({ name: "moved", items: moved.items, brought: moved.brought ?? null, busy: false });
+      setStep({ name: "moved", moved, busy: false });
     } catch (e) {
       const why = errorOf(e);
       if (why === "declined" && agreed.current && !leaving.current)
@@ -329,8 +327,7 @@ export function MoveFlow({
       return (
         <MoveMoved
           computer={computer}
-          items={current.items}
-          brought={current.brought}
+          brought={current.moved.brought}
           busy={current.busy}
           onDone={keepOrRemove}
         />
