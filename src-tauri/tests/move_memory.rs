@@ -279,6 +279,8 @@ impl PhoneHome {
             counts: self.counts(),
             bytes: std::fs::metadata(file).unwrap().len() as f64,
             schema: nocturne_engine::store::latest_version(),
+            since: None,
+            bring: false,
         }
     }
 }
@@ -319,7 +321,13 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
     let (file, sha) = home.backup();
 
     let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
-    assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
+    assert_eq!(
+        accepted,
+        RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false
+        }
+    );
     assert!(
         matches!(c.view(), Some(MoveView::Preparing { .. })),
         "nothing has arrived while the phone gets it ready"
@@ -466,6 +474,8 @@ fn removing_the_phone_while_its_memory_comes_stages_nothing() {
         counts: home.counts(),
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
     let device = c.device_id();
@@ -530,7 +540,10 @@ fn a_computer_that_holds_a_memory_offers_the_choice() {
     assert!(here, "it says a memory is here");
     assert_eq!(items, home.counts().items);
     c.h.ok("answer_move", json!({"choice": "move"}));
-    let RemoteAnswer::MemoryAccepted { here: Some(here) } = block(asked).unwrap().unwrap() else {
+    let RemoteAnswer::MemoryAccepted {
+        here: Some(here), ..
+    } = block(asked).unwrap().unwrap()
+    else {
         panic!("the phone hears what is here")
     };
     assert!(here.items > 0);
@@ -604,6 +617,8 @@ fn an_interrupted_upload_changes_nothing() {
         counts: home.counts(),
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
     let before = c.relay.sent();
@@ -635,10 +650,15 @@ fn an_interrupted_upload_changes_nothing() {
         counts: home.counts(),
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     assert_eq!(
         block(phone.call(again)).unwrap(),
-        RemoteAnswer::MemoryAccepted { here: None }
+        RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false
+        }
     );
 
     // A file that is not what the phone said is refused whole, and nothing changes either.
@@ -677,6 +697,8 @@ fn a_memory_is_not_taken_without_the_persons_word() {
         counts: home.counts(),
         bytes: 5e9,
         schema: 1,
+        since: None,
+        bring: false,
     }));
     assert_eq!(
         too_big.err(),
@@ -688,6 +710,8 @@ fn a_memory_is_not_taken_without_the_persons_word() {
         counts: home.counts(),
         bytes: 10.0,
         schema: nocturne_engine::store::latest_version() + 1,
+        since: None,
+        bring: false,
     }));
     assert_eq!(
         newer.err(),
@@ -725,7 +749,13 @@ fn short_of_room_nothing_moves_until_there_is_some() {
     nocturne_app_lib::remote::moving::pretend_free(c.data(), Some(u64::MAX / 4));
     assert!(c.h.ok("get_move", json!({}))["room"].is_null());
     let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
-    assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
+    assert_eq!(
+        accepted,
+        RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false
+        }
+    );
     assert!(matches!(
         block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
         RemoteAnswer::MemoryArrived { .. }
@@ -750,6 +780,8 @@ fn stopping_on_the_computer_ends_the_move_and_the_phone_hears_so() {
         counts: home.counts(),
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
     let before = c.relay.sent();
@@ -923,9 +955,17 @@ fn the_phone_asks_where_its_memory_stands_then_sends_it() {
         counts: home.counts(),
         bytes: 4096.0,
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     let accepted = offer_and_answer(&c, &phone, offer, "move");
-    assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
+    assert_eq!(
+        accepted,
+        RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false
+        }
+    );
     assert_eq!(
         block(phone.memory_status()).err(),
         Some(CallError::Phone {

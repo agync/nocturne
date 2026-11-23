@@ -431,6 +431,8 @@ pub(crate) async fn offer(
         counts: facts.counts,
         bytes: facts.bytes.max(1.0),
         schema: nocturne_engine::store::latest_version(),
+        since: None,
+        bring: false,
     };
     tracing::info!(
         "offering the memory: {} items, about {} bytes",
@@ -447,7 +449,7 @@ pub(crate) async fn offer(
         }
     })?;
     match answered {
-        RemoteAnswer::MemoryAccepted { here } => {
+        RemoteAnswer::MemoryAccepted { here, .. } => {
             tracing::info!(here = here.is_some(), "the computer agreed to the move");
             Ok(Offered::Accepted { here })
         }
@@ -954,7 +956,10 @@ mod tests {
         fn new() -> Fake {
             Fake {
                 scratch: tempfile::tempdir().unwrap(),
-                offered: Ok(RemoteAnswer::MemoryAccepted { here: None }),
+                offered: Ok(RemoteAnswer::MemoryAccepted {
+                    here: None,
+                    bring: false,
+                }),
                 offers: Mutex::default(),
                 sends: Mutex::default(),
                 statuses: Mutex::default(),

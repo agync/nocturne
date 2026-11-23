@@ -13,6 +13,7 @@ export type { BackupReport } from "./BackupReport";
 export type { BackupSummary } from "./BackupSummary";
 export type { BackupsView } from "./BackupsView";
 export type { Band } from "./Band";
+export type { BroughtCounts } from "./BroughtCounts";
 export type { BroughtItem } from "./BroughtItem";
 export type { CalendarBatch } from "./CalendarBatch";
 export type { CalendarChange } from "./CalendarChange";

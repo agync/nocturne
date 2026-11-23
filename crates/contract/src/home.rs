@@ -70,6 +70,18 @@ pub struct MemoryCounts {
     pub originals: u32,
 }
 
+/// What bringing a phone's things into a computer's memory added there, as both sides say it:
+/// things kept, apart from the journal and check-ins; journal entries and good things; and
+/// check-ins, each as they stand now.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BroughtCounts {
+    pub things: u32,
+    pub entries: u32,
+    pub checkins: u32,
+}
+
 /// What a memory holds, in the columns a phone shows before a restore replaces it: things kept
 /// (not the journal, check-ins, the calendar or readings), journal entries and good things as
 /// they stand now, and photos and recordings.

@@ -462,6 +462,7 @@ impl<R: Runtime> Call<R> {
                 counts,
                 bytes,
                 schema,
+                ..
             } => {
                 let (app, core) = (&self.app, &self.core);
                 super::moving::offer(app, core, &self.out, &self.device, counts, bytes, schema)
