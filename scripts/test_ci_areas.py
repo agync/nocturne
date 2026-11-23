@@ -26,6 +26,7 @@ CASES = (
     ("crates/helpers/fixtures/help/tailnet/1.104.6/help.txt", RUST),
     ("crates/channel/src/words.txt", RUST | {"ui"} | {"android"}),
     ("crates/contract/src/lib.rs", RUST | {"phone-engine"}),
+    (".config/nextest.toml", RUST),
     (".cargo/config.toml", RUST | {"phone-engine"}),
     ("src-tauri/src/remote/mod.rs", RUST | {"ui"}),
     ("src-tauri/tests/ipc.rs", RUST | {"ui"}),

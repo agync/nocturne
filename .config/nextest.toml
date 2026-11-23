@@ -1,0 +1,26 @@
+# cargo-nextest, which runs the Rust tests in CI and in `make rust/test` when it is installed.
+# It does not run doctests: rust/test runs `cargo test --doc` after it.
+
+# The oldest nextest that reads this file: profile inheritance came in 0.9.115.
+nextest-version = "0.9.115"
+
+[profile.default]
+# A failed test runs once more. One that passes then is reported FLAKY, in the run's output and,
+# in CI, in the job summary (scripts/nextest_summary.py); the run still passes.
+retries = 1
+# A test still running after a minute is named, so a hang shows before the job's timeout.
+slow-timeout = "60s"
+
+# CI: every test runs, each failure's output is printed as it happens and again at the end, and
+# the JUnit report the job summary reads is written to target/nextest/ci/junit.xml.
+[profile.ci]
+fail-fast = false
+failure-output = "immediate-final"
+success-output = "never"
+
+[profile.ci.junit]
+path = "junit.xml"
+
+# rust/test's second run, the app with its server, so its report does not overwrite the first.
+[profile.ci-server]
+inherits = "ci"

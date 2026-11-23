@@ -5,8 +5,9 @@
 # jobs below run the same Makefile targets in parallel. Together they cover everything `make check`
 # does:
 #
-#   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check, and the
-#              Away from home interop tests (scripts/away-integration.sh interop)
+#   rust       rust/lint (rustfmt, clippy twice), rust/test (cargo-nextest, the doctests and the
+#              app's server run), contract/check, and the Away from home interop tests
+#              (scripts/away-integration.sh interop)
 #   ui         ui/lint, ui/test
 #   scripts    scripts/test
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
@@ -17,8 +18,8 @@
 # docs built into one site and checked with axe, as docs/contribution/website.md describes), and
 # the tests on the other machines Nocturne ships for:
 #
-#   rust-platforms       rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64,
-#                        and the real engine started on Windows
+#   rust-platforms       rust/test on Linux arm64; the tests and doctests on macOS arm64 and
+#                        Windows x64, and the real engine started on Windows
 #   rust-lint-platforms  rust/lint's clippy on macOS arm64 and Windows x64
 #   ui-platforms         the interface's unit tests on macOS and Windows
 #
@@ -39,6 +40,9 @@
 # action, the Makefile or the Rust toolchain, a push to main and a hand run run every job. A job
 # reads its flag as `!= 'false'`, so a flag the script does not write runs the job rather than
 # skipping it.
+#
+# The Rust tests run under cargo-nextest, which retries a failed test once and lists any that
+# passed on the retry as flaky in the job summary (.config/nextest.toml, scripts/nextest_summary.py).
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
@@ -70,6 +74,8 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
   NODE_VERSION: "26"
+  # The cargo-nextest the Rust jobs install; taiki-e/install-action checks its download's sum.
+  NEXTEST_TOOL: cargo-nextest@0.9.152
   # The system libraries the Tauri crates link against, as release.yml installs them.
   APT_PACKAGES: >-
     build-essential curl file libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
@@ -154,10 +160,18 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: ${{ env.NEXTEST_TOOL }}
       - name: Lint
         run: make rust/lint
       - name: Test
-        run: make rust/test
+        run: make rust/test NEXTEST_PROFILE=ci NEXTEST_SERVER_PROFILE=ci-server
+      - name: Flaky and failed tests
+        if: always()
+        run: >-
+          python3 -I scripts/nextest_summary.py --summary "$GITHUB_STEP_SUMMARY"
+          target/nextest/ci/junit.xml target/nextest/ci-server/junit.xml
       # The release build differs from the test builds: it compiles the code that only a release
       # has (cfg(not(debug_assertions))) and leaves the stand-in features off. Checking it needs no
       # code generation, so it costs a fraction of a package.
@@ -181,8 +195,8 @@ jobs:
           scripts/away-integration.sh interop
 
   # The Rust tests on the other machines Nocturne ships for. Linux on Arm runs both test runs of
-  # rust/test; macOS and Windows run the workspace tests, since the server is built for Linux only.
-  # Tests that need a Linux-only piece (/proc, network namespaces, prctl) are compiled out or
+  # rust/test; macOS and Windows run the tests and doctests, since the server is built for Linux
+  # only. Tests that need a Linux-only piece (/proc, network namespaces, prctl) are compiled out or
   # ignored with their reason elsewhere. Lint, the bindings and the browser tests stay on x86_64.
   rust-platforms:
     name: rust tests (${{ matrix.name }})
@@ -229,20 +243,31 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: ${{ env.NEXTEST_TOOL }}
       # Every test target is built first, so a compile error in one does not hide another's, and
       # every test runs, so one failure does not hide the next. The `test` profile is the one
-      # `cargo test` uses: building the `dev` profile here made the test step compile the same
-      # workspace crates a second time.
+      # cargo-nextest and `cargo test` use: building the `dev` profile here made the test step
+      # compile the same workspace crates a second time.
       - name: Build the tests
         run: cargo build --workspace --tests --profile test --keep-going
       - name: Test
         run: |
           set -euo pipefail
           if [ "$RUNNER_OS" = Linux ]; then
-            make rust/test
+            make rust/test NEXTEST_PROFILE=ci NEXTEST_SERVER_PROFILE=ci-server
           else
-            cargo test --workspace --no-fail-fast
+            cargo nextest run --profile ci --workspace
+            cargo test --doc --workspace
           fi
+      - name: Flaky and failed tests
+        if: always()
+        run: |
+          set -euo pipefail
+          python=$(command -v python3 || command -v python)
+          "$python" -I scripts/nextest_summary.py --summary "$GITHUB_STEP_SUMMARY" \
+            target/nextest/ci/junit.xml target/nextest/ci-server/junit.xml
       # The release build differs from the test builds: it compiles the code that only a release
       # has (cfg(not(debug_assertions))) and leaves the stand-in features off. Checking it needs no
       # code generation, so it costs a fraction of a package.

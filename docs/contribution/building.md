@@ -28,6 +28,12 @@ or `NOCTURNE_REQUIRE_TAILNET_TESTS=1`, a missing toolchain fails the check inste
 fetches the helper's Go modules, checked against `go.sum`; the tests themselves run offline against
 Tailscale's in-process control server.
 
+`make rust/test` runs the tests with [cargo-nextest](https://nexte.st) when it is installed, and
+with `cargo test` otherwise. nextest runs each test in its own process and retries a failed test
+once: one that passes on the retry is reported as flaky, and the run passes. It runs no doctests,
+so `cargo test --doc` follows it. Its settings are in `.config/nextest.toml`. `RUST_PACKAGES`
+narrows the run to some packages (`make rust/test RUST_PACKAGES="-p nocturne-engine"`).
+
 `make check` does not need the embedded Lemonade and does not build a package. The package
 configuration is opt-in: a plain `cargo build`, `make dev` and `make check` work on a checkout that
 has never fetched `vendor/`.
@@ -53,14 +59,14 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 
 | Job | Runs | Covers | Runs when these change |
 |---|---|---|---|
-| `rust` | `make rust/lint rust/test contract/check`, `scripts/away-integration.sh interop` | rustfmt, clippy for both feature sets, both test runs, the release build's compile check, the bindings drift check, the Rust and TypeScript phone sides against each other | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh`, `scripts/away-integration.sh` |
+| `rust` | `make rust/lint rust/test contract/check`, `scripts/away-integration.sh interop` | rustfmt, clippy for both feature sets, the tests under nextest and the doctests, the app's server run, the release build's compile check, the bindings drift check, the Rust and TypeScript phone sides against each other | the Rust side (`crates/`, `src-tauri/`, `phone/`, `docs/guide/`, `.cargo/`, `.config/nextest.toml`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh`, `scripts/away-integration.sh` |
 | `ui` | `make ui/lint ui/test`, `npm run build`, `scripts/check_ui_dist.py` | Biome, the type check, the interface tests, the interface the app ships and its check | `ui/`, `src-tauri/` |
 | `packaging scripts` | `make scripts/test` | the packaging scripts' tests | `scripts/`, the Rust side, `flatpak/`, `docs/contribution/flatpak.md`, `LICENSE`, `ui/package*.json` |
 | `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` | `helpers/`, `scripts/test-tailnet.sh`, `scripts/tailnet-tags.sh` |
 | `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them | always |
 | `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium | `ui/`, `src-tauri/` |
 | `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks | `site/`, `docs/`, `lemonade.lock`, `ui/package*.json` |
-| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo test --workspace --no-fail-fast` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64 | the Rust side |
+| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo nextest run` and `cargo test --doc` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64, and the real engine started on Windows | the Rust side |
 | `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | the Rust side |
 | `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
 | `android` | `make ui/install phone/android`, then the plugins' `testDebugUnitTest` and `lintDebug` through Gradle | the phone app's debug APK for arm64, its plugins' JVM tests and Android lint; the APK is kept for 7 days for emulator checks | `phone/`, `crates/channel/`, `ui/src/phone/`, `ui/phone/`, `ui/vite.phone.config.ts`, `ui/package*.json`, `Cargo.*` |
@@ -78,6 +84,13 @@ the merged code and the first build of the code compiled only for a release. The
 x86_64 Linux both sides run when either changes, while the other platforms run only their own
 side. A job skipped this way counts as passed in `gate`. Every run on `main` finishes, and none is
 dropped while queued.
+
+The tests run under cargo-nextest, at the version `NEXTEST_TOOL` in `ci.yml` names, installed
+with `taiki-e/install-action`, which checks the download's sha256. The `ci` profile runs every
+test, prints each failure's output as it happens and again at the end, and writes a JUnit report.
+A test that fails and then passes on its one retry does not fail the job:
+`scripts/nextest_summary.py` lists it as flaky in the job summary and as a warning on the run, so
+a retry never hides one. The doctests run with `cargo test --doc` for the same packages.
 
 The `browser tests` and `site` jobs go beyond `make check`, and so do the platform jobs.
 Rustfmt, the clippy pass with the `server` feature, the bindings drift check, the browser tests
