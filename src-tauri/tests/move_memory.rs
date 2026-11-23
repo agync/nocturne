@@ -216,6 +216,7 @@ fn calendar(sync: &str) -> CalendarBatch {
             id: "c1".into(),
             name: "Home".into(),
             colour: None,
+            account: None,
         }],
         changes: vec![CalendarChange::Upsert {
             entry: entry("e1", "Dentist"),

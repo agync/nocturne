@@ -146,6 +146,16 @@ class CalendarRowsTest {
     }
 
     @Test
+    fun aCalendarCarriesItsAccountExceptInTheWorkProfile() {
+        val personal = CalendarRows.calendar(CalendarRow(3, "Holidays", 1, null, account = " maya.k@example.com "))
+        val blank = CalendarRows.calendar(CalendarRow(4, "Holidays", 1, null, account = "  "))
+        val work = CalendarRows.calendar(CalendarRow(5, null, 1, null, enterprise = true, account = "x"), 1)
+        assertEquals("maya.k@example.com", personal.account)
+        assertNull(blank.account)
+        assertNull(work.account)
+    }
+
+    @Test
     fun workCalendarsAreListedAfterPersonalOnesAndNumberedFromOne() {
         val rows = listOf(
             CalendarRow(1, "Family", 1, "ana@example.com"),

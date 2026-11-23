@@ -153,6 +153,7 @@ fn send_calendar(sync: &str, entries: Vec<CalendarEntry>) -> RemoteCall {
                 id: "c1".into(),
                 name: "Home".into(),
                 colour: None,
+                account: None,
             }],
             changes: entries
                 .into_iter()

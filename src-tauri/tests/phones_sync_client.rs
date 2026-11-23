@@ -174,11 +174,13 @@ impl Device for Stand {
                 id: "1".into(),
                 name: "Home".into(),
                 colour: Some("#3F51B5".into()),
+                account: None,
             },
             PhoneCalendar {
                 id: "2".into(),
                 name: "Holidays in United Kingdom".into(),
                 colour: None,
+                account: None,
             },
         ])
     }

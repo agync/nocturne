@@ -76,6 +76,7 @@ fn calendars() -> Vec<PhoneCalendar> {
         id: "c1".into(),
         name: "Home".into(),
         colour: None,
+        account: None,
     }]
 }
 
@@ -1860,6 +1861,7 @@ fn a_reflection_is_shown_the_days_appointments_as_background() {
         id: "c2".into(),
         name: "Holidays".into(),
         colour: None,
+        account: None,
     });
     f.engine.take_calendar(&f.phone, cb).unwrap();
     f.engine

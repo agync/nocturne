@@ -3,4 +3,8 @@
 /**
  * A calendar as the phone names it. `colour` is a CSS colour.
  */
-export type PhoneCalendar = { id: string, name: string, colour: string | null, };
+export type PhoneCalendar = { id: string, name: string, colour: string | null, 
+/**
+ * The account the phone files the calendar under, shown when two calendars share a name.
+ */
+account?: string, };
