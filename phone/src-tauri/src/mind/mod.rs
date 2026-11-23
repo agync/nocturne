@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use jiff::Timestamp;
 use nocturne_contract::{CheckOutcome, ItemKind};
-use nocturne_engine::Clock;
+use nocturne_engine::{Clock, Engine};
 use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
 };
@@ -176,6 +176,18 @@ impl Noting {
             Some(status::Trouble::offline(now, *trouble))
         };
     }
+}
+
+/// The things and the memories the Sent online list carried that were kept before a forget.
+#[derive(Debug, Default)]
+pub struct Kept {
+    items: std::collections::HashSet<String>,
+    memories: std::collections::HashSet<String>,
+}
+
+/// Whether a lookup found nothing.
+fn missing(found: nocturne_engine::Result<()>) -> bool {
+    matches!(found, Err(nocturne_engine::Error::NotFound(_)))
 }
 
 /// The looks again at a service that stopped answering, since it stopped.
@@ -446,6 +458,62 @@ impl PhoneMind {
         self.sent.list(limit, before)
     }
 
+    /// What the Sent online list's rows carried that `engine` still keeps, before a forget, an
+    /// unkeep or a delete: [`PhoneMind::forget_words`] then removes the words of what it took.
+    pub fn still_kept(&self, engine: &Engine) -> Kept {
+        let (items, memories) = self.sent.carried();
+        Kept {
+            items: items
+                .into_iter()
+                .filter(|id| !missing(engine.get_item(id).map(drop)))
+                .collect(),
+            memories: memories
+                .into_iter()
+                .filter(|id| !missing(engine.get_memory(id).map(drop)))
+                .collect(),
+        }
+    }
+
+    /// After a forget, an unkeep or a delete: the words of every row on the Sent online list
+    /// that carried a thing or a memory `before` held and `engine` no longer keeps are removed,
+    /// the row kept. What went missing some other way, such as by a reading again, stays.
+    pub fn forget_words(&self, engine: &Engine, before: &Kept) {
+        self.forget_words_after(engine, 0, |id| {
+            before.items.contains(id) || before.memories.contains(id)
+        });
+    }
+
+    /// The words of rows after `after` that carried something `was` held and that is gone.
+    fn forget_words_after(&self, engine: &Engine, after: u64, was: impl Fn(&str) -> bool) {
+        let items = std::cell::RefCell::new(std::collections::HashMap::new());
+        let memories = std::cell::RefCell::new(std::collections::HashMap::new());
+        let gone = |cache: &std::cell::RefCell<std::collections::HashMap<String, bool>>,
+                    id: &String,
+                    found: &dyn Fn(&str) -> nocturne_engine::Result<()>| {
+            *cache
+                .borrow_mut()
+                .entry(id.clone())
+                .or_insert_with(|| was(id) && missing(found(id)))
+        };
+        self.sent.forget_words(after, |row| {
+            row.items
+                .iter()
+                .any(|id| gone(&items, id, &|id| engine.get_item(id).map(drop)))
+                || row
+                    .memories
+                    .iter()
+                    .any(|id| gone(&memories, id, &|id| engine.get_memory(id).map(drop)))
+        });
+    }
+
+    /// After a request that began at row `from`, with the store's forgets at `forgets`: when a
+    /// forget ran meanwhile, what it took was not yet on the list, so its words go now.
+    fn after_request(&self, engine: &Engine, from: u64, forgets: u64) {
+        if engine.forget_generation() != forgets {
+            self.forget_words_after(engine, from, |_| true);
+        }
+    }
+
     pub fn is_on(&self) -> bool {
         lock(&self.on).is_some()
     }
@@ -602,7 +670,13 @@ impl PhoneMind {
                 // Each thing read counts toward the month: the one that reaches a limit is the
                 // last before the pause.
                 while read < FEW && !home.store_wanted() && self.paused_until().is_none() {
-                    match t.reader.tick().await {
+                    let (from, forgets) = (self.sent.last_id(), open.engine.forget_generation());
+                    let step = t.reader.tick().await;
+                    if let Step::Read { item, .. } = &step {
+                        self.sent.carry(from, item);
+                    }
+                    self.after_request(&open.engine, from, forgets);
+                    match step {
                         Step::Read {
                             outcome: Outcome::Returned | Outcome::Lost,
                             ..
@@ -648,8 +722,10 @@ impl PhoneMind {
             }
             // The page or a reflection being written is dropped unsaved for the store, and the
             // reader, the tidy and the scheduler are made anew at the next pass.
+            let (from, forgets) = (self.sent.last_id(), open.engine.forget_generation());
             tokio::select! {
                 step = t.scheduler.tick() => {
+                    self.after_request(&open.engine, from, forgets);
                     use nocturne_intelligence::{SchedStep, TidyStep};
                     let scheduled = matches!(
                         step,

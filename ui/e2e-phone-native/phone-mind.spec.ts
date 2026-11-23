@@ -148,9 +148,15 @@ for (const scheme of ["light", "dark"] as const) {
     test("Sent online", async ({ page }) => {
       await page.goto("/?m=kept&mind=on&v=thisPhone");
       await page.getByRole("button", { name: "See what was sent" }).click();
-      await expect(page.getByText("Read a thing you kept")).toBeVisible();
+      await expect(page.getByText("Read a thing you kept").first()).toBeVisible();
+      await expect(page.getByText("Removed when you forgot it")).toBeVisible();
       await clean(page);
       await shot(page, `mind-sent-${scheme}`);
+      await page.getByText("Read a thing you kept").nth(1).click();
+      const open = page.locator("details[open]");
+      await expect(open.getByText("Exactly what was sent")).toBeVisible();
+      await expect(open.getByText("Ask about the swap for the 28th")).toBeVisible();
+      await shot(page, `mind-sent-open-${scheme}`);
     });
 
     test("Ask with a mind", async ({ page }) => {
@@ -263,7 +269,7 @@ test.describe("200 per cent text", () => {
     await fits(page);
     await shot(page, "text-200-mind-this-phone");
     await page.getByRole("button", { name: "See what was sent" }).click();
-    await expect(page.getByText("Read a thing you kept")).toBeVisible();
+    await expect(page.getByText("Read a thing you kept").first()).toBeVisible();
     await fits(page);
     await shot(page, "text-200-mind-sent");
   });

@@ -3,7 +3,7 @@ import { formatBytes, formatLongDay, formatTimeOfDay, journalDay } from "../../.
 import { type CopyId, t } from "../../../copy/t";
 import { useHeading } from "../../native/screens/parts";
 import { BackBar, Page } from "../../screens/ui";
-import type { MindSent } from "../mind";
+import type { MindSaid, MindSent } from "../mind";
 
 const KIND: Record<MindSent["kind"], CopyId> = {
   read: "phone.mind.sent.read",
@@ -14,17 +14,44 @@ const KIND: Record<MindSent["kind"], CopyId> = {
 
 type Load = { name: "loading" } | { name: "ready"; rows: MindSent[] } | { name: "failed" };
 
-/** One request: what it was for, when it left and how much. */
+/** What one part of a request carried, as it left. */
+function Said({ part }: { part: MindSaid }) {
+  if (part.kind === "photo") return <p className="ph-small">{t("phone.mind.sent.photo")}</p>;
+  if (part.kind === "recording")
+    return <p className="ph-small">{t("phone.mind.sent.recording")}</p>;
+  return <pre className="ph-mind-sent-words">{part.text}</pre>;
+}
+
+/** One request: what it was for, when, to which host and how much, its words behind a tap. */
 function SentRow({ row }: { row: MindSent }) {
-  return (
-    <li className="ph-mind-sent">
+  const head = (
+    <>
       <span className="ph-mind-sent-what">{t(KIND[row.kind])}</span>
       <span className="ph-mind-sent-meta">
         {t("phone.mind.sent.row", {
           time: formatTimeOfDay(row.at),
+          host: row.host,
           size: formatBytes(row.bytes),
         })}
       </span>
+      {row.forgotten ? (
+        <span className="ph-mind-sent-meta">{t("phone.mind.sent.forgotten")}</span>
+      ) : null}
+    </>
+  );
+  return (
+    <li>
+      {row.said.length > 0 ? (
+        <details className="ph-mind-sent">
+          <summary>{head}</summary>
+          <p className="ph-lbl">{t("phone.mind.sent.exact")}</p>
+          {row.said.map((part, i) => (
+            <Said key={String(i)} part={part} />
+          ))}
+        </details>
+      ) : (
+        <div className="ph-mind-sent">{head}</div>
+      )}
     </li>
   );
 }

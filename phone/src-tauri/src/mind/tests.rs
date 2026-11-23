@@ -506,6 +506,8 @@ fn deleting_everything_takes_the_key_the_choice_and_the_sent_list() {
     assert!(w.keys.key().is_none());
     assert_eq!(w.mind.chosen(), Chosen::Off);
     assert!(w.mind.sent(10, None).is_empty());
+    assert!(!w._dir.path().join("sent.jsonl").exists());
+    assert!(!w._dir.path().join("sent-words").exists());
 }
 
 impl World {
@@ -773,7 +775,8 @@ fn the_screens_read_the_sent_list_and_the_month_as_mind_ts_says() {
     assert_eq!(json["kind"], "check");
     assert_eq!(json["id"], "2");
     assert!(json["bytes"].as_u64().unwrap() > 0);
-    assert!(json.get("words").is_some());
+    assert!(json["said"].is_array());
+    assert_eq!(json["forgotten"], false);
     let limit: MindLimit =
         serde_json::from_value(serde_json::json!({"kind": "amount", "usd": 5.0})).unwrap();
     assert_eq!(limit, MindLimit::Amount { usd: 5.0 });
@@ -1041,4 +1044,152 @@ fn a_stopped_question_is_dropped_unanswered_and_uncounted() {
     assert_eq!(sent.len(), rows + 1);
     assert_eq!(sent[0].sent_for, super::SentFor::Answer);
     assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+}
+
+/// The words a row on the Sent online list carried, joined.
+fn words_of(row: &super::Sent) -> String {
+    row.said
+        .iter()
+        .filter_map(|s| match s {
+            nocturne_provider::Said::Words(w) => Some(w.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn the_sent_list_keeps_the_words_that_went_and_what_they_came_from() {
+    use super::SentFor;
+    let w = world();
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    w.stand_in.then(Answer::text("Ana lives in **Hull** [m1]."));
+    w.ask("Where does Ana live?");
+    let rows = w.mind.sent(1000, None);
+    let read = rows
+        .iter()
+        .find(|r| r.sent_for == SentFor::Reading)
+        .unwrap();
+    assert!(words_of(read).contains("Ana lives in Hull now"), "{read:?}");
+    assert_eq!(read.items, vec![id.clone()]);
+    let answer = &rows[0];
+    assert_eq!(answer.sent_for, SentFor::Answer);
+    assert!(words_of(answer).contains("Where does Ana live?"));
+    assert!(answer.items.contains(&id));
+    assert!(!answer.memories.is_empty());
+    let shown = serde_json::to_value(super::status::MindSent::from(answer.clone())).unwrap();
+    assert_eq!(shown["said"][0]["kind"], "words");
+    assert_eq!(shown["forgotten"], false);
+}
+
+#[test]
+fn forgetting_what_a_row_carried_removes_its_words_and_keeps_the_row() {
+    use super::SentFor;
+    use crate::home::commands::forgetting;
+    let w = world();
+    w.rt.block_on(w.mind.check(&w.settings()));
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    w.stand_in.then(Answer::text("Ana lives in **Hull** [m1]."));
+    w.ask("Where does Ana live?");
+    let before = w.mind.sent(1000, None);
+    let call = RemoteCall::Unkeep { id: id.clone() };
+    let answer = forgetting(&w.home, &w.mind, || {
+        dispatch::answer(&w.home.open_store().unwrap(), call)
+    });
+    assert!(!matches!(answer, RemoteAnswer::Error { .. }), "{answer:?}");
+    let after = w.mind.sent(1000, None);
+    assert_eq!(after.len(), before.len());
+    for row in &after {
+        if row.sent_for == SentFor::Check {
+            assert!(!row.forgotten);
+        } else {
+            assert!(row.forgotten, "{row:?}");
+            assert!(row.said.is_empty() && row.items.is_empty() && row.memories.is_empty());
+            assert!(row.bytes_up > 0);
+        }
+    }
+    let kept = |dir: &Path| -> String {
+        let mut all = std::fs::read_to_string(dir.join("sent.jsonl")).unwrap();
+        for f in std::fs::read_dir(dir.join("sent-words"))
+            .into_iter()
+            .flatten()
+        {
+            all.push_str(&std::fs::read_to_string(f.unwrap().path()).unwrap());
+        }
+        all
+    };
+    let files = kept(w._dir.path());
+    assert!(!files.contains("Ana lives in Hull now"));
+    assert!(!files.contains(&id));
+}
+
+#[test]
+fn forgetting_a_memory_removes_the_words_of_what_carried_it_alone() {
+    use super::SentFor;
+    use crate::home::commands::forgetting;
+    use nocturne_contract::{ForgetScope, HomeAnswer, HomeCall};
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    w.stand_in.then(Answer::text("Ana lives in **Hull** [m1]."));
+    w.ask("Where does Ana live?");
+    let answer = w.mind.sent(1, None).remove(0);
+    assert_eq!(answer.sent_for, SentFor::Answer);
+    let no_progress = |_: nocturne_contract::BackupPhase, _: u64, _: u64| {};
+    let HomeAnswer::ForgetPreview { preview } = w.home.local_call(
+        HomeCall::PreviewForget {
+            scope: ForgetScope {
+                ids: answer.memories.clone(),
+                include_originals: false,
+                also: None,
+                pick: None,
+            },
+        },
+        false,
+        &no_progress,
+    ) else {
+        panic!("no preview")
+    };
+    let forgot = forgetting(&w.home, &w.mind, || {
+        w.home.local_call(
+            HomeCall::Forget {
+                token: preview.token,
+            },
+            false,
+            &no_progress,
+        )
+    });
+    assert!(matches!(forgot, HomeAnswer::Forgotten { .. }), "{forgot:?}");
+    for row in w.mind.sent(1000, None) {
+        match row.sent_for {
+            SentFor::Answer => assert!(row.forgotten && row.said.is_empty(), "{row:?}"),
+            // The thing kept is still kept: what read it keeps its words.
+            _ => assert!(!row.forgotten, "{row:?}"),
+        }
+    }
+}
+
+#[test]
+fn what_goes_missing_without_a_forget_keeps_its_words() {
+    use crate::home::commands::forgetting;
+    let w = world();
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    // Taken away outside a forget, as a store swapped for a backup would.
+    let open = w.home.open_store().unwrap();
+    open.engine.unkeep(&id).unwrap();
+    let other = w.keep("Bea moved to Leeds.", "c2");
+    forgetting(&w.home, &w.mind, || {
+        dispatch::answer(
+            &w.home.open_store().unwrap(),
+            RemoteCall::Unkeep { id: other },
+        )
+    });
+    assert!(w.mind.sent(1000, None).iter().all(|r| !r.forgotten));
 }

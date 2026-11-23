@@ -78,6 +78,55 @@ pub struct ProviderMind {
     sound_refused: AtomicU32,
 }
 
+/// The things kept and the memories whose words a request was handed. A thing being read is the
+/// reader's to name; the mind names what it was handed.
+#[derive(Debug, Default)]
+struct Handed {
+    items: Vec<String>,
+    memories: Vec<String>,
+}
+
+impl Handed {
+    fn of_facts(facts: &[Fact]) -> Handed {
+        let mut carried = Handed::default();
+        for f in facts {
+            if !nocturne_engine::is_source_line(&f.memory.id) {
+                carried.memories.push(f.memory.id.clone());
+            }
+            carried.add_items(f.memory.receipts.iter().map(|r| &r.item_id));
+        }
+        carried
+    }
+
+    fn of_page(page: &PageView) -> Handed {
+        let mut carried = Handed::default();
+        for line in page
+            .needs_you
+            .iter()
+            .chain(&page.changed)
+            .chain(&page.let_go)
+            .chain(&page.upcoming)
+            .chain(&page.learned)
+        {
+            for id in &line.memory_ids {
+                if !carried.memories.contains(id) {
+                    carried.memories.push(id.clone());
+                }
+            }
+            carried.add_items(line.receipts.iter().map(|r| &r.item_id));
+        }
+        carried
+    }
+
+    fn add_items<'a>(&mut self, ids: impl Iterator<Item = &'a String>) {
+        for id in ids {
+            if !self.items.contains(id) {
+                self.items.push(id.clone());
+            }
+        }
+    }
+}
+
 /// Refusals in a row, of different things, that mean a provider takes no photos or no sound.
 const REFUSED_IN_A_ROW: u32 = 2;
 
@@ -177,21 +226,32 @@ impl ProviderMind {
     }
 
     async fn ask(&self, job: Job, body: Value, seconds: u64) -> Result<Reply, Failed> {
-        self.ask_until(job, body, seconds, None).await
+        self.ask_until(job, body, seconds, None, &Handed::default())
+            .await
     }
 
-    /// One request for `job`, ended by `stop`.
+    /// One request for `job`, ended by `stop`, noted with the things and memories it was handed.
     async fn ask_until(
         &self,
         job: Job,
         body: Value,
         seconds: u64,
         stop: Option<Stop>,
+        carried: &Handed,
     ) -> Result<Reply, Failed> {
-        let reply = self
+        let mut reply = self
             .provider
             .chat_until(body, Duration::from_secs(seconds), stop)
             .await;
+        let exchange = match &mut reply {
+            Ok(r) => Some(&mut r.exchange),
+            Err(f) if !f.refused => Some(&mut f.exchange),
+            Err(_) => None,
+        };
+        if let Some(exchange) = exchange {
+            exchange.carried.items = carried.items.clone();
+            exchange.carried.memories = carried.memories.clone();
+        }
         match &reply {
             Ok(r) => self.note(job, &r.exchange),
             Err(f) if !f.refused => self.note(job, &f.exchange),
@@ -225,17 +285,21 @@ impl ProviderMind {
         mut body: Value,
         schema: &Value,
         seconds: u64,
+        carried: &Handed,
     ) -> Result<Reply, Failed> {
         if self.schema_refused.load(Ordering::Relaxed) {
-            return self.ask(job, body, seconds).await;
+            return self.ask_until(job, body, seconds, None, carried).await;
         }
         body["response_format"] = prompts::response_format(schema);
-        match self.ask(job, body.clone(), seconds).await {
+        match self
+            .ask_until(job, body.clone(), seconds, None, carried)
+            .await
+        {
             Err(f) if f.exchange.status == Some(400) => {
                 if let Some(o) = body.as_object_mut() {
                     o.remove("response_format");
                 }
-                let again = self.ask(job, body, seconds).await;
+                let again = self.ask_until(job, body, seconds, None, carried).await;
                 if again.is_ok() {
                     tracing::warn!("the provider refused a reply by schema; asking by the prompt");
                     self.schema_refused.store(true, Ordering::Relaxed);
@@ -266,7 +330,13 @@ impl ProviderMind {
             "max_tokens": prompts::IMAGE_TOKENS,
         });
         let reply = match self
-            .ask_shaped(Job::Photo, body, &prompts::image_schema(), READ_SECONDS)
+            .ask_shaped(
+                Job::Photo,
+                body,
+                &prompts::image_schema(),
+                READ_SECONDS,
+                &Handed::default(),
+            )
             .await
         {
             Ok(r) => {
@@ -395,8 +465,9 @@ impl ProviderMind {
             line_hashes: q.line_hashes,
             ..OnlineReceipt::default()
         };
+        let carried = Handed::of_facts(&q.facts);
         let reply = self
-            .ask_until(Job::Answer, body, ANSWER_SECONDS, stop)
+            .ask_until(Job::Answer, body, ANSWER_SECONDS, stop, &carried)
             .await;
         let exchange = match &reply {
             Ok(r) => &r.exchange,
@@ -426,7 +497,13 @@ impl ProviderMind {
             "max_tokens": prompts::HEADLINE_TOKENS,
         });
         let reply = self
-            .ask_shaped(Job::Page, body, &prompts::headline_schema(), WRITE_SECONDS)
+            .ask_shaped(
+                Job::Page,
+                body,
+                &prompts::headline_schema(),
+                WRITE_SECONDS,
+                &Handed::of_page(page),
+            )
             .await
             .map_err(online)?;
         let h: Headline = reading::json_text(&reply.text)
@@ -456,8 +533,12 @@ impl ProviderMind {
             "temperature": temperature::REFLECTION,
             "max_tokens": prompts::REPLY_TOKENS,
         });
+        let carried = Handed {
+            items: input.items.iter().map(|i| i.id.to_string()).collect(),
+            memories: Vec::new(),
+        };
         let reply = self
-            .ask(Job::Reflection, body, WRITE_SECONDS)
+            .ask_until(Job::Reflection, body, WRITE_SECONDS, None, &carried)
             .await
             .map_err(online)?;
         read::trace_reply("reflect", &reply.text);
@@ -484,6 +565,7 @@ impl read::Reads for ProviderMind {
                     body,
                     &prompts::extraction_schema(),
                     READ_SECONDS,
+                    &Handed::default(),
                 )
                 .await
                 .map_err(reading_failure)?;
