@@ -25,7 +25,7 @@ Status: proposed, with the owner's decisions folded in. Nothing here is built.
 | Screen | File and states | Renders |
 |---|---|---|
 | On the phone | `move.html`: `found`, `size`, `moving`, `moved` | `move-found-light.png`, `move-size-light.png`, `move-moving-light.png`, `move-moved-light.png`, `move-moved-dark.png` |
-| On the computer | `desktop-move.html`: `choose`, `merged`, and `receive`, `done` (a whole move, no longer used: an empty computer shows the bringing-in stages and `merged`, decision 31) | `desktop-move-receive-light.png`, `desktop-move-done-light.png`, `desktop-move-receive-dark.png`, `desktop-move-choose-light.png`, `desktop-move-choose-dark.png`, `desktop-move-merged-light.png` |
+| On the computer | `desktop-move.html`: `choose`, `merged`, and `receive`, `done` (a whole move, retired: an empty computer shows the bringing-in stages and `merged`, decision 31, and nothing on the computer shows them) | `desktop-move-receive-light.png`, `desktop-move-done-light.png`, `desktop-move-receive-dark.png`, `desktop-move-choose-light.png`, `desktop-move-choose-dark.png`, `desktop-move-merged-light.png` |
 
 ## One home holds the pen
 
@@ -68,7 +68,7 @@ flowchart TD
     F --> SZ[How big, what changes here]
     SZ --> MV[Moving]
     MV --> RC[Computer: arrived, checked, things added]
-    RC --> MD[Phone: Your things are on Home computer. Remove it from this phone, or keep it put aside]
+    RC --> MD[Phone: Your things are on Home computer. Keep it put aside, or remove it from this phone]
     MD --> CO{Locked copy online, online mind?}
     CO --> T[Phone is a companion: Today from Home computer]
 ```
@@ -217,7 +217,7 @@ flowchart TD
 | Lead | "A computer holds one person’s memory. Choose how {name} joins this one." |
 | Choice, selected | "Bring the phone’s things in" / "What was kept on {name}, with its journal and check-ins, joins the memory here, and Nocturne reads it as new. Its calendar and health readings are sent again, with nothing doubled." |
 | Choice | "Use this computer’s memory" / "Nothing comes in from {name}. It works with this computer like your other phones, and what it holds now is put aside on it." |
-| Not enough room | Before the buttons, when free space is short for bringing the things in: "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}.", where {moveItHere} is "Continue". "Continue" waits until there is room while "Bring the phone’s things in" is selected |
+| Not enough room | Before the buttons, when free space is short for bringing the things in: "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}.", where {moveItHere} is "Continue". "Continue" waits until there is room while "Bring the phone’s things in" is selected. {size} is about three times the phone's estimate of its backup: the backup as it arrives, the same unpacked beside the memory here, and the photos and recordings copied into it, all on the disk at once until the adding ends |
 | Buttons | "Continue" · "Not now" |
 
 **On the phone, meanwhile.** After pairing, instead of "Move your memory to {computer}?":
@@ -233,7 +233,7 @@ phone as it was.
 | Phone | Stop | Until adding begins: "Stop bringing your things in? Nothing changes on {computer}, and your memory stays on this phone." / "Stop" (careful) · "Keep going". The phone tells {computer}, which stops too. After: "Stopped. Nothing changed on {computer}." |
 | Phone | Sending | "{done} of {size}", and "About {minutes} minutes left" once measured |
 | Phone | Adding | "Adding them to the memory on {computer}…" |
-| Phone | Done | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." Then the usual choice for what stays on the phone: "Remove it from this phone" (selected) / "Keep it put aside for 30 days" |
+| Phone | Done | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." Then the choice for what stays on the phone: "Keep it put aside for 30 days" (selected) / "Remove it from this phone". When what is put aside holds anything that did not go (below), the first choice is "Keep it put aside" (selected) instead, since it then never goes by itself, and a line under the choice says what stays: "These stay only on this phone, so removing it deletes them for good: {list}." |
 | Computer | Preparing | "{name} is getting its things ready…" with a moving bar and "Stop" |
 | Computer | Arriving | "Bringing in {name}’s things · {done} of {size}" with "Stop" ("Stop bringing them in? Nothing changes here, and {name} keeps its memory." / "Stop" · "Keep going") |
 | Computer | Adding | "Adding them to the memory here…" Stop is no longer offered |
@@ -268,9 +268,9 @@ aside only once the computer says the things were added.
 | | Bring the phone's things in | Use the computer's memory |
 |---|---|---|
 | What is put aside on the phone | Its whole memory, read only, after its things were added to the computer's | Its whole memory, read only. Nothing of it is on the computer |
-| How long | Removed now, or kept 30 days, as the person chooses | Kept until the person removes it; never removed by itself, since it is the only copy |
+| How long | Removed now, or kept 30 days, as the person chooses. While it holds anything that stays only on the phone, it never goes by itself: kept until the person removes it (AGENTS.md invariant 5, deletion is explicit) | Kept until the person removes it; never removed by itself, since it is the only copy. Bringing its things in later never shortens that |
 | Later | "Remove…" in This phone | "Bring its things to {computer}…" in This phone, which runs the bringing in from what was put aside (decision 33), or "Remove…" |
-| "Remove…" asks | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." and, when the phone had pages or reflections, "Pages and reflections written on this phone go with it." / "Remove" (careful) · "Keep it" | "Delete what was put aside {day} for good?" / "Nothing from it went to {computer}. This deletes {things} things kept, {entries} journal entries and {media} photos and recordings, and they can’t be brought back." / "Delete for good" (careful) · "Keep it" |
+| "Remove…" asks | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." and, when it holds anything that did not go, "These stay only on this phone, so removing it deletes them for good: {list}." / "Remove" (careful) · "Keep it" | "Delete what was put aside {day} for good?" / "Nothing from it went to {computer}. This deletes {things} things kept, {entries} journal entries and {media} photos and recordings, and they can’t be brought back." / "Delete for good" (careful) · "Keep it" |
 
 A later "Bring its things to {computer}…" asks first: "Bring the things put aside {day} to
 {computer}?" / "{things} things kept, {entries} journal entries and {checkins} check-ins join the
@@ -280,12 +280,28 @@ aside, and afterwards "Remove…" asks as it does after bringing things in. Stop
 aside stays as it was.
 
 **What travels, and what doesn't, when things are brought in.** Every kept thing with its original,
-how and where it was kept, and its private mark; journal entries and good things; check-ins. Not the
-phone's pages, reflections or what a mind worked out on the phone: the computer reads the things as
-new and writes its own. They stay in what is put aside on the phone. Calendar and health are not
-copied from the phone's memory; the phone sends them again into the computer's, over the usual
-window (two days back to two weeks ahead, and the last 30 days of readings), and what the computer
-already has counts as unchanged.
+how and where it was kept, and its private mark; journal entries and good things; check-ins; and
+what the person forgot from a thing that travels, so the computer never reads it from that thing
+again. The person's marks on what the phone's mind worked out travel with the things too: a
+memory marked private there is private once the computer reads it again, and so are done, kept
+forever and its tags. For a calendar entry the phone sends again, what was forgotten of it stays
+forgotten and its marks hold, on every version that comes. Not the phone's pages, reflections or what a mind worked out on the phone: the computer reads
+the things as new and writes its own. They stay in what is put aside on the phone, with the
+answers to the morning question, the names the person taught it, what they confirmed or settled,
+and its settings. Calendar and health are not copied from the phone's memory; the phone sends them
+again into the computer's, over the usual window (two days back to two weeks ahead, and the last 30
+days of readings), and what the computer already has counts as unchanged.
+
+**What stays only on the phone, said before removing.** Since those stay only in what is put aside,
+removing it is never the default after things are brought in (the owner's no-data-loss stance),
+what is put aside never goes by itself while it holds any of them (only the person removes it; one
+put aside earlier with an end date loses it instead of going), and the line before removing lists
+them, each only when there is one: "{pages, plural, one {# page}
+other {# pages}}", "{reflections, plural, one {# reflection} other {# reflections}}", "{answers,
+plural, one {# answer to the morning question} other {# answers to the morning question}}",
+"{names, plural, one {# name you taught it} other {# names you taught it}}", "{choices, plural, one
+{# thing you confirmed or settled} other {# things you confirmed or settled}}" and "its settings",
+joined with commas and a last "and". With none of them, the line is left out.
 
 **Edge cases.**
 
@@ -295,7 +311,8 @@ already has counts as unchanged.
 | Journal entries or check-ins for the same day on both | Both kept, each on its day in time order. Nothing is joined into one entry |
 | Private marks | Kept as they were. When the same thing is on both and one of them is private, it is private |
 | A thing the phone sent earlier, as a companion of this computer | Already here, so it is not added again |
-| A thing the person forgot or deleted on the phone | Not there to travel |
+| A thing the person forgot or deleted on the phone | Not there to travel. One a forget on the phone has started and not finished counts as gone |
+| Something the person forgot from a thing that travels (a memory forgotten, its original kept) | It stays forgotten: the thing arrives as read, so the computer never reads it again by itself, keeps what was forgotten from it so no reading says it again, and does not offer the thing by its words, as after a forget there. For a thing kept on both, the computer's own copy takes the same marks; what the computer already remembers from its own copy stays, since nothing is deleted there without the person asking |
 | Things marked private on the phone | Travel locked, like everything else, and stay private |
 | The phone is removed from the computer while its things are arriving | Nothing is added. Computer: "{name} was removed, so nothing came in from it." / "OK" |
 | The phone is removed while its things are being added | Adding finishes, since everything had arrived whole. Computer: "{name}’s things are here." with the usual counts, and "{name} was removed while they were added, so it still holds its own memory." / "Open today’s page". The phone never hears that the things were added, so it stays a phone alone with its memory, and shows the approved removed words when it next tries to connect |
@@ -320,7 +337,7 @@ already has counts as unchanged.
 | Room runs out during the move | Computer: "There wasn’t room for {name}’s memory, so nothing changed. Free about {size} here, then move it again from {name}." Phone: "{computer} ran out of room, so nothing changed. Your memory is still on this phone." with "Try again" · "Not now". Nothing is retried silently |
 | Stopped on the computer | Phone: "{computer} stopped the move. Nothing changed, and your memory is still on this phone." with "OK" |
 | New home has a newer Nocturne | Moves normally |
-| New home has an older Nocturne | 0013's newer-Nocturne words: "Update Nocturne on {computer}, then try again. Nothing was changed." |
+| New home has an older Nocturne | 0013's newer-Nocturne words: "Update Nocturne on {computer}, then try again. Nothing was changed." This includes a computer old enough to take the memory whole and restart: the phone never follows it, whether it hears so when offering, after sending or when it asks where the memory stands, and keeps its own memory |
 | The phone is lost before confirming | The computer has the memory; the phone's put-aside memory is only on the lost phone, and removing the phone in Away from home stops it at once |
 | Two homes try to take the pen | The newer claim wins; the old home's unsent things still go across as waiting things, never as a second memory |
 
@@ -343,12 +360,13 @@ already has counts as unchanged.
 | Computer, use this one | "{name} now works with this computer." / "Nothing came in from it. Its calendar and health come here from now on." / "OK" |
 | Phone, waiting for the choice | "{computer} already holds a memory." / "Choose on {computer} what happens to yours. Nothing changes until you do." / "Waiting for {computer}…" |
 | Phone, bringing in | "Bringing your things to {computer}" / "Getting your things ready…" / "{done} of {size}" / "Adding them to the memory on {computer}…" |
-| Phone, brought in | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." |
+| Phone, brought in | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." / "Your memory on this phone" / "Keep it put aside for 30 days" (selected; "Keep it put aside" when anything stays only on the phone) / "Remove it from this phone" / "Done" |
+| Phone, what stays only here | "These stay only on this phone, so removing it deletes them for good: {list}." / "{pages, plural, one {# page} other {# pages}}" / "{reflections, plural, one {# reflection} other {# reflections}}" / "{answers, plural, one {# answer to the morning question} other {# answers to the morning question}}" / "{names, plural, one {# name you taught it} other {# names you taught it}}" / "{choices, plural, one {# thing you confirmed or settled} other {# things you confirmed or settled}}" / "its settings" |
 | Phone, use the computer's | "This phone now works with {computer}." / "Nothing went to {computer}. What this phone held is put aside here, and its calendar and health go to {computer} from now on." / "Keep it put aside" / "Remove it from this phone" / "Nothing from this phone went to {computer}, so removing it deletes it for good." |
 | Put aside, later | "Bring its things to {computer}…" |
 | Phone, stop bringing in | "Stop bringing your things in? Nothing changes on {computer}, and your memory stays on this phone." / "Stop" / "Keep going" / "Stopped. Nothing changed on {computer}." |
 | Computer, stopped by the phone | "{name} stopped bringing its things in. Nothing changed here." / "OK" |
-| Remove, after bringing in | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." / "Pages and reflections written on this phone go with it." / "Remove" / "Keep it" |
+| Remove, after bringing in | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." / the line of what stays only here, above / "Remove" / "Keep it" |
 | Remove, after using the computer's | "Delete what was put aside {day} for good?" / "Nothing from it went to {computer}. This deletes {things} things kept, {entries} journal entries and {media} photos and recordings, and they can’t be brought back." / "Delete for good" / "Keep it" |
 | Item, also kept | "Also kept on {name} · {day}, {time}" / "Also kept on {name}" |
 | Bring them in later | "Bring the things put aside {day} to {computer}?" / "{things} things kept, {entries} journal entries and {checkins} check-ins join the memory on {computer}, which reads them as new. What is put aside here stays until you remove it." / "Bring them in" / "Not now" |
