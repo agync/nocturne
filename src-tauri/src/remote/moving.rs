@@ -1,6 +1,10 @@
-//! A phone that holds its own memory moves it here. The phone offers it (`offerMemory`) with
-//! what it holds; the person on this computer agrees, or keeps what is here and the pairing is
-//! undone. The phone then sends a backup in 0013's format, locked with a passphrase made for this
+//! A phone that holds its own memory moves it here. A computer that holds nothing brings the
+//! phone's things in at once, as below, with nothing asked and no restart (the owner's decision
+//! 31). The whole move described next, which a restart finishes, is no longer offered; its code
+//! and tests stay until it is taken out.
+//!
+//! The phone offers it (`offerMemory`) with what it holds; the person on this computer agrees,
+//! or keeps what is here and the pairing is undone. The phone then sends a backup in 0013's format, locked with a passphrase made for this
 //! one move, as the chunks of `memoryDone`. It is checked and unpacked into the restore stage,
 //! takes this computer's own settings and paired phones, and the phone's own row becomes the
 //! phone as it is paired here, all before the store in use is touched. The store changes places
@@ -1353,9 +1357,10 @@ pub async fn offer<R: Runtime>(
     new.things = things.map(|n| n.min(counts.items));
     new.online = online;
     new.room = room;
-    if bring {
-        // The person chose on the phone to bring in what a move put aside there: nothing is
-        // asked here, and the phone hears at once.
+    // The person chose on the phone to bring in what a move put aside there, or this computer
+    // holds nothing to choose about: nothing is asked here, the phone hears at once, and its
+    // things are added with no restart.
+    if bring || here.is_none() {
         if let Some(room) = room {
             tracing::info!(
                 device = id,
@@ -1373,13 +1378,19 @@ pub async fn offer<R: Runtime>(
             return Some(err(PhoneError::Busy));
         };
         emit(app, view);
-        tracing::info!(device = id, "the phone brings its things in");
+        if !bring {
+            crate::window::show_main(app);
+        }
+        tracing::info!(
+            device = id,
+            empty = !bring,
+            "the phone brings its things in"
+        );
         return Some(RemoteAnswer::MemoryAccepted { here, bring: true });
     }
-    // Short of room for a whole move, the question shows with its room line and the phone hears
-    // so at once: it tries again once the person here has freed some. A computer that holds a
-    // memory keeps the phone waiting, since using its memory needs no room.
-    new.phase = Phase::Offered((room.is_none() || here.is_some()).then_some(tx));
+    // This computer holds a memory: the person here chooses how the phone joins it, and the
+    // phone waits, short of room or not, since using this memory needs no room.
+    new.phase = Phase::Offered(Some(tx));
     let owner = new.owner.clone();
     let Some(view) = core.moves.claim(new) else {
         tracing::info!(device = id, "another move holds the place: the phone waits");
@@ -1387,20 +1398,7 @@ pub async fn offer<R: Runtime>(
     };
     emit(app, view);
     crate::window::show_main(app);
-    if let Some(room) = room.filter(|_| here.is_none()) {
-        tracing::info!(
-            device = id,
-            "not enough room for the move yet: {} bytes free of {} needed",
-            room.free,
-            room.need
-        );
-        return Some(err(PhoneError::TooLarge));
-    }
-    tracing::info!(
-        device = id,
-        here = here.is_some(),
-        "the person here is asked about the move"
-    );
+    tracing::info!(device = id, "the person here is asked how the phone joins");
     let choice = tokio::select! {
         choice = rx => Some(choice),
         () = out.closed() => None,
