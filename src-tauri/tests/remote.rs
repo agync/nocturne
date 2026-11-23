@@ -1218,6 +1218,33 @@ fn retried_upload_replaces_dead_session_upload() {
 }
 
 #[test]
+fn a_retried_upload_replaces_a_cut_one_not_yet_noticed() {
+    let p = on();
+    let keys = p.pair("Pixel");
+    let bytes = jpeg(300);
+    let mut cut = p.open(&keys, Mode::WebSocket);
+    let id = block(cut.request(RemoteCall::KeepBytes {
+        mime: "image/jpeg".into(),
+        size: bytes.len() as f64,
+        client_id: "c-photo".into(),
+        caption: None,
+        feeling: None,
+        good: None,
+        captured_at: None,
+    }))
+    .unwrap();
+    block(cut.chunk(id, 0, false, &bytes[..100])).unwrap();
+    wait_for("the first upload begins", || {
+        p.hub.core.incoming.in_flight() == 1
+    });
+    // The first session is still open: the computer has not seen the connection drop.
+    let mut fresh = p.open(&keys, Mode::WebSocket);
+    let a = keep_bytes(&mut fresh, &bytes, "image/jpeg", "c-photo", None, 100);
+    assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
+    assert_eq!(p.hub.core.incoming.in_flight(), 0);
+}
+
+#[test]
 fn a_closed_session_call_leaves_the_retry_upload_alone() {
     use nocturne_app_lib::remote::incoming::Declared;
     let p = on();
@@ -1227,6 +1254,7 @@ fn a_closed_session_call_leaves_the_retry_upload_alone() {
         mime: "image/jpeg".into(),
         size: 300.0,
         recording: false,
+        client_id: "c-photo".into(),
     };
     // Neither conversation is open, so the second upload replaces the first; both are call 1.
     let (dead, fresh) = (u64::MAX - 1, u64::MAX - 2);
