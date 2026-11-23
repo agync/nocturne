@@ -30,8 +30,6 @@ export interface MoveProgress {
 /** How long the move is measured before it says how long is left. */
 export const MEASURE_MS = 10_000;
 
-const count = (n: number) => new Intl.NumberFormat("en-GB").format(n);
-
 /** "3 March", for a `YYYY-MM-DD` day. */
 const dayAndMonth = (day: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }).format(
@@ -138,16 +136,16 @@ export function MoveSize({
           {since ? (
             <li>
               {t("moving.phone.size.kept", {
-                count: count(things),
+                count: things,
                 date: dayAndMonth(since),
               })}
             </li>
           ) : null}
           {journal > 0 ? (
-            <li>{t("moving.phone.size.journal", { count: count(journal) })}</li>
+            <li>{t("moving.phone.size.journal", { count: journal })}</li>
           ) : null}
           {counts.pages > 0 ? (
-            <li>{t("moving.phone.size.pages", { count: count(counts.pages) })}</li>
+            <li>{t("moving.phone.size.pages", { count: counts.pages })}</li>
           ) : null}
           <li>{t("moving.phone.size.bytes", { size: formatBytes(bytes) })}</li>
         </ul>
@@ -258,7 +256,7 @@ export function MoveMoving({
             {left !== null ? (
               <>
                 <br />
-                {t("moving.phone.moving.left", { minutes: String(left) })}
+                {t("moving.phone.moving.left", { minutes: left })}
               </>
             ) : null}
           </p>
@@ -393,9 +391,9 @@ export function MoveMoved({
               <Hero title={t("moving.phone.brought.title", { computer })} icon="check" />
               <p className="ph-body">
                 {t("moving.phone.brought.body", {
-                  count: count(brought.things),
-                  entries: count(brought.entries),
-                  checkins: count(brought.checkins),
+                  count: brought.things,
+                  entries: brought.entries,
+                  checkins: brought.checkins,
                   computer,
                 })}
               </p>
@@ -404,7 +402,7 @@ export function MoveMoved({
             <>
               <Hero title={t("moving.phone.moved.title", { computer })} icon="check" />
               <p className="ph-body">
-                {t("moving.phone.moved.body", { count: count(items), computer })}
+                {t("moving.phone.moved.body", { count: items, computer })}
               </p>
             </>
           )}
