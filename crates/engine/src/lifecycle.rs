@@ -273,7 +273,7 @@ fn item_exists(tx: &rusqlite::Transaction<'_>, item_id: &str) -> Result<()> {
 
 /// Every memory linked to this item, current or history (not those already being forgotten).
 /// With `only_this_item`, just those whose one source is this item.
-fn memories_of(
+pub(crate) fn memories_of(
     tx: &rusqlite::Transaction<'_>,
     item_id: &str,
     only_this_item: bool,

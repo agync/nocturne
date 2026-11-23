@@ -25,6 +25,7 @@ pub mod guide;
 mod journal;
 mod lifecycle;
 mod memory;
+mod merge;
 mod mind;
 mod online;
 mod page;
@@ -55,6 +56,7 @@ pub use export::DELETE_PHRASE;
 pub use find::{ExcerptPart, FIND_CAP, FoundItem};
 pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
 pub use journal::keep::KeepPlace;
+pub use merge::BroughtIn;
 pub use mind::{
     AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
     ReflectInput, ReflectItem, Reflected, Transcript, Understanding, WrittenSentence,
