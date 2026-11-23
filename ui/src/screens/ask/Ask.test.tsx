@@ -179,7 +179,9 @@ describe("the answer", () => {
         name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
       }),
     ).toHaveLength(2);
-    await screen.findByText(/on Mondays/);
+    // The four held-in steps are sent a few milliseconds apart: wait for the last of them, so the
+    // release below cannot overtake it.
+    await screen.findByText(/at 17:30/);
     expect(screen.queryByText(/Sam/, { selector: "p" })).toBeNull();
     // The text itself is never in a live region while it streams.
     expect(announcer()).toHaveTextContent("");
