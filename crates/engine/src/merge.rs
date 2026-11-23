@@ -5,6 +5,8 @@
 //! mark, the journal and the check-ins. Nothing a mind worked out on the phone comes: no memories,
 //! pages, reflections or mentions. Calendar entries and health readings stay behind too; the phone
 //! sends them again. What arrives waits to be read as new; finding it by its words works at once.
+//! What the person forgot on the phone stays forgotten: a thing a forget removes does not come,
+//! and the claims forgotten from a thing that stays come with it, so no read here says them again.
 //!
 //! Each thing keeps its id, so bringing the same memory in twice adds nothing the second time.
 //! A thing already here (the same thing kept on both, one the phone sent as a companion of this
@@ -77,6 +79,8 @@ struct Arriving {
     client: Option<String>,
     /// The name of the device it was kept on, as the phone knew it.
     place: Option<String>,
+    /// Claims the person forgot from it on the phone, as hashes.
+    forgotten: Vec<String>,
 }
 
 impl Arriving {
@@ -133,17 +137,31 @@ fn text(v: &Sql) -> Option<String> {
     }
 }
 
-/// Items a started forget still has to remove: they are as good as gone.
+/// Items a started forget still has to remove: they are as good as gone. Only a forget that takes
+/// originals removes items, and then only those no memory outside a forget still cites; the
+/// others stay on the phone, so they travel, with what was forgotten from them.
 fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
-    let mut stmt = phone.prepare("SELECT items FROM forget_jobs")?;
-    let lists: Vec<String> = stmt
-        .query_map([], |r| r.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    Ok(lists
-        .iter()
-        .filter_map(|l| serde_json::from_str::<Vec<String>>(l).ok())
-        .flatten()
-        .collect())
+    let mut stmt = phone.prepare(
+        "SELECT DISTINCT j.value FROM forget_jobs f, json_each(f.items) j \
+         WHERE f.include_originals = 1 AND NOT EXISTS ( \
+           SELECT 1 FROM memory_sources ms JOIN memories m ON m.id = ms.memory_id \
+           WHERE ms.item_id = j.value AND m.forgetting = 0)",
+    )?;
+    let items = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    Ok(items.collect::<rusqlite::Result<_>>()?)
+}
+
+/// What the person forgot on the phone, as the claims kept for each item that said them, so the
+/// computer never reads them from it again.
+fn forgotten(phone: &Connection) -> Result<HashMap<String, Vec<String>>> {
+    let mut stmt = phone.prepare("SELECT item_id, claim FROM forgotten_claims")?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (item, claim) = row?;
+        out.entry(item).or_default().push(claim);
+    }
+    Ok(out)
 }
 
 /// Every thing on the phone that may travel, oldest first, read with the columns both stores
@@ -163,6 +181,7 @@ fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<A
         need("metadata")?,
     );
     let gone = forgetting(phone)?;
+    let mut claims = forgotten(phone)?;
     // The device each phone keep came through, and the name of any that is not the phone itself.
     let mut keeps: HashMap<String, (String, Option<String>)> = HashMap::new();
     {
@@ -222,7 +241,9 @@ fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<A
             .map(str::to_string)
             .or(through)
             .or_else(|| Some(name.to_string()));
+        let forgotten = claims.remove(&item_id).unwrap_or_default();
         out.push(Arriving {
+            forgotten,
             id: item_id,
             kind: text(&row[kind]).unwrap_or_default(),
             sha: sha256,
@@ -405,6 +426,26 @@ fn join_same(tx: &Transaction<'_>, here: &str, p: &Arriving) -> Result<Vec<PathB
         }
     }
     Ok(files)
+}
+
+/// What the person forgot from a thing on the phone holds for it here: kept with the claims
+/// forgotten here, so no read says them again. A thing already here moves to a new forget epoch,
+/// as a forget here does, so a read that began before cannot write them either.
+fn carry_forgotten(tx: &Transaction<'_>, here: &str, p: &Arriving, added: bool) -> Result<()> {
+    let mut new = 0;
+    for claim in &p.forgotten {
+        new += tx.execute(
+            "INSERT OR IGNORE INTO forgotten_claims(item_id, claim) VALUES (?1, ?2)",
+            params![here, claim],
+        )?;
+    }
+    if new > 0 && !added {
+        tx.execute(
+            "UPDATE items SET forget_epoch = forget_epoch + 1, reread = 0 WHERE id = ?1",
+            [here],
+        )?;
+    }
+    Ok(())
 }
 
 /// The originals the arriving things need that are not here yet, copied beside the others
@@ -640,6 +681,7 @@ impl Engine {
                         brought.already += 1;
                     }
                     files.extend(join_same(tx, here, p)?);
+                    carry_forgotten(tx, here, p, false)?;
                     if placing.contains(&n)
                         && let Some(day) = p.entry_day()
                     {
@@ -713,6 +755,7 @@ impl Engine {
                 );
             }
             tx.execute(&insert, params_from_iter(row.iter()))?;
+            carry_forgotten(tx, id, p, true)?;
             if let Some(client) = &p.client {
                 tx.execute(
                     "INSERT OR IGNORE INTO remote_keeps(item_id, device_id, client_id, kept_at) \
@@ -758,6 +801,7 @@ mod tests {
             meta: json!({}),
             client: None,
             place: None,
+            forgotten: Vec::new(),
         }
     }
 
