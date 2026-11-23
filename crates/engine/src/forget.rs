@@ -39,6 +39,21 @@ pub(crate) const ORIGINALS_NOT_IN_FORGET: &str = "NOT EXISTS (SELECT 1 FROM forg
      WHERE (j.kind = 'unkeep' OR j.include_originals = 1) \
      AND instr(j.items, '\"' || i.id || '\"') > 0)";
 
+/// SQL condition on the item whose id is `id` (an expression): started forgets will remove it.
+/// A forget that removes originals and names the item takes it in its last phase, when no memory
+/// cites it. By then the forgets before it, which clear their memories first, are done, so it
+/// goes only when every memory citing it belongs to that forget or an earlier one. A memory
+/// outside a forget, or in a later one, keeps it in place.
+pub(crate) fn going_by_forgets(id: &str) -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM forget_jobs a WHERE a.include_originals = 1 \
+           AND instr(a.items, '\"' || {id} || '\"') > 0 \
+           AND NOT EXISTS (SELECT 1 FROM memory_sources ms WHERE ms.item_id = {id} \
+             AND NOT EXISTS (SELECT 1 FROM forget_jobs b, json_each(b.ids) c \
+               WHERE b.id <= a.id AND c.value = ms.memory_id)))"
+    )
+}
+
 /// The requested memories plus every earlier version they replaced or ended.
 fn closure(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
     let mut set: BTreeSet<String> = BTreeSet::new();

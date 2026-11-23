@@ -149,16 +149,14 @@ fn text(v: &Sql) -> Option<String> {
 }
 
 /// Items a started forget still has to remove: they are as good as gone. Only a forget that takes
-/// originals removes items, and then only those no memory outside a forget still cites; the
-/// others stay on the phone, so they travel, with what was forgotten from them. A thing goes with
-/// every earlier version of it.
+/// originals removes items, and then only those no memory outside a forget still cites, and no
+/// other started forget leaves in place; the others stay on the phone, so they travel, with what
+/// was forgotten from them. A thing goes with every earlier version of it.
 fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
-    let mut stmt = phone.prepare(
-        "SELECT DISTINCT j.value FROM forget_jobs f, json_each(f.items) j \
-         WHERE f.include_originals = 1 AND NOT EXISTS ( \
-           SELECT 1 FROM memory_sources ms JOIN memories m ON m.id = ms.memory_id \
-           WHERE ms.item_id = j.value AND m.forgetting = 0)",
-    )?;
+    let mut stmt = phone.prepare(&format!(
+        "SELECT i.id FROM items i WHERE {}",
+        crate::forget::going_by_forgets("i.id")
+    ))?;
     let items: Vec<String> = stmt
         .query_map([], |r| r.get::<_, String>(0))?
         .collect::<rusqlite::Result<_>>()?;

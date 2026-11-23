@@ -601,9 +601,9 @@ impl Engine {
         {
             let mut stmt = conn.prepare(&format!(
                 "SELECT i.sha256, i.ext FROM items i \
-                 WHERE i.file_name IS NOT NULL AND {} \
+                 WHERE i.file_name IS NOT NULL AND NOT {} \
                  ORDER BY i.sha256",
-                crate::forget::ORIGINALS_NOT_IN_FORGET
+                crate::forget::going_by_forgets("i.id")
             ))?;
             let rows: Vec<(String, Option<String>)> = stmt
                 .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
