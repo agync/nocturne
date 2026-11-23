@@ -1,8 +1,9 @@
 //! A phone that holds its own memory moves it to this computer: the phone app's own client
 //! against the real listener, through a relay on loopback, as `phone_client.rs`. The phone's
 //! side is its store and the same backup a phone makes; the computer is the app with Away from
-//! home on. It offers, the person agrees, the backup goes up in chunks, every count matches, and
-//! after the next start the phone is one of the computer's phones with all it kept.
+//! home on. It offers; an empty computer agrees at once, one that holds a memory asks the person
+//! there. The backup goes up in chunks, every count matches, and its things are added with no
+//! restart: the phone is one of the computer's phones, and all it kept is here.
 
 #![cfg(unix)]
 
@@ -174,13 +175,6 @@ impl Computer {
 
     fn data(&self) -> &Path {
         self.h.dir.path()
-    }
-
-    /// Stop as the app does when it quits, and start again on the same folder.
-    fn restart(self) -> Computer {
-        block(self.hub.shutdown());
-        self.relay.cut();
-        computer(restart(self.h))
     }
 }
 
@@ -355,86 +349,80 @@ fn offer_and_answer(c: &Computer, phone: &Phone, offer: RemoteCall, choice: &str
     }
 }
 
+/// An empty computer agrees at once: nothing is asked here.
+fn offered(phone: &Phone, offer: RemoteCall) -> RemoteAnswer {
+    block(phone.call(offer)).unwrap()
+}
+
+const BROUGHT: RemoteAnswer = RemoteAnswer::MemoryAccepted {
+    here: None,
+    bring: true,
+};
+
 #[test]
-fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
-    let home = phone_home();
+fn an_empty_computer_brings_the_phones_things_in_with_no_restart() {
+    let home = phone_home().with_more();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
     let device = c.device_id();
     let (file, sha) = home.backup();
+    let shown = c.h.events("move-changed");
 
-    let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
-    assert_eq!(
-        accepted,
-        RemoteAnswer::MemoryAccepted {
-            here: None,
-            bring: false
-        }
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
+    assert!(
+        matches!(c.view(), Some(MoveView::Preparing { bring: true, .. })),
+        "nothing is asked: it waits for the phone's things"
     );
     assert!(
-        matches!(c.view(), Some(MoveView::Preparing { .. })),
-        "nothing has arrived while the phone gets it ready"
+        shown
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|v| v["phase"] != "offered"),
+        "the window never asks"
     );
 
     let seen = Arc::new(AtomicUsize::new(0));
     let heard = seen.clone();
-    let arrived = block(phone.upload_memory(done(&file, &sha), &file, move |n| {
+    let brought = block(phone.upload_memory(done(&file, &sha), &file, move |n| {
         heard.store(n as usize, Ordering::SeqCst)
     }))
     .unwrap();
-    let RemoteAnswer::MemoryArrived { counts } = arrived else {
-        panic!("{arrived:?}")
+    let RemoteAnswer::MemoryBrought { counts, added } = brought else {
+        panic!("{brought:?}")
     };
     assert_eq!(counts, home.counts(), "every count matches");
     assert_eq!(
         seen.load(Ordering::SeqCst) as u64,
         std::fs::metadata(&file).unwrap().len()
     );
-    assert!(matches!(c.view(), Some(MoveView::Restarting { .. })));
-
-    // Until the next start, what a phone sends would land in the store about to be put aside.
-    let waits = block(phone.call(RemoteCall::SendCalendar {
-        batch: calendar("s2"),
-    }));
     assert_eq!(
-        waits.err(),
-        Some(CallError::Phone {
-            code: PhoneError::Busy
-        })
+        added,
+        BroughtCounts {
+            things: 2,
+            entries: 0,
+            checkins: 1,
+        }
     );
-    // Asking before the restart: not opened yet, so the phone waits and keeps its memory.
-    assert_eq!(
-        block(phone.memory_status()).err(),
-        Some(CallError::Phone {
-            code: PhoneError::Busy
-        })
+    assert!(matches!(c.view(), Some(MoveView::Brought { .. })));
+    assert!(
+        !nocturne_app_lib::restore::marker_path(c.data()).exists(),
+        "no restart"
     );
+    assert!(!nocturne_app_lib::restore::stage_dir(c.data()).exists());
     assert_eq!(
-        block(phone.call(home.offer(&file))).err(),
-        Some(CallError::Phone {
-            code: PhoneError::Busy
-        })
-    );
-    let parts = std::fs::read_dir(c.hub.core.incoming.dir())
-        .unwrap()
-        .count();
-    assert_eq!(parts, 0, "the upload is gone once checked");
-    // Nothing replaces the memory waiting for the next start.
-    assert_eq!(
-        c.h.code("restore_put_aside", json!({"id": "2026-11-13 070000"})),
-        "busy"
+        std::fs::read_dir(c.hub.core.incoming.dir())
+            .unwrap()
+            .count(),
+        0,
+        "the upload is gone once added"
     );
 
-    let c = c.restart();
+    // Everything is here at once, with no restart: the note with where it was kept, the
+    // private mark, the check-in.
     let e = c.h.engine();
     assert_eq!(e.local_device().unwrap(), None, "no own row shows here");
-    let phones: Vec<String> = e
-        .devices(false)
-        .unwrap()
-        .into_iter()
-        .map(|d| d.id)
-        .collect();
-    assert_eq!(phones, vec![device.clone()]);
+    assert_eq!(e.devices(false).unwrap().len(), 1, "one of its phones");
     let note = e
         .remote_keep(&device, "c-note-1")
         .unwrap()
@@ -443,49 +431,41 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
         e.get_item(&note).unwrap().from_device.as_deref(),
         Some(NAME)
     );
-    assert_eq!(e.stats().unwrap().item_count, counts.items);
-    assert!(c.view().is_none());
-    // The window says it is here once, after the start that put it in place.
-    let shown = c.h.ok("get_move", json!({}));
-    assert_eq!(shown["phase"], "arrived");
-    assert_eq!(shown["name"], NAME);
-    c.h.ok("finish_move", json!({}));
-    assert!(c.h.ok("get_move", json!({})).is_null());
+    let gate = e.find_items(GATE, 10).unwrap().remove(0).receipt.item_id;
+    assert!(e.get_item(&gate).unwrap().private, "still private");
+    let before_calendar = e.stats().unwrap().item_count;
 
-    // The same phone, with the keys it paired with, hears that the memory opened, and only then
-    // puts its own aside. A calendar sent again is not taken twice.
-    let phone = c.phone(phone.identity().unwrap());
-    assert!(matches!(
-        block(phone.connect()),
-        Connection::Connected { .. }
-    ));
+    // The phone missed the answer: it hears it again, and nothing is doubled.
     assert_eq!(
         block(phone.memory_status()).unwrap(),
-        RemoteAnswer::MemoryArrived { counts }
+        RemoteAnswer::MemoryBrought { counts, added }
     );
-    let RemoteAnswer::Synced { receipt } = block(phone.call(RemoteCall::SendCalendar {
-        batch: calendar("s3"),
-    }))
-    .unwrap() else {
-        panic!("a receipt")
-    };
-    assert_eq!((receipt.taken, receipt.unchanged), (0, 1), "{receipt:?}");
-}
+    assert_eq!(
+        offered(&phone, home.offer(&file)),
+        RemoteAnswer::MemoryBrought { counts, added }
+    );
+    assert_eq!(
+        items_like(&c, "The heron feeder is refilled on Thursday."),
+        1
+    );
+    assert_eq!(items_like(&c, GATE), 1);
+    assert_eq!(e.stats().unwrap().item_count, before_calendar);
 
-/// Offer, agree and send: the memory waits for the next start.
-fn moved(c: &Computer, home: &PhoneHome, phone: &Phone) {
-    let (file, sha) = home.backup();
-    offer_and_answer(c, phone, home.offer(&file), "move");
-    assert!(matches!(
-        block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
-        RemoteAnswer::MemoryArrived { .. }
-    ));
+    // The calendar was not copied: the phone sends it again, and only once.
+    assert_eq!(send_calendar(&phone, "s2"), (1, 0));
+    assert_eq!(send_calendar(&phone, "s3"), (0, 1));
+
+    let shown = c.h.ok("get_move", json!({}));
+    assert_eq!(shown["phase"], "brought");
+    assert_eq!(shown["added"]["things"], 2);
+    c.h.ok("finish_move", json!({}));
+    assert!(c.h.ok("get_move", json!({})).is_null());
 }
 
 #[test]
 fn the_computer_counts_the_things_as_the_phone_does() {
     let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let c = computer_with_a_memory();
     let phone = c.phone(c.pair());
     let (file, _) = home.backup();
     let offer = home.offer(&file);
@@ -512,45 +492,21 @@ fn the_computer_counts_the_things_as_the_phone_does() {
 }
 
 #[test]
-fn removing_the_phone_before_the_next_start_lets_its_memory_go() {
-    let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
-    let phone = c.phone(c.pair());
-    moved(&c, &home, &phone);
-    let device = c.device_id();
-    c.h.ok("remove_device", json!({"id": device}));
-    assert!(c.view().is_none());
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
-    assert!(!nocturne_app_lib::restore::stage_dir(c.data()).exists());
-    let c = c.restart();
-    let e = c.h.engine();
-    assert_eq!(e.stats().unwrap().item_count, 0, "nothing of it came in");
-    assert!(e.devices(false).unwrap().is_empty());
-}
-
-#[test]
-fn removing_the_phone_while_its_memory_comes_stages_nothing() {
+fn removing_the_phone_while_its_things_come_to_an_empty_computer_adds_nothing() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
     let (file, _) = home.backup();
-    let big = home.dir.path().join("big.nocturne");
-    let mut bytes = std::fs::read(&file).unwrap();
-    bytes.resize(bytes.len() + 6 * 1024 * 1024, 7);
-    std::fs::write(&big, &bytes).unwrap();
-    let sha: String = Sha256::digest(&bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let (big, sha, size) = big_backup(&home);
     let offer = RemoteCall::OfferMemory {
         counts: home.counts(),
-        bytes: bytes.len() as f64,
+        bytes: size,
         schema: nocturne_engine::store::latest_version(),
         since: None,
         things: None,
         bring: false,
     };
-    offer_and_answer(&c, &phone, offer, "move");
+    assert_eq!(offered(&phone, offer), BROUGHT);
     let device = c.device_id();
     let before = c.relay.sent();
     let p = phone.clone();
@@ -562,42 +518,28 @@ fn removing_the_phone_while_its_memory_comes_stages_nothing() {
     });
     c.h.ok("remove_device", json!({"id": device}));
     assert!(block(going).unwrap().is_err());
-    assert!(c.view().is_none());
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
-    assert!(!nocturne_app_lib::restore::stage_dir(c.data()).exists());
+    assert_eq!(
+        c.view(),
+        Some(MoveView::Ended {
+            name: NAME.into(),
+            why: EndedWhy::Removed
+        })
+    );
+    assert_eq!(
+        c.h.engine().stats().unwrap().item_count,
+        0,
+        "nothing came in"
+    );
     assert_eq!(c.hub.core.incoming.in_flight(), 0);
+    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
     // Removed, it cannot offer again.
     assert!(block(phone.call(home.offer(&file))).is_err());
 }
 
 #[test]
-fn the_computers_phones_as_they_are_at_the_next_start_hold() {
-    let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
-    let phone = c.phone(c.pair());
-    moved(&c, &home, &phone);
-    // Paired after the memory arrived and before the next start.
-    let tablet = c.pair();
-    let c = c.restart();
-    let names: Vec<String> =
-        c.h.engine()
-            .devices(false)
-            .unwrap()
-            .into_iter()
-            .map(|d| d.id)
-            .collect();
-    assert_eq!(names.len(), 2, "{names:?}");
-    let tablet = c.phone(tablet);
-    assert!(matches!(
-        block(tablet.connect()),
-        Connection::Connected { .. }
-    ));
-}
-
-#[test]
 fn keeping_what_is_here_undoes_the_pairing() {
     let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let c = computer_with_a_memory();
     let phone = c.phone(c.pair());
     let (file, _) = home.backup();
 
@@ -611,13 +553,12 @@ fn keeping_what_is_here_undoes_the_pairing() {
     assert!(phone.identity().is_none(), "the phone forgot the pairing");
     assert!(c.h.engine().devices(false).unwrap().is_empty());
     assert!(c.view().is_none());
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
 }
 
 #[test]
 fn a_phone_that_says_not_now_takes_the_question_away() {
     let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let c = computer_with_a_memory();
     let phone = c.phone(c.pair());
     let (file, _) = home.backup();
     let p = phone.clone();
@@ -637,26 +578,18 @@ fn an_interrupted_upload_changes_nothing() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
-    let (file, sha) = home.backup();
     // Enough to be cut part way.
-    let big = home.dir.path().join("big.nocturne");
-    let mut bytes = std::fs::read(&file).unwrap();
-    bytes.resize(bytes.len() + 6 * 1024 * 1024, 7);
-    std::fs::write(&big, &bytes).unwrap();
-    let big_sha: String = Sha256::digest(&bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-
-    let offer = RemoteCall::OfferMemory {
+    let (big, big_sha, size) = big_backup(&home);
+    let (file, sha) = home.backup();
+    let offer = || RemoteCall::OfferMemory {
         counts: home.counts(),
-        bytes: bytes.len() as f64,
+        bytes: size,
         schema: nocturne_engine::store::latest_version(),
         since: None,
         things: None,
         bring: false,
     };
-    offer_and_answer(&c, &phone, offer, "move");
+    assert_eq!(offered(&phone, offer()), BROUGHT);
     let before = c.relay.sent();
     let p = phone.clone();
     let (call, path) = (done(&big, &big_sha), big.clone());
@@ -679,24 +612,9 @@ fn an_interrupted_upload_changes_nothing() {
     wait_for("the computer lets go", || {
         matches!(c.view(), Some(MoveView::Preparing { .. })) && c.hub.core.incoming.in_flight() == 0
     });
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
-    assert!(!nocturne_app_lib::restore::stage_dir(c.data()).exists());
-    // Carrying on after the pause, the phone is not asked about twice.
-    let again = RemoteCall::OfferMemory {
-        counts: home.counts(),
-        bytes: bytes.len() as f64,
-        schema: nocturne_engine::store::latest_version(),
-        since: None,
-        things: None,
-        bring: false,
-    };
-    assert_eq!(
-        block(phone.call(again)).unwrap(),
-        RemoteAnswer::MemoryAccepted {
-            here: None,
-            bring: false
-        }
-    );
+    assert_eq!(c.h.engine().stats().unwrap().item_count, 0);
+    // Carrying on after the pause, it is agreed as before.
+    assert_eq!(offered(&phone, offer()), BROUGHT);
 
     // A file that is not what the phone said is refused whole, and nothing changes either.
     let wrong = block(phone.upload_memory(done(&file, &big_sha.replace('a', "b")), &file, |_| {}));
@@ -706,19 +624,19 @@ fn an_interrupted_upload_changes_nothing() {
             code: PhoneError::Invalid
         })
     );
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
+    assert_eq!(c.h.engine().stats().unwrap().item_count, 0);
     assert!(c.view().is_none(), "the phone may offer it again");
 
-    // Offered again, it arrives.
-    offer_and_answer(&c, &phone, home.offer(&file), "move");
+    // Offered again, its things are added.
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
     assert!(matches!(
         block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
-        RemoteAnswer::MemoryArrived { .. }
+        RemoteAnswer::MemoryBrought { .. }
     ));
 }
 
 #[test]
-fn a_memory_is_not_taken_without_the_persons_word() {
+fn a_memory_is_not_taken_unless_offered_and_fitting() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
@@ -775,29 +693,17 @@ fn short_of_room_nothing_moves_until_there_is_some() {
             code: PhoneError::TooLarge
         })
     );
-    let shown = c.h.ok("get_move", json!({}));
-    assert_eq!(shown["phase"], "offered");
-    assert!(shown["room"]["need"].as_f64().unwrap() > 1024.0);
-    assert_eq!(
-        c.h.code("answer_move", json!({"choice": "move"})),
-        "notFound",
-        "the move button waits for room"
+    assert!(
+        c.h.ok("get_move", json!({})).is_null(),
+        "nothing shows here: the phone says so"
     );
 
-    // Room freed: the window says so, and the phone's next try is asked as usual.
+    // Room freed: the phone's next try is agreed at once.
     nocturne_app_lib::remote::moving::pretend_free(c.data(), Some(u64::MAX / 4));
-    assert!(c.h.ok("get_move", json!({}))["room"].is_null());
-    let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
-    assert_eq!(
-        accepted,
-        RemoteAnswer::MemoryAccepted {
-            here: None,
-            bring: false
-        }
-    );
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
     assert!(matches!(
         block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
-        RemoteAnswer::MemoryArrived { .. }
+        RemoteAnswer::MemoryBrought { .. }
     ));
 }
 
@@ -806,24 +712,16 @@ fn stopping_on_the_computer_ends_the_move_and_the_phone_hears_so() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
-    let (file, _) = home.backup();
-    let big = home.dir.path().join("big.nocturne");
-    let mut bytes = std::fs::read(&file).unwrap();
-    bytes.resize(bytes.len() + 6 * 1024 * 1024, 7);
-    std::fs::write(&big, &bytes).unwrap();
-    let sha: String = Sha256::digest(&bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let (big, sha, size) = big_backup(&home);
     let offer = RemoteCall::OfferMemory {
         counts: home.counts(),
-        bytes: bytes.len() as f64,
+        bytes: size,
         schema: nocturne_engine::store::latest_version(),
         since: None,
         things: None,
         bring: false,
     };
-    offer_and_answer(&c, &phone, offer, "move");
+    assert_eq!(offered(&phone, offer), BROUGHT);
     let before = c.relay.sent();
     let p = phone.clone();
     let (call, path) = (done(&big, &sha), big.clone());
@@ -840,55 +738,8 @@ fn stopping_on_the_computer_ends_the_move_and_the_phone_hears_so() {
         })
     );
     assert!(c.view().is_none());
-    assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
+    assert_eq!(c.h.engine().stats().unwrap().item_count, 0);
     assert_eq!(c.hub.core.incoming.in_flight(), 0);
-}
-
-#[test]
-fn a_memory_that_does_not_open_changes_nothing_and_the_phone_keeps_its_own() {
-    let home = phone_home();
-    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
-    let phone = c.phone(c.pair());
-    let (file, _) = home.backup();
-    moved(&c, &home, &phone);
-    // The staged store is damaged before the start that would open it.
-    let db = nocturne_app_lib::restore::stage_dir(c.data()).join("store/nocturne.db");
-    std::fs::write(&db, b"not a database at all").unwrap();
-    let c = c.restart();
-
-    assert_eq!(
-        c.h.engine().stats().unwrap().item_count,
-        0,
-        "nothing changed here"
-    );
-    let shown = c.h.ok("get_move", json!({}));
-    assert_eq!(shown["phase"], "failed");
-    assert_eq!(shown["why"], "notOpened");
-    c.h.ok("finish_move", json!({}));
-    assert!(c.h.ok("get_move", json!({})).is_null());
-
-    let phone = c.phone(phone.identity().unwrap());
-    for _ in 0..2 {
-        assert_eq!(
-            block(phone.memory_status()).err(),
-            Some(CallError::Phone {
-                code: PhoneError::NotFound
-            }),
-            "the phone hears it did not open, however often it asks"
-        );
-    }
-    // Offered again, it is a new move, asked as before.
-    let p = phone.clone();
-    let offer = home.offer(&file);
-    let again = tauri::async_runtime::spawn(async move { p.call(offer).await });
-    wait_for("asked again", || {
-        matches!(c.view(), Some(MoveView::Offered { .. }))
-    });
-    c.h.ok("answer_move", json!({"choice": "move"}));
-    assert!(matches!(
-        block(again).unwrap(),
-        Ok(RemoteAnswer::MemoryAccepted { .. })
-    ));
 }
 
 #[test]
@@ -897,7 +748,7 @@ fn a_stop_before_the_upload_reaches_the_phone_and_not_the_next_move() {
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
     let (file, sha) = home.backup();
-    offer_and_answer(&c, &phone, home.offer(&file), "move");
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
     c.h.ok("stop_move", json!({}));
     assert!(c.view().is_none());
     assert_eq!(
@@ -907,20 +758,18 @@ fn a_stop_before_the_upload_reaches_the_phone_and_not_the_next_move() {
         }),
         "the phone hears the move was stopped"
     );
-    // Tried again, the person agrees again and the memory comes.
-    offer_and_answer(&c, &phone, home.offer(&file), "move");
+    // Tried again, it is agreed again and the things come.
+    assert_eq!(offered(&phone, home.offer(&file)), BROUGHT);
     assert!(matches!(
         block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
-        RemoteAnswer::MemoryArrived { .. }
+        RemoteAnswer::MemoryBrought { .. }
     ));
 }
 
 #[test]
 fn a_phone_that_asks_where_its_memory_stands_starts_nothing() {
-    let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
     let phone = c.phone(c.pair());
-    let (file, _) = home.backup();
     assert_eq!(
         block(phone.memory_status()).err(),
         Some(CallError::Phone {
@@ -928,8 +777,7 @@ fn a_phone_that_asks_where_its_memory_stands_starts_nothing() {
         }),
         "nothing is known of it here"
     );
-    assert!(c.view().is_none(), "no question is asked");
-    let _ = file;
+    assert!(c.view().is_none(), "nothing starts");
 }
 
 /// As the phone app does it: an offer that guesses the size low, then, once agreed and the backup
@@ -948,24 +796,17 @@ fn the_phone_asks_where_its_memory_stands_then_sends_it() {
         things: None,
         bring: false,
     };
-    let accepted = offer_and_answer(&c, &phone, offer, "move");
-    assert_eq!(
-        accepted,
-        RemoteAnswer::MemoryAccepted {
-            here: None,
-            bring: false
-        }
-    );
+    assert_eq!(offered(&phone, offer), BROUGHT);
     assert_eq!(
         block(phone.memory_status()).err(),
         Some(CallError::Phone {
             code: PhoneError::NotReady
         })
     );
-    let arrived = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
+    let brought = block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap();
     assert!(
-        matches!(arrived, RemoteAnswer::MemoryArrived { .. }),
-        "{arrived:?}"
+        matches!(brought, RemoteAnswer::MemoryBrought { .. }),
+        "{brought:?}"
     );
 }
 
