@@ -402,3 +402,43 @@ fn a_damaged_original_name_adds_nothing() {
     assert!(computer.engine.bring_in(phone.dir.path(), &device).is_err());
     assert_eq!(item_count(&computer.engine), 0, "none of it was added");
 }
+
+#[test]
+fn a_forget_here_that_is_not_done_never_swallows_the_phones_copy() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let bytes: &[u8] = b"\x89PNG\r\n\x1a\nthe allotment shed";
+    let here = write_file(computer.dir.path(), "shed.png", bytes);
+    let Kept::New { item: here } = computer.engine.keep_file(&here, Source::Drop).unwrap() else {
+        panic!("a new photo here")
+    };
+    let there = write_file(phone.dir.path(), "shed.png", bytes);
+    let Kept::New { item: there } = phone.engine.keep_file(&there, Source::Phone).unwrap() else {
+        panic!("a new photo on the phone")
+    };
+    computer.engine.unkeep_begin_only(&here.id).unwrap();
+
+    let busy = computer.engine.bring_in(phone.dir.path(), &device);
+    assert!(
+        matches!(busy, Err(nocturne_engine::Error::Busy)),
+        "{busy:?}"
+    );
+    let stray = std::fs::read_dir(computer.dir.path().join("originals"))
+        .unwrap()
+        .flatten()
+        .filter(|f| f.file_name().to_string_lossy().starts_with(".tmp-"))
+        .count();
+    assert_eq!(stray, 0, "no copy is left behind");
+
+    computer.engine.resume_forgets_for_test().unwrap();
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.things, 1, "{brought:?}");
+    let came = computer.engine.get_item(&there.id).unwrap();
+    assert!(
+        came.original_path
+            .as_deref()
+            .is_some_and(|p| std::path::Path::new(p).is_file()),
+        "the phone's copy came with its original"
+    );
+}

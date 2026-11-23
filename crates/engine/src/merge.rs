@@ -405,19 +405,29 @@ fn join_same(tx: &Transaction<'_>, here: &str, p: &Arriving) -> Result<Vec<PathB
     Ok(files)
 }
 
-/// The originals the arriving things need that are not here yet, copied in beside the others
-/// under a passing name and then renamed. Answers the ones made, so a merge that does not commit
-/// takes them away again.
-fn copy_originals(from: &Path, to: &Path, items: &[&Arriving]) -> Result<Vec<PathBuf>> {
-    let mut made = Vec::new();
-    let copied = (|| {
+/// The originals the arriving things need that are not here yet, copied beside the others
+/// under passing names. They are put in place under the store's lock, as a keep does, so a keep
+/// or a forget running meanwhile never finds a file that has no row or loses one that has.
+#[derive(Default)]
+struct Staged {
+    /// Each copy waiting, by its digest.
+    waiting: HashMap<String, PathBuf>,
+    /// Digests the phone's backup holds no original for.
+    missing: HashSet<String>,
+    /// Originals put in place by this merge, taken away again should it not commit.
+    placed: Vec<(String, PathBuf)>,
+}
+
+impl Staged {
+    fn copy(from: &Path, to: &Path, items: &[&Arriving]) -> Result<Staged> {
+        let mut staged = Staged::default();
         for p in items.iter().filter(|p| p.file) {
-            let dest = original_path(to, &p.sha, p.ext.as_deref());
-            if dest.exists() {
+            if staged.waiting.contains_key(&p.sha) {
                 continue;
             }
             let src = original_path(from, &p.sha, p.ext.as_deref());
             if !src.is_file() {
+                staged.missing.insert(p.sha.clone());
                 continue;
             }
             let tmp = to.join(format!(".tmp-{}", random_hex(8)));
@@ -426,24 +436,43 @@ fn copy_originals(from: &Path, to: &Path, items: &[&Arriving]) -> Result<Vec<Pat
                 let mut output = crate::fsutil::create_private_file(&tmp)?;
                 std::io::copy(&mut input, &mut output)?;
                 output.sync_all()?;
-                std::fs::rename(&tmp, &dest)?;
                 Ok::<_, Error>(())
             })();
             if let Err(e) = written {
                 let _ = std::fs::remove_file(&tmp);
+                staged.drop_waiting();
                 return Err(e);
             }
-            made.push(dest);
+            staged.waiting.insert(p.sha.clone(), tmp);
         }
-        Ok(())
-    })();
-    match copied {
-        Ok(()) => Ok(made),
-        Err(e) => {
-            for f in made {
-                crate::fsutil::shred(&f);
+        Ok(staged)
+    }
+
+    /// Put the original of a thing being added in place, under the store's lock. Refused as
+    /// busy when it is not here and no copy waits for it (something took it away since the
+    /// copies were made): the phone carries on, and it is copied again then.
+    fn place(&mut self, to: &Path, p: &Arriving) -> Result<()> {
+        if !p.file {
+            return Ok(());
+        }
+        let dest = original_path(to, &p.sha, p.ext.as_deref());
+        if dest.exists() {
+            return Ok(());
+        }
+        match self.waiting.remove(&p.sha) {
+            Some(tmp) => {
+                std::fs::rename(&tmp, &dest)?;
+                self.placed.push((p.sha.clone(), dest));
+                Ok(())
             }
-            Err(e)
+            None if self.missing.contains(&p.sha) => Ok(()),
+            None => Err(Error::Busy),
+        }
+    }
+
+    fn drop_waiting(&mut self) {
+        for (_, tmp) in self.waiting.drain() {
+            let _ = std::fs::remove_file(tmp);
         }
     }
 }
@@ -477,8 +506,9 @@ impl Engine {
         let arriving = read_phone(&phone, &shared, &name)?;
         drop(phone);
 
-        // The originals go first, outside the transaction, so the store is never held while
-        // they are copied. What the transaction then finds here already needs none of them.
+        // The originals are copied first, outside the transaction, so the store is never held
+        // while they are; they are put in place inside it. What the transaction then finds here
+        // already needs none of them.
         let needed: Vec<&Arriving> = {
             let have: HashSet<String> = self.read(|conn| {
                 let mut stmt = conn.prepare("SELECT sha256 FROM items")?;
@@ -487,9 +517,12 @@ impl Engine {
             })?;
             arriving.iter().filter(|p| !have.contains(&p.sha)).collect()
         };
-        let made = copy_originals(&staged.join("originals"), &self.originals_dir(), &needed)?;
+        let originals = self.originals_dir();
+        let mut copies = Staged::copy(&staged.join("originals"), &originals, &needed)?;
 
-        let written = self.write(|tx| self.add_arriving(tx, device, &arriving, &shared));
+        let written =
+            self.write(|tx| self.add_arriving(tx, device, &arriving, &shared, &mut copies));
+        copies.drop_waiting();
         match written {
             Ok((brought, files)) => {
                 if !files.is_empty() {
@@ -499,9 +532,22 @@ impl Engine {
                 Ok(brought)
             }
             Err(e) => {
-                for f in made {
-                    crate::fsutil::shred(&f);
-                }
+                // Only an original no row came to need since: a keep puts its own in place
+                // under the same lock.
+                let placed = std::mem::take(&mut copies.placed);
+                let _ = self.write(|tx| {
+                    for (sha, file) in &placed {
+                        let used: bool = tx.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM items WHERE sha256 = ?1)",
+                            [sha],
+                            |r| r.get(0),
+                        )?;
+                        if !used {
+                            crate::fsutil::shred(file);
+                        }
+                    }
+                    Ok(())
+                });
                 Err(e)
             }
         }
@@ -513,7 +559,17 @@ impl Engine {
         device: &str,
         arriving: &[Arriving],
         shared: &[String],
+        copies: &mut Staged,
     ) -> Result<(BroughtIn, Vec<PathBuf>)> {
+        // A forget here that has not finished yet still removes its things and their originals:
+        // a thing it names could swallow the phone's own copy of it, or lose the original an
+        // arriving thing shares. Nothing is added until it is done; the phone carries on.
+        let forgetting: bool =
+            tx.query_row("SELECT EXISTS(SELECT 1 FROM forget_jobs)", [], |r| r.get(0))?;
+        if forgetting {
+            return Err(Error::Busy);
+        }
+        let originals = self.originals_dir();
         let mut brought = BroughtIn::default();
         let mut files = Vec::new();
         let mut fates: Vec<Fate> = Vec::with_capacity(arriving.len());
@@ -602,6 +658,7 @@ impl Engine {
             };
             set("id", Sql::Text(id.clone()));
             set("metadata", Sql::Text(meta.to_string()));
+            copies.place(&originals, p)?;
             if p.readable {
                 set("status", Sql::Text("kept".into()));
             }
@@ -640,5 +697,51 @@ impl Engine {
             }
         }
         Ok((brought, files))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn photo(sha: &str) -> Arriving {
+        Arriving {
+            row: Vec::new(),
+            id: "itm_a".into(),
+            kind: "image".into(),
+            sha: sha.into(),
+            ext: Some("png".into()),
+            file: true,
+            readable: true,
+            private: false,
+            kept_at: String::new(),
+            meta: json!({}),
+            client: None,
+            place: None,
+        }
+    }
+
+    /// Something took an original away after the copies were made (a forget that finished):
+    /// nothing is added without it, and the phone carries on.
+    #[test]
+    fn an_original_gone_since_the_copies_were_made_is_not_added_without_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let (from, to) = (dir.path().join("from"), dir.path().join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        let (a, b) = ("a".repeat(64), "b".repeat(64));
+        std::fs::write(original_path(&from, &a, Some("png")), b"a").unwrap();
+        let mut staged = Staged::copy(&from, &to, &[&photo(&a)]).unwrap();
+        assert!(
+            !original_path(&to, &a, Some("png")).exists(),
+            "not in place yet"
+        );
+        staged.place(&to, &photo(&a)).unwrap();
+        assert!(original_path(&to, &a, Some("png")).is_file());
+        assert_eq!(staged.placed.len(), 1);
+        assert!(matches!(staged.place(&to, &photo(&b)), Err(Error::Busy)));
+        staged.drop_waiting();
+        let left: Vec<_> = std::fs::read_dir(&to).unwrap().flatten().collect();
+        assert_eq!(left.len(), 1, "no copy is left behind");
     }
 }
