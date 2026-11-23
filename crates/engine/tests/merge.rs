@@ -580,6 +580,54 @@ fn a_forget_on_the_phone_that_is_not_done_still_holds_on_the_computer() {
 }
 
 #[test]
+fn a_forget_on_the_phone_covers_every_version_of_the_thing() {
+    use common::EngineExt;
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let day = date("2026-11-13");
+    let first = phone
+        .engine
+        .save_entry_text(day, None, 0, "The heron prefers the feeder.")
+        .unwrap()
+        .unwrap();
+    phone.engine.apply(&first.item.id, vec![heron()]).unwrap();
+    // Changed after it was read, so the first version stays as history.
+    let second = phone
+        .engine
+        .save_entry_text(day, Some(&first.item.id), 0, "The fox prefers the shed.")
+        .unwrap()
+        .unwrap();
+    assert_eq!(second.earlier.len(), 1);
+    let memory = phone
+        .engine
+        .apply(
+            &second.item.id,
+            vec![common::cand(
+                "fox",
+                nocturne_engine::Predicate::Prefers,
+                "the shed",
+                "The fox prefers the shed.",
+            )],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    forget_memory(&phone.engine, &memory, true, true);
+
+    computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    let e = &computer.engine;
+    assert!(
+        e.get_item(&second.item.id).is_err(),
+        "the version being forgotten does not come"
+    );
+    assert!(
+        e.get_item(&first.item.id).is_err(),
+        "nor does the version it replaced"
+    );
+}
+
+#[test]
 fn a_forget_on_the_phone_holds_for_the_same_thing_already_here() {
     let phone = fixture();
     let computer = fixture();
