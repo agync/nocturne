@@ -39,9 +39,8 @@ pub const KEY_ENV: &str = "LEMONADE_NOCTURNE_ONLINE_API_KEY";
 pub const ROW: &str = "nocturne-online";
 /// The model id Nocturne calls: the engine prefixes registered rows with `user.`.
 pub const MODEL_ID: &str = "user.nocturne-online";
-pub const MAX_TOKENS: u32 = 600;
-/// The one question of a connection check.
-pub const CHECK_QUESTION: &str = "Reply with the word ready.";
+pub use nocturne_mind::online::CHECK_QUESTION;
+pub use nocturne_mind::online::MAX_TOKENS;
 /// After this long without an answer the person may switch to this computer.
 pub const WAIT_SECONDS: u64 = 6;
 /// After this long without an answer this computer answers instead.

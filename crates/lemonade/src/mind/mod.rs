@@ -530,7 +530,7 @@ impl LemonadeMind {
         sampling: &crate::client::Sampling,
     ) -> Result<String, MindError> {
         let mut req = ChatRequest::new(model, messages.to_vec()).sampled(sampling);
-        req.max_tokens = Some(1024);
+        req.max_tokens = Some(prompts::REPLY_TOKENS);
         let mut stream = match self.client.chat(&req).await {
             Ok(s) => s,
             Err(e) => {
@@ -576,11 +576,11 @@ impl LemonadeMind {
             model,
             vec![
                 Message::system(&prompts::image_system()),
-                Message::user_with_image("Describe and read this image.", uri),
+                Message::user_with_image(prompts::IMAGE_ASK, uri),
             ],
         )
         .sampled(&self.sampling.image);
-        req.max_tokens = Some(1024);
+        req.max_tokens = Some(prompts::IMAGE_TOKENS);
         #[derive(Deserialize)]
         struct Reading {
             #[serde(default)]
@@ -643,7 +643,7 @@ impl LemonadeMind {
             ],
         )
         .sampled(&self.sampling.headline);
-        req.max_tokens = Some(200);
+        req.max_tokens = Some(prompts::HEADLINE_TOKENS);
         #[derive(Deserialize)]
         struct Headline {
             headline: String,

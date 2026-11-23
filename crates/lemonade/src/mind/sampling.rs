@@ -3,6 +3,7 @@
 //! them from [`ENV`], read only by a debug build with the `test-sampling` feature.
 
 use nocturne_contract::Tier;
+use nocturne_mind::temperature;
 use serde::Deserialize;
 
 use crate::client::Sampling;
@@ -21,11 +22,11 @@ pub struct Presets {
 }
 
 const TODAY: Presets = Presets {
-    extract: Sampling::temperature(0.0),
-    answer: Sampling::temperature(0.2),
-    image: Sampling::temperature(0.0),
-    headline: Sampling::temperature(0.4),
-    reflection: Sampling::temperature(0.3),
+    extract: Sampling::temperature(temperature::EXTRACT),
+    answer: Sampling::temperature(temperature::ANSWER),
+    image: Sampling::temperature(temperature::IMAGE),
+    headline: Sampling::temperature(temperature::HEADLINE),
+    reflection: Sampling::temperature(temperature::REFLECTION),
 };
 
 #[derive(Default, Deserialize)]

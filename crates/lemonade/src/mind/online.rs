@@ -23,8 +23,6 @@ use crate::online::{CHECK_QUESTION, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classi
 /// Whether each memory id may still be sent, asked again just before the body is built.
 pub type Sendable = Arc<dyn Fn(&[String]) -> Vec<bool> + Send + Sync>;
 
-const CHECK_MAX_TOKENS: u32 = 8;
-
 pub struct OnlineMind {
     client: Client,
     sendable: Sendable,
@@ -87,7 +85,7 @@ impl OnlineMind {
         let request = OnlineRequest {
             model: MODEL_ID.to_string(),
             messages: vec![Message::system(&system), Message::user(&user)],
-            temperature: 0.2,
+            temperature: nocturne_mind::temperature::ANSWER,
             max_tokens: MAX_TOKENS,
             timeout: None,
         };
@@ -154,8 +152,8 @@ pub async fn check(client: &Client, host: &str, model: &str) -> (CheckOutcome, O
     let request = OnlineRequest {
         model: MODEL_ID.to_string(),
         messages: vec![Message::user(CHECK_QUESTION)],
-        temperature: 0.0,
-        max_tokens: CHECK_MAX_TOKENS,
+        temperature: nocturne_mind::temperature::CHECK,
+        max_tokens: nocturne_mind::online::CHECK_MAX_TOKENS,
         timeout: Some(Duration::from_secs(SWITCH_SECONDS)),
     };
     let mut receipt = OnlineReceipt {
