@@ -650,8 +650,16 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     }
     let _busy = Busy(&moving);
     moving.stop.store(false, Ordering::SeqCst);
+    // Listened for from here: a Stop while the backup is made still ends the move, rather than
+    // the move carrying on through a pairing the Stop undid.
+    let stopped = moving.stopped.notified();
+    tokio::pin!(stopped);
+    stopped.as_mut().enable();
+    let Ok(computer) = phone(&app) else {
+        tracing::info!("no pairing to move the memory through");
+        return Err(MoveError::Declined);
+    };
     tracing::info!("moving the memory: making its backup");
-    let computer = phone(&app)?;
     let began = std::time::Instant::now();
     let hold = {
         let app = app.clone();
@@ -682,8 +690,9 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
     );
     let report = |phase, done, total| emit(&app, phase, done, total);
     let arrived = tokio::select! {
+        biased;
+        () = &mut stopped => Err(MoveError::Stopped),
         arrived = carry(&computer, &prepared, &report, RETRY_EVERY) => arrived,
-        () = moving.stopped.notified() => Err(MoveError::Stopped),
     };
     let home = app.state::<Home>();
     let counts = match arrived {
