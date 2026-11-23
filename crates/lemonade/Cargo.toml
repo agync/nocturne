@@ -36,6 +36,7 @@ dunce.workspace = true
 nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 nocturne-mind.workspace = true
+nocturne-provider.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

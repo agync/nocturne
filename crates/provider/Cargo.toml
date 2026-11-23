@@ -1,0 +1,21 @@
+[package]
+name = "nocturne-provider"
+description = "The Nocturne mind on an online provider the person chose: its address rules, one client to its one host, and the mind that reads, writes and answers through it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nocturne-engine.workspace = true
+base64.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+tokio = { workspace = true, features = ["net"] }
+url.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt"] }
+
+[lints]
+workspace = true
