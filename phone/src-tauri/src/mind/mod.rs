@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use jiff::Timestamp;
-use nocturne_contract::CheckOutcome;
+use nocturne_contract::{CheckOutcome, ItemKind};
 use nocturne_engine::Clock;
 use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
@@ -377,6 +377,12 @@ impl PhoneMind {
                 clock.clone(),
                 events,
             );
+            let voice = home.voice();
+            reader.hold_while(Arc::new(move |p| {
+                p.kind == ItemKind::Audio
+                    && p.text.as_deref().is_none_or(|t| t.trim().is_empty())
+                    && !voice.turn_over(&p.id)
+            }));
             scheduler.set_reflecting(self.slot.clone(), Arc::new(|| true));
             *thinking = Some(Thinking {
                 generation,

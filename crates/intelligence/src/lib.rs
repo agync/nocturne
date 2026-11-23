@@ -30,7 +30,7 @@ pub use events::{Events, NullEvents};
 #[cfg(any(test, feature = "fake"))]
 pub use host::FakeHost;
 pub use host::{Host, SleepGuard, SystemHost, probe};
-pub use reader::{AskGuard, DrainHandle, DrainProgress, Outcome, Reader, ReaderStats, Step};
+pub use reader::{AskGuard, DrainHandle, DrainProgress, Hold, Outcome, Reader, ReaderStats, Step};
 pub use reflect::{ReflectError, Wrote};
 pub use schedule::{Coming, coming, target_date};
 pub use scheduler::{SchedStep, Scheduler};
