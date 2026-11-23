@@ -276,6 +276,12 @@ impl PhoneMind {
         let _ = std::fs::remove_file(self.path());
     }
 
+    /// "Delete everything": turned off, and the Sent online list goes with the key.
+    pub fn erase(&self) {
+        self.turn_off();
+        self.sent.clear();
+    }
+
     pub fn chosen(&self) -> Chosen {
         if let Some(On { host, model, .. }) = lock(&self.on).clone() {
             return Chosen::On { host, model };
