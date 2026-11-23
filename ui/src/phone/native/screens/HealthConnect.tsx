@@ -12,7 +12,16 @@ import {
   onIphone,
   openHealth,
 } from "../sources";
-import { DoneBar, KeptSoFar, openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
+import {
+  DoneBar,
+  KeptSoFar,
+  openPolicy,
+  places,
+  placesRich,
+  Switch,
+  sentAt,
+  useHeading,
+} from "./parts";
 
 type Step =
   | { name: "loading" }
@@ -384,6 +393,7 @@ export function HealthSettingsScreen({
           on={settings.bring}
           onChange={(bring) => void save({ ...settings, bring })}
         />
+        <h2 className="ph-lbl">{t("phone.health.kinds.title")}</h2>
         <KindSwitches
           kinds={settings.kinds}
           disabled={!settings.bring}

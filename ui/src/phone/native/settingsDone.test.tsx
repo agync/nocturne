@@ -78,7 +78,9 @@ describe.each([
     expect(await screen.findByRole("switch", { name: new RegExp(aloneSwitch) })).toBeTruthy();
     expect(screen.queryByRole("switch", { name: new RegExp(companionSwitch) })).toBeNull();
     const kept = screen.getByRole("region", { name: "Kept so far" });
-    expect(within(kept).getByText("What Nocturne already kept stays until you delete it.")).toBeTruthy();
+    expect(
+      within(kept).getByText("What Nocturne already kept stays until you delete it."),
+    ).toBeTruthy();
     fireEvent.click(within(kept).getByRole("button", { name: "Delete what was kept…" }));
     expect(onDelete).toHaveBeenCalledOnce();
     const done = screen.getByRole("button", { name: "Done" });

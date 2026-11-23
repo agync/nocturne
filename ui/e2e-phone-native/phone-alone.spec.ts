@@ -22,7 +22,7 @@ async function fits(page: Page) {
   );
   expect(wide).toBeLessThanOrEqual(1);
   const clipped = await page.evaluate(() =>
-    [...document.querySelectorAll("main button, footer button")]
+    [...document.querySelectorAll("main button, footer button, .ph-done button")]
       .filter((b) => b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1)
       .map((b) => b.textContent),
   );

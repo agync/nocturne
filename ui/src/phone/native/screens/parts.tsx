@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Children, type ReactNode, useEffect, useRef } from "react";
 import { formatTimeOfDay } from "../../../copy/format";
-import { Button } from "../../screens/ui";
 import { type CopyId, type CopyValues, t, tParts } from "../../../copy/t";
+import { Button } from "../../screens/ui";
 
 /** The privacy policy, in the phone's browser. */
 export const POLICY = "https://nocturne.is/privacy";
@@ -88,11 +88,11 @@ export function Switch({
 /** "Done", pinned at the bottom of a settings screen, where the thumb is. Choices save as made. */
 export function DoneBar({ onDone }: { onDone(): void }) {
   return (
-    <footer className="ph-done">
+    <div className="ph-done">
       <Button kind="primary" onClick={onDone}>
         {t("phone.done")}
       </Button>
-    </footer>
+    </div>
   );
 }
 
