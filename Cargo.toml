@@ -12,6 +12,7 @@ rust-version = "1.98"
 [workspace.dependencies]
 nocturne-contract = { path = "crates/contract" }
 nocturne-engine = { path = "crates/engine" }
+nocturne-intelligence = { path = "crates/intelligence" }
 nocturne-lemonade = { path = "crates/lemonade" }
 nocturne-mind = { path = "crates/mind" }
 nocturne-provider = { path = "crates/provider" }

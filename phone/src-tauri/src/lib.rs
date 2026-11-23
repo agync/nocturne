@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod home;
 pub mod log;
+pub mod mind;
 pub mod sources;
 pub mod state;
 pub mod store;
@@ -30,16 +31,21 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             log::start(&dir.join("logs"));
             app.manage(state::AppState::new(dir.clone()));
-            app.manage(home::Home::new(
-                dir,
+            let home = home::Home::new(
+                dir.clone(),
                 std::sync::Arc::new(nocturne_engine::SystemClock),
                 exclude_from_backup(app.handle()),
-            ));
+            );
+            let thinking = mind::PhoneMind::new(dir, Box::new(mind::MemoryKeys::default()));
+            thinking.follow(&home);
+            app.manage(home);
+            app.manage(thinking);
             app.manage(home::r#move::Moving::default());
             sources::start(app.handle());
             home::commands::fade_soon(app.handle());
             home::commands::clear_backup_copies(app.handle());
             home::r#move::clear_old_put_aside(app.handle());
+            mind::run(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
