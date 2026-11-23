@@ -1,21 +1,21 @@
 //! Moving this phone's memory to the computer it has just paired with. The phone offers it with
-//! what it holds; once the person on the computer agrees and the person here says "Move my
-//! memory", nothing else touches the store: a backup in 0013's format is made, locked with a
-//! passphrase made for this one move, and sent up in chunks with that passphrase inside the
-//! sealed session. When the computer says every count matches, Nocturne there restarts to open
-//! the memory; the phone keeps its memory, still held, and asks until the computer says the
-//! memory opened. Only then is the store put aside as `store-put-aside-{time}`, read only, and
-//! the phone becomes a companion of that computer. The put-aside memory stays for 30 days unless
-//! the person removes it sooner. While it waits the phone only asks where its memory stands (a
-//! `memoryDone` that sends nothing), so the wait never starts a new move on the computer.
+//! what it holds. An empty computer agrees at once; one that already holds a memory asks the
+//! person there how this phone joins it. Once the person here says "Move my memory", nothing
+//! else touches the store: a backup in 0013's format is made, locked with a passphrase made for
+//! this one move, and sent up in chunks with that passphrase inside the sealed session. The
+//! computer checks every count and adds the things to its memory, with no restart, and answers
+//! `MemoryBrought`. Only then is the store put aside as `store-put-aside-{time}`, read only, the
+//! phone becomes a companion of that computer, and the calendar and health are sent again from
+//! nothing so the computer has them too. The put-aside memory stays for 30 days unless the
+//! person removes it sooner. A computer still checking or adding when the phone comes back is
+//! only asked where the memory stands (a `memoryDone` that sends nothing), so the wait never
+//! starts a new move there. A computer that answers it took the memory whole, to open after a
+//! restart, is not followed: nothing changes here.
 //!
 //! Anything kept while the memory moves waits in the screens' queue and goes to the computer
 //! once the phone is its companion. A move that stops part way changes nothing here.
 //!
-//! A computer that already holds a memory asks the person there how this phone joins it. To
-//! bring its things in, the move runs as above, but the computer adds them to its memory and
-//! answers `MemoryBrought` with no restart; only then is the store put aside, and the calendar
-//! and health are sent again from nothing so the computer has them too. To use the computer's
+//! To use the computer's
 //! memory, nothing goes: the store is put aside at once, kept until the person removes it (it
 //! is the only copy), and the phone becomes a companion. From This phone, what was put aside
 //! can be brought in later: a backup is made from it and offered with `bring`, so the computer
@@ -56,7 +56,7 @@ const PASSPHRASE_CHARS: usize = 32;
 const MOVE_WORK_FACTOR: u8 = 10;
 /// How long a paused move waits before it tries the computer again.
 const RETRY_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
-/// How often a finishing move asks the computer whether the memory opened.
+/// How often a move asks the computer, while it checks or adds, where the memory stands.
 const ASK_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// What the phone holds, for "What moves".
@@ -87,8 +87,6 @@ pub enum MovePhase {
     Checking,
     /// The computer cannot be reached; it carries on when it is back.
     Paused,
-    /// Every count matched; Nocturne on the computer restarts to open the memory.
-    Finishing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -688,7 +686,7 @@ pub(crate) enum Stands {
     Opened(MemoryCounts),
     /// Its things were added there.
     Brought(MemoryCounts, BroughtCounts),
-    /// Not opened yet: being checked, or Nocturne there restarts.
+    /// Not settled yet: being checked or added there.
     Waiting,
     /// The computer knows nothing of it: it is offered again.
     Unknown,
@@ -1159,7 +1157,7 @@ pub(crate) async fn carry(
         media: 0.0,
     };
     // First where it stands: a move whose phone went away part way (the app stopped while the
-    // computer restarted) finishes without sending anything again.
+    // computer checked or added) finishes without sending anything again.
     let first = stands(computer).await;
     tracing::info!("where the memory stands on the computer: {first:?}");
     match first? {
@@ -1171,7 +1169,7 @@ pub(crate) async fn carry(
         }
         Stands::Brought(..) => {}
         Stands::Waiting => {
-            if let Some(arrival) = finishing(computer, size, report, pause).await? {
+            if let Some(arrival) = settled(computer, size, report, pause).await? {
                 return Ok(arrival);
             }
         }
@@ -1222,30 +1220,29 @@ pub(crate) async fn carry(
                 tokio::time::sleep(pause).await;
             }
             Ok(brought @ Arrival::Brought(..)) => return Ok(brought),
-            // Every count matched: wait for the computer to say the memory opened. Should it
-            // know nothing of it, it is offered again and sent.
+            // Taken whole, to open after a restart: no longer how a move ends, so this phone
+            // keeps its memory rather than wait on a computer that may come back elsewhere.
             Ok(Arrival::Opened(_)) => {
-                if let Some(arrival) = finishing(computer, size, report, pause).await? {
-                    return Ok(arrival);
-                }
+                tracing::info!("the computer took the memory whole: nothing changes here");
+                return Err(MoveError::Failed);
             }
             Err(e) => return Err(e),
         }
     }
 }
 
-/// While Nocturne on the computer restarts: ask where the memory stands, sending nothing, until
-/// it opened there (`Some`), it could not open it, or the computer knows nothing of it (`None`).
-/// An answer that has to wait (the restart, the connection) just waits.
-async fn finishing(
+/// While the computer checks or adds what it was sent: ask where the memory stands, sending
+/// nothing, until its things were added (`Some`) or the computer knows nothing of it (`None`).
+/// An answer that has to wait (the check, the connection) just waits.
+async fn settled(
     computer: &impl Computer,
     size: u64,
     report: &(dyn Fn(MovePhase, u64, u64) + Sync),
     pause: std::time::Duration,
 ) -> Result<Option<Arrival>, MoveError> {
-    tracing::info!("waiting for the memory to open on the computer");
+    tracing::info!("waiting for the computer to finish with what it was sent");
     loop {
-        report(MovePhase::Finishing, size, size);
+        report(MovePhase::Checking, size, size);
         tokio::time::sleep(pause.min(ASK_EVERY)).await;
         match stands(computer).await? {
             Stands::Opened(counts) => return Ok(Some(Arrival::Opened(counts))),
@@ -1436,6 +1433,10 @@ mod tests {
                 return next;
             }
             match *self.took.lock().unwrap() {
+                Some(counts) if self.brings => Ok(RemoteAnswer::MemoryBrought {
+                    counts,
+                    added: added(),
+                }),
                 Some(counts) => Ok(RemoteAnswer::MemoryArrived { counts }),
                 None => Err(CallError::Phone {
                     code: PhoneError::NotReady,
@@ -1892,37 +1893,38 @@ mod tests {
         (out, phases.into_inner().unwrap())
     }
 
+    /// A computer that adds the things, as every computer does now.
+    fn bringing() -> Fake {
+        let mut computer = Fake::new();
+        computer.brings = true;
+        computer.offered = Ok(RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: true,
+        });
+        computer
+    }
+
     #[test]
-    fn the_memory_stays_until_the_computer_says_it_opened() {
+    fn the_memory_stays_until_the_computer_says_its_things_were_added() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
-        let computer = Fake::new();
-        // Nothing known before it goes; then the computer restarts: wait, unreachable, opened.
+        let computer = bringing();
+        // Still checking what an earlier try sent, then out of reach, then it knows nothing.
         computer.statuses.lock().unwrap().extend([
-            Err(phone_code(PhoneError::NotReady)),
             Err(phone_code(PhoneError::Busy)),
             Err(CallError::Connection {
                 state: Reach::CantConnect,
             }),
+            Err(phone_code(PhoneError::NotReady)),
         ]);
         let (out, phases) = carried(&home, &computer);
-        assert_eq!(out.unwrap().counts().items, 2);
-        assert!(phases.contains(&MovePhase::Finishing));
+        assert!(matches!(out.unwrap(), Arrival::Brought(c, _) if c.items == 2));
+        assert!(phases.contains(&MovePhase::Checking));
         assert!(
             !phases.contains(&MovePhase::Paused),
-            "finishing is not a pause"
+            "waiting for the check is not a pause"
         );
-        assert_eq!(
-            computer
-                .calls
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|c| matches!(c, RemoteCall::OfferMemory { .. }))
-                .count(),
-            0,
-            "waiting never offers it again"
-        );
+        assert_eq!(sends(&computer), 1);
         assert_eq!(
             home.mode(true),
             Some(PhoneMode::Alone),
@@ -1932,31 +1934,42 @@ mod tests {
     }
 
     #[test]
-    fn a_memory_that_did_not_open_leaves_this_one_as_it_was() {
+    fn a_computer_that_takes_the_memory_whole_is_not_followed() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let computer = Fake::new();
-        computer.statuses.lock().unwrap().extend([
-            Err(phone_code(PhoneError::NotReady)),
-            Err(phone_code(PhoneError::NotFound)),
-        ]);
-        let (out, _) = carried(&home, &computer);
-        assert_eq!(out.err(), Some(MoveError::NotOpened));
+        let (out, phases) = carried(&home, &computer);
+        assert_eq!(out.err(), Some(MoveError::Failed));
+        assert_eq!(sends(&computer), 1);
+        assert!(
+            computer
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|c| !matches!(c, RemoteCall::OfferMemory { .. })),
+            "no wait for a restart, and nothing offered again"
+        );
+        assert!(!phases.contains(&MovePhase::Paused));
         assert_eq!(home.mode(true), Some(PhoneMode::Alone));
         assert_eq!(home.move_facts().unwrap().counts.items, 2);
     }
 
     #[test]
-    fn a_computer_that_knows_nothing_of_it_after_its_restart_is_offered_it_again() {
+    fn a_move_cut_part_way_is_offered_again_before_it_goes_again() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
-        let computer = Fake::new();
-        computer.statuses.lock().unwrap().extend([
-            Err(phone_code(PhoneError::NotReady)),
-            Err(phone_code(PhoneError::NotReady)),
-        ]);
-        let (out, _) = carried(&home, &computer);
-        assert!(out.is_ok());
+        let computer = bringing();
+        computer
+            .sends
+            .lock()
+            .unwrap()
+            .push_back(CallError::Connection {
+                state: Reach::Asleep,
+            });
+        let (out, phases) = carried(&home, &computer);
+        assert!(matches!(out.unwrap(), Arrival::Brought(..)));
+        assert!(phases.contains(&MovePhase::Paused));
         assert_eq!(sends(&computer), 2);
         let offers = computer
             .calls
