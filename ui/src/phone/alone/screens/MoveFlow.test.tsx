@@ -1,7 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemoryCounts } from "../../../engine/bindings";
-import { type MoveApi, type Moved, type MoveError, MoveFlow, type MoveOffered } from "./MoveFlow";
+import {
+  type MoveApi,
+  type Moved,
+  type MoveError,
+  MoveFlow,
+  type MoveOffered,
+} from "./MoveFlow";
 import { MEASURE_MS, MoveMoving, type MoveProgress } from "./MoveScreens";
 
 afterEach(cleanup);
@@ -187,6 +193,23 @@ describe("moving the memory to a computer", () => {
       screen.getByText("Moving paused. It carries on when Maya’s laptop is back."),
     ).toBeInTheDocument();
   });
+
+  it("says the move is paused while the computer is out of reach, and carries on once it answers", async () => {
+    const api = fakeApi();
+    const { onExit } = open(api);
+    await screen.findByRole("button", { name: "Continue" });
+    api.answerOffer("paused");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move my memory" }));
+    expect(
+      await screen.findByText("Moving paused. It carries on when Maya’s laptop is back."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/didn’t arrive whole/)).toBeNull();
+    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), { timeout: 8000 });
+    api.answerOffer("opened");
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    expect(onExit).not.toHaveBeenCalled();
+  }, 12_000);
 
   it("Stop asks first, then stops and changes nothing", async () => {
     const api = fakeApi();
