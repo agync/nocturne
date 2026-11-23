@@ -178,10 +178,14 @@ export function MoveFlow({
       // The person on the computer kept what it has: the phone stays as it was.
       if (e === "declined") return exit(true);
       // Waiting for the person there: the connection went, or the question timed out. It is
-      // asked again, and the phone keeps waiting until they choose or this one cancels.
-      if (step.current.name === "waiting")
+      // asked again, and the phone keeps waiting until they choose or this one cancels. While
+      // this person reads, a computer out of reach is asked again too, so a move whose memory
+      // already opened there finishes once it answers.
+      const again = () =>
+        step.current.name === "waiting" || (e === "paused" && deciding());
+      if (again())
         setTimeout(() => {
-          if (!leaving.current && step.current.name === "waiting") ask();
+          if (!leaving.current && again() && offer.current === sent) ask();
         }, ASK_AGAIN_MS);
     });
     return sent;
@@ -200,12 +204,27 @@ export function MoveFlow({
     ask();
   }, []);
 
+  /** The computer's answer, asked again while it is out of reach: the move is paused till then. */
+  const reached = async (): Promise<MoveOffered> => {
+    for (;;) {
+      try {
+        return await (offer.current ?? ask());
+      } catch (e) {
+        if (errorOf(e) !== "paused") throw e;
+        offer.current = null;
+        setProgress({ phase: "paused", done: 0, total: 0 });
+        await new Promise((r) => setTimeout(r, ASK_AGAIN_MS));
+        if (leaving.current) throw "stopped";
+      }
+    }
+  };
+
   const move = async (asked: boolean) => {
     let bring = asked;
     setStep({ name: "moving", bring });
     setProgress(null);
     try {
-      const answer = await (offer.current ?? ask());
+      const answer = await reached();
       // The person there chose the computer's memory: what was here is already put aside.
       if (answer.useHere) return setStep({ name: "used", busy: false });
       if (answer.bring && !bring) {
