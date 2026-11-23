@@ -471,7 +471,8 @@ impl Core {
         self.shell.stop_phone(device_id);
         self.incoming.cancel(device_id);
         if self.moves.forget(device_id) {
-            self.shell.move_changed(None);
+            // A bring-in it ended says so until the person says OK.
+            self.shell.move_changed(self.moves.view().as_ref());
         }
         lock(&self.phones).remove(device_id);
         self.limits.forget(device_id);

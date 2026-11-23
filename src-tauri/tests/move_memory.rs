@@ -1305,6 +1305,7 @@ fn removing_the_phone_while_its_things_arrive_adds_nothing() {
     wait_for("part of it went", || {
         c.relay.sent() > sent + 2 * 1024 * 1024
     });
+    let shown = c.h.events("move-changed");
     c.h.ok("remove_device", json!({"id": c.device_id()}));
     assert!(block(going).unwrap().is_err());
     assert_eq!(
@@ -1314,6 +1315,11 @@ fn removing_the_phone_while_its_things_arrive_adds_nothing() {
             why: EndedWhy::Removed
         }),
         "the person here hears that nothing came in"
+    );
+    assert_eq!(
+        shown.lock().unwrap().last().map(|v| v["phase"].clone()),
+        Some(json!("ended")),
+        "and the window is told so"
     );
     assert_eq!(c.h.engine().stats().unwrap().item_count, before);
     c.h.ok("finish_move", json!({}));
