@@ -8,6 +8,7 @@ import {
   MoveMoved,
   MoveMoving,
   type MoveProgress,
+  staysLine,
 } from "../../alone/screens/MoveScreens";
 import type { Connection, PairedDevice } from "../../engine";
 import { BackBar, Button, Page } from "../../screens/ui";
@@ -178,6 +179,7 @@ export function ThisPhone({
       <MoveMoved
         computer={computer}
         brought={step.moved.brought}
+        behind={step.moved.behind}
         busy={step.busy}
         onDone={settle}
       />
@@ -201,9 +203,7 @@ export function ThisPhone({
           {put.onComputer ? (
             <>
               <p className="ph-body">{t("moving.phone.aside.removeBody", { computer })}</p>
-              {put.writing ? (
-                <p className="ph-body">{t("moving.phone.aside.removeWriting")}</p>
-              ) : null}
+              {staysLine(put.behind) ? <p className="ph-body">{staysLine(put.behind)}</p> : null}
             </>
           ) : counts ? (
             <p className="ph-body">

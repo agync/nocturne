@@ -225,8 +225,10 @@ describe("moving the memory to a computer", () => {
       ),
     ).toBeInTheDocument();
     const choice = screen.getByRole("group", { name: "Your memory on this phone" });
-    expect(within(choice).getByRole("radio", { name: "Remove it from this phone" })).toBeChecked();
-    fireEvent.click(within(choice).getByRole("radio", { name: "Keep it put aside for 30 days" }));
+    expect(
+      within(choice).getByRole("radio", { name: "Keep it put aside for 30 days" }),
+    ).toBeChecked();
+    expect(screen.queryByText(/stay only on this phone/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(api.putAside).toHaveBeenCalledWith(false);
@@ -510,7 +512,11 @@ describe("moving to a computer that already holds a memory", () => {
       "Adding them to the memory on Maya’s laptop…",
     );
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
-    api.finishMove({ items: 1284, brought: { things: 1284, entries: 212, checkins: 96 } });
+    api.finishMove({
+      items: 1284,
+      brought: { things: 1284, entries: 212, checkins: 96 },
+      behind: { pages: 3, reflections: 1, answers: 5, names: 2, choices: 0, settings: true },
+    });
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
     ).toBeInTheDocument();
@@ -519,7 +525,13 @@ describe("moving to a computer that already holds a memory", () => {
         "1,284 things, 212 journal entries and 96 check-ins were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Remove it from this phone" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Keep it put aside for 30 days" })).toBeChecked();
+    expect(
+      screen.getByText(
+        "These stay only on this phone, so removing it deletes them for good: 3 pages, 1 reflection, 5 answers to the morning question, 2 names you taught it and its settings.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Remove it from this phone" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(api.putAside).toHaveBeenCalledWith(true);

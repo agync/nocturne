@@ -89,7 +89,7 @@ describe("the memory a move put aside, in This phone", () => {
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "Keep it put aside for 30 days" }));
+    expect(screen.getByRole("radio", { name: "Keep it put aside for 30 days" })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(aside.putAside).toHaveBeenCalledWith(false));
   });
@@ -135,7 +135,6 @@ describe("the memory a move put aside, in This phone", () => {
       keepUntil: null,
       at: "2026-11-23T08:00:00Z",
       counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
-      writing: false,
     });
     open(aside);
     fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
@@ -160,7 +159,7 @@ describe("the memory a move put aside, in This phone", () => {
       keepUntil: "2026-12-23T08:00:00Z",
       at: "2026-11-23T08:00:00Z",
       counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
-      writing: true,
+      behind: { pages: 1, reflections: 2, answers: 0, names: 0, choices: 1, settings: false },
     });
     open(aside);
     fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
@@ -173,7 +172,9 @@ describe("the memory a move put aside, in This phone", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Pages and reflections written on this phone go with it."),
+      screen.getByText(
+        "These stay only on this phone, so removing it deletes them for good: 1 page, 2 reflections and 1 thing you confirmed or settled.",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     expect(aside.putAside).not.toHaveBeenCalled();

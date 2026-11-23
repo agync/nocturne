@@ -585,3 +585,29 @@ fn a_forget_on_the_phone_holds_for_the_same_thing_already_here() {
         "the one here never says what was forgotten on the phone"
     );
 }
+
+#[test]
+fn what_bringing_in_leaves_behind_on_the_phone_is_counted() {
+    use common::EngineExt;
+    let phone = fixture();
+    let before = nocturne_engine::store_left_behind(phone.dir.path()).unwrap();
+    assert_eq!(
+        (
+            before.pages,
+            before.reflections,
+            before.answers,
+            before.choices
+        ),
+        (0, 0, 0, 0)
+    );
+    let item = keep(&phone.engine, "The heron prefers the feeder.");
+    let memory = phone.engine.apply(&item, vec![heron()]).unwrap().created[0].clone();
+    phone.engine.confirm(&memory, true).unwrap();
+    let after = nocturne_engine::store_left_behind(phone.dir.path()).unwrap();
+    assert_eq!(
+        after.choices,
+        before.choices + 1,
+        "what the person confirmed"
+    );
+    assert!(after.any());
+}

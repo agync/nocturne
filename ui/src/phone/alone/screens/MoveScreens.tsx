@@ -26,6 +26,40 @@ export interface MoveProgress {
   total: number;
 }
 
+/** What the memory put aside here holds that did not go to the computer with its things. */
+export interface LeftBehind {
+  pages: number;
+  reflections: number;
+  /** Answers to the morning question. */
+  answers: number;
+  /** Names the person taught it. */
+  names: number;
+  /** Memories confirmed and conflicts settled. */
+  choices: number;
+  settings: boolean;
+}
+
+const AND = new Intl.ListFormat("en-GB", { style: "long", type: "conjunction" });
+
+/**
+ * "These stay only on this phone, so removing it deletes them for good: …", or none when
+ * nothing stays only here.
+ */
+export function staysLine(behind: LeftBehind | null | undefined): string | null {
+  if (!behind) return null;
+  const parts = [
+    behind.pages > 0 ? t("moving.phone.stays.pages", { count: behind.pages }) : null,
+    behind.reflections > 0
+      ? t("moving.phone.stays.reflections", { count: behind.reflections })
+      : null,
+    behind.answers > 0 ? t("moving.phone.stays.answers", { count: behind.answers }) : null,
+    behind.names > 0 ? t("moving.phone.stays.names", { count: behind.names }) : null,
+    behind.choices > 0 ? t("moving.phone.stays.choices", { count: behind.choices }) : null,
+    behind.settings ? t("moving.phone.stays.settings") : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? t("moving.phone.stays", { list: AND.format(parts) }) : null;
+}
+
 /** How long the move is measured before it says how long is left. */
 export const MEASURE_MS = 10_000;
 
@@ -372,20 +406,26 @@ export function MoveFailed({
   );
 }
 
-/** "Your things are on {computer}.", and what becomes of the memory put aside here. */
+/**
+ * "Your things are on {computer}.", and what becomes of the memory put aside here: kept for 30
+ * days unless the person chooses to remove it now, with what stays only on this phone said first.
+ */
 export function MoveMoved({
   computer,
   brought,
+  behind = null,
   busy,
   onDone,
 }: {
   computer: string;
   brought: BroughtCounts;
+  behind?: LeftBehind | null;
   busy: boolean;
   onDone(remove: boolean): void;
 }) {
-  const [remove, setRemove] = useState(true);
+  const [remove, setRemove] = useState(false);
   const choice = t("moving.phone.moved.choice");
+  const stays = staysLine(behind);
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
@@ -406,23 +446,24 @@ export function MoveMoved({
             <input
               type="radio"
               name="put-aside"
-              checked={remove}
-              onChange={() => setRemove(true)}
-            />
-            <span className="ph-radio" aria-hidden="true" />
-            <span>{t("moving.phone.moved.remove")}</span>
-          </label>
-          <label className="ph-option">
-            <input
-              type="radio"
-              name="put-aside"
               checked={!remove}
               onChange={() => setRemove(false)}
             />
             <span className="ph-radio" aria-hidden="true" />
             <span>{t("moving.phone.moved.keep")}</span>
           </label>
+          <label className="ph-option">
+            <input
+              type="radio"
+              name="put-aside"
+              checked={remove}
+              onChange={() => setRemove(true)}
+            />
+            <span className="ph-radio" aria-hidden="true" />
+            <span>{t("moving.phone.moved.remove")}</span>
+          </label>
         </fieldset>
+        {stays ? <p className="ph-small">{stays}</p> : null}
       </main>
       <footer className="ph-foot">
         <Button kind="primary" disabled={busy} onClick={() => onDone(remove)}>

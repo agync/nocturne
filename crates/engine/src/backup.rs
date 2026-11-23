@@ -803,16 +803,57 @@ pub fn store_kept_counts(dir: &Path) -> Result<KeptCounts> {
     kept_counts_in(&conn)
 }
 
-/// Whether a store folder that is not open holds pages or reflections written there. Read only.
-pub fn store_has_writing(dir: &Path) -> Result<bool> {
+/// What bringing a store's things into a computer's memory leaves behind in it: what was written,
+/// answered, taught or settled there, apart from the things kept (`docs/design/moving-memory.md`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeftBehind {
+    pub pages: u32,
+    pub reflections: u32,
+    /// Answers to the morning question.
+    pub answers: u32,
+    /// Names the person taught it: renames, merges and moves not taken back, and "Which {name}
+    /// is this?" answered.
+    pub names: u32,
+    /// Memories the person confirmed, and conflicts they settled.
+    pub choices: u32,
+    /// It holds settings of its own.
+    pub settings: bool,
+}
+
+impl LeftBehind {
+    pub fn any(&self) -> bool {
+        self.pages + self.reflections + self.answers + self.names + self.choices > 0
+            || self.settings
+    }
+}
+
+/// What a store folder that is not open holds that bringing its things in leaves behind. Read
+/// only.
+pub fn store_left_behind(dir: &Path) -> Result<LeftBehind> {
     let conn = Connection::open_with_flags(
         dir.join(crate::DB_FILE),
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     Ok(conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM reflections)",
+        "SELECT (SELECT COUNT(*) FROM pages), (SELECT COUNT(*) FROM reflections), \
+           (SELECT COUNT(*) FROM questions WHERE answer IS NOT NULL), \
+           (SELECT COUNT(*) FROM entity_changes WHERE undone_at IS NULL) \
+             + (SELECT COUNT(*) FROM name_questions WHERE answered_at IS NOT NULL), \
+           (SELECT COUNT(*) FROM memories WHERE confirmed = 1) \
+             + (SELECT COUNT(*) FROM conflicts WHERE resolved_at IS NOT NULL), \
+           EXISTS(SELECT 1 FROM settings)",
         [],
-        |r| r.get(0),
+        |r| {
+            Ok(LeftBehind {
+                pages: r.get(0)?,
+                reflections: r.get(1)?,
+                answers: r.get(2)?,
+                names: r.get(3)?,
+                choices: r.get(4)?,
+                settings: r.get(5)?,
+            })
+        },
     )?)
 }
 
