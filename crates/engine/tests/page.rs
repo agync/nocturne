@@ -68,6 +68,24 @@ fn a_capture_at_0130_on_the_night_clocks_go_back_lands_in_the_right_page() {
 }
 
 #[test]
+fn the_page_says_only_what_was_read_was_read() {
+    let f = fixture_at("2026-11-13T20:00:00Z", "Europe/London");
+    save_day(&f, "2026-11-13");
+    let read = keep(&f.engine, "The bins go out on Tuesday.");
+    f.engine.apply(&read, vec![]).unwrap();
+    keep(&f.engine, "Seville oranges for marmalade.");
+    f.clock.set_str("2026-11-14T07:00:00Z");
+    let page = compose(&f, "2026-11-14");
+    assert_eq!((page.kept_count, page.pending), (2, 1));
+    assert!(
+        page.dek
+            .starts_with("Last night Nocturne read 1 thing you kept."),
+        "{}",
+        page.dek
+    );
+}
+
+#[test]
 fn a_time_zone_change_between_pages_loses_and_duplicates_nothing() {
     let f = fixture_at("2026-11-10T06:00:00Z", "Europe/London");
     let a = keep(&f.engine, "in London");
