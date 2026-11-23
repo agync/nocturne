@@ -36,6 +36,23 @@ describe("an original", () => {
     );
   });
 
+  it("adds a line for each other place the same thing was kept", async () => {
+    const engine = createMockEngine();
+    const real = engine.getItem.bind(engine);
+    vi.spyOn(engine, "getItem").mockImplementation(async (itemId) => ({
+      ...(await real(itemId)),
+      alsoKeptOn: [
+        { name: "Maya’s phone", at: "2026-11-12T08:05:00Z" },
+        { name: "Old laptop", at: null },
+      ],
+    }));
+    await open("item-letter", engine);
+    const kept = screen.getByText("Photo · Wed 11 Nov 18:12");
+    const phone = screen.getByText(/^Also kept on Maya’s phone · Thu 12 Nov, \d\d:\d\d$/);
+    expect(kept.compareDocumentPosition(phone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Also kept on Old laptop")).toBeInTheDocument();
+  });
+
   it("says Unconfirmed before how long it took to understand", async () => {
     const engine = createMockEngine();
     const real = engine.getItem.bind(engine);

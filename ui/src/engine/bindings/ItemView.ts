@@ -6,6 +6,7 @@ import type { HeardBy } from "./HeardBy";
 import type { ItemKind } from "./ItemKind";
 import type { ItemStatus } from "./ItemStatus";
 import type { JournalRole } from "./JournalRole";
+import type { KeptElsewhere } from "./KeptElsewhere";
 import type { Source } from "./Source";
 import type { Trust } from "./Trust";
 
@@ -50,4 +51,8 @@ calendar?: CalendarDetail,
 /**
  * Who made the words of a voice note, while the phone's words stand.
  */
-heardBy?: HeardBy, };
+heardBy?: HeardBy, 
+/**
+ * Other places the same thing was kept, when it came in from a phone that held it too.
+ */
+alsoKeptOn?: Array<KeptElsewhere>, };

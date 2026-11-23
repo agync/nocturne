@@ -173,6 +173,17 @@ export function ItemPage({ id }: { id: string }) {
                   time: formatTime(it.keptAt),
                 })}
           </p>
+          {(it.alsoKeptOn ?? []).map((place) => (
+            <p key={place.name} className={`t-section ${styles.meta}`}>
+              {place.at
+                ? t("moving.kept.also", {
+                    name: place.name,
+                    day: formatDay(place.at),
+                    time: formatTime(place.at),
+                  })
+                : t("moving.kept.alsoUndated", { name: place.name })}
+            </p>
+          ))}
           <h1 ref={heading} tabIndex={-1} className={`t-item-title ${styles.title}`}>
             {it.title}
           </h1>

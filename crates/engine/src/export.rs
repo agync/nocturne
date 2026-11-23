@@ -473,9 +473,9 @@ impl Engine {
                         view: to_view(r)?,
                         sha: r.get(17)?,
                         ext: r.get(18)?,
-                        origin: r.get(22)?,
-                        metadata: r.get(23)?,
-                        left_out: r.get(24)?,
+                        origin: r.get(crate::rows::ITEM_COL_COUNT)?,
+                        metadata: r.get(crate::rows::ITEM_COL_COUNT + 1)?,
+                        left_out: r.get(crate::rows::ITEM_COL_COUNT + 2)?,
                     })
                 })?
                 .collect::<rusqlite::Result<_>>()?
