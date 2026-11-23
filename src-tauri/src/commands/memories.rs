@@ -1,8 +1,8 @@
 //! Memories and the people, places and things they are about.
 
 use nocturne_contract::{
-    EntityKind, EntityView, MemoryFilter, MemoryView, MergeOutcome, RefileTarget, Refiled,
-    RenameOutcome,
+    EntityKind, EntityView, FoundItem, MemoryFilter, MemoryView, MergeOutcome, RefileTarget,
+    Refiled, RenameOutcome,
 };
 use nocturne_engine::CorrectPatch;
 use tauri::{AppHandle, Runtime};
@@ -25,6 +25,19 @@ pub async fn list_memories<R: Runtime>(
     filter: MemoryFilter,
 ) -> Result<Vec<MemoryView>, CommandError> {
     read(app, move |e| e.memories(filter)).await
+}
+
+/// Kept things found by their words that no mind has read yet: finding them works before then.
+#[tauri::command]
+pub async fn find_unread<R: Runtime>(
+    app: AppHandle<R>,
+    query: String,
+) -> Result<Vec<FoundItem>, CommandError> {
+    read(app, move |e| {
+        let found = e.find_unread(&query, nocturne_engine::FIND_CAP)?;
+        Ok(found.into_iter().map(FoundItem::from).collect())
+    })
+    .await
 }
 
 #[tauri::command]

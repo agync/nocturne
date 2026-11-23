@@ -226,6 +226,44 @@ describe("What Nocturne remembers", () => {
     expect(screen.getAllByText(/Nothing matches “zebra”/).length).toBeGreaterThan(0);
   });
 
+  it("finds things no mind has read yet by their words", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "findUnread").mockImplementation(async (query) =>
+      query === "marmalade"
+        ? [
+            {
+              receipt: {
+                itemId: "item-letter",
+                kind: "text",
+                source: "phone",
+                label: "Seville oranges",
+                keptAt: "2026-11-23T05:30:00Z",
+                durationMs: null,
+                span: null,
+                unconfirmed: false,
+                fromDevice: "Maya’s phone",
+              },
+              excerpt: [
+                { text: "Make ", matched: false },
+                { text: "marmalade", matched: true },
+                { text: " on Saturday.", matched: false },
+              ],
+              private: false,
+            },
+          ]
+        : [],
+    );
+    await browse("#/memories?q=marmalade", engine);
+    const found = await screen.findByRole("region", {
+      name: "Found by their words. Answers need a mind.",
+    });
+    expect(within(found).getByText("marmalade", { selector: "mark" })).toBeInTheDocument();
+    // Only the list of names says nothing of theirs matches; the results do not.
+    expect(screen.getAllByText(/Nothing matches “marmalade”/)).toHaveLength(1);
+    await userEvent.click(within(found).getByRole("button"));
+    await waitFor(() => expect(window.location.hash).toBe("#/items/item-letter"));
+  });
+
   it("puts the tab of the entity's own kind under it", async () => {
     await browse("#/memories/ent-bin");
     await screen.findByRole("heading", { level: 1, name: "Bin day" });

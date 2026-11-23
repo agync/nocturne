@@ -93,6 +93,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
     "list_memories",
     ["filter"],
   ],
+  ["findUnread", ["marmalade"], "find_unread", ["query"]],
   ["getEntity", ["e1"], "get_entity", ["id"]],
   ["correctMemory", ["m1", "Fixed."], "correct_memory", ["id", "text"]],
   ["renameEntity", ["e1", "Drinks"], "rename_entity", ["id", "name"]],

@@ -131,6 +131,7 @@ export class TauriEngine implements EngineClient {
   markDone: EngineClient["markDone"] = (memoryId) => this.call("mark_done", { memoryId });
 
   listMemories: EngineClient["listMemories"] = (filter) => this.call("list_memories", { filter });
+  findUnread: EngineClient["findUnread"] = (query) => this.call("find_unread", { query });
   getEntity: EngineClient["getEntity"] = (id) => this.call("get_entity", { id });
   listEntities: EngineClient["listEntities"] = (kind, query) =>
     this.call("list_entities", { kind, query });

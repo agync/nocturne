@@ -103,6 +103,13 @@ fn the_phones_things_journal_and_check_ins_are_added_and_wait_to_be_read() {
         found.iter().any(|f| f.receipt.item_id == note),
         "finding it by its words works at once"
     );
+    assert!(
+        e.find_unread("heron feeder", 10)
+            .unwrap()
+            .iter()
+            .any(|f| f.receipt.item_id == note),
+        "and it is among what waits to be read"
+    );
 
     let picture = e.get_item(&photo.id).unwrap();
     assert!(picture.original_path.is_some(), "the original came with it");

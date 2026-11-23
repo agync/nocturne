@@ -13,6 +13,7 @@ pub const RAW: &[&str] = &["keep_recording", "keep_bytes"];
 /// for a folder named by the caller. A browser has none of that. Away from home is never
 /// driven from the preview either, nor what its phones bring.
 pub const UNAVAILABLE: &[&str] = &[
+    "find_unread",
     "pick_folder",
     "pick_files",
     "pick_backup",

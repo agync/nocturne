@@ -327,6 +327,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("confirm_memory", Never),
         ("mark_done", Never),
         ("list_memories", Never),
+        ("find_unread", Never),
         ("get_entity", Never),
         ("list_entities", Never),
         ("correct_memory", Never),
