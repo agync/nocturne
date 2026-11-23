@@ -901,7 +901,8 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 |---|---|
 | "Its mind" | "{service}, online" |
 | "What goes" | "What you keep, and questions" |
-| "See what was sent" | Opens the Sent online list on the phone, 90 days, as 0011. Each row says what it was for: "Read a thing you kept", "Answered a question", "Wrote your page" or "Connection check" |
+| "See what was sent" | Opens the Sent online list on the phone, 90 days, as 0011. Each row says what it was for: "Read a thing you kept", "Answered a question", "Wrote your page" or "Connection check", then "{time} · {host} · {size}". Tapping a row opens "Exactly what was sent": the words as they left, with "The photo itself" or "The recording itself" in place of a photo or a recording. A row with no words, such as the look at the service's list of models, doesn't open |
+| Forgetting | When a thing kept, or a memory, that a row carried is forgotten (forget, take back a keep, or delete what a calendar or Health brought), that row's words are removed at once and the row stays, with "Removed when you forgot it" under it. "Delete everything" removes the whole list |
 | "This month" | "{count} things read and answered · limit {limit}", or with no limit "{count} things read and answered · no limit" |
 | "Change…" | Back to the choice |
 | "Turn off…" | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" · "Keep it on" |
@@ -1035,7 +1036,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind online, sees, no model yet | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses may be made by another company that the service passes things to." |
 | Mind online, limit lines | "At most {count} things a month are read and answered online; after that, what you keep waits to be read until the 1st." / "At most {amount} a month goes to the service; after that, what you keep waits to be read until the 1st." / "There is no limit on how much is read and answered online." |
 | Mind, find above | "Found by their words." |
-| Mind, sent rows | "Read a thing you kept" / "Answered a question" / "Wrote your page" / "Connection check" |
+| Mind, sent rows | "Read a thing you kept" / "Answered a question" / "Wrote your page" / "Connection check" / "{time} · {host} · {size}" / "Exactly what was sent" / "The photo itself" / "The recording itself" / "Removed when you forgot it" |
 | Mind online, changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Mind online, changing | "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." / "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Mind online, bar | "Turn on" / "Not now" |
