@@ -47,8 +47,13 @@ fn world() -> World {
     );
     home.start_alone("Pixel", false).unwrap();
     let keys = Arc::new(MemoryKeys::default());
-    let mind = PhoneMind::new(dir.path().to_path_buf(), Box::new(Shared(keys.clone())));
+    let mind = PhoneMind::new(
+        dir.path().to_path_buf(),
+        Box::new(Shared(keys.clone())),
+        clock.clone(),
+    );
     mind.follow(&home);
+    mind.host().set_charging(Some(true));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -162,7 +167,12 @@ fn after_turning_off_nothing_goes_and_the_key_is_gone() {
 fn a_choice_without_its_key_reaches_nothing() {
     let w = world();
     w.mind.turn_on(w.settings()).unwrap();
-    let again = PhoneMind::new(w._dir.path().to_path_buf(), Box::new(MemoryKeys::default()));
+    let again = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(MemoryKeys::default()),
+        w.clock.clone(),
+    );
+    again.host().set_charging(Some(true));
     assert!(matches!(again.chosen(), Chosen::NeedsKey { .. }));
     w.keep(prompts::EXAMPLE_NOTE, "c1");
     assert_eq!(again.pass(&w.home, w.rt.handle()), Pass::Off);
@@ -304,4 +314,47 @@ fn a_store_wanted_while_the_scheduler_writes_is_given_way_to_at_once() {
     });
     // What was being written was dropped unsaved; all is made anew at the next pass.
     assert!(w.mind.thinking.lock().unwrap().is_none());
+}
+
+#[test]
+fn nothing_is_read_unless_the_phone_is_known_to_charge() {
+    let w = world();
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    for charging in [None, Some(false)] {
+        w.mind.host().set_charging(charging);
+        assert_eq!(w.pass(), Pass::NotCharging);
+    }
+    assert_eq!(w.status(&id), ItemStatus::Kept);
+    assert!(w.stand_in.seen().is_empty());
+    w.mind.host().set_charging(Some(true));
+    assert!(matches!(w.pass(), Pass::Ran { read: 1, .. }));
+}
+
+#[test]
+fn the_first_page_waits_for_the_next_morning() {
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    // A day on, this morning's page is missed, and the mind is turned on.
+    w.clock.advance_days(1);
+    w.mind.turn_on(w.settings()).unwrap();
+    let pages = || w.home.open_store().unwrap().engine.pages().unwrap().len();
+    for _ in 0..5 {
+        assert!(matches!(
+            w.pass(),
+            Pass::Ran {
+                scheduled: false,
+                ..
+            }
+        ));
+    }
+    assert_eq!(pages(), 0);
+    w.clock.advance_days(1);
+    for _ in 0..10 {
+        if pages() > 0 {
+            break;
+        }
+        w.pass();
+    }
+    assert_eq!(pages(), 1);
 }

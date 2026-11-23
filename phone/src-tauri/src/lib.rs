@@ -31,12 +31,13 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             log::start(&dir.join("logs"));
             app.manage(state::AppState::new(dir.clone()));
+            let clock = std::sync::Arc::new(nocturne_engine::SystemClock);
             let home = home::Home::new(
                 dir.clone(),
-                std::sync::Arc::new(nocturne_engine::SystemClock),
+                clock.clone(),
                 exclude_from_backup(app.handle()),
             );
-            let thinking = mind::PhoneMind::new(dir, Box::new(mind::MemoryKeys::default()));
+            let thinking = mind::PhoneMind::new(dir, Box::new(mind::MemoryKeys::default()), clock);
             thinking.follow(&home);
             app.manage(home);
             app.manage(thinking);
