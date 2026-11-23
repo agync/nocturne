@@ -46,7 +46,7 @@ of the design. All names and data are fictional.
 | The mind is away | `away.html`: `today`, `journal`, `back`, `removed` | [Household](household-server.md#states) |
 | This phone in each mode | `this-phone.html`: `alone`, `guest`, `member` | [Phone first](phone-first.md#8-this-phone), [Household](household-server.md#this-phone) |
 | The household on a computer | `desktop-household.html`: `household`, `add`, `allow`, `remove`, `off` | [Household](household-server.md#on-the-computer-that-runs-it) |
-| Moving your memory | `move.html`: `found`, `size`, `moving`, `moved`; `desktop-move.html`: `receive`, `done` | [Moving](moving-memory.md#screens) |
+| Moving your memory | `move.html`: `found`, `size`, `moving`, `moved`; `desktop-move.html`: `receive`, `done`, `choose`, `merged` | [Moving](moving-memory.md#screens) |
 
 ## Goals
 
@@ -618,4 +618,5 @@ The owner then answered the questions the first pass left open:
 | 29 | Whose computer can be someone's home | A: a desktop with its own owner, and a computer kept for the purpose. B: only one kept for the purpose | **A** |
 | 30 | What labels from decision models are for | A: finding and grouping only. B: also shown on items. C: a hidden ranking signal | **A, then B** with "Remove this label" |
 | 31 | Finishing a move on the computer (question 9) | A: reopen the memory in place. B: restart Nocturne, saying so before and after | **B**, decided by build cost: reopening in place is a large change to how the computer opens its memory. The computer says "Nocturne restarts to open the memory from {name}. It opens again by itself." and the phone "Finishing on {computer}…". For the owner to confirm |
+| 32 | A phone alone moving to a computer that already holds a memory | A: put the computer's memory aside and take the phone's (0013's replace). B: bring the phone's things into the computer's memory. C: use the computer's memory and bring nothing | **B or C, the person chooses on the computer** (owner). Replace leaves the move; it stays only for restoring a backup file. Bringing things in is the one merge in Nocturne, and still one home afterwards |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |

@@ -25,7 +25,7 @@ Status: proposed, with the owner's decisions folded in. Nothing here is built.
 | Screen | File and states | Renders |
 |---|---|---|
 | On the phone | `move.html`: `found`, `size`, `moving`, `moved` | `move-found-light.png`, `move-size-light.png`, `move-moving-light.png`, `move-moved-light.png`, `move-moved-dark.png` |
-| On the computer | `desktop-move.html`: `receive`, `done` | `desktop-move-receive-light.png`, `desktop-move-done-light.png`, `desktop-move-receive-dark.png` |
+| On the computer | `desktop-move.html`: `receive`, `done`, `choose`, `merged` | `desktop-move-receive-light.png`, `desktop-move-done-light.png`, `desktop-move-receive-dark.png`, `desktop-move-choose-light.png`, `desktop-move-choose-dark.png`, `desktop-move-merged-light.png` |
 
 ## One home holds the pen
 
@@ -38,7 +38,7 @@ sequenceDiagram
     participant N as New home
     O->>O: a last copy, everything waiting written in
     O->>N: the copy and its originals, sealed
-    N->>N: the backup checks from 0013; anything already here is put aside
+    N->>N: the backup checks from 0013 (a computer that already holds a memory asks first, below)
     N-->>O: arrived, every count matches
     O->>O: its memory is put aside, read only
     Note over O: the person confirms, then it is deleted, or kept put aside for 30 days
@@ -51,8 +51,7 @@ sequenceDiagram
 | How it travels | Over the sealed channel between the two, using the backup format. The locked copy online is never read by a computer: it is for restoring on a phone |
 | Nothing read again | When both homes find things the same way, nothing is read again. When they don't, the new home gets each thing ready again in the background, and finding by words works meanwhile |
 | Nothing deleted early | The old home's memory is put aside, read only, once the new home has it and every count matches. It is deleted only when the person confirms |
-| No merging | A home that already holds a memory is offered 0013's choice: put what is here aside and take the new one, or keep this one and move nothing |
-| Other phones of a replaced memory | When the computer puts its memory aside for the one arriving, its other paired phones stay paired (the phones list is the computer's), and the computer asks each to send its calendar and health again from scratch the next time it connects, since what they sent went aside with the old memory |
+| Joining a computer's memory | The one exception to one home moving whole. When the computer already holds a memory, it offers two choices ([below](#when-the-computer-already-holds-a-memory)): bring the phone's things in, which adds them to the computer's memory, or use the computer's memory, which brings nothing. Either way there is one home afterwards, and nothing is ever synced both ways. Putting the computer's memory aside for the phone's is not offered in a move; it stays only in restoring a backup file ([Back up and restore](backup-and-restore.md)) |
 | Where a thing was kept | Each thing keeps the name of the device it was kept on. As a memory leaves a home, that home writes its own name into what it kept that has none yet (a phone uses the name it paired with), so the new home can say "Kept on {device}" |
 | After | A phone whose memory left becomes a companion of the new home (or a phone alone again, if the memory came to it) |
 
@@ -171,21 +170,106 @@ this phone holds" after "becomes the home of your memory".
 | Title | "{name} has its own memory. Move it here?" |
 | Counts | "{count} things kept since {date} · about {size}" |
 | Lead | "This computer becomes its home: it reads, tidies and writes the page. {name} then works with it like your other phones." |
-| Already a memory here | "This computer already holds a memory. A computer holds one person’s memory. Move {name}’s here and put what is here aside, or keep what is here and move nothing." |
-| Buttons | "Move it here" · "Not now"; with a memory here: "Put this aside and move it here" · "Keep what’s here" |
+| Buttons | "Move it here" · "Not now" |
 | Not enough room | Before the buttons, when free space is short: "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}." The move button waits until there is room |
-| Already a memory, other phones | "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside." |
 | Preparing | After "Move it here" and before anything arrives: "{name} is getting its memory ready…" with a moving bar that shows no amount, and "Stop" |
 | Arriving | Once the first part arrives: "Arriving from {name} · {done} of {size}" with "Stop" |
 | Stop | "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" (careful) · "Keep moving" |
 | Checking | "Checking · every count must match before {name} lets go of it" |
 | Restarting | Once every count matches, for about two seconds: "Nocturne restarts to open the memory from {name}. It opens again by itself." Then it closes and opens again, or opens in the tray if it was started there |
 
-"Keep what’s here" leaves the phone as it was, with "Move my memory" still in its This phone.
+"Not now" leaves the phone as it was, with "Move my memory" still in its This phone. The first
+three rows are for an empty computer; a computer that already holds a memory asks the question
+below instead.
 
 Nocturne restarts on the computer to open a moved memory, because a restore opens the new memory on
 the next start ([0013](/adr/0013-passphrase-backup.md)). Stopping is possible on either side until
 the restart; after it, the move finishes or changes nothing.
+
+### When the computer already holds a memory
+
+The owner's decision: a computer that already holds a memory never puts it aside for a phone's. It
+asks how the phone joins it, and the phone waits for the answer.
+
+```mermaid
+flowchart TD
+    P[Phone holds its own memory, pairs] --> Q{Computer: how should Maya's phone join?}
+    Q -->|Bring the phone's things in| B[Phone's kept things, journal and check-ins travel and are added]
+    Q -->|Use this computer's memory| U[Nothing travels]
+    B --> BC[Computer reads them as new. Calendar and health sent again, nothing doubled]
+    U --> UC[Calendar and health come from now on, as for any phone]
+    BC --> PA[Phone: a companion. Its own memory put aside on it]
+    UC --> PA
+```
+
+**On the computer: how should it join?**
+
+| Part | Copy |
+|---|---|
+| Title | "{name} has its own memory, and this computer has one too." |
+| Counts | "{count} things kept on {name} since {date} · about {size}" |
+| Lead | "A computer holds one person’s memory. Choose how {name} joins this one." |
+| Choice, selected | "Bring the phone’s things in" / "What was kept on {name}, with its journal and check-ins, joins the memory here, and Nocturne reads it as new. Its calendar and health readings are sent again, with nothing doubled." |
+| Choice | "Use this computer’s memory" / "Nothing comes in from {name}. It works with this computer like your other phones, and what it holds now is put aside on it." |
+| Not enough room | As above, for bringing the things in |
+| Buttons | "Continue" · "Not now" |
+
+**On the phone, meanwhile.** After pairing, instead of "Move your memory to {computer}?":
+"{computer} already holds a memory." / "Choose on {computer} what happens to yours. Nothing changes
+until you do." / "Waiting for {computer}…", with "Cancel", which undoes the pairing and leaves the
+phone as it was.
+
+**Bringing the phone's things in.**
+
+| Side | Stage | Copy |
+|---|---|---|
+| Phone | Preparing | "Bringing your things to {computer}" / "Getting your things ready…" with a moving bar and "Stop" |
+| Phone | Sending | "{done} of {size}", and "About {minutes} minutes left" once measured |
+| Phone | Adding | "Adding them to the memory on {computer}…" |
+| Phone | Done | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." Then the usual choice for what stays on the phone: "Remove it from this phone" (selected) / "Keep it put aside for 30 days" |
+| Computer | Preparing | "{name} is getting its things ready…" with a moving bar and "Stop" |
+| Computer | Arriving | "Bringing in {name}’s things · {done} of {size}" with "Stop" ("Stop bringing them in? Nothing changes here, and {name} keeps its memory." / "Stop" · "Keep going") |
+| Computer | Adding | "Adding them to the memory here…" Stop is no longer offered |
+| Computer | Done | "{name}’s things are here." / "{count} things, {entries} journal entries and {checkins} check-ins were added. Nocturne reads them as new over the next while; finding them by their words works now." / "Open today’s page" |
+
+Nothing is added until everything has arrived and every count matches; then all of it is added in
+one step, or none of it. Adding happens while Nocturne runs: no restart. The phone puts its memory
+aside only once the computer says the things were added.
+
+**Using the computer's memory.**
+
+| Side | Copy |
+|---|---|
+| Computer | "{name} now works with this computer." / "Nothing came in from it. Its calendar and health come here from now on." / "OK" |
+| Phone | "This phone now works with {computer}." / "Nothing went to {computer}. What this phone held is put aside here, and its calendar and health go to {computer} from now on." Then: "Keep it put aside" (selected) / "Remove it from this phone", with "Nothing from this phone went to {computer}, so removing it deletes it for good." |
+
+**What "put aside" means for each.**
+
+| | Bring the phone's things in | Use the computer's memory |
+|---|---|---|
+| What is put aside on the phone | Its whole memory, read only, after its things were added to the computer's | Its whole memory, read only. Nothing of it is on the computer |
+| How long | Removed now, or kept 30 days, as the person chooses | Kept until the person removes it; never removed by itself, since it is the only copy |
+| Later | "Remove…" in This phone | "Bring its things to {computer}…" in This phone, which runs the bringing in from what was put aside, or "Remove…" |
+
+**What travels, and what doesn't, when things are brought in.** Every kept thing with its original,
+how and where it was kept, and its private mark; journal entries and good things; check-ins. Not the
+phone's pages, reflections or what a mind worked out on the phone: the computer reads the things as
+new and writes its own. They stay in what is put aside on the phone. Calendar and health are not
+copied from the phone's memory; the phone sends them again into the computer's, over the usual
+window (two days back to two weeks ahead, and the last 30 days of readings), and what the computer
+already has counts as unchanged.
+
+**Edge cases.**
+
+| Case | What happens |
+|---|---|
+| The same thing kept on both | Kept once. The one already on the computer stays, and its page lists both places it was kept |
+| Journal entries or check-ins for the same day on both | Both kept, each on its day in time order. Nothing is joined into one entry |
+| Private marks | Kept as they were. When the same thing is on both and one of them is private, it is private |
+| A thing the phone sent earlier, as a companion of this computer | Already here, so it is not added again |
+| A thing the person forgot or deleted on the phone | Not there to travel |
+| Things marked private on the phone | Travel locked, like everything else, and stay private |
+| The phone is lost before the person chooses what stays on it | The computer has the things; what was put aside is only on the lost phone, and removing it in Away from home stops it |
 
 ### On the computer: arrived
 
@@ -237,11 +321,18 @@ the restart; after it, the move finishes or changes nothing.
 | Moved | "Your memory is on {computer}." / "{count} things arrived, and every count matches. This phone now works with {computer}." / "Your memory on this phone" / "Remove it from this phone" / "Keep it put aside for 30 days" / "Your locked copy online" / "Delete the copy online" / "Keep it as it is" / "Done" |
 | Leaving a household | "Delete your memory from {household}?" |
 | Computer, receive | "{name} has its own memory. Move it here?" / "{count} things kept since {date} · about {size}" / "This computer becomes its home: it reads, tidies and writes the page. {name} then works with it like your other phones." |
-| Computer, already | "This computer already holds a memory. A computer holds one person’s memory. Move {name}’s here and put what is here aside, or keep what is here and move nothing." / "Put this aside and move it here" / "Keep what’s here" / "Move it here" |
+| Computer, choose | "{name} has its own memory, and this computer has one too." / "{count} things kept on {name} since {date} · about {size}" / "A computer holds one person’s memory. Choose how {name} joins this one." / "Bring the phone’s things in" / "What was kept on {name}, with its journal and check-ins, joins the memory here, and Nocturne reads it as new. Its calendar and health readings are sent again, with nothing doubled." / "Use this computer’s memory" / "Nothing comes in from {name}. It works with this computer like your other phones, and what it holds now is put aside on it." / "Continue" / "Not now" |
+| Computer, bringing in | "{name} is getting its things ready…" / "Bringing in {name}’s things · {done} of {size}" / "Adding them to the memory here…" / "Stop" / "Stop bringing them in? Nothing changes here, and {name} keeps its memory." / "Stop" / "Keep going" |
+| Computer, brought in | "{name}’s things are here." / "{count} things, {entries} journal entries and {checkins} check-ins were added. Nocturne reads them as new over the next while; finding them by their words works now." / "Open today’s page" |
+| Computer, use this one | "{name} now works with this computer." / "Nothing came in from it. Its calendar and health come here from now on." / "OK" |
+| Phone, waiting for the choice | "{computer} already holds a memory." / "Choose on {computer} what happens to yours. Nothing changes until you do." / "Waiting for {computer}…" |
+| Phone, bringing in | "Bringing your things to {computer}" / "Getting your things ready…" / "{done} of {size}" / "Adding them to the memory on {computer}…" |
+| Phone, brought in | "Your things are on {computer}." / "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory there. {computer} reads them over the next while. This phone now works with {computer}." |
+| Phone, use the computer's | "This phone now works with {computer}." / "Nothing went to {computer}. What this phone held is put aside here, and its calendar and health go to {computer} from now on." / "Keep it put aside" / "Remove it from this phone" / "Nothing from this phone went to {computer}, so removing it deletes it for good." |
+| Put aside, later | "Bring its things to {computer}…" |
 | Computer, arriving | "{name} is getting its memory ready…" / "Arriving from {name} · {done} of {size}" / "Stop" / "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" / "Keep moving" / "Checking · every count must match before {name} lets go of it" / "Nocturne restarts to open the memory from {name}. It opens again by itself." |
 | Computer, room | "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}." / "There wasn’t room for {name}’s memory, so nothing changed. Free about {size} here, then move it again from {name}." |
 | Computer, didn't open | "The memory from {name} couldn’t be opened here, so nothing changed. What was on this computer is as it was." / "OK" |
-| Computer, other phones | "Your other phones send their calendar and health again the next time they connect, since what they sent stays with the memory put aside." |
 | Computer, arrived | "The memory from {name} is here." / "Reading carries on from where it was. Nothing is read again." / "This computer finds things its own way, so it gets each thing ready again over the next while. Finding by words works meanwhile." / "To have answers written online here, set up Online answers in {settings}." / "Open today’s page" |
 | Computer, to a phone | "Move my memory to a phone…" / "Your phone becomes its home. This computer then keeps nothing of yours." / "Which phone?" / "{name} has {free} free and your memory needs about {size}. Free some room on {name}, or move it somewhere else." / "Your memory is on {name}." / "What was here is put aside until you remove it." / "Keep using this computer’s mind" / "Remove it from this computer" |
 | States | "Moving paused. It carries on when {computer} is back." / "Something didn’t arrive whole, so nothing changed. Try again." / "Try again" / "Update Nocturne on {computer}, then try again. Nothing was changed." / "{computer} needs more free room for your memory. Free some there, then try again." / "{computer} ran out of room, so nothing changed. Your memory is still on this phone." / "{computer} couldn’t open your memory, so nothing changed. Your memory is still on this phone." / "{computer} stopped the move. Nothing changed, and your memory is still on this phone." / "Not now" / "OK" |

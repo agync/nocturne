@@ -6,7 +6,7 @@
 <title>Moving your memory, on the computer · Nocturne</title>
 <link rel="stylesheet" href="parity.css">
 </head>
-<body data-frame="app" data-section="Settings" data-states="receive done">
+<body data-frame="app" data-section="Settings" data-states="receive choose done merged">
 <div id="content" class="sheet">
   <div style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
     <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
@@ -44,9 +44,37 @@
     </div>
   </div>
 </div>
+
+<div id="overlay3" data-state="choose">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="ct" style="width: min(100%, 600px)">
+      <h2 id="ct" class="dialogTitle">Maya’s phone has its own memory, and this computer has one too.</h2>
+      <p class="muted">1,284 things kept on Maya’s phone since 3 March · about 1.4 GB</p>
+      <p>A computer holds one person’s memory. Choose how Maya’s phone joins this one.</p>
+      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="j" checked> <span class="oText"><span class="oLabel">Bring the phone’s things in</span><span class="oHint">What was kept on Maya’s phone, with its journal and check-ins, joins the memory here, and Nocturne reads it as new. Its calendar and health readings are sent again, with nothing doubled.</span></span></label>
+      <label class="oRow" style="display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--s-3)"><input type="radio" name="j"> <span class="oText"><span class="oLabel">Use this computer’s memory</span><span class="oHint">Nothing comes in from Maya’s phone. It works with this computer like your other phones, and what it holds now is put aside on it.</span></span></label>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary">Not now</span>
+        <span class="button" data-variant="primary">Continue</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay4" data-state="merged">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="gt" style="width: min(100%, 580px)">
+      <h2 id="gt" class="dialogTitle">Maya’s phone’s things are here.</h2>
+      <p>1,284 things, 212 journal entries and 96 check-ins were added. Nocturne reads them as new over the next while; finding them by their words works now.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="primary">Open today’s page</span>
+      </div>
+    </div>
+  </div>
+</div>
 <script src="../phone-apps/shell.js"></script>
 <script>
-  const o2 = document.getElementById("overlay2"); if (o2) document.body.appendChild(o2);
+  for (const id of ["overlay2", "overlay3", "overlay4"]) { const o = document.getElementById(id); if (o) document.body.appendChild(o); }
 </script>
 </body>
 </html>
