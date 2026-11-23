@@ -48,9 +48,20 @@ check-changed: ## Run the basics for what changed since BASE (default merge base
 rust/build: ## Build the Rust workspace
 	cargo build --workspace
 
-rust/test: ## Test the Rust workspace
-	cargo test --workspace
-	cargo test -p nocturne-app --features server --lib --test preview
+# The packages rust/test runs: the workspace, or `-p` flags for some of its packages. The second
+# run, the app with its server, runs when the app is one.
+RUST_PACKAGES ?= --workspace
+# cargo-nextest runs the tests when it is installed, with these profiles from .config/nextest.toml;
+# cargo test runs them otherwise. nextest runs no doctests, so cargo test --doc follows it.
+NEXTEST_PROFILE ?= default
+NEXTEST_SERVER_PROFILE ?= $(NEXTEST_PROFILE)
+NEXTEST = $(shell cargo nextest --version >/dev/null 2>&1 && echo yes)
+RUST_TEST_APP = $(filter --workspace nocturne-app,$(RUST_PACKAGES))
+
+rust/test: ## Test the Rust workspace (with cargo-nextest when it is installed)
+	$(if $(NEXTEST),cargo nextest run --profile $(NEXTEST_PROFILE) --no-tests=warn $(RUST_PACKAGES),cargo test $(RUST_PACKAGES))
+	$(if $(NEXTEST),cargo test --doc $(RUST_PACKAGES))
+	$(if $(RUST_TEST_APP),$(if $(NEXTEST),cargo nextest run --profile $(NEXTEST_SERVER_PROFILE),cargo test) -p nocturne-app --features server --lib --test preview)
 
 rust/lint: ## Clippy and rustfmt check
 	cargo fmt --all --check
