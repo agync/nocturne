@@ -117,6 +117,36 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { name: "Disconnect this phone?" })).toBeVisible();
     });
 
+    for (const [row, title, switchName] of [
+      [/Your calendar/, "calendar", "Bring my calendar"],
+      [/Health/, "health", "Bring health readings"],
+    ] as const) {
+      test(`${title} settings end with Done`, async ({ page }) => {
+        await page.goto("/");
+        await page.getByRole("button", { name: "This phone" }).click();
+        await page
+          .getByRole("region", { name: "What this phone brings" })
+          .getByRole("button", { name: row })
+          .click();
+        await expect(page.getByRole("switch", { name: new RegExp(switchName) })).toBeVisible();
+        await expect(page.getByRole("region", { name: "Kept so far" })).toHaveCount(0);
+        const done = page.getByRole("button", { name: "Done" });
+        await expect(done).toBeVisible();
+        const last = await page.evaluate(() => {
+          const buttons = [...document.querySelectorAll("button")];
+          return buttons[buttons.length - 1].textContent;
+        });
+        expect(last).toBe("Done");
+        await clean(page);
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.screenshot({
+          path: `${process.env.SHOTS ?? "test-results/phone-native-shots"}/companion-${title}-${scheme}.png`,
+        });
+        await done.click();
+        await expect(page.getByRole("region", { name: "What this phone brings" })).toBeVisible();
+      });
+    }
+
     test("keeping what another app shared", async ({ page }) => {
       await page.goto("/?n=share");
       const sheet = page.getByRole("dialog", { name: "Keep in Nocturne" });

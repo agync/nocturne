@@ -19,6 +19,7 @@
   "phone.calendar.bring": "Bring my calendar",
   "phone.calendar.bring.hint": "Two days back to two weeks ahead, read only.",
   "phone.calendar.which": "Which calendars",
+  "phone.calendar.note": "Every calendar starts on. Turn off any you don’t want on your page.",
   "phone.calendar.work": "Work profile calendar",
   "phone.calendar.workN": "Work profile calendar {n}",
   "phone.calendar.notes": "Notes on each appointment",

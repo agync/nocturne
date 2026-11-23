@@ -71,6 +71,28 @@ html.ph-native .ph-screen--fixed {
   background: var(--rule);
 }
 
+/* Done sits at the bottom of the screen at any text size; the page scrolls above it. */
+.ph-done {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 24px calc(16px + var(--ph-inset-bottom, 0px));
+  border-top: 1px solid var(--rule);
+  background: var(--bg);
+}
+
+.ph-kept-so-far {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ph-link--careful {
+  color: var(--ember);
+  font-size: 0.875rem;
+  min-height: 44px;
+}
+
 .ph-bring-hint {
   font-size: 0.8125rem;
 }
