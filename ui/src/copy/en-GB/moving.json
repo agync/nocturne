@@ -97,6 +97,8 @@
   "moving.phone.stays.answers": "{count, plural, one {# answer to the morning question} other {# answers to the morning question}}",
   "moving.phone.stays.names": "{count, plural, one {# name you taught it} other {# names you taught it}}",
   "moving.phone.stays.choices": "{count, plural, one {# thing you confirmed or settled} other {# things you confirmed or settled}}",
+  "moving.phone.stays.appointments": "{count, plural, one {# appointment} other {# appointments}}",
+  "moving.phone.stays.readings": "{count, plural, one {# health reading} other {# health readings}}",
   "moving.phone.stays.settings": "its settings",
   "moving.phone.aside.removeYes": "Remove",
   "moving.phone.aside.keepIt": "Keep it",

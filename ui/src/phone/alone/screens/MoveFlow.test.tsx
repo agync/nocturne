@@ -17,7 +17,12 @@ afterEach(() => {
   clearMocks();
 });
 
-const COUNTS: MemoryCounts = { items: 1284, memories: 0, pages: 0, originals: 40 };
+const COUNTS: MemoryCounts = {
+  items: 1284,
+  memories: 0,
+  pages: 0,
+  originals: 40,
+};
 
 type Answer = MemoryCounts | null | MoveError | "opened" | "bring" | "empty" | "useHere";
 
@@ -106,7 +111,9 @@ describe("moving the memory to a computer", () => {
     const api = fakeApi();
     open(api);
     expect(
-      await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+      await screen.findByRole("heading", {
+        name: "Move your memory to Maya’s laptop?",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -130,7 +137,9 @@ describe("moving the memory to a computer", () => {
     await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(1));
     api.answerOffer("empty");
     expect(
-      await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+      await screen.findByRole("heading", {
+        name: "Move your memory to Maya’s laptop?",
+      }),
     ).toBeInTheDocument();
     expect(api.move).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -138,7 +147,9 @@ describe("moving the memory to a computer", () => {
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     expect(api.offer).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -172,7 +183,9 @@ describe("moving the memory to a computer", () => {
     expect(screen.queryByText(/pages/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
-      await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+      await screen.findByRole("heading", {
+        name: "Move your memory to Maya’s laptop?",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -203,12 +216,26 @@ describe("moving the memory to a computer", () => {
     const { onDone } = open(api);
     await toMoving(api);
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
-    act(() => api.progress?.({ phase: "sending", done: 820_000_000, total: 1_400_000_000 }));
+    act(() =>
+      api.progress?.({
+        phase: "sending",
+        done: 820_000_000,
+        total: 1_400_000_000,
+      }),
+    );
     expect(screen.getByText(/^820\sMB of 1\.4\sGB/)).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "59");
-    act(() => api.progress?.({ phase: "checking", done: 1_400_000_000, total: 1_400_000_000 }));
+    act(() =>
+      api.progress?.({
+        phase: "checking",
+        done: 1_400_000_000,
+        total: 1_400_000_000,
+      }),
+    );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Adding them to the memory on Maya’s laptop…",
     );
@@ -221,16 +248,22 @@ describe("moving the memory to a computer", () => {
       keepUntil: "2026-12-23T09:00:00Z",
     });
     expect(
-      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "Your things are on Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
         "1,172 things, 12 journal entries and 100 check-ins were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
       ),
     ).toBeInTheDocument();
-    const choice = screen.getByRole("group", { name: "Your memory on this phone" });
+    const choice = screen.getByRole("group", {
+      name: "Your memory on this phone",
+    });
     expect(
-      within(choice).getByRole("radio", { name: "Keep it put aside for 30 days" }),
+      within(choice).getByRole("radio", {
+        name: "Keep it put aside for 30 days",
+      }),
     ).toBeChecked();
     expect(screen.queryByText(/stay only on this phone/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -259,7 +292,9 @@ describe("moving the memory to a computer", () => {
       await screen.findByText("Moving paused. It carries on when Maya’s laptop is back."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/didn’t arrive whole/)).toBeNull();
-    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), { timeout: 8000 });
+    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), {
+      timeout: 8000,
+    });
     api.answerOffer("opened");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     expect(onExit).not.toHaveBeenCalled();
@@ -273,7 +308,9 @@ describe("moving the memory to a computer", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Move my memory" }));
     api.answerOffer("declined");
     expect(
-      await screen.findByRole("heading", { name: "This phone was removed from Nocturne." }),
+      await screen.findByRole("heading", {
+        name: "This phone was removed from Nocturne.",
+      }),
     ).toBeInTheDocument();
     expect(onExit).not.toHaveBeenCalled();
   });
@@ -337,7 +374,9 @@ describe("moving the memory to a computer", () => {
   it("goes back to the phone alone when the computer keeps what it has", async () => {
     const api = fakeApi(true);
     const { onExit } = open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("declined");
     await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
@@ -386,7 +425,9 @@ describe("a move that went away part way", () => {
     api.answerOffer("opened");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
   });
 });
@@ -434,7 +475,11 @@ describe("how long is left", () => {
   it("says one minute, one thing and one journal entry in the singular", async () => {
     let clock = 0;
     const now = () => clock;
-    const sending = (done: number): MoveProgress => ({ phase: "sending", done, total: 50_000_000 });
+    const sending = (done: number): MoveProgress => ({
+      phase: "sending",
+      done,
+      total: 50_000_000,
+    });
     const { rerender } = render(
       <MoveMoving computer="Maya’s laptop" progress={sending(0)} onStop={vi.fn()} now={now} />,
     );
@@ -486,7 +531,9 @@ describe("moving to a computer that already holds a memory", () => {
     const api = fakeApi(true);
     const { onExit } = open(api);
     expect(
-      await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." }),
+      await screen.findByRole("heading", {
+        name: "Maya’s laptop already holds a memory.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -495,7 +542,9 @@ describe("moving to a computer that already holds a memory", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting for Maya’s laptop…");
     expect(
-      screen.queryByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+      screen.queryByRole("heading", {
+        name: "Move your memory to Maya’s laptop?",
+      }),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(onExit).toHaveBeenCalled());
@@ -505,17 +554,33 @@ describe("moving to a computer that already holds a memory", () => {
   it("brings its things in by itself once chosen there, and says what was added", async () => {
     const api = fakeApi(true);
     const { onDone } = open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("bring");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("Getting your things ready…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
-    act(() => api.progress?.({ phase: "sending", done: 700_000_000, total: 1_400_000_000 }));
+    act(() =>
+      api.progress?.({
+        phase: "sending",
+        done: 700_000_000,
+        total: 1_400_000_000,
+      }),
+    );
     expect(screen.getByText(/^700\sMB of 1\.4\sGB/)).toBeInTheDocument();
-    act(() => api.progress?.({ phase: "checking", done: 1_400_000_000, total: 1_400_000_000 }));
+    act(() =>
+      api.progress?.({
+        phase: "checking",
+        done: 1_400_000_000,
+        total: 1_400_000_000,
+      }),
+    );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Adding them to the memory on Maya’s laptop…",
     );
@@ -523,11 +588,22 @@ describe("moving to a computer that already holds a memory", () => {
     api.finishMove({
       items: 1284,
       brought: { things: 1284, entries: 212, checkins: 96 },
-      behind: { pages: 3, reflections: 1, answers: 5, names: 2, choices: 0, settings: true },
+      behind: {
+        pages: 3,
+        reflections: 1,
+        answers: 5,
+        names: 2,
+        choices: 0,
+        appointments: 0,
+        readings: 0,
+        settings: true,
+      },
       keepUntil: null,
     });
     expect(
-      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "Your things are on Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -550,7 +626,9 @@ describe("moving to a computer that already holds a memory", () => {
   it("asks its own way before it stops bringing the things in, then says nothing changed there", async () => {
     const api = fakeApi(true);
     const { onExit } = open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("bring");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
@@ -564,7 +642,9 @@ describe("moving to a computer that already holds a memory", () => {
       await screen.findByText("Stopped. Nothing changed on Maya’s laptop."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
     expect(api.stop).toHaveBeenCalled();
     api.finishMove("stopped");
@@ -575,7 +655,9 @@ describe("moving to a computer that already holds a memory", () => {
   it("says the computer stopped it under the bringing title", async () => {
     const api = fakeApi(true);
     open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("bring");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     api.finishMove("stoppedThere");
@@ -585,7 +667,9 @@ describe("moving to a computer that already holds a memory", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+      screen.getByRole("heading", {
+        name: "Bringing your things to Maya’s laptop",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -595,7 +679,9 @@ describe("moving to a computer that already holds a memory", () => {
     await toMoving(api);
     api.finishMove("declined");
     expect(
-      await screen.findByRole("heading", { name: "This phone was removed from Nocturne." }),
+      await screen.findByRole("heading", {
+        name: "This phone was removed from Nocturne.",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("To use it again, pair it from your computer.")).toBeInTheDocument();
     expect(onExit).not.toHaveBeenCalled();
@@ -607,10 +693,14 @@ describe("moving to a computer that already holds a memory", () => {
   it("uses the computer's memory, keeping this one put aside unless removed", async () => {
     const api = fakeApi(true);
     const { onDone } = open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("useHere");
     expect(
-      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "This phone now works with Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -632,14 +722,20 @@ describe("moving to a computer that already holds a memory", () => {
   it("keeps waiting, and asks again, when the connection goes while the person there chooses", async () => {
     const api = fakeApi(true);
     const { onExit } = open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer("paused");
-    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), { timeout: 8000 });
+    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), {
+      timeout: 8000,
+    });
     expect(screen.getByRole("status")).toHaveTextContent("Waiting for Maya’s laptop…");
     expect(onExit).not.toHaveBeenCalled();
     api.answerOffer("useHere");
     expect(
-      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "This phone now works with Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
   }, 12_000);
 
@@ -650,7 +746,9 @@ describe("moving to a computer that already holds a memory", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Move my memory" }));
     api.answerOffer("useHere");
     expect(
-      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+      await screen.findByRole("heading", {
+        name: "This phone now works with Maya’s laptop.",
+      }),
     ).toBeInTheDocument();
     expect(api.move).not.toHaveBeenCalled();
   });
@@ -658,10 +756,14 @@ describe("moving to a computer that already holds a memory", () => {
   it("asks as for any move when the computer takes the memory whole after all", async () => {
     const api = fakeApi(true);
     open(api);
-    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    await screen.findByRole("heading", {
+      name: "Maya’s laptop already holds a memory.",
+    });
     api.answerOffer(null);
     expect(
-      await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+      await screen.findByRole("heading", {
+        name: "Move your memory to Maya’s laptop?",
+      }),
     ).toBeInTheDocument();
   });
 });
