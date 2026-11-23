@@ -116,7 +116,11 @@ export function ThisPhone({
         bring
         progress={progress}
         onStop={() => {
-          void aside?.stop().finally(() => setStep({ name: "failed", why: "stoppedHere" }));
+          // Refused once the computer is adding them: this waits to hear that instead.
+          void aside?.stop().then(
+            () => setStep({ name: "failed", why: "stoppedHere" }),
+            () => undefined,
+          );
         }}
       />
     );

@@ -185,6 +185,26 @@ describe("the memory a move put aside, in This phone", () => {
     expect(aside.stop).toHaveBeenCalled();
   });
 
+  it("does not say it stopped when the computer is already adding them", async () => {
+    const aside = fakeAside({ onComputer: false, keepUntil: null });
+    aside.stop = vi.fn(async () => Promise.reject("failed"));
+    open(aside);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+    );
+    await waitFor(() => expect(aside.bring).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Stop" }),
+    );
+    await waitFor(() => expect(aside.stop).toHaveBeenCalled());
+    aside.finish({ items: 40, brought: { things: 38, entries: 2, checkins: 0 } });
+    expect(
+      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Stopped\./)).toBeNull();
+  });
+
   it("shows nothing of it when no move put a memory aside", async () => {
     const aside = fakeAside(null);
     open(aside);

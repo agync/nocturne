@@ -595,7 +595,8 @@ pub enum RemoteCall {
         passphrase: String,
     },
     /// The person stopped bringing this phone's things in, until they are being added: the
-    /// computer stops too and nothing changes there. Answered with `Done`.
+    /// computer stops too and nothing changes there. Answered with `Done`, or `TooLate` once
+    /// they are being added, which then finishes.
     StopMemory,
 }
 

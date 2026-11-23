@@ -289,9 +289,13 @@ export function MoveFlow({
           onStop={() => {
             leaving.current = true;
             const bring = current.bring;
-            void api.stop().finally(() =>
+            void api.stop().then(
               // Bringing things in says it stopped; a whole move just ends.
-              bring ? setStep({ name: "failed", why: "stoppedHere", bring }) : onExit(),
+              () => (bring ? setStep({ name: "failed", why: "stoppedHere", bring }) : onExit()),
+              // Too late: the computer is adding them, and this waits to hear it.
+              () => {
+                leaving.current = false;
+              },
             );
           }}
         />
