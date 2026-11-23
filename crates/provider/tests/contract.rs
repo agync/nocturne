@@ -1,6 +1,7 @@
 //! What the mind sends to the person's provider, and where: the shape of a reading, an answer
 //! and a page; one host and nothing else; nothing at all until it is asked.
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use nocturne_contract::{CheckOutcome, EntityKind, ItemKind, MemoryView, PageView};
@@ -595,4 +596,33 @@ fn an_address_off_the_rules_makes_no_provider() {
         Provider::new("https://metadata.google.internal/v1", MODEL, key()).unwrap_err(),
         UrlProblem::NotAllowed
     );
+}
+
+#[tokio::test]
+async fn a_recording_in_another_format_goes_as_wav_once_decoded() {
+    let stand_in = StandIn::start().await;
+    stand_in.always(Answer::text("Pick up the bread."));
+    let dir = tempfile::tempdir().unwrap();
+    let m4a = dir.path().join("note.m4a");
+    std::fs::write(&m4a, b"not really sound").unwrap();
+
+    let refused = mind(&stand_in).transcribe(&m4a).await;
+    assert!(matches!(refused, Err(MindError::NotTaken(_))));
+    assert!(stand_in.chats().is_empty());
+
+    let decoded = mind(&stand_in).with_decoder(Arc::new(|_: &Path| Some(b"RIFFwav".to_vec())));
+    let heard = decoded.transcribe(&m4a).await.unwrap();
+    assert_eq!(heard.text, "Pick up the bread.");
+    let chats = stand_in.chats();
+    assert_eq!(chats.len(), 1);
+    let audio = &chats[0].body["messages"][1]["content"][1]["input_audio"];
+    assert_eq!(audio["format"], "wav");
+    assert_eq!(audio["data"], "UklGRndhdg==");
+
+    let cannot = mind(&stand_in).with_decoder(Arc::new(|_: &Path| None));
+    assert!(matches!(
+        cannot.transcribe(&m4a).await,
+        Err(MindError::NotTaken(_))
+    ));
+    assert_eq!(stand_in.chats().len(), 1);
 }
