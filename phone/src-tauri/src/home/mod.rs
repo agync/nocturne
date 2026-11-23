@@ -25,7 +25,7 @@ mod tests;
 pub mod voice;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use nocturne_contract::{HomeError, PhoneMode};
@@ -83,6 +83,9 @@ pub struct Home {
     fading: Mutex<()>,
     /// The passphrase work a backup asks of whoever opens it; `None` is what Nocturne writes.
     work_factor: Option<u8>,
+    /// Counts the times the open store was let go, so work begun on one store (a voice note's
+    /// lease) knows when what is open now is another.
+    generation: AtomicU64,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -149,6 +152,7 @@ impl Home {
             voice: voice::Voice::default(),
             fading: Mutex::new(()),
             work_factor: None,
+            generation: AtomicU64::new(0),
         }
     }
 
@@ -199,9 +203,14 @@ impl Home {
         only
     }
 
-    /// Someone waits to change the store: a long read stops and waits for another pass.
+    /// Someone waits to change the store, or holds it to change it (a move, a restore): a long
+    /// read stops and waits for another pass.
     pub(crate) fn store_wanted(&self) -> bool {
         self.writers.load(Ordering::SeqCst) > 0
+            || matches!(
+                self.gate.try_read(),
+                Err(std::sync::TryLockError::WouldBlock)
+            )
     }
 
     /// The store, opened now if it is not open yet. Only while the phone is alone.
@@ -248,6 +257,12 @@ impl Home {
     /// Let go of the open store. Only under [`Home::exclusive`].
     pub(crate) fn close(&self) {
         lock(&self.open).take();
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Which open store this is: it changes each time the store is let go.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
     }
 
     /// The folder a damaged store was put aside in, while the phone waits for a backup or a

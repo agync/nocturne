@@ -1658,3 +1658,85 @@ fn fading_waits_for_a_memory_and_starts_again_with_a_new_one() {
         "a fresh memory has its own days"
     );
 }
+
+/// A reader that says when it starts each piece and holds it until let go.
+struct Held {
+    started: std::sync::mpsc::Sender<()>,
+    go: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+    reads: std::sync::atomic::AtomicUsize,
+}
+
+impl Reader for Held {
+    fn ready(&self, _: &str) -> bool {
+        true
+    }
+
+    fn read(&self, _: &Path, _: &str) -> Heard {
+        self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let _ = self.started.send(());
+        let _ = self.go.lock().unwrap().recv();
+        Heard::Words("held words".into())
+    }
+}
+
+#[test]
+fn a_move_or_a_restore_never_waits_behind_a_voice_note_being_read() {
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let open = home.open_store().unwrap();
+    // Two sounds, so the second is not taken as the first kept again.
+    for (client, samples) in [("c-1", 16_000), ("c-2", 8_000)] {
+        let sound = wav(samples);
+        kept_id(&dispatch::keep_bytes(
+            &open,
+            recording("audio/wav", client, sound.len()),
+            &sound,
+            &home.keeping_dir(),
+        ));
+    }
+    assert!(home.set_language("en-GB"));
+    let (started, piece) = std::sync::mpsc::channel();
+    let (go, held) = std::sync::mpsc::channel();
+    let reader = Held {
+        started,
+        go: std::sync::Mutex::new(held),
+        reads: Default::default(),
+    };
+    std::thread::scope(|s| {
+        let pass = s.spawn(|| home.hear_waiting(&reader));
+        piece
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a piece is being read");
+        let (took, taken) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let home = &home;
+        let mover = s.spawn(move || {
+            let _only = home.exclusive();
+            took.send(()).unwrap();
+            let _ = released.recv();
+        });
+        let in_time = taken.recv_timeout(Duration::from_secs(2)).is_ok();
+        go.send(()).unwrap();
+        go.send(()).unwrap();
+        if !in_time {
+            drop(release);
+            panic!("the store was not taken while the reader read");
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            reader.reads.load(Ordering::SeqCst),
+            1,
+            "no new piece while the store is held"
+        );
+        release.send(()).unwrap();
+        mover.join().unwrap();
+        assert_eq!(
+            pass.join().unwrap(),
+            2,
+            "both notes are heard once it is free"
+        );
+    });
+    assert_eq!(reader.reads.load(Ordering::SeqCst), 2);
+}
