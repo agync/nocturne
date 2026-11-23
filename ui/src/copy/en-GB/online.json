@@ -1,7 +1,6 @@
 {
   "screen.online.title": "Online answers",
   "screen.online.setup.title": "Set up Online answers",
-  "online.row.label": "Online answers",
   "online.row.hint": "Answers written by an online service you choose",
   "online.row.off": "Off",
   "online.row.on": "On",
@@ -82,9 +81,6 @@
   "online.row.private.value": "Never sent",
   "online.row.limit.label": "Monthly limit",
   "online.row.limit.hint": "Then questions are answered here until the 1st.",
-  "online.limit.option.questions": "{count, number} questions",
-  "online.limit.option.usd": "{amount} a month",
-  "online.limit.option.none": "No limit",
 
   "online.month.heading": "This month",
   "online.month.questions": "questions sent online",

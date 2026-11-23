@@ -8,8 +8,6 @@
   "rail.recent": "Recently kept",
   "rail.fading": "Fading & let go",
   "rail.pages": "Past pages",
-  "rail.privacy": "Privacy",
-  "rail.settings": "Settings",
   "status.region": "Nocturne status",
   "status.state.starting": "Starting",
   "status.state.gettingReady": "Getting ready",
@@ -97,7 +95,6 @@
   "rail.away.on": "Away from home is on",
   "rail.away.use": "{name} is using Nocturne",
   "rail.away.useMany": "{count} phones are using Nocturne",
-  "rail.away.relink": "Your phones need the new address",
   "rail.away.needs": "Away from home needs you",
   "status.phones.label": "Sent to your phones"
 }

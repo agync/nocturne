@@ -27,6 +27,24 @@ function shellFiles(): Plugin {
   };
 }
 
+/**
+ * `copy/t.ts` reads the whole desktop deck. The phone build reads `copy/phone-deck.ts` in its
+ * place, so the phone ships only the copy files its screens use.
+ */
+function phoneDeck(): Plugin {
+  const full = here("./src/copy/deck.ts");
+  const phone = here("./src/copy/phone-deck.ts");
+  return {
+    name: "nocturne-phone-deck",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      if (!importer || !/(^|\/)deck$/.test(source)) return null;
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      return resolved?.id === full ? phone : null;
+    },
+  };
+}
+
 // The phone app: a second entry, built into dist/phone beside the desktop interface and served
 // by the computer to paired phones. Nothing is inlined, so its policy needs no inline script or
 // style. Tests use the scripted phone engine. `--mode native` builds the same screens for the
@@ -40,7 +58,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: "phone",
     base: "/",
-    plugins: native ? [react()] : [react(), shellFiles()],
+    plugins: native ? [phoneDeck(), react()] : [phoneDeck(), react(), shellFiles()],
     define: {
       "import.meta.env.VITE_ENGINE": JSON.stringify(engine),
       __APP_VERSION__: JSON.stringify(version),
