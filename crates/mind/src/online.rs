@@ -9,6 +9,12 @@ use crate::prompts;
 
 /// The most remembered sentences one question sends.
 pub const MAX_FACTS: usize = 12;
+/// The most an answer written online may be, in tokens.
+pub const MAX_TOKENS: u32 = 600;
+/// The one question of a connection check.
+pub const CHECK_QUESTION: &str = "Reply with the word ready.";
+/// The most its answer may be, in tokens.
+pub const CHECK_MAX_TOKENS: u32 = 8;
 
 /// A question ready to send, made before anything leaves.
 pub struct Question {

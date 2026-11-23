@@ -1392,12 +1392,7 @@ pub fn query_text(model: &str, question: &str) -> String {
     }
 }
 
-pub(crate) fn json_schema_format(schema: &Value) -> Value {
-    json!({
-        "type": "json_schema",
-        "json_schema": {"name": "result", "strict": true, "schema": schema},
-    })
-}
+pub(crate) use nocturne_mind::prompts::response_format as json_schema_format;
 
 /// Models sometimes wrap JSON in a code fence; take what is inside.
 pub(crate) fn parse_json_text<T: DeserializeOwned>(text: &str) -> Result<T, RuntimeError> {

@@ -12,4 +12,5 @@ pub mod prompts;
 pub mod read;
 pub mod reading;
 pub mod reflect;
+pub mod temperature;
 pub mod watch;
