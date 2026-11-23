@@ -875,6 +875,24 @@ Ask while a mind is on but not answering yet, such as while it reads or can't be
 found by its words shows under "Found by their words.", without "Answers need a mind.", which would
 not be true.
 
+### Answers on a phone alone
+
+Ask on a phone alone answers as the companion's Ask does, with the lines that point at a computer
+replaced, since there is none. Stop ends the question at once: the request to the service is
+dropped, nothing of it is shown, and nothing is counted. A request that had already left is listed
+in Sent online, as everything that leaves is.
+
+| Part | Copy |
+|---|---|
+| Not sure, under the near matches | "Open each one to see which is right." (in place of the computer's "Choose which is right on your computer…") |
+| After an answer | "Answered online by your provider ({host})", then "What was sent is listed in {thisPhone}. Choose {seeWhatWasSent}." with both as chips |
+| Correcting | Not shown: a phone alone has no way yet to correct a memory, so "Something wrong? Correct it on your computer." is left out |
+| No answer came | "No answer came this time. Ask again in a moment." (in place of "Nocturne is getting ready…") |
+| Failed | "This couldn’t be answered just now. Ask again in a moment." (in place of the line about the computer) |
+
+When the service stops answering, has refused the key, has no credit or the limit is reached, Ask
+turns to finding by words with the [state](#states)'s own words instead.
+
 ### The mind in This phone
 
 A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your memory.
@@ -893,11 +911,11 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 | State | What shows |
 |---|---|
 | Reading | Nothing on Today; This phone: "Reading · {done} of {count}" |
-| Service unreachable | Today keeps the last page with "Written {day}. {host} hasn’t answered since {time}." Ask finds by words with "Answers are back when {host} is." |
+| Service unreachable | Today keeps the last page with "Written {day}. {host} hasn’t answered since {time}." Ask finds by words with "Answers are back when {host} is." Meanwhile the phone looks again with one look at the service's list of models, listed in Sent online as a "Connection check": after 1, 5, 15 and 30 minutes, then every 30 minutes, never while paused by the limit. When one is answered, the state ends and Ask answers again |
 | Key refused | On Today and Ask: "Your provider refused the key" / "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words." with "Check the key…", which opens the details step |
 | No credit | On Today and Ask: "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." with "Check again", which opens the details step |
 | Paused by the limit | On Today and Ask: "Paused by your limit" / "You’ve reached this month’s limit. Ask finds by words until {day}." with "Change limit", which opens the details step, then the limit |
-| No connection | "This phone isn’t online. What you keep waits to be read." |
+| No connection | When this phone can’t reach the internet at all (the service’s name can’t be looked up, or there is no route), on Today and over what Ask finds by words: "This phone isn’t online. What you keep waits to be read." Nothing left the phone, so nothing is added to Sent online and nothing is counted. The phone looks again as for an unreachable service; a look that can’t leave the phone isn’t listed either |
 
 ### Checks before the online mind ships
 
@@ -1034,6 +1052,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind, no credit | "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." / "Check again" |
 | Mind, paused | "Paused by your limit" / "You’ve reached this month’s limit. Ask finds by words until {day}." / "Change limit" |
 | Mind, offline | "This phone isn’t online. What you keep waits to be read." |
+| Mind, Ask | "Open each one to see which is right." / "What was sent is listed in {thisPhone}. Choose {seeWhatWasSent}." / "No answer came this time. Ask again in a moment." / "This couldn’t be answered just now. Ask again in a moment." |
 | First release, listing growing | "When you want answers and a morning page, give it a mind: Nocturne on your own computer." |
 | First release, Welcome link | "I have a backup" |
 | First release, waits hint | "A mind can come from Nocturne on your own computer. Your memory then moves there." |
