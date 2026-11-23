@@ -70,6 +70,12 @@ class SystemPlugin: Plugin {
     }
   }
 
+  /// Whether the phone is set to 24-hour time: its own pattern for an hour has no am or pm.
+  @objc public func hourClock(_ invoke: Invoke) throws {
+    let pattern = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: Locale.current) ?? ""
+    invoke.resolve(["is24": !pattern.contains("a")])
+  }
+
   private static func available(_ path: String) -> Int64? {
     let url = URL(fileURLWithPath: path, isDirectory: true)
     let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
