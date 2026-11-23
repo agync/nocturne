@@ -729,7 +729,11 @@ impl Engine {
                 obj.insert("block".into(), json!(n));
             }
             obj.remove("phone");
-            if p.readable {
+            // A thing the person forgot something from is never read again by itself, as here
+            // (`Engine::queue_reread`): it arrives as read, so no mind gets a second chance to say
+            // what was forgotten. Only one not read yet waits to be read.
+            let fresh = p.readable && p.forgotten.is_empty();
+            if fresh {
                 obj.remove("read_at");
             }
             let mut row = p.row.clone();
@@ -741,7 +745,7 @@ impl Engine {
             set("id", Sql::Text(id.clone()));
             set("metadata", Sql::Text(meta.to_string()));
             copies.place(&originals, p)?;
-            if p.readable {
+            if fresh {
                 set("status", Sql::Text("kept".into()));
             }
             for c in FRESH {

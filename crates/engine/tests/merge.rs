@@ -508,7 +508,9 @@ fn forget_memory(e: &Engine, memory: &str, originals: bool, begin_only: bool) {
 
 fn says_heron(e: &Engine, item: &str) -> bool {
     use common::EngineExt;
-    !e.apply(item, vec![heron()]).unwrap().created.is_empty()
+    // A read refused outright says nothing either.
+    e.apply(item, vec![heron()])
+        .is_ok_and(|r| !r.created.is_empty())
 }
 
 #[test]
@@ -522,7 +524,15 @@ fn what_the_person_forgot_on_the_phone_is_never_read_again_on_the_computer() {
     let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
     assert_eq!(brought.things, 1, "the thing itself stays and travels");
     let e = &computer.engine;
-    assert_eq!(e.get_item(&note).unwrap().status, ItemStatus::Kept);
+    assert_ne!(
+        e.get_item(&note).unwrap().status,
+        ItemStatus::Kept,
+        "never read again by itself"
+    );
+    assert!(
+        !e.pending_items(50).unwrap().iter().any(|p| p.id == note),
+        "it is not in the queue"
+    );
     assert_eq!(
         sql_count(computer.dir.path(), "SELECT COUNT(*) FROM forgotten_claims"),
         1

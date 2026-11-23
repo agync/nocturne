@@ -537,8 +537,17 @@ fn what_was_forgotten_on_the_phone_stays_forgotten_on_the_computer() {
         "nor is it found by its words, as after a forget here"
     );
     assert!(
-        read(&e, &here).created.is_empty(),
-        "the computer never reads what was forgotten from it again"
+        !e.pending_items(50).unwrap().iter().any(|p| p.id == here),
+        "the computer never reads it again by itself"
+    );
+    let lease = e.lease_item(&here, std::time::Duration::from_secs(60));
+    assert!(
+        lease.is_err()
+            || e.apply_candidates(&here, &lease.unwrap().lease, vec![said()])
+                .unwrap()
+                .created
+                .is_empty(),
+        "nor says what was forgotten from it"
     );
 }
 
