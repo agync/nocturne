@@ -23,6 +23,7 @@ import type {
   FeelingPart,
   ForgetPreview,
   ForgetReport,
+  FoundItem,
   GoodThing,
   GuideView,
   HealthSeries,
@@ -274,6 +275,8 @@ export interface EngineClient {
   markDone(memoryId: string): Promise<void>;
 
   listMemories(filter: MemoryFilter): Promise<MemoryView[]>;
+  /** Kept things found by their words that no mind has read yet. */
+  findUnread(query: string): Promise<FoundItem[]>;
   getEntity(id: string): Promise<EntityView>;
   listEntities(kind: EntityKind | null, query: string | null): Promise<EntityView[]>;
   /** Stops a fading memory from fading for this many days. */

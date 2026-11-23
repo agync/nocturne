@@ -17,6 +17,7 @@ import type {
   ExportReport,
   ForgetPreview,
   ForgetReport,
+  FoundItem,
   GuideView,
   HealthSeries,
   ItemFilter,
@@ -1275,6 +1276,34 @@ export class MockEngine implements EngineClient {
       .filter((m) => q === null || `${m.sentence} ${m.subject}`.toLowerCase().includes(q));
     if (filter.limit !== null) out = out.slice(0, filter.limit);
     return clone(out);
+  }
+
+  async findUnread(query: string): Promise<FoundItem[]> {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
+    return clone(
+      this.items
+        .filter((i) => i.status === "kept" && i.kind !== "checkin")
+        .filter((i) => {
+          const text = `${i.title} ${i.text ?? ""}`.toLowerCase();
+          return words.some((w) => text.includes(w));
+        })
+        .map((i) => ({
+          receipt: {
+            itemId: i.id,
+            kind: i.kind,
+            source: i.source,
+            label: i.title,
+            keptAt: i.keptAt,
+            durationMs: i.durationMs,
+            span: null,
+            unconfirmed: false,
+            fromDevice: i.fromDevice,
+          },
+          excerpt: [{ text: i.text ?? i.title, matched: false }],
+          private: i.private,
+        })),
+    );
   }
 
   private liveEntities(): EntityView[] {

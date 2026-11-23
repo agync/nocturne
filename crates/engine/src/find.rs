@@ -90,6 +90,26 @@ impl Engine {
             Ok(found)
         })
     }
+
+    /// [`Engine::find_items`], only the things no mind has read yet: what a search of what
+    /// Nocturne remembers cannot find until then, such as things just brought in from a phone.
+    pub fn find_unread(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {
+        let found = self.find_items(query, FIND_CAP)?;
+        let unread: Vec<bool> = self.read(|conn| {
+            let mut stmt = conn
+                .prepare_cached("SELECT status IN ('kept', 'reading') FROM items WHERE id = ?1")?;
+            found
+                .iter()
+                .map(|f| Ok(stmt.query_row([&f.receipt.item_id], |r| r.get(0))?))
+                .collect()
+        })?;
+        Ok(found
+            .into_iter()
+            .zip(unread)
+            .filter_map(|(f, unread)| unread.then_some(f))
+            .take(limit)
+            .collect())
+    }
 }
 
 fn find(conn: &Connection, q: &str, limit: usize) -> Result<Vec<FoundItem>> {

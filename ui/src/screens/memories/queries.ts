@@ -46,6 +46,15 @@ export function useMemories(filter: Partial<MemoryFilter>, enabled = true) {
   });
 }
 
+/** Kept things found by their words that no mind has read yet. */
+export function useUnread(query: string) {
+  const engine = useEngine();
+  return useQuery({
+    queryKey: ["memories", "unread", query],
+    queryFn: () => engine.findUnread(query),
+  });
+}
+
 export function useItem(id: string) {
   const engine = useEngine();
   return useQuery({ queryKey: ["item", id], queryFn: () => engine.getItem(id) });
