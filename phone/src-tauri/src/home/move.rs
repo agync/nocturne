@@ -72,6 +72,8 @@ pub struct MoveFacts {
     pub since: Option<String>,
     /// About what the move sends, in bytes.
     pub bytes: f64,
+    /// Of that, what the photos and recordings take.
+    pub media: f64,
 }
 
 /// Where the move stands.
@@ -296,6 +298,7 @@ impl Home {
             journal: kept.journal_entries,
             since,
             bytes: e.backup_estimate().map_err(err)? as f64,
+            media: e.originals_bytes() as f64,
         })
     }
 
@@ -622,7 +625,8 @@ pub(crate) async fn offer(
         bytes: facts.bytes.max(1.0),
         schema: nocturne_engine::store::latest_version(),
         since: facts.since.clone(),
-        things: Some(facts.things),
+        // The facts of a backup made for a move count nothing apart: the computer counts then.
+        things: (facts.things + facts.journal > 0).then_some(facts.things),
         bring,
     };
     tracing::info!(
@@ -1047,6 +1051,7 @@ pub async fn move_bring_aside<R: Runtime>(app: AppHandle<R>) -> Result<Moved, Mo
         journal: 0,
         since,
         bytes: size as f64,
+        media: 0.0,
     };
     let report = |phase, done, total| emit(&app, phase, done, total);
     let brought = tokio::select! {
@@ -1118,6 +1123,7 @@ pub(crate) async fn carry(
         journal: 0,
         since: None,
         bytes: size as f64,
+        media: 0.0,
     };
     // First where it stands: a move whose phone went away part way (the app stopped while the
     // computer restarted) finishes without sending anything again.
