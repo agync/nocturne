@@ -545,7 +545,7 @@ the phone heard them, else "waiting to be read". No reflection is offered; where
 | This phone | "Name" | Not shown on a phone alone, which shows its name nowhere; pairing asks for a name when it is needed |
 | | "Version" | "Nocturne {version}" |
 | Help | "Privacy policy", "What this phone can do" | "What this phone can do" reads "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
-| Your memory | "Move my memory…" | Opens [Moving your memory](moving-memory.md) |
+| Your memory | "Move my memory…" | Opens [Give Nocturne a mind](#giving-it-a-mind-in-the-first-release) directly, with a mind online or without, never the choice of a mind: moving to a computer is the one move. "Scan the code" there leads into [Moving your memory](moving-memory.md) |
 | | "Save a backup…" | The 0013 backup, saved through the phone's save sheet ([Backups to a file](#backups-to-a-file)) |
 | At the end | "Delete everything…" | The approved confirmation, worded for this phone |
 
@@ -800,12 +800,20 @@ place.
 | Title | "Your service’s details" |
 | Lead | "Find these on your service’s website, often under developer settings or keys." |
 | Fields | "API URL" · "API key" · "Model name" |
-| Check | "Check" / checking "Checking with {host}…" / passed "{host} answered. It works." |
+| Under the key | "The key is kept in this phone’s own safe place." |
+| Check | "Check", then "Check again" / checking "Checking with {host}…" / passed "{host} answered. It works." |
 | Bar | "Continue" · "Back" · disabled reason "Continue works once the check passes." |
 
-**Step 3: a monthly limit.** Online answers' step 4, worded for reading too: "How much may go online
-each month?" with "No limit", "A number of things read and answered" and "An amount", and the same
-disabled reasons.
+**Step 3: a monthly limit.** Online answers' step 4, worded for reading too.
+
+| Part | Copy |
+|---|---|
+| Title | "How much may go online each month?" |
+| Choices | "No limit" (selected) · "A number of things read and answered" · "An amount" |
+| Field, a number | "Things read and answered in a month" |
+| Field, an amount | "Amount in US dollars, in a month" |
+| Not valid | "Enter a whole number from 1 upwards, like 200." / "Enter an amount above zero, like 5.00." |
+| Bar, disabled reason | "Continue works once the limit is a whole number, like 200." / "Continue works once the amount is above zero, like 5.00." |
 
 **Step 4: agree.** Every fact on screen.
 
@@ -817,13 +825,16 @@ disabled reasons.
 | What is sent | "Each thing you keep, so it can be read: its words, and the photo or recording itself when there is one. Your journal entries, good things and check-ins, so it can write your reflections and recaps. Each question, with the lines that answer it. Each night, the lines your page is written from. For example:" |
 | Example | "Kept 7:40 am · Dentist moved to Thursday at 9, Bridge Street." |
 | Where it goes | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
-| Who can see it | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." / "Nocturne can’t check what the service keeps, for how long, or whether it learns from what you send. Read its privacy page before you turn this on." (0011) |
+| Who can see it | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." Before the details step names the model, and behind step 1's expander: "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses may be made by another company that the service passes things to." / "Nocturne can’t check what the service keeps, for how long, or whether it learns from what you send. Read its privacy page before you turn this on." (0011) |
 | Private | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." / "Things you let go are never sent." |
 | What changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Changing your mind | "{limit line}" · "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." · "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Bar | "Turn on" · "Not now" |
 
-The limit lines are 0011's, worded for "things read and answered".
+The limit lines are 0011's, worded for "things read and answered": "At most {count} things a month
+are read and answered online; after that, what you keep waits to be read until the 1st.", "At most
+{amount} a month goes to the service; after that, what you keep waits to be read until the 1st.",
+and with no limit "There is no limit on how much is read and answered online."
 
 ### Apple Intelligence (iPhone, after the trial)
 
@@ -856,7 +867,13 @@ After turning on, once.
 | Button | "OK" |
 
 Next morning, Today shows the page as the companion's phone edition does, with the receipt chips,
-and a line under the title: "Written by {host}" or "Written by Apple Intelligence".
+and a line under the title: "Written by {host}" or "Written by Apple Intelligence". The page
+carries its own date, so Today hides its own date label while the page shows, and shows it again
+when there is no page.
+
+Ask while a mind is on but not answering yet, such as while it reads or can't be reached: what is
+found by its words shows under "Found by their words.", without "Answers need a mind.", which would
+not be true.
 
 ### The mind in This phone
 
@@ -866,8 +883,8 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 |---|---|
 | "Its mind" | "{service}, online" |
 | "What goes" | "What you keep, and questions" |
-| "See what was sent" | Opens the Sent online list on the phone, 90 days, as 0011 |
-| "This month" | "{count} things read and answered · limit {limit}" |
+| "See what was sent" | Opens the Sent online list on the phone, 90 days, as 0011. Each row says what it was for: "Read a thing you kept", "Answered a question", "Wrote your page" or "Connection check" |
+| "This month" | "{count} things read and answered · limit {limit}", or with no limit "{count} things read and answered · no limit" |
 | "Change…" | Back to the choice |
 | "Turn off…" | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" · "Keep it on" |
 
@@ -989,13 +1006,17 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Mind online, sent | "What you keep, so it can be read: your notes, photos and voice notes, your journal and check-ins. And your questions, with what answers them." |
 | Mind online, private | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." |
 | Mind online, need | "An account with that service. Most charge a little for what they read and write. Setting up means copying three details from its website." |
-| Mind online, details | "Your service’s details" / "Find these on your service’s website, often under developer settings or keys." / "Checking with {host}…" / "{host} answered. It works." |
-| Mind online, limit | "How much may go online each month?" / "A number of things read and answered" |
+| Mind online, details | "Your service’s details" / "Find these on your service’s website, often under developer settings or keys." / "The key is kept in this phone’s own safe place." / "Check" / "Check again" / "Checking with {host}…" / "{host} answered. It works." |
+| Mind online, limit | "How much may go online each month?" / "No limit" / "A number of things read and answered" / "An amount" / "Things read and answered in a month" / "Amount in US dollars, in a month" / "Enter a whole number from 1 upwards, like 200." / "Enter an amount above zero, like 5.00." / "Continue works once the limit is a whole number, like 200." / "Continue works once the amount is above zero, like 5.00." |
 | Mind online, lead | "While this is on, what you keep and your questions go from this phone to {host}, so it can read them, write your page and answer." |
-| Mind online, what is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
+| Mind online, what is sent | "Each thing you keep, so it can be read: its words, and the photo or recording itself when there is one. Your journal entries, good things and check-ins, so it can write your reflections and recaps. Each question, with the lines that answer it. Each night, the lines your page is written from. For example:" |
 | Mind online, where | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Mind online, sees | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." |
 | Mind online, private line | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." / "Things you let go are never sent." |
+| Mind online, sees, no model yet | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses may be made by another company that the service passes things to." |
+| Mind online, limit lines | "At most {count} things a month are read and answered online; after that, what you keep waits to be read until the 1st." / "At most {amount} a month goes to the service; after that, what you keep waits to be read until the 1st." / "There is no limit on how much is read and answered online." |
+| Mind, find above | "Found by their words." |
+| Mind, sent rows | "Read a thing you kept" / "Answered a question" / "Wrote your page" / "Connection check" |
 | Mind online, changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Mind online, changing | "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." / "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Mind online, bar | "Turn on" / "Not now" |
@@ -1005,7 +1026,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Reading | "Reading what you kept" / "Nocturne is reading {count} things you kept, a few at a time. Your first page comes tomorrow morning." / "{done} of {count} read" / "Reading carries on when this phone allows it, often while it charges." |
 | Written by | "Written by {host}" / "Written by Apple Intelligence" |
 | Mind group | "Nocturne’s mind online" |
-| Mind rows | "What goes" / "What you keep, and questions" / "This month" / "{count} things read and answered · limit {limit}" |
+| Mind rows | "What goes" / "What you keep, and questions" / "This month" / "{count} things read and answered · limit {limit}" / "{count} things read and answered · no limit" |
 | Mind, turn off | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" / "Keep it on" |
 | Mind, unreachable | "Written {day}. {host} hasn’t answered since {time}." / "Answers are back when {host} is." |
 | Mind, offline | "This phone isn’t online. What you keep waits to be read." |
