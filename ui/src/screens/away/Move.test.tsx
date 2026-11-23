@@ -168,6 +168,23 @@ describe("a phone with its own memory", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/today"));
   });
 
+  it("closes once Open today’s page is pressed, though the computer sends no change", async () => {
+    const { engine } = await withOffer();
+    act(() => engine.setMove({ phase: "arrived", name: "Maya’s phone", online: true }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "The memory from Maya’s phone is here.",
+    });
+    // The computer marks the arrival seen and says nothing more: only asking again closes it.
+    let waiting = true;
+    vi.spyOn(engine, "finishMove").mockImplementation(async () => {
+      waiting = false;
+    });
+    const get = engine.getMove;
+    vi.spyOn(engine, "getMove").mockImplementation(async () => (waiting ? get() : null));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Open today’s page" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
   it("leaves out the Online answers line once it is set up here", async () => {
     const { engine } = await withOffer();
     act(() => engine.setMove({ phase: "arrived", name: "Maya’s phone", online: true }));
