@@ -7,6 +7,16 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::home::dispatch::phone_item;
 
+/// How the mind is doing changed: the screens look at its status again.
+pub const EVENT_STATUS: &str = "mind-status";
+
+/// Tells the screens that how the mind is doing changed.
+pub fn status_changed<R: Runtime>(app: &AppHandle<R>) {
+    if let Err(e) = app.emit(EVENT_STATUS, ()) {
+        tracing::warn!("could not tell the screens of the mind: {e}");
+    }
+}
+
 pub struct PhoneEvents<R: Runtime>(pub AppHandle<R>);
 
 impl<R: Runtime> Events for PhoneEvents<R> {

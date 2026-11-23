@@ -283,9 +283,9 @@ export function HomeApp({
   );
   const refresh = useCallback(() => setFresh((n) => n + 1), []);
 
-  // The mind reads and writes in the background: how it is doing shows as soon as it is done, a
-  // burst as one change. Only a page written reloads the screens, so what is open stays put
-  // while readings go by.
+  // The mind reads, writes and looks again at its service in the background: how it is doing
+  // shows as soon as it is done, a burst as one change. Only a page written reloads the
+  // screens, so what is open stays put while readings go by.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let page = false;
@@ -302,6 +302,7 @@ export function HomeApp({
     const stops = [
       listen("item-changed", () => soon(false)),
       listen("page-ready", () => soon(true)),
+      listen("mind-status", () => soon(false)),
     ].map((p) => p.catch(() => () => undefined));
     return () => {
       clearTimeout(timer);

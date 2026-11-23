@@ -517,6 +517,21 @@ impl World {
             });
         steps
     }
+
+    fn later(&self, minutes: i64) {
+        use nocturne_engine::Clock;
+        self.clock
+            .set(self.clock.now() + jiff::SignedDuration::from_mins(minutes));
+    }
+
+    fn look_again(&self) -> bool {
+        self.mind.look_again(self.rt.handle())
+    }
+
+    /// Reads all that was kept.
+    fn read_all(&self) {
+        while matches!(self.pass(), Pass::Ran { read: 1.., .. }) {}
+    }
 }
 
 #[test]
@@ -726,13 +741,15 @@ fn a_service_that_stops_answering_is_told_until_it_answers_again() {
     w.mind.turn_on(w.settings()).unwrap();
     w.pass();
     assert!(matches!(w.mind.status(), MindStatus::Unreachable { .. }));
+    // Until a look again finds it, nothing more is sent.
+    let seen = w.stand_in.seen().len();
+    assert_eq!(w.pass(), Pass::Waiting);
+    assert_eq!(w.stand_in.seen().len(), seen);
     w.stand_in.always(Answer::text(prompts::EXAMPLE_REPLY));
     w.clock.advance_days(1);
-    w.mind
-        .retry
-        .store(true, std::sync::atomic::Ordering::SeqCst);
-    w.pass();
+    assert!(w.look_again());
     assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+    assert!(matches!(w.pass(), Pass::Ran { read: 1, .. }));
     w.mind.turn_off();
     assert_eq!(w.mind.status(), MindStatus::Off);
 }
@@ -835,4 +852,45 @@ fn a_request_that_ends_after_delete_everything_leaves_no_row() {
     while_a_request_hangs(&w, || w.mind.erase());
     std::thread::sleep(Duration::from_millis(200));
     assert!(w.mind.sent(10, None).is_empty());
+}
+
+#[test]
+fn an_unreachable_service_is_looked_at_again_until_it_answers() {
+    use super::status::MindStatus;
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    w.stand_in.always(Answer::Status(503, "{}".into()));
+    w.stand_in.models_status(503);
+    assert_eq!(
+        w.ask("Where does Ana live?").last().unwrap().phase,
+        AskPhase::Unavailable
+    );
+    assert!(matches!(w.mind.status(), MindStatus::Unreachable { .. }));
+    let rows = w.mind.sent(1000, None).len();
+    // After 1 minute, then 5 more, each look one request, listed as a connection check.
+    assert!(!w.look_again());
+    w.later(1);
+    assert!(w.look_again());
+    w.later(4);
+    assert!(!w.look_again());
+    w.later(1);
+    assert!(w.look_again());
+    let sent = w.mind.sent(1000, None);
+    assert_eq!(sent.len(), rows + 2);
+    assert_eq!(sent[0].sent_for, super::SentFor::Check);
+    assert!(matches!(w.mind.status(), MindStatus::Unreachable { .. }));
+    // It comes back: the next look ends the state, and Ask is answered by the mind again.
+    w.stand_in.models_listed();
+    w.stand_in.always(Answer::text(prompts::EXAMPLE_REPLY));
+    w.later(15);
+    assert!(w.look_again());
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+    assert!(!w.look_again());
+    w.stand_in.then(Answer::text("Ana lives in **Hull** [m1]."));
+    assert_eq!(
+        w.ask("Where does Ana live?").last().unwrap().phase,
+        AskPhase::Done
+    );
 }

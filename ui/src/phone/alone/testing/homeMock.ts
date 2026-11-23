@@ -255,6 +255,15 @@ const SENT: MindSent[] = [
   },
 ];
 
+/** What a screen test changes while the app runs: how the service is doing, over `&trouble=`. */
+export const scriptedMind = {
+  trouble: undefined as string | null | undefined,
+};
+
+export function resetScriptedMind(): void {
+  scriptedMind.trouble = undefined;
+}
+
 /**
  * `&trouble=` names how the service is doing once the mind is on: `unreachable`, `keyRefused`,
  * `noCredit` or `paused`. With none it is fine.
@@ -262,7 +271,11 @@ const SENT: MindSent[] = [
 function mindStatus(mind: MindChosen): MindStatus {
   if (mind.state !== "on") return { state: "off" };
   const host = mind.host;
-  switch (new URLSearchParams(location.search).get("trouble")) {
+  const trouble =
+    scriptedMind.trouble !== undefined
+      ? scriptedMind.trouble
+      : new URLSearchParams(location.search).get("trouble");
+  switch (trouble) {
     case "unreachable":
       return { state: "unreachable", host, since: `${HOME_DAY}T06:40:00.000Z` };
     case "keyRefused":

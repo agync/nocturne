@@ -31,6 +31,7 @@ use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
 };
 use nocturne_provider::address::{OnlineKey, UrlProblem, host_of, validate_url};
+use nocturne_provider::client::Exchange;
 use nocturne_provider::{Job, Provider, ProviderMind};
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,8 @@ const TICK: std::time::Duration = std::time::Duration::from_secs(30);
 const FEW: usize = 3;
 /// How often a pass looks whether the store is wanted.
 const WANTED_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+/// Minutes between looks at a service that stopped answering: the last one repeats.
+const LOOK_AGAIN: [i64; 4] = [1, 5, 15, 30];
 
 /// The person's provider, as typed into the form.
 #[derive(Debug, Clone)]
@@ -80,6 +83,8 @@ pub enum Pass {
     NotCharging,
     /// The month's limit is reached: nothing goes until next month.
     Paused,
+    /// The service stopped answering: nothing is read or written until a look again finds it.
+    Waiting,
     /// The phone holds no memory now (not alone, or the store will not open).
     NotReady,
     /// How many things the reader took, and whether the scheduler started or wrote something.
@@ -119,8 +124,39 @@ struct On {
     since: Option<Timestamp>,
     /// Things read to an end since it was turned on, this run.
     read: u32,
+    /// Notes each request on the Sent online list and what it says about the service.
+    noting: Arc<Noting>,
+}
+
+/// What each request of one chosen provider leaves behind: its row on the Sent online list and
+/// what its answer says about the service.
+struct Noting {
+    sent: Arc<SentLog>,
+    trouble: Arc<Mutex<Option<status::Trouble>>>,
+    clock: Arc<dyn Clock>,
+    host: String,
+    model: String,
     /// Cleared as it is turned off or replaced: a request that ends after that is not noted.
-    live: Arc<AtomicBool>,
+    live: AtomicBool,
+}
+
+impl Noting {
+    fn note(&self, job: Job, exchange: &Exchange) {
+        if !self.live.load(Ordering::SeqCst) {
+            return;
+        }
+        self.sent.note(job, &self.host, &self.model, exchange);
+        let mut trouble = lock(&self.trouble);
+        *trouble = status::Trouble::after(exchange.status, self.clock.now(), *trouble);
+    }
+}
+
+/// The looks again at a service that stopped answering, since it stopped.
+#[derive(Debug, Default)]
+struct Looks {
+    since: Option<Timestamp>,
+    made: usize,
+    last: Option<Timestamp>,
 }
 
 /// The reader, the tidy and the scheduler over one open store.
@@ -172,6 +208,7 @@ pub struct PhoneMind {
     thinking: Arc<Mutex<Option<Thinking>>>,
     /// A new mind is in the slot: the next pass tries again what waited for the last one.
     retry: AtomicBool,
+    looks: Mutex<Looks>,
 }
 
 impl PhoneMind {
@@ -191,6 +228,7 @@ impl PhoneMind {
             on: Mutex::new(None),
             thinking: Arc::default(),
             retry: AtomicBool::new(false),
+            looks: Mutex::default(),
         };
         if let Some(saved) = mind.saved()
             && let Some(key) = mind.keys.key().and_then(|held| unbound(&saved.url, &held))
@@ -236,19 +274,17 @@ impl PhoneMind {
     fn fill(&self, saved: &Saved, key: OnlineKey) -> Result<(), UrlProblem> {
         let provider = Provider::new(&saved.url, &saved.model, key)?;
         let (host, model) = (provider.host().to_string(), provider.model().to_string());
-        let live = Arc::new(AtomicBool::new(true));
+        let noting = Arc::new(Noting {
+            sent: self.sent.clone(),
+            trouble: self.trouble.clone(),
+            clock: self.clock.clone(),
+            host: host.clone(),
+            model: model.clone(),
+            live: AtomicBool::new(true),
+        });
         let record: nocturne_provider::Record = {
-            let (sent, host, model) = (self.sent.clone(), host.clone(), model.clone());
-            let (trouble, clock) = (self.trouble.clone(), self.clock.clone());
-            let live = live.clone();
-            Arc::new(move |job, exchange| {
-                if !live.load(Ordering::SeqCst) {
-                    return;
-                }
-                sent.note(job, &host, &model, exchange);
-                let mut trouble = lock(&trouble);
-                *trouble = status::Trouble::after(exchange.status, clock.now(), *trouble);
-            })
+            let noting = noting.clone();
+            Arc::new(move |job, exchange| noting.note(job, exchange))
         };
         let decode: nocturne_provider::Decode = {
             let decode = self.decode.clone();
@@ -267,11 +303,11 @@ impl PhoneMind {
             model,
             since: saved.since.as_deref().and_then(|s| s.parse().ok()),
             read: 0,
-            live,
+            noting,
         };
         lock(&self.trouble).take();
         if let Some(before) = lock(&self.on).replace(on) {
-            before.live.store(false, Ordering::SeqCst);
+            before.noting.live.store(false, Ordering::SeqCst);
             before.mind.provider().stop();
         }
         self.retry.store(true, Ordering::SeqCst);
@@ -325,7 +361,7 @@ impl PhoneMind {
     pub fn turn_off(&self) {
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(on) = lock(&self.on).take() {
-            on.live.store(false, Ordering::SeqCst);
+            on.noting.live.store(false, Ordering::SeqCst);
             on.mind.provider().stop();
         }
         self.keys.forget();
@@ -363,6 +399,60 @@ impl PhoneMind {
         lock(&self.on).is_some()
     }
 
+    /// While the service is not answering, one look at its list of models when it is due
+    /// ([`LOOK_AGAIN`]), noted as a connection check. Never while
+    /// paused by the limit. When it is answered, the trouble ends and the next pass reads what
+    /// waited. True when a look was made. Blocks on `rt`: call it off the async workers.
+    pub fn look_again(&self, rt: &tokio::runtime::Handle) -> bool {
+        use status::Trouble;
+        let trouble = *lock(&self.trouble);
+        let since = match trouble {
+            Some(Trouble::Unreachable(since)) => since,
+            _ => {
+                *lock(&self.looks) = Looks::default();
+                return false;
+            }
+        };
+        let Some(on) = lock(&self.on).clone() else {
+            return false;
+        };
+        if self.paused_until().is_some() {
+            return false;
+        }
+        let now = self.clock.now();
+        {
+            let mut looks = lock(&self.looks);
+            if looks.since != Some(since) {
+                *looks = Looks {
+                    since: Some(since),
+                    ..Looks::default()
+                };
+            }
+            let wait = LOOK_AGAIN[looks.made.min(LOOK_AGAIN.len() - 1)];
+            let from = looks.last.unwrap_or(since);
+            if now < from + jiff::SignedDuration::from_mins(wait) {
+                return false;
+            }
+            looks.made += 1;
+            looks.last = Some(now);
+        }
+        match rt.block_on(on.mind.provider().models()) {
+            Ok((_, exchange)) => on.noting.note(Job::Check, &exchange),
+            Err(f) if f.refused => {}
+            Err(f) => on.noting.note(Job::Check, &f.exchange),
+        }
+        if lock(&self.trouble).is_none() {
+            self.retry.store(true, Ordering::SeqCst);
+        }
+        true
+    }
+
+    /// The service stopped answering: only [`PhoneMind::look_again`] reaches it until it
+    /// answers.
+    fn waiting(&self) -> bool {
+        matches!(*lock(&self.trouble), Some(status::Trouble::Unreachable(_)))
+    }
+
     /// Whether the morning after the mind was turned on has come, so a page may be written.
     fn morning_come(&self) -> bool {
         let clock = &self.clock;
@@ -390,6 +480,9 @@ impl PhoneMind {
         }
         if self.paused_until().is_some() {
             return Pass::Paused;
+        }
+        if self.waiting() {
+            return Pass::Waiting;
         }
         let Ok((_use, open)) = home.using() else {
             return Pass::NotReady;
@@ -543,6 +636,8 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let power = system.power().unwrap_or_default();
                 mind.host().set_charging(power.charging);
                 let on = mind.is_on();
+                let was = mind.status();
+                mind.look_again(&rt);
                 if asked != Some(on) {
                     match system.background(on) {
                         Ok(()) => asked = Some(on),
@@ -550,6 +645,9 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                     }
                 }
                 let more = mind.pass(&worker.state::<Home>(), &rt).more();
+                if mind.status() != was {
+                    events::status_changed(&worker);
+                }
                 if power.window
                     && !more
                     && let Err(e) = system.background_done()

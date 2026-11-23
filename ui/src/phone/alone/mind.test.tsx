@@ -1,3 +1,4 @@
+import { emit } from "@tauri-apps/api/event";
 import { clearMocks } from "@tauri-apps/api/mocks";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -5,13 +6,14 @@ import type { CheckOutcome } from "../../engine/bindings";
 import { NativeRoot } from "../native/NativeRoot";
 import { nativeMockServices } from "../testing/nativeMock";
 import { hostOf } from "./mind";
-import { scriptedNoteRows } from "./testing/homeMock";
+import { resetScriptedMind, scriptedMind, scriptedNoteRows } from "./testing/homeMock";
 
 afterEach(async () => {
   await new Promise((settle) => setTimeout(settle, 50));
   cleanup();
   clearMocks();
   scriptedNoteRows.clear();
+  resetScriptedMind();
   history.replaceState(null, "", "/");
 });
 
@@ -411,6 +413,19 @@ describe("Today and Ask with a mind", () => {
         "You’ve reached this month’s limit. Ask finds by words until Tuesday 1 December.",
       ),
     ).toBeVisible();
+  });
+});
+
+describe("When the service stops answering", () => {
+  it("turns Ask back to the mind when the service answers again", async () => {
+    await app("m=kept&mind=on&trouble=unreachable");
+    await screen.findByText(/answers\.example hasn’t answered/);
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("Answers are back when answers.example is.")).toBeVisible();
+    scriptedMind.trouble = null;
+    await emit("mind-status");
+    expect(await screen.findByRole("textbox", { name: "Your question" })).toBeVisible();
+    expect(screen.queryByText("Answers are back when answers.example is.")).toBeNull();
   });
 });
 
