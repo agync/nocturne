@@ -17,6 +17,11 @@ export LC_ALL=C
 everything='^(\.github/(workflows|actions)/|Makefile$|rust-toolchain\.toml$|scripts/(ci-areas\.sh|affected_crates\.py)$)'
 lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
 rust_side="crates/|src-tauri/|phone/|docs/guide/|\.cargo/|\.config/nextest\.toml$|clippy\.toml$|$lockfiles"
+# What builds or behaves differently on Windows, macOS and Linux on Arm: the shells, the helpers
+# and the engine's supervisor that start programs, the channel's sockets, the host detection, every
+# build script and what every build reads. A pull request runs the other platforms' jobs only when
+# one of these changes; a push to main and the nightly run run them always.
+platform="src-tauri/|phone/|crates/(helpers|channel|lemonade)/|crates/intelligence/src/host/|(.*/)?build\.rs$|Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$|\.cargo/|\.config/nextest\.toml$|clippy\.toml$"
 # What the packages are built from. The Rust sources are not here: the rust and rust-platforms
 # jobs check their release build.
 package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|Cargo\.(toml|lock)$|LICENSE$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$"
@@ -27,7 +32,7 @@ declare -A areas=(
     # client from ui/ against the Rust side.
     [rust]="^($rust_side|ui/|scripts/(bindings|away-integration|away-test-programs)\.sh$)"
     # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
-    [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
+    [rust-platforms]="^($platform|scripts/fetch-lemonade\.sh$)"
     # The interface's tests import scripts/build-tokens.mjs and read src-tauri/ and the channel's
     # word list.
     [ui]='^(ui/|src-tauri/|crates/channel/|scripts/(build-tokens\.mjs|check_ui_dist\.py|check_tree\.py)$)'
