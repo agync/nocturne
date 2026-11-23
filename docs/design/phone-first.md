@@ -357,8 +357,9 @@ A phone alone that pairs with a computer moves its memory there; one home at a t
 | The person says "Not now" | Pairing is undone on both, and the phone stays a phone alone. A phone never becomes a companion while it holds its own memory |
 | The move | The phone makes a last backup in 0013's format and sends it over the sealed channel; things kept meanwhile wait and go across at the end |
 | The computer already holds a memory | The computer asks how the phone joins it, and the phone waits: "Bring the phone’s things in" adds the phone's kept things, journal and check-ins to the computer's memory, which reads them as new, and the phone sends its calendar and health again; "Use this computer’s memory" brings nothing. Either way the phone becomes a companion and its own memory is put aside on it ([Moving](moving-memory.md#when-the-computer-already-holds-a-memory)). The computer's memory is never put aside in a move |
-| It has arrived | Every count matches; Nocturne on the computer restarts to open it ("Finishing on {computer}…"). Only when the computer says the memory opened is the phone's memory put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
-| Calendar and health | Carry on, now sent to the computer. What was already brought arrived with the memory, so nothing is sent twice |
+| The computer is empty | The same bringing in, without the question: an empty computer has nothing to choose about. The phone's "Move my memory" starts it, both sides show the bringing-in stages, and Nocturne never restarts ([decision 31](phone-parity.md#decisions)) |
+| It has arrived | Every count matches and the computer adds the things to its memory. Only when the computer says they were added is the phone's memory put aside, read only. The phone becomes a companion: Today, Journal and Ask come from the computer |
+| Calendar and health | Carry on, now sent to the computer. The phone sends them again from its usual window, and what the computer already has counts as unchanged, so nothing is doubled |
 | What was put aside on the phone | "Remove it from this phone" or "Keep it put aside for 30 days" |
 | Later, the other way | Once it ships, the computer can move the memory back to this phone ([Back to the phone](moving-memory.md#back-to-the-phone)) |
 
