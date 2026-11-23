@@ -221,3 +221,14 @@ body[data-frame="duo"] { background: color-mix(in srgb, var(--bg) 88%, var(--ink
 .storeRow { display: flex; gap: var(--s-2); }
 .storeRow span { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--r-md); background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); font-size: 0.8125rem; font-weight: 500; }
 .oRow .tick { flex: none; width: 16px; height: 16px; margin-top: 3px; border: 1px solid var(--ink3); border-radius: 3px; }
+
+/* ?text=200: the phone's text at 200 per cent. The screen grows to show everything, so a render
+   proves nothing is cut off; the status bar keeps the phone's own size. */
+html[data-text="200"] { font-size: 200%; }
+html[data-text="200"] .device[data-os] .screen { height: auto; }
+html[data-text="200"] .scroll { overflow: visible; }
+html[data-text="200"] .sys { font-size: 14px; }
+html[data-text="200"] .btn { height: auto; min-height: 52px; padding-top: 12px; padding-bottom: 12px; text-align: center; }
+html[data-text="200"] .foot { position: static; }
+html[data-text="200"] .osLabel { font-size: 12px; }
+html[data-text="200"] .nav, html[data-text="200"] .appbar { height: auto; min-height: 44px; padding-top: 6px; padding-bottom: 6px; }

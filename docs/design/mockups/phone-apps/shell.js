@@ -2,6 +2,7 @@
 // <body data-frame="duo"> draws #content twice, in an Android and an iPhone frame side by side;
 // <x data-os="android"> or data-os="ios" shows in one frame only. <body data-frame="app"> draws the
 // computer's rail and keep bar. <x data-state="a b"> shows only in states a and b; ?state= picks one.
+// ?text=200 draws the phone's text at 200 per cent, with each screen grown to show all of it.
 
 const ICON = {
   lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
@@ -88,6 +89,7 @@ for (const el of document.querySelectorAll("[data-state]")) {
 }
 const theme = params.get("theme");
 if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+if (params.get("text") === "200") document.documentElement.dataset.text = "200";
 
 const frame = document.body.dataset.frame;
 const content = document.getElementById("content");
