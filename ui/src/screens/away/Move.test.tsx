@@ -349,7 +349,9 @@ describe("a phone joining a computer that already holds a memory", () => {
         removed: true,
       }),
     );
-    const dialog = await screen.findByRole("alertdialog", { name: "Maya’s phone’s things are here." });
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Maya’s phone’s things are here.",
+    });
     expect(dialog).toHaveTextContent(
       "Maya’s phone was removed while they were added, so it still holds its own memory.",
     );

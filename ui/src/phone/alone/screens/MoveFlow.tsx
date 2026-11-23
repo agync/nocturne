@@ -94,9 +94,9 @@ export function endedFor(e: unknown): MoveEnded | null {
 /** The move through the app's own commands. */
 export const nativeMoveApi: MoveApi = {
   computer: async () => {
-    const state = await invoke<{ kind: string; hello?: { computerName: string } }>(
-      "connect",
-    ).catch(() => null);
+    const state = await invoke<{ kind: string; hello?: { computerName: string } }>("connect").catch(
+      () => null,
+    );
     if (state?.hello?.computerName) return state.hello.computerName;
     // Opened again part way with the computer out of reach: the name kept from the pairing.
     const kept = await invoke<{ computerName: string | null } | null>("device").catch(() => null);
@@ -194,8 +194,7 @@ export function MoveFlow({
       // asked again, and the phone keeps waiting until they choose or this one cancels. While
       // this person reads, a computer out of reach is asked again too, so a move whose memory
       // already opened there finishes once it answers.
-      const again = () =>
-        step.current.name === "waiting" || (e === "paused" && deciding());
+      const again = () => step.current.name === "waiting" || (e === "paused" && deciding());
       if (again())
         setTimeout(() => {
           if (!leaving.current && again() && offer.current === sent) ask();
