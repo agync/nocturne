@@ -149,19 +149,43 @@ for (const scheme of ["light", "dark"] as const) {
       await page.goto("/?m=kept&mind=on&v=thisPhone");
       await page.getByRole("button", { name: "See what was sent" }).click();
       await expect(page.getByText("Read a thing you kept")).toBeVisible();
-      await page.getByText("Read a thing you kept").click();
-      await expect(page.getByText("Exactly what was sent").first()).toBeVisible();
       await clean(page);
       await shot(page, `mind-sent-${scheme}`);
     });
 
-    test("Ask with a mind", async ({ page }) => {
-      await page.goto("/?m=kept&mind=on&v=ask");
-      await page.getByRole("textbox", { name: "Find something you kept" }).fill("swap");
-      await expect(page.getByText("Found by their words.")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Choose a mind" })).toHaveCount(0);
+    test("The service doesn't answer", async ({ page }) => {
+      await page.goto("/?m=kept&mind=on&trouble=unreachable");
+      await expect(
+        page.getByText(/Written Saturday 21 November\. answers\.example hasn’t answered since /),
+      ).toBeVisible();
       await clean(page);
-      await shot(page, `mind-ask-${scheme}`);
+      await shot(page, `mind-today-unreachable-${scheme}`);
+      await page.goto("/?m=kept&mind=on&trouble=unreachable&v=ask");
+      await expect(page.getByText("Answers are back when answers.example is.")).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-ask-unreachable-${scheme}`);
+    });
+
+    test("The key is refused", async ({ page }) => {
+      await page.goto("/?m=kept&mind=on&trouble=keyRefused");
+      await expect(page.getByText("Your provider refused the key")).toBeVisible();
+      await expect(page.getByText(/Until you check it, Ask finds by words/)).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-today-refused-${scheme}`);
+      await page.getByRole("button", { name: "Check the key…" }).click();
+      await expect(page.getByRole("heading", { name: "Your service’s details" })).toBeVisible();
+    });
+
+    test("No credit, and paused by the limit", async ({ page }) => {
+      await page.goto("/?m=kept&mind=on&trouble=noCredit&v=ask");
+      await expect(page.getByText("Your provider says there’s no credit left")).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-ask-no-credit-${scheme}`);
+      await page.goto("/?m=kept&mind=on&trouble=paused&v=ask");
+      await expect(page.getByText("Paused by your limit")).toBeVisible();
+      await expect(page.getByText(/Ask finds by words until Tuesday 1 December/)).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-ask-paused-${scheme}`);
     });
   });
 }

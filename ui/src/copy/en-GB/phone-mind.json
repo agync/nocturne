@@ -124,6 +124,17 @@
   "phone.mind.off.no": "Keep it on",
   "phone.mind.off.failed": "That didn’t work. Nothing was changed.",
 
+  "phone.mind.trouble.refused.title": "Your provider refused the key",
+  "phone.mind.trouble.refused.body": "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words.",
+  "phone.mind.trouble.refused.action": "Check the key…",
+  "phone.mind.trouble.noCredit.title": "Your provider says there’s no credit left",
+  "phone.mind.trouble.noCredit.body": "Add credit on your provider’s website, then check again. Until then, Ask finds by words.",
+  "phone.mind.trouble.noCredit.action": "Check again",
+  "phone.mind.trouble.paused.title": "Paused by your limit",
+  "phone.mind.trouble.paused.body": "You’ve reached this month’s limit. Ask finds by words until {day}.",
+  "phone.mind.trouble.paused.action": "Change limit",
+  "phone.mind.trouble.unreachable.today": "Written {day}. {host} hasn’t answered since {time}.",
+  "phone.mind.trouble.unreachable.ask": "Answers are back when {host} is.",
   "phone.mind.sent.title": "What was sent",
   "phone.mind.sent.dek": "Everything this phone sent to {host}, word for word as it left. Kept for 90 days.",
   "phone.mind.sent.empty": "Nothing has been sent online.",
@@ -134,6 +145,5 @@
   "phone.mind.sent.page": "Wrote your page",
   "phone.mind.sent.check": "Connection check",
   "phone.mind.sent.row": "{time} · {size}",
-  "phone.mind.sent.exact": "Exactly what was sent",
   "phone.mind.sent.footer": "Older than 90 days are removed by themselves."
 }

@@ -33,8 +33,15 @@ import { Keep } from "../screens/Keep";
 import { Original } from "../screens/Original";
 import { Which } from "../screens/Which";
 import "./home.css";
+import { listen } from "@tauri-apps/api/event";
 import { HomeRequestError, NEARLY_FULL } from "./api";
-import { chosenHost, createMindApi, type MindChosen, type MindReading } from "./mind";
+import {
+  chosenHost,
+  createMindApi,
+  type MindChosen,
+  type MindReading,
+  type MindStatus,
+} from "./mind";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { Restore, SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
@@ -203,6 +210,7 @@ export function HomeApp({
   const { view, go, back, replace, unwind, leave } = useView(offer ? { name: "offer" } : TODAY);
   const mind = useMemo(() => services.mind ?? createMindApi(), [services]);
   const [mindChosen, setMindChosen] = useState<MindChosen | null>(null);
+  const [mindStatus, setMindStatus] = useState<MindStatus | null>(null);
   // The form, its key included, lives here and never in the history entries.
   const draft = useRef<MindDraft>(NEW_DRAFT);
   const host = chosenHost(mindChosen);
@@ -226,8 +234,11 @@ export function HomeApp({
 
   const lookMind = useCallback(
     () =>
-      mind.chosen().then(
-        (c) => setMindChosen(c),
+      Promise.all([mind.chosen(), mind.status()]).then(
+        ([c, s]) => {
+          setMindChosen(c);
+          setMindStatus(s);
+        },
         () => undefined,
       ),
     [mind],
@@ -235,6 +246,11 @@ export function HomeApp({
   useEffect(() => {
     void lookMind();
   }, [lookMind]);
+  // Today and Ask say how the service is doing as they open.
+  const onTab = view.name === "tab" ? view.tab : null;
+  useEffect(() => {
+    if (onTab === "today" || onTab === "ask") void lookMind();
+  }, [onTab, lookMind]);
 
   const stats = useCallback(
     () =>
@@ -258,6 +274,26 @@ export function HomeApp({
     [channel],
   );
   const refresh = useCallback(() => setFresh((n) => n + 1), []);
+
+  // The mind reads and writes in the background: what it did shows as soon as it is done, a
+  // burst of readings as one change.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void lookMind();
+        refresh();
+      }, 400);
+    };
+    const stops = ["item-changed", "page-ready"].map((name) =>
+      listen(name, soon).catch(() => () => undefined),
+    );
+    return () => {
+      clearTimeout(timer);
+      for (const stop of stops) void stop.then((off) => off()).catch(() => undefined);
+    };
+  }, [lookMind, refresh]);
 
   // Once per phone: a plain line, then the phone's own prompt for what reads voice notes.
   // Resolves false when the person said "Not now": nothing then opens the phone's prompt.
@@ -419,6 +455,11 @@ export function HomeApp({
   );
   const toKeep = () => go({ name: "keep" });
   const toMind = () => go({ name: "mind" });
+  // The details are asked again: a key refused, credit added or a new limit all start there.
+  const fixMind = () => {
+    draft.current = NEW_DRAFT;
+    go({ name: "mindOnline", step: 2, depth: 1 });
+  };
   const leaveMind = (depth: number) => {
     draft.current = NEW_DRAFT;
     leave(depth);
@@ -558,16 +599,14 @@ export function HomeApp({
             chosen: mindChosen,
             month: mind.month,
             reading: mind.reading,
-            sentReady: mind.ready,
             onMove: () => go({ name: "mindComputer" }),
             onSent: () => go({ name: "mindSent" }),
-            onCheckKey: () => {
-              draft.current = NEW_DRAFT;
-              go({ name: "mindOnline", step: 2, depth: 1 });
-            },
+            onCheckKey: fixMind,
+            fresh,
             onTurnOff: async () => {
               await mind.turnOff();
               setMindChosen({ state: "off" });
+              setMindStatus({ state: "off" });
               refresh();
             },
           }}
@@ -615,13 +654,7 @@ export function HomeApp({
         );
       else if (step === 3)
         screen = (
-          <MindLimitStep
-            draft={draft.current}
-            limits={mind.ready}
-            onDraft={setDraft}
-            onBack={back}
-            onNext={next}
-          />
+          <MindLimitStep draft={draft.current} onDraft={setDraft} onBack={back} onNext={next} />
         );
       else
         screen = (
@@ -678,12 +711,11 @@ export function HomeApp({
         <DeleteEverything
           onKeep={back}
           onDelete={async (phrase) => {
-            // The service and its key go first: if that fails, nothing is deleted.
-            await mind.turnOff();
             await home.deleteEverything(phrase);
             await services.queue.clear().catch(() => undefined);
             await forgetReminder(home.notes);
             setMindChosen({ state: "off" });
+            setMindStatus({ state: "off" });
             // Welcome is a new start: the back gesture does not walk into the screens before.
             unwind();
             onDeleted();
@@ -795,6 +827,8 @@ export function HomeApp({
             onJournal={() => toTab("journal")}
             nearlyFull={nearlyFull}
             mind={host}
+            status={mindStatus}
+            onFixMind={fixMind}
             queue={services.queue}
             onQueued={refresh}
             onOpen={open}
@@ -816,6 +850,8 @@ export function HomeApp({
       } else {
         screen = (
           <HomeFind
+            status={mindStatus}
+            onFixMind={fixMind}
             bar={bar("ask")}
             empty={empty}
             today={journalDay(new Date(services.now()))}
