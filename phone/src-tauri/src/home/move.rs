@@ -1099,14 +1099,31 @@ pub async fn move_bring_aside<R: Runtime>(app: AppHandle<R>) -> Result<Moved, Mo
 /// "Stop" while what was put aside is brought in: it ends and nothing changes here. This phone
 /// stays with its computer.
 #[tauri::command]
-pub async fn move_bring_stop<R: Runtime>(app: AppHandle<R>) {
+pub async fn move_bring_stop<R: Runtime>(app: AppHandle<R>) -> Result<(), MoveError> {
     tracing::info!("the person stopped bringing what was put aside");
+    tell_stop(&app).await?;
     app.state::<Moving>().halt();
-    // The computer stops too, and says so there.
-    if let Some(phone) = app.state::<AppState>().phone(&app)
-        && let Err(e) = phone.call(RemoteCall::StopMemory).await
-    {
-        tracing::info!("the computer did not hear the stop: {e:?}");
+    Ok(())
+}
+
+/// Tell the computer the person stopped bringing the things in, so it stops too and says so.
+/// Refused once they are being added there: that finishes, and this phone waits to hear it.
+async fn tell_stop<R: Runtime>(app: &AppHandle<R>) -> Result<(), MoveError> {
+    let Some(phone) = app.state::<AppState>().phone(app) else {
+        return Ok(());
+    };
+    match phone.call(RemoteCall::StopMemory).await {
+        Err(CallError::Phone {
+            code: PhoneError::TooLate,
+        }) => {
+            tracing::info!("too late to stop: the computer is adding the things");
+            Err(MoveError::Failed)
+        }
+        Err(e) => {
+            tracing::info!("the computer did not hear the stop: {e:?}");
+            Ok(())
+        }
+        Ok(_) => Ok(()),
     }
 }
 
@@ -1249,6 +1266,7 @@ fn tenths(done: u64, size: u64) -> u64 {
 #[tauri::command]
 pub async fn move_stop<R: Runtime>(app: AppHandle<R>) -> Result<(), MoveError> {
     tracing::info!("the person stopped the move");
+    tell_stop(&app).await?;
     app.state::<Moving>().halt();
     move_undo(app).await
 }
