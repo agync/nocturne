@@ -1,4 +1,4 @@
-# The quality gate on every pull request and every push to main.
+# The quality gate on every pull request, every push to main and every night.
 #
 # `make check` is the gate the git hooks and this workflow share (docs/contribution/building.md).
 # It is `make lint` plus `make test`, and one runner would take the sum of all its parts, so the
@@ -37,14 +37,15 @@
 #
 # Every job but hygiene and the gate runs only when a path it reads changed: the `changes` job
 # lists the paths and scripts/ci-areas.sh says which jobs they run. A change to a workflow or an
-# action, the Makefile or the Rust toolchain, a push to main and a hand run run every job. A job
-# reads its flag as `!= 'false'`, so a flag the script does not write runs the job rather than
-# skipping it.
+# action, the Makefile or the Rust toolchain, a push to main, the nightly run and a hand run run
+# every job. A job reads its flag as `!= 'false'`, so a flag the script does not write runs the
+# job rather than skipping it. The other platforms' Rust jobs run on a pull request only when what
+# builds differently there changed (the `platform` paths in scripts/ci-areas.sh).
 #
 # Within the Rust jobs, a pull request tests only the workspace packages it reaches: the ones its
 # files are in, every package that depends on them, and the ones whose tests read them
 # (scripts/affected_crates.py, through .github/actions/affected-crates). Lint stays workspace wide.
-# A push to main and a hand run test the whole workspace. The tests run under
+# A push to main, the nightly run and a hand run test the whole workspace. The tests run under
 # cargo-nextest, which retries a failed test once and lists any that passed on the retry as flaky
 # in the job summary (.config/nextest.toml, scripts/nextest_summary.py).
 #
@@ -61,12 +62,17 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Every night, the whole workspace on every platform: it finds what a runner image or a flaky
+  # test breaks while nothing is pushed.
+  schedule:
+    - cron: "23 3 * * *"
   workflow_dispatch:
 
 # A newer push to the same pull request or branch cancels the run before it, on main as well: the
 # latest commit's run covers everything before it, and each of those was tested on its pull request.
+# The nightly run has a group of its own, so a push and the nightly run never cancel each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: true
 
 permissions:

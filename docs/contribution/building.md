@@ -52,7 +52,7 @@ the engine lives under the data folder, never beside the program, so a read-only
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and every push to `main`, on Ubuntu 24.04
+`.github/workflows/ci.yml` runs on every pull request, every push to `main` and every night, on Ubuntu 24.04
 (x86_64), with the tests also on Linux arm64, macOS and Windows, a read-only token and no secret.
 `make check` is lint plus test, so the workflow runs its targets as parallel jobs and together
 they cover all of it. On a pull request, each job runs only when a path it reads changed:
@@ -66,8 +66,8 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 | `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them | always |
 | `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium | `ui/`, `src-tauri/` |
 | `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks | `site/`, `docs/`, `lemonade.lock`, `ui/package*.json` |
-| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo nextest run` and `cargo test --doc` on `macos-15` and `windows-2022` | the affected packages' tests on Linux arm64, macOS arm64 and Windows x64, and the real engine started on Windows | the Rust side |
-| `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | the Rust side |
+| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo nextest run` and `cargo test --doc` on `macos-15` and `windows-2022` | the affected packages' tests on Linux arm64, macOS arm64 and Windows x64, and the real engine started on Windows | what builds differently there: `src-tauri/`, `phone/`, `crates/helpers/`, `crates/channel/`, `crates/lemonade/`, `crates/intelligence/src/host/`, any `build.rs`, `Cargo.*`, both lock files, `.cargo/`, `.config/nextest.toml`, `clippy.toml`, `scripts/fetch-lemonade.sh` |
+| `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | as `rust tests` |
 | `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
 | `android` | `make ui/install phone/android`, then the plugins' `testDebugUnitTest` and `lintDebug` through Gradle | the phone app's debug APK for arm64, its plugins' JVM tests and Android lint; the APK is kept for 7 days for emulator checks | `phone/`, `crates/channel/`, `ui/src/phone/`, `ui/phone/`, `ui/vite.phone.config.ts`, `ui/package*.json`, `Cargo.*` |
 | `android (engine)` | `cargo check -p nocturne-engine -p nocturne-mind --target aarch64-linux-android` with the NDK's clang | the engine and the mind build for the phone, the engine with its bundled SQLite, without the APK build | `crates/contract/`, `crates/engine/`, `crates/mind/`, `.cargo/`, `Cargo.*` |
@@ -78,12 +78,13 @@ which jobs it chose. The table of areas is `scripts/ci-areas.sh`; `scripts/test_
 checks one changed path for each of its patterns, that each job's `if:` reads the flag of its
 area and it needs only `changes`, that none continues on error, and that `gate` needs every job.
 A change to a workflow, an action, the `Makefile`, `rust-toolchain.toml`, that script or
-`scripts/affected_crates.py`, a push to `main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
+`scripts/affected_crates.py`, a push to `main`, the nightly run and a hand run run every job. Without a merge queue, the run on `main` is the first test of
 the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in
 `ui/` and write the bindings there, and the interface's tests read files in `src-tauri/`, so on
 x86_64 Linux both sides run when either changes, while the other platforms run only their own
 side. A job skipped this way counts as passed in `gate`. Every run on `main` finishes, and none is
-dropped while queued.
+dropped while queued. The nightly run has a concurrency group of its own, so it and a push to
+`main` never cancel each other.
 
 The Rust jobs of a pull request test only the workspace packages it reaches.
 `scripts/affected_crates.py` reads the changed files and the workspace from `cargo metadata`, and
@@ -99,7 +100,7 @@ tests. `scripts/test_affected_crates.py` scans every string in the Rust sources 
 its package to a file in the repository, and fails when the script's tables miss one. The `rust`
 job prints which packages it picked and why, and its summary lists them. Clippy stays workspace
 wide: it checks without generating code, so the whole workspace costs little next to the tests.
-A push to `main` and a hand run test everything, so a read the tables miss fails
+A push to `main`, the nightly run and a hand run test everything, so a read the tables miss fails
 on `main` and not later.
 
 The tests run under cargo-nextest, at the version `NEXTEST_TOOL` in `ci.yml` names, installed

@@ -11,6 +11,8 @@ SCRIPT = os.path.join(HERE, "ci-areas.sh")
 WORKFLOW = os.path.join(ROOT, ".github", "workflows", "ci.yml")
 
 RUST = {"rust", "rust-platforms", "scripts"}
+# A Rust change the other platforms' jobs skip on a pull request.
+RUST_HOST = {"rust", "scripts"}
 PACKAGE = {"package", "package-linux"}
 
 # One changed path for each alternative in the table, and the areas it alone selects.
@@ -20,12 +22,19 @@ CASES = (
     ("Cargo.lock", RUST | PACKAGE | {"android", "phone-engine"}),
     ("helpers.lock", RUST | PACKAGE),
     ("lemonade.lock", RUST | PACKAGE | {"site"}),
-    ("crates/engine/src/lib.rs", RUST | {"phone-engine"}),
-    ("crates/engine/tests/round2.rs", RUST | {"phone-engine"}),
-    ("crates/mind/src/prompts.rs", RUST | {"phone-engine"}),
+    ("crates/engine/src/lib.rs", RUST_HOST | {"phone-engine"}),
+    ("crates/engine/tests/round2.rs", RUST_HOST | {"phone-engine"}),
+    ("crates/engine/src/private.rs", RUST_HOST | {"phone-engine"}),
+    ("crates/mind/src/prompts.rs", RUST_HOST | {"phone-engine"}),
     ("crates/helpers/fixtures/help/tailnet/1.104.6/help.txt", RUST),
     ("crates/channel/src/words.txt", RUST | {"ui"} | {"android"}),
-    ("crates/contract/src/lib.rs", RUST | {"phone-engine"}),
+    ("crates/contract/src/lib.rs", RUST_HOST | {"phone-engine"}),
+    ("crates/intelligence/src/journal.rs", RUST_HOST),
+    ("crates/intelligence/src/host/macos.rs", RUST),
+    ("crates/lemonade/src/process.rs", RUST),
+    ("crates/helpers/src/supervise.rs", RUST),
+    ("crates/channel/src/protocol.rs", RUST | {"ui", "android"}),
+    ("crates/engine/build.rs", RUST | {"phone-engine"}),
     (".config/nextest.toml", RUST),
     (".cargo/config.toml", RUST | {"phone-engine"}),
     ("src-tauri/src/remote/mod.rs", RUST | {"ui"}),
@@ -59,7 +68,7 @@ CASES = (
     ("flatpak/is.nocturne.Nocturne.yml", {"scripts", "package-linux"}),
     ("docs/contribution/flatpak.md", {"scripts", "site"}),
     # The app bundles the guide, and the Rust tests read it.
-    ("docs/guide/install.md", {"site", "scripts"} | RUST),
+    ("docs/guide/install.md", {"site"} | RUST_HOST),
     ("docs/ui/notes.md", {"site"}),
     ("site/index.html", {"site"}),
     ("LICENSE", {"scripts"} | PACKAGE),
