@@ -189,11 +189,11 @@ describe("the welcome", () => {
     expect(start).toHaveBeenCalledWith("simple", true);
   });
 
-  it("shows the memory moved here over setup after the restart", async () => {
+  it("shows a phone's things coming here over setup", async () => {
     const { engine } = await open("notStarted");
-    engine.setMove({ phase: "arrived", name: "Maya’s phone", online: false });
+    engine.setMove({ phase: "preparing", name: "Maya’s phone" });
     expect(
-      await screen.findByRole("alertdialog", { name: "The memory from Maya’s phone is here." }),
+      await screen.findByRole("alertdialog", { name: "Maya’s phone is getting its things ready…" }),
     ).toBeInTheDocument();
   });
 

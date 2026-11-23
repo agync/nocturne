@@ -8,20 +8,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const offered = (here: boolean) => ({
+const offered = {
   phase: "offered" as const,
   name: "Maya’s phone",
   items: 1284,
   bytes: 1_400_000_000,
-  here,
-});
+};
 
-async function withOffer() {
+/** An empty computer asks nothing: the phone's things are on their way at once. */
+async function withThingsComing() {
   const engine = manualEngine("onAlone");
   const view = await openAway("/settings/away", "onAlone", "Away from home", engine);
-  act(() => engine.setMove(offered(false)));
+  act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone" }));
   const dialog = await screen.findByRole("alertdialog", {
-    name: "Maya’s phone has its own memory. Move it here?",
+    name: "Maya’s phone is getting its things ready…",
   });
   return { ...view, engine, dialog };
 }
@@ -31,40 +31,39 @@ const CHOOSE = "Maya’s phone has its own memory, and this computer has one too
 async function withChoice(room: { need: number; free: number } | null = null) {
   const engine = manualEngine("onAlone");
   const view = await openAway("/settings/away", "onAlone", "Away from home", engine);
-  act(() => engine.setMove({ ...offered(true), since: "2026-03-03", room }));
+  act(() => engine.setMove({ ...offered, since: "2026-03-03", room }));
   const dialog = await screen.findByRole("alertdialog", { name: CHOOSE });
   return { ...view, engine, dialog };
 }
 
-describe("a phone with its own memory", () => {
-  it("asks to move it here, with what it holds, and Move it here takes it", async () => {
-    const { engine, dialog } = await withOffer();
-    expect(dialog).toHaveTextContent("1,284 things kept · about 1.4 GB");
+describe("a phone bringing its things to an empty computer", () => {
+  it("asks nothing, says the phone is getting its things ready with a bar of no amount, and can be stopped", async () => {
+    const { engine, dialog } = await withThingsComing();
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+    const bar = within(dialog).getByRole("progressbar");
+    expect(bar).toHaveAccessibleName("Maya’s phone is getting its things ready…");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(screen.queryByText(/0\sB of/)).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    const stop = vi.spyOn(engine, "stopMove");
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(
-      within(dialog).getByText(
-        "This computer becomes its home: it reads, tidies and writes the page. Maya’s phone then works with it like your other phones.",
+      screen.getByText(
+        "Stop bringing them in? Nothing changes here, and Maya’s phone keeps its memory.",
       ),
     ).toBeInTheDocument();
-    const names = within(dialog)
-      .getAllByRole("button")
-      .map((b) => b.textContent);
-    expect(names).toEqual(["Not now", "Move it here"]);
-    const answer = vi.spyOn(engine, "answerMove");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Move it here" }));
-    expect(answer).toHaveBeenCalledWith("move");
-    expect(await screen.findByRole("progressbar")).toHaveAccessibleName(
-      "Maya’s phone is getting its memory ready…",
-    );
+    const sure = within(screen.getByRole("alertdialog")).getAllByRole("button", { name: "Stop" });
+    const confirm = sure.at(-1);
+    if (!confirm) throw new Error("a Stop to confirm");
+    await userEvent.click(confirm);
+    expect(stop).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 
-  it("says since when, and one thing in the singular", async () => {
-    const engine = manualEngine("onAlone");
-    await openAway("/settings/away", "onAlone", "Away from home", engine);
-    act(() => engine.setMove({ ...offered(false), items: 1, since: "2026-03-03" }));
-    const dialog = await screen.findByRole("alertdialog", {
-      name: "Maya’s phone has its own memory. Move it here?",
-    });
-    expect(dialog).toHaveTextContent("1 thing kept since 3 March · about 1.4 GB");
+  it("says one thing in the singular when it is here", async () => {
+    const { engine } = await withThingsComing();
     act(() =>
       engine.setMove({
         phase: "brought",
@@ -77,124 +76,38 @@ describe("a phone with its own memory", () => {
     ).toBeInTheDocument();
   });
 
-  it("takes focus, and Escape means Not now", async () => {
-    const { engine, dialog } = await withOffer();
-    await waitFor(() => expect(dialog).toHaveFocus());
-    const answer = vi.spyOn(engine, "answerMove");
-    await userEvent.keyboard("{Escape}");
-    expect(answer).toHaveBeenCalledWith("notNow");
-  });
-
-  it("says the phone is getting its memory ready, with a bar of no amount and Stop, until the first part arrives", async () => {
-    const { engine } = await withOffer();
-    await userEvent.click(screen.getByRole("button", { name: "Move it here" }));
-    const bar = await screen.findByRole("progressbar");
-    expect(bar).toHaveAccessibleName("Maya’s phone is getting its memory ready…");
-    expect(bar).not.toHaveAttribute("aria-valuenow");
-    expect(screen.queryByText(/0\sB of/)).toBeNull();
-    const stop = vi.spyOn(engine, "stopMove");
-    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
-    await userEvent.click(screen.getByRole("button", { name: "Stop moving" }));
-    expect(stop).toHaveBeenCalled();
-  });
-
-  it("stays while the memory arrives and is checked, and can be stopped until the restart", async () => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "arriving", name: "Maya’s phone", done: 7e8, size: 1.4e9 }));
-    const bar = await screen.findByRole("progressbar");
-    expect(bar).toHaveAccessibleName("Arriving from Maya’s phone · 700\u00a0MB of 1.4\u00a0GB");
-    await userEvent.keyboard("{Escape}");
-    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
-    expect(
-      screen.getByText("Stop this move? Nothing changes here, and Maya’s phone keeps its memory."),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Keep moving" }));
-    expect(await screen.findByRole("progressbar")).toBeInTheDocument();
-
-    act(() => engine.setMove({ phase: "checking", name: "Maya’s phone" }));
-    expect(await screen.findByRole("progressbar")).toHaveAccessibleName(
-      "Checking · every count must match before Maya’s phone lets go of it",
-    );
-    const stop = vi.spyOn(engine, "stopMove");
-    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
-    await userEvent.click(screen.getByRole("button", { name: "Stop moving" }));
-    expect(stop).toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-  });
-
-  it("says Nocturne restarts to open it, with nothing to press", async () => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "restarting", name: "Maya’s phone" }));
-    expect(
-      await screen.findByText(
-        "Nocturne restarts to open the memory from Maya’s phone. It opens again by itself.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(screen.getByRole("alertdialog")).queryByRole("button")).toBeNull();
-  });
-
-  it("waits for room before moving it here", async () => {
-    const { engine } = await withOffer();
+  it("says room ran out, with OK", async () => {
+    const { engine } = await withThingsComing();
     act(() =>
       engine.setMove({
-        ...offered(false),
-        room: { need: 2_900_000_000, free: 1_200_000_000 },
+        phase: "failed",
+        name: "Maya’s phone",
+        why: "noRoom",
+        room: { need: 4_300_000_000, free: 0 },
       }),
     );
     const dialog = await screen.findByRole("alertdialog");
     await waitFor(() =>
       expect(dialog).toHaveTextContent(
-        "This computer needs about 2.9 GB free for it and has 1.2 GB. Free some room here, then choose Move it here.",
+        "There wasn’t room for Maya’s phone’s memory, so nothing changed. Free about 4.3 GB here, then move it again from Maya’s phone.",
       ),
     );
-    expect(within(dialog).getByRole("button", { name: "Move it here" })).toBeDisabled();
-  });
-
-  it.each([
-    [
-      { why: "noRoom" as const, room: { need: 2_900_000_000, free: 0 } },
-      "There wasn’t room for Maya’s phone’s memory, so nothing changed. Free about 2.9 GB here, then move it again from Maya’s phone.",
-    ],
-    [
-      { why: "notOpened" as const, room: null },
-      "The memory from Maya’s phone couldn’t be opened here, so nothing changed. What was on this computer is as it was.",
-    ],
-  ])("says how a move ended with nothing changed, with OK", async (failed, line) => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "failed", name: "Maya’s phone", ...failed }));
-    const dialog = await screen.findByRole("alertdialog");
-    await waitFor(() => expect(dialog).toHaveTextContent(line));
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 
-  it("says the memory is here, and Open today’s page finishes it", async () => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "arrived", name: "Maya’s phone", online: false }));
-    const dialog = await screen.findByRole("alertdialog", {
-      name: "The memory from Maya’s phone is here.",
-    });
-    expect(
-      within(dialog).getByText("Reading carries on from where it was. Nothing is read again."),
-    ).toBeInTheDocument();
-    expect(dialog).toHaveTextContent(
-      "To have answers written online here, set up Online answers in Settings.",
-    );
-    const finish = vi.spyOn(engine, "finishMove");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Open today’s page" }));
-    expect(finish).toHaveBeenCalled();
-    await waitFor(() => expect(window.location.hash).toBe("#/today"));
-  });
-
   it("closes once Open today’s page is pressed, though the computer sends no change", async () => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "arrived", name: "Maya’s phone", online: true }));
+    const { engine } = await withThingsComing();
+    act(() =>
+      engine.setMove({
+        phase: "brought",
+        name: "Maya’s phone",
+        added: { things: 3, entries: 0, checkins: 0 },
+      }),
+    );
     const dialog = await screen.findByRole("alertdialog", {
-      name: "The memory from Maya’s phone is here.",
+      name: "Maya’s phone’s things are here.",
     });
-    // The computer marks the arrival seen and says nothing more: only asking again closes it.
     let waiting = true;
     vi.spyOn(engine, "finishMove").mockImplementation(async () => {
       waiting = false;
@@ -204,20 +117,12 @@ describe("a phone with its own memory", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Open today’s page" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
-
-  it("leaves out the Online answers line once it is set up here", async () => {
-    const { engine } = await withOffer();
-    act(() => engine.setMove({ phase: "arrived", name: "Maya’s phone", online: true }));
-    const dialog = await screen.findByRole("alertdialog", {
-      name: "The memory from Maya’s phone is here.",
-    });
-    expect(dialog).not.toHaveTextContent("Online answers");
-  });
 });
 
 describe("a phone joining a computer that already holds a memory", () => {
   it("asks how it joins, with bringing its things in chosen", async () => {
     const { dialog } = await withChoice();
+    await waitFor(() => expect(dialog).toHaveFocus());
     expect(dialog).toHaveTextContent(
       "1,284 things kept on Maya’s phone since 3 March · about 1.4 GB",
     );
@@ -254,7 +159,6 @@ describe("a phone joining a computer that already holds a memory", () => {
         name: "Maya’s phone",
         done: 7e8,
         size: 1.4e9,
-        bring: true,
       }),
     );
     expect(await screen.findByRole("progressbar")).toHaveAccessibleName(
@@ -276,7 +180,7 @@ describe("a phone joining a computer that already holds a memory", () => {
 
   it("drops the answered question once the things come in", async () => {
     const { engine } = await withChoice();
-    act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone", bring: true }));
+    act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone" }));
     const dialog = await screen.findByRole("alertdialog", {
       name: "Maya’s phone is getting its things ready…",
     });
@@ -289,7 +193,7 @@ describe("a phone joining a computer that already holds a memory", () => {
 
   it("stops bringing them in when asked", async () => {
     const { engine } = await withChoice();
-    act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone", bring: true }));
+    act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone" }));
     await screen.findByRole("progressbar");
     const stop = vi.spyOn(engine, "stopMove");
     await userEvent.click(screen.getByRole("button", { name: "Stop" }));
@@ -387,6 +291,14 @@ describe("a phone joining a computer that already holds a memory", () => {
     );
     expect(within(dialog).getByRole("button", { name: "Continue" })).toBeEnabled();
     expect(dialog).not.toHaveTextContent("Free some room here");
+  });
+
+  it("says how many things without a first day, and one in the singular", async () => {
+    const engine = manualEngine("onAlone");
+    await openAway("/settings/away", "onAlone", "Away from home", engine);
+    act(() => engine.setMove({ ...offered, items: 1 }));
+    const dialog = await screen.findByRole("alertdialog", { name: CHOOSE });
+    expect(dialog).toHaveTextContent("1 thing kept · about 1.4 GB");
   });
 
   it("means Not now on Escape, and never offers to put this memory aside", async () => {

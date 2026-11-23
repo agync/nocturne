@@ -136,28 +136,23 @@ export interface MoveRoom {
   free: number;
 }
 
-/** A phone's memory moving to this computer, as the window shows it (`get_move`). */
+/** A phone's things coming to this computer, as the window shows it (`get_move`). */
 export type MoveView =
+  /** This computer already holds a memory: the person chooses how the phone joins it. */
   | {
       phase: "offered";
       name: string;
       items: number;
       bytes: number;
-      /** This computer already holds a memory: the person chooses how the phone joins it. */
-      here: boolean;
       /** The first day something was kept on the phone, `YYYY-MM-DD`. */
       since?: string | null;
-      /** Not enough room yet: the move button waits. */
+      /** Not enough room yet to bring its things in: Continue waits while that is chosen. */
       room?: MoveRoom | null;
     }
-  /**
-   * Agreed, and nothing has arrived yet: the phone makes the copy that travels. `bring`: its
-   * things are being brought into the memory here.
-   */
-  | { phase: "preparing"; name: string; bring?: boolean }
-  | { phase: "arriving"; name: string; done: number; size: number; bring?: boolean }
-  | { phase: "checking"; name: string }
-  /** A bring-in arrived whole and is being added: it can no longer be stopped. */
+  /** Agreed, and nothing has arrived yet: the phone makes the copy that travels. */
+  | { phase: "preparing"; name: string }
+  | { phase: "arriving"; name: string; done: number; size: number }
+  /** Arrived whole and being added: it can no longer be stopped once adding begins. */
   | { phase: "adding"; name: string }
   /** `removed`: the phone was removed while they were added, so it still holds its memory. */
   | { phase: "brought"; name: string; added: BroughtCounts; removed?: boolean }
@@ -165,15 +160,13 @@ export type MoveView =
   | { phase: "ended"; name: string; why: "removed" | "stopped" }
   /** The person chose this computer's memory: nothing came in. */
   | { phase: "used"; name: string }
-  | { phase: "restarting"; name: string }
-  | { phase: "arrived"; name: string; online: boolean }
-  | { phase: "failed"; name: string; why: "noRoom" | "notOpened"; room: MoveRoom | null };
+  | { phase: "failed"; name: string; why: "noRoom"; room: MoveRoom | null };
 
 /**
- * The person's answer to a phone that offers its memory: to a computer that holds nothing, move it
- * here; to one that holds a memory, bring the phone's things in or use this computer's memory.
+ * The person's answer to a phone that offers its memory to a computer that holds one: bring the
+ * phone's things in, use this computer's memory, or not now.
  */
-export type MoveChoice = "move" | "notNow" | "bring" | "useHere";
+export type MoveChoice = "notNow" | "bring" | "useHere";
 
 export type EngineEventName = keyof EngineEvents;
 

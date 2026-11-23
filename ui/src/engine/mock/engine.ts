@@ -146,60 +146,41 @@ function remoteFromAddress(): RemoteOptions {
 }
 
 /**
- * `?mockMove=offered|here|room|preparing|arriving|checking|restarting|arrived|ranOut|notOpened|
- * bringing|adding|brought|used` opens with a phone's memory moving here.
+ * `?mockMove=here|room|preparing|arriving|adding|brought|used|ranOut` opens with a phone's things
+ * coming here.
  */
 function moveFromAddress(): MoveView | null {
   if (typeof location === "undefined") return null;
   const name = "Maya’s phone";
   switch (new URLSearchParams(location.search).get("mockMove")) {
-    case "offered":
-      return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: false };
     case "here":
-      return {
-        phase: "offered",
-        name,
-        items: 1284,
-        bytes: 1_400_000_000,
-        here: true,
-        since: "2026-03-03",
-      };
-    case "bringing":
-      return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000, bring: true };
-    case "adding":
-      return { phase: "adding", name };
-    case "brought":
-      return { phase: "brought", name, added: { things: 1284, entries: 212, checkins: 96 } };
-    case "used":
-      return { phase: "used", name };
-    case "preparing":
-      return { phase: "preparing", name };
-    case "arriving":
-      return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000 };
-    case "checking":
-      return { phase: "checking", name };
-    case "arrived":
-      return { phase: "arrived", name, online: false };
+      return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, since: "2026-03-03" };
     case "room":
       return {
         phase: "offered",
         name,
         items: 1284,
         bytes: 1_400_000_000,
-        here: false,
-        room: { need: 2_900_000_000, free: 1_200_000_000 },
+        since: "2026-03-03",
+        room: { need: 4_300_000_000, free: 1_200_000_000 },
       };
-    case "restarting":
-      return { phase: "restarting", name };
+    case "preparing":
+      return { phase: "preparing", name };
+    case "arriving":
+      return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000 };
+    case "adding":
+      return { phase: "adding", name };
+    case "brought":
+      return { phase: "brought", name, added: { things: 1284, entries: 212, checkins: 96 } };
+    case "used":
+      return { phase: "used", name };
     case "ranOut":
       return {
         phase: "failed",
         name,
         why: "noRoom",
-        room: { need: 2_900_000_000, free: 0 },
+        room: { need: 4_300_000_000, free: 0 },
       };
-    case "notOpened":
-      return { phase: "failed", name, why: "notOpened", room: null };
     default:
       return null;
   }
@@ -1989,14 +1970,10 @@ export class MockEngine implements EngineClient {
   answerMove = async (choice: MoveChoice): Promise<void> => {
     const now = this.moving;
     if (now?.phase !== "offered") throw new Error("There is no offer to answer");
-    const fits =
-      choice === "notNow" ||
-      (now.here ? choice === "bring" || choice === "useHere" : choice === "move");
-    if (!fits) throw new Error("There is no offer to answer");
     const name = now.name;
     this.setMove(
-      choice === "move" || choice === "bring"
-        ? { phase: "preparing", name, bring: choice === "bring" }
+      choice === "bring"
+        ? { phase: "preparing", name }
         : choice === "useHere"
           ? { phase: "used", name }
           : null,
@@ -2004,19 +1981,13 @@ export class MockEngine implements EngineClient {
   };
   finishMove = async (): Promise<void> => {
     const phase = this.moving?.phase;
-    if (
-      phase !== "arrived" &&
-      phase !== "failed" &&
-      phase !== "brought" &&
-      phase !== "used" &&
-      phase !== "ended"
-    )
+    if (phase !== "failed" && phase !== "brought" && phase !== "used" && phase !== "ended")
       throw new Error("No memory is waiting");
     this.setMove(null);
   };
   stopMove = async (): Promise<void> => {
     const now = this.moving;
-    if (now?.phase !== "preparing" && now?.phase !== "arriving" && now?.phase !== "checking")
+    if (now?.phase !== "preparing" && now?.phase !== "arriving")
       throw new Error("There is no move to stop");
     this.setMove(null);
   };
