@@ -41,8 +41,12 @@
 # reads its flag as `!= 'false'`, so a flag the script does not write runs the job rather than
 # skipping it.
 #
-# The Rust tests run under cargo-nextest, which retries a failed test once and lists any that
-# passed on the retry as flaky in the job summary (.config/nextest.toml, scripts/nextest_summary.py).
+# Within the Rust jobs, a pull request tests only the workspace packages it reaches: the ones its
+# files are in, every package that depends on them, and the ones whose tests read them
+# (scripts/affected_crates.py, through .github/actions/affected-crates). Lint stays workspace wide.
+# A push to main and a hand run test the whole workspace. The tests run under
+# cargo-nextest, which retries a failed test once and lists any that passed on the retry as flaky
+# in the job summary (.config/nextest.toml, scripts/nextest_summary.py).
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
@@ -143,8 +147,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      # Two commits deep, for the affected crates: a pull request's merge commit and its base.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
       - name: System libraries
         run: |
@@ -163,12 +169,19 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: ${{ env.NEXTEST_TOOL }}
+      - id: affected
+        uses: ./.github/actions/affected-crates
+      # Clippy checks without building, so the whole workspace costs little next to the tests,
+      # and it catches a dependent's lint that a change upstream sets off.
       - name: Lint
         run: make rust/lint
       - name: Test
+        if: steps.affected.outputs.scope != 'none'
+        env:
+          RUST_PACKAGES: ${{ steps.affected.outputs.packages }}
         run: make rust/test NEXTEST_PROFILE=ci NEXTEST_SERVER_PROFILE=ci-server
       - name: Flaky and failed tests
-        if: always()
+        if: always() && steps.affected.outputs.scope != 'none'
         run: >-
           python3 -I scripts/nextest_summary.py --summary "$GITHUB_STEP_SUMMARY"
           target/nextest/ci/junit.xml target/nextest/ci-server/junit.xml
@@ -196,8 +209,9 @@ jobs:
 
   # The Rust tests on the other machines Nocturne ships for. Linux on Arm runs both test runs of
   # rust/test; macOS and Windows run the tests and doctests, since the server is built for Linux
-  # only. Tests that need a Linux-only piece (/proc, network namespaces, prctl) are compiled out or
-  # ignored with their reason elsewhere. Lint, the bindings and the browser tests stay on x86_64.
+  # only. On a pull request they test the affected packages, as the rust job does. Tests that need
+  # a Linux-only piece (/proc, network namespaces, prctl) are compiled out or ignored with their
+  # reason elsewhere. Lint, the bindings and the browser tests stay on x86_64.
   rust-platforms:
     name: rust tests (${{ matrix.name }})
     needs: changes
@@ -230,6 +244,7 @@ jobs:
         run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
       - name: System libraries
         if: runner.os == 'Linux'
@@ -246,23 +261,35 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: ${{ env.NEXTEST_TOOL }}
+      - id: affected
+        uses: ./.github/actions/affected-crates
       # Every test target is built first, so a compile error in one does not hide another's, and
       # every test runs, so one failure does not hide the next. The `test` profile is the one
       # cargo-nextest and `cargo test` use: building the `dev` profile here made the test step
       # compile the same workspace crates a second time.
       - name: Build the tests
-        run: cargo build --workspace --tests --profile test --keep-going
+        if: steps.affected.outputs.scope != 'none'
+        env:
+          RUST_PACKAGES: ${{ steps.affected.outputs.packages }}
+        run: |
+          set -euo pipefail
+          read -ra packages <<< "$RUST_PACKAGES"
+          cargo build "${packages[@]}" --tests --profile test --keep-going
       - name: Test
+        if: steps.affected.outputs.scope != 'none'
+        env:
+          RUST_PACKAGES: ${{ steps.affected.outputs.packages }}
         run: |
           set -euo pipefail
           if [ "$RUNNER_OS" = Linux ]; then
             make rust/test NEXTEST_PROFILE=ci NEXTEST_SERVER_PROFILE=ci-server
           else
-            cargo nextest run --profile ci --workspace
-            cargo test --doc --workspace
+            read -ra packages <<< "$RUST_PACKAGES"
+            cargo nextest run --profile ci --no-tests=warn "${packages[@]}"
+            cargo test --doc "${packages[@]}"
           fi
       - name: Flaky and failed tests
-        if: always()
+        if: always() && steps.affected.outputs.scope != 'none'
         run: |
           set -euo pipefail
           python=$(command -v python3 || command -v python)
