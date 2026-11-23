@@ -36,9 +36,9 @@ it their home. The design is [A household computer](/design/household-server.md)
 - **Never a home by the back door.** No borrowing call writes anything for later. A household
   computer holds a person's memory only after a code for that person alone, their own pairing with
   three words and Allow, and a move, which a later record covers with the per-person store and its key.
-- **Private stays home.** Things marked private never go to a borrowed mind. Check-ins do, sealed,
-  so it can write reflections: the journal's rule ([0015](0015-journal-privacy-class.md)) is about
-  online minds, and the owner confirmed this.
+- **What an answer needs.** A borrowed mind gets what each request needs, check-ins and things
+  marked private included, sealed, so it can write reflections and answer well. A private mark
+  decides only what comes up on its own (owner, 2026-11-23, replacing "private stays home").
 - **In turn.** The owner's own asks first, then household asks, then everyone's reading in turn, one
   thing at a time per connection. Taking turns needs only what is waiting now. The owner can turn
   lending off or make a new code.

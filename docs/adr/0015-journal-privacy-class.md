@@ -8,7 +8,12 @@ tags: [adr, journal, privacy, sensitivity]
 
 # 0015 A journal privacy class
 
-Status: accepted. Date: 2026-11-19.
+Status: accepted. Date: 2026-11-19. Amended 2026-11-23 (owner): "check-ins never go online" is no
+longer a rule. An online mind the person chose gets what a good answer needs, check-ins included;
+on a phone with an online mind ([0020](0020-an-online-mind-on-a-phone.md)) they go so it can write
+reflections and recaps. On the computer, Ask still does not search check-ins, reflections or
+recaps, so Online answers does not send them. The journal mark still keeps journal content out of
+audio, notifications, the tray and a lock screen.
 
 ## Context
 

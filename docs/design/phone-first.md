@@ -243,7 +243,7 @@ thing (its words, photo, recording or document), when and how it was kept, and i
 | Part | Copy |
 |---|---|
 | Kept | "Kept" / "{how} · {day}, {time}", where {how} is "Typed on this phone", "Taken on this phone", "Chosen from your photos", "Recorded on this phone", "Shared from another app", "From your calendar" or "From Health". A thing restored from a backup or moved from a computer keeps its first {how}, or "Kept on {device}" when it was kept elsewhere and its device name travelled with it ([Moving](moving-memory.md#one-home-holds-the-pen)); with no name, the row shows "{day}, {time}" alone |
-| Private | Switch "Private" / hint "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest." |
+| Private | Switch "Private" / hint "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask. If your memory moves, it moves too, locked like the rest." (revised 2026-11-23, [What private means](only-marked-private.md)) |
 | Journal entries and good things | No private switch, by the journal's rule: "Journal entries can’t be marked private." (0015) |
 | Actions | "Delete…", with the computer's confirmation worded for this phone ("This will be deleted from this phone for good, along with anything Nocturne worked out from it."). "Forget…" shows only when Nocturne has worked something out from this thing, which on a phone alone happens only for a memory restored from a backup or moved from a computer; otherwise there is nothing to forget, and the row would always say "There is nothing left to delete here." |
 
@@ -274,7 +274,7 @@ the line has no meaning when the phone is the home. Keys are the companion's.
 | Share sheet | Computer away | "Waiting." and the waiting words | Not shown |
 | Item | `phone.original.loading` | "Opening it from your computer…" | "Opening it…" |
 | Item | `phone.original.failed` | "That didn’t open. Your computer may be asleep. Try again in a moment." | "That didn’t open. Try again." |
-| Item | `phone.original.private` | "That one stays on your computer." | Not shown: private things open on the phone that holds them |
+| Item | `phone.original.private` | "That one stays on your computer." | Not shown: private things open on the phone that holds them. Removed for companions too since 2026-11-23 ([What private means](only-marked-private.md)) |
 | Item | `phone.original.zoom` | "Pinch to zoom. Shown from your computer; nothing is saved on this phone." | "Pinch to zoom." |
 | Item | `phone.original.text`, `phone.original.voice` | "Shown from your computer…" / "Played from your computer…" | Not shown |
 | Item | `phone.original.cantShow` | "This one can’t be shown on the phone. Open it on your computer." | "This one can’t be shown here. Save a copy to open it in another app." |
@@ -319,7 +319,7 @@ Each phone asks once, with one plain line before its own prompt, and a "Continue
 | Phone | When | Line before the prompt | The phone's own prompt |
 |---|---|---|---|
 | Android | The first time the microphone is needed while alone: the first "Record", or the first voice note shared from another app if the microphone was never allowed. Android's recogniser needs the microphone even for a recording it reads from a file | "Next, Android asks to let Nocturne use the microphone. Nocturne records only while you hold Record, and turns voice notes into words on this phone." | Android's microphone prompt |
-| iPhone | Just after the first voice note is kept while alone, recorded or shared | "Next, iPhone asks to let Nocturne recognise speech. Nocturne asks for it on this iPhone only, so your voice notes become words without leaving it." | Apple's speech recognition prompt, with Nocturne's purpose: "Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it." |
+| iPhone | Just after the first voice note is kept while alone, recorded or shared | "Next, iPhone asks to let Nocturne recognise speech. Nocturne asks for it on this iPhone only, so your voice notes become words without leaving it." | Apple's speech recognition prompt, with Nocturne's purpose: "Nocturne turns your voice notes into words on this iPhone so you can find them." |
 
 "Not now" or a refusal leaves voice notes "waiting to be read". This phone then shows a row "Voice
 notes in words" with "Off" and "Turn on", or, once the phone has refused it, "Off in your phone’s
@@ -686,8 +686,8 @@ other way, sending memories to the assistant's company. Nothing is shown for wha
 | Title | "Where should Nocturne’s mind be?" |
 | Lead | "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
 | Choice, from phase 3 | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and shows you its code. It reads and answers for you, and keeps nothing of yours." |
-| Choice | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
-| Choice, iPhone, after the trial | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
+| Choice | "An online service you choose" / "A company you have an account with reads what you keep. You’ll copy three details from its website." |
+| Choice, iPhone, after the trial | "Apple Intelligence" / "Apple’s servers read what you keep. No account or key." |
 | Choice | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
 | Bar | "Continue" · "Not now" |
 
@@ -724,10 +724,10 @@ phone alone has only its own.
 |---|---|
 | Step label | "Nocturne’s mind online · step 1 of 4" |
 | Title | "Have Nocturne’s mind work online, with a service you choose." |
-| Sent | "The words of what you keep, your journal entries and good things, and your questions. Only words: what you typed, and what this phone heard in your voice notes." |
-| Never sent | "Your photos and recordings themselves, your check-ins, reflections and recaps, and anything you marked private." |
+| Sent | "What you keep, so it can be read: your notes, photos and voice notes, your journal and check-ins. And your questions, with what answers them." |
+| Private | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." |
 | You need | "An account with that service. Most charge a little for what they read and write. Setting up means copying three details from its website." |
-| Expander, closed | "Everything that is sent, and what stays here" |
+| Expander, closed | "Everything that is sent" |
 | Bar | "Continue" · "Not now" · "Nothing is turned on until the last step." |
 
 Behind the expander: step 4's sections, in the same order, with its example.
@@ -755,12 +755,12 @@ disabled reasons.
 |---|---|
 | Step label | "Nocturne’s mind online · step 4 of 4" |
 | Title | "Before you turn this on, here is exactly what happens." |
-| Lead | "While this is on, the words of what you keep and your questions leave this phone. Your photos, recordings and check-ins stay here." |
-| What is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
+| Lead | "While this is on, what you keep and your questions go from this phone to {host}, so it can read them, write your page and answer." |
+| What is sent | "Each thing you keep, so it can be read: its words, and the photo or recording itself when there is one. Your journal entries, good things and check-ins, so it can write your reflections and recaps. Each question, with the lines that answer it. Each night, the lines your page is written from. For example:" |
 | Example | "Kept 7:40 am · Dentist moved to Thursday at 9, Bridge Street." |
 | Where it goes | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Who can see it | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." / "Nocturne can’t check what the service keeps, for how long, or whether it learns from what you send. Read its privacy page before you turn this on." (0011) |
-| Never sent | "Photos and recordings themselves" · "Your check-ins. With a mind online, Nocturne writes no reflections or recaps, since they are written from your check-ins." · "Things you marked private" |
+| Private | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." / "Things you let go are never sent." |
 | What changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Changing your mind | "{limit line}" · "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." · "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Bar | "Turn on" · "Not now" |
@@ -807,7 +807,7 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 | Row | Value |
 |---|---|
 | "Its mind" | "{service}, online" |
-| "What goes" | "Words of what you keep, and questions" |
+| "What goes" | "What you keep, and questions" |
 | "See what was sent" | Opens the Sent online list on the phone, 90 days, as 0011 |
 | "This month" | "{count} things read and answered · limit {limit}" |
 | "Change…" | Back to the choice |
@@ -825,7 +825,8 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 
 ### Checks before the online mind ships
 
-As [0020](/adr/0020-an-online-mind-on-a-phone.md#checks-before-it-ships) states them, on an Android
+Off means no traffic; on means only the one chosen host; nothing else. As
+[0020](/adr/0020-an-online-mind-on-a-phone.md#checks-before-it-ships) states them, on an Android
 emulator with every packet it sends captured and a stand-in provider at an address no one else uses.
 No real provider, address or key is in a test, a fixture or this page.
 
@@ -833,7 +834,7 @@ No real provider, address or key is in a test, a fixture or this page.
 |---|---|
 | Off | A phone alone with the mind never turned on, and again after "Turn off", reaches nothing but consented app downloads |
 | On, one host | Every connection goes to the one host entered: the check, one look at its list of models, reading, the page and answers. Nothing else, no redirect followed |
-| What goes | A fixture memory with check-ins, a thing marked private, a photo and a recording, each with a marker phrase, is read, paged and asked about. No request holds a marker phrase or a byte of an original |
+| Nothing else | No other host, nothing from another process of the app, and nothing while there is nothing to read or ask. What goes is not checked item by item: the person chose what the mind may read (owner, 2026-11-23) |
 | The record | The Sent online list matches what the stand-in received, request for request |
 | Turning off | Nothing goes after the off mark; the key is gone from the safe place |
 | The limit | With a limit of 3 things, the fourth waits and the paused words show |
@@ -885,7 +886,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | This phone, restore hint | "What’s on this phone now is put aside first, never deleted." |
 | Delete everything, phone | "Delete everything on this phone?" / "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. A backup you saved elsewhere isn’t touched." / "Type “delete everything” to go ahead" / "Delete everything" / "Keep everything" |
 | Item, kept | "Kept" / "{how} · {day}, {time}" / "Typed on this phone" / "Taken on this phone" / "Chosen from your photos" / "Recorded on this phone" / "Shared from another app" / "From your calendar" / "From Health" / "Kept on {device}" |
-| Item, private | "Private" / "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest." / "Journal entries can’t be marked private." |
+| Item, private | "Private" / "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask. If your memory moves, it moves too, locked like the rest." / "Journal entries can’t be marked private." |
 | Item, delete | "This will be deleted from this phone for good, along with anything Nocturne worked out from it." / "These will be deleted from this phone for good, along with anything Nocturne worked out from them." |
 | Copy, step 1 | "A locked copy online · step 1 of 2" / "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
 | Copy, what goes | "Everything you kept, in one locked copy, made again every day. Photos and recordings go once each." |
@@ -921,20 +922,20 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Copy, another phone | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." / "Make this phone the one in use" |
 | Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
 | Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and shows you its code. It reads and answers for you, and keeps nothing of yours." |
-| Mind, service | "An online service you choose" / "A company you have an account with reads the words of what you keep. You’ll copy three details from its website." |
-| Mind, Apple | "Apple Intelligence" / "Apple’s servers read the words of what you keep. No account or key." |
+| Mind, service | "An online service you choose" / "A company you have an account with reads what you keep. You’ll copy three details from its website." |
+| Mind, Apple | "Apple Intelligence" / "Apple’s servers read what you keep. No account or key." |
 | Mind, own computer | "A computer of your own" / "Install Nocturne on your computer and move your memory there. This phone then works with it." |
 | Mind online, step 1 | "Nocturne’s mind online · step {n} of 4" / "Have Nocturne’s mind work online, with a service you choose." |
-| Mind online, sent | "The words of what you keep, your journal entries and good things, and your questions. Only words: what you typed, and what this phone heard in your voice notes." |
-| Mind online, never | "Your photos and recordings themselves, your check-ins, reflections and recaps, and anything you marked private." |
+| Mind online, sent | "What you keep, so it can be read: your notes, photos and voice notes, your journal and check-ins. And your questions, with what answers them." |
+| Mind online, private | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." |
 | Mind online, need | "An account with that service. Most charge a little for what they read and write. Setting up means copying three details from its website." |
 | Mind online, details | "Your service’s details" / "Find these on your service’s website, often under developer settings or keys." / "Checking with {host}…" / "{host} answered. It works." |
 | Mind online, limit | "How much may go online each month?" / "A number of things read and answered" |
-| Mind online, lead | "While this is on, the words of what you keep and your questions leave this phone. Your photos, recordings and check-ins stay here." |
+| Mind online, lead | "While this is on, what you keep and your questions go from this phone to {host}, so it can read them, write your page and answer." |
 | Mind online, what is sent | "The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:" |
 | Mind online, where | "This phone sends it straight to {host}, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers." |
 | Mind online, sees | "{host} can see everything sent, when it is sent, and this phone’s internet address. What it uses, {used}, may be made by another company that the service passes things to." |
-| Mind online, never list | "Photos and recordings themselves" / "Your check-ins. With a mind online, Nocturne writes no reflections or recaps, since they are written from your check-ins." / "Things you marked private" |
+| Mind online, private line | "Marking something private keeps it from coming up on its own, in reminders and notifications. It still goes to be read and helps answer what you ask." / "Things you let go are never sent." |
 | Mind online, changes | "{host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. Reading happens when this phone allows it, often while it charges. If it can’t be reached, what you keep waits to be read and Ask finds by words." |
 | Mind online, changing | "Turn it off at any time in {thisPhone}. What was already read stays in your memory on this phone." / "Every answer and every page says where it was written. {seeWhatWasSent} shows the exact words." |
 | Mind online, bar | "Turn on" / "Not now" |
@@ -944,7 +945,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Reading | "Reading what you kept" / "Nocturne is reading {count} things you kept, a few at a time. Your first page comes tomorrow morning." / "{done} of {count} read" / "Reading carries on when this phone allows it, often while it charges." |
 | Written by | "Written by {host}" / "Written by Apple Intelligence" |
 | Mind group | "Nocturne’s mind online" |
-| Mind rows | "What goes" / "Words of what you keep, and questions" / "This month" / "{count} things read and answered · limit {limit}" |
+| Mind rows | "What goes" / "What you keep, and questions" / "This month" / "{count} things read and answered · limit {limit}" |
 | Mind, turn off | "Turn off Nocturne’s mind online?" / "What was read stays in your memory. What you keep from now waits to be read." / "Turn off" / "Keep it on" |
 | Mind, unreachable | "Written {day}. {host} hasn’t answered since {time}." / "Answers are back when {host} is." |
 | Mind, offline | "This phone isn’t online. What you keep waits to be read." |
@@ -970,7 +971,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | After Delete everything (pending) | "Everything was deleted from this phone." |
 | Voice, Android line | "Next, Android asks to let Nocturne use the microphone. Nocturne records only while you hold Record, and turns voice notes into words on this phone." |
 | Voice, iPhone line | "Next, iPhone asks to let Nocturne recognise speech. Nocturne asks for it on this iPhone only, so your voice notes become words without leaving it." |
-| Voice, iPhone purpose | "Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it." |
+| Voice, iPhone purpose | "Nocturne turns your voice notes into words on this iPhone so you can find them." |
 | Voice, This phone row | "Voice notes in words" / "Off" / "Turn on" / "Off in your phone’s settings" / "Open phone settings" |
 | Find, clear | "Clear" |
 | Settings screens | "Done" / "Kept so far" / "What Nocturne already kept stays until you delete it." / "Delete what was kept…" |

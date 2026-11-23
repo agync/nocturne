@@ -56,7 +56,7 @@ showing the household code, or by inviting one person to keep their memory there
 | What the household computer keeps | Nothing about the phone: no name, key, list, memory, file, copy, log or count. It keeps only its one current code, which any phone holding it may use | That person's memory, locked |
 | Needs | A phone that keeps its own memory ([Phone first](phone-first.md)) | Nothing new on the phone: it works as a companion of that store |
 | Overnight | The phone drives its own tidy when it is charging and can reach the household | The household computer tidies overnight, with the key the phone leaves for the night ([decision 13](phone-parity.md#decisions)) |
-| Things marked private | Never sent ([decision 15](phone-parity.md#decisions)) | Read like everything else: it is their home |
+| Things marked private | Sent when a request needs them, like everything else ([decision 15](phone-parity.md#decisions), changed by decision 37) | Read like everything else: it is their home |
 | When the household computer is away | The phone works as a phone alone: keeps, finds by words; reading waits | The phone keeps recording and never reads on its own; things wait to go across |
 | On Sam's desktop, which has its own owner | Yes | Yes |
 
@@ -141,7 +141,7 @@ The screen before joining. The words are exact, and appear the same in This phon
 | Can’t see heading | "{runner} can’t see, in Nocturne" |
 | Can’t see | "Which phone is yours, or that it ever borrowed the mind" · "What you keep, ask or write" · "Your answers, your page or your journal" · "Your calendar and health" · "When or how much you used the mind" |
 | Nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing of yours and nothing about this phone: no copy, no file, no name, and no record of what it read or when." |
-| Private | "Things you marked private never go to {household}." |
+| Private | "Marking something private keeps it from coming up on its own. It still helps answer what you ask." |
 | Others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
 | The limit | "Someone with full control of {household} could change Nocturne on it to look at what it reads. Nocturne can’t prevent that. Join only a household you trust." |
 | Bar | "Join" · "Back" |
@@ -471,7 +471,7 @@ can be revisited.
 | See, can | "{runner} can see" / "That a phone with the code is using the mind right now, not which one" |
 | See, can’t | "{runner} can’t see, in Nocturne" / "Which phone is yours, or that it ever borrowed the mind" / "What you keep, ask or write" / "Your answers, your page or your journal" / "Your calendar and health" / "When or how much you used the mind" |
 | See, nothing kept | "{household} reads each thing in its memory while it works on it, then lets it go. It keeps nothing of yours and nothing about this phone: no copy, no file, no name, and no record of what it read or when." |
-| See, private | "Things you marked private never go to {household}." |
+| See, private | "Marking something private keeps it from coming up on its own. It still helps answer what you ask." |
 | See, others | "No one else in the household sees anything of yours, and you see nothing of theirs." |
 | See, limit, borrowing | "Someone with full control of {household} could change Nocturne on it to look at what it reads. Nocturne can’t prevent that. Join only a household you trust." |
 | See, bar | "Join" / "Back" |

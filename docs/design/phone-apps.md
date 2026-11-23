@@ -308,7 +308,7 @@ calendar and health add.
 | Last night | When sleep is brought: "Last night · {duration} asleep" and the night's bar ([Health from the phone](phone-health.md#on-the-page)) |
 | In your calendar today | Up to five rows, time on the left, then the title, then the place in the secondary ink; "{count} more today" when there are more. All-day entries first, as "All day". Each row's receipt chip says "Calendar · {calendar}" |
 | The page's sections | As on the phone page: what changed, needs you, let go, the question |
-| Foot | "Things you marked private stay on your computer." (Phone page) |
+| Foot | "Things you marked private stay on your computer." (Phone page). Removed by [What private means](only-marked-private.md#on-a-companion-phone-and-a-households-mind) (2026-11-23) |
 | Keep | The floating Keep button |
 
 "In your calendar today" comes from the computer's page, so it holds what every paired phone
@@ -653,7 +653,7 @@ The same rules as everything else, with nothing added for the calendar.
 | Shown in the app, on the page, in the journal, on a paired phone, in Print and export | Yes |
 | Read aloud, in a notification, in the tray, on the lock screen | As any ordinary kept thing: yes on the page read aloud, unless marked private. Nocturne has no notifications or lock screen content on the phone |
 | Online answers | A sentence may go when it helps answer a question; health, money and ID ones are kept back by default |
-| Marked private | Possible on the item's own page, as for any kept thing; a private entry stays off phones and out of online answers |
+| Marked private | Possible on the item's own page, as for any kept thing; a private entry never comes up on its own, and since 2026-11-23 shows on a paired phone and may help an online answer ([What private means](only-marked-private.md)) |
 | Local only | Read on the phone, sent only to the person's own computer through the sealed channel. No calendar company is contacted by Nocturne |
 | Read only | Nocturne never writes to the phone's calendar |
 

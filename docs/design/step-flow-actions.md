@@ -29,6 +29,8 @@ before anything is turned on. All of it is in the interface.
 | The line in the bar | Kept: "Nothing is turned on until the last step." on Online answers steps 1 to 4 |
 | Narrow windows | Below 720 pixels wide, the keep or ask bar is hidden while a step flow is open |
 | Health, money and ID details (2026-11-22) | Removed from every step: Nocturne never judges a person's data, and only what they mark private is held back ([Only what you mark private is held back](only-marked-private.md)) |
+| Private and what is sent (2026-11-23, proposed) | "Never sent" becomes "Private" on step 1 and "What stays here" behind the expander and on step 5: a private mark keeps nothing out of an answer ([What private means](only-marked-private.md#the-explanation-at-setup)) |
+| Private things on a phone (2026-11-23, proposed) | Away from home's "Things you marked private stay on this computer." and its "Private things" row go: a paired phone shows private things ([What private means](only-marked-private.md#on-a-companion-phone-and-a-households-mind)) |
 | Online answers step 1 | Lightened: three short true lines, one expander holding the full detail, the side column folded into it |
 | Online answers step 5 | Gains a "What changes" section and a corrected lead, so everything step 1 folds away is shown in full before the person agrees |
 | Away from home step 1 | Lightened the same way, now, with the full detail repeated before anything is downloaded or turned on |

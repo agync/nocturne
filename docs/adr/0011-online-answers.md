@@ -12,6 +12,12 @@ Amended 2026-11-22: memories about health, money or ID are no longer kept back. 
 that Nocturne never judges a person's data, so only what the person marks private is held back
 ([Only what you mark private is held back](/design/only-marked-private.md)).
 
+Amended 2026-11-23 (owner): an answer online gets what a good answer needs, things marked private
+included. Private decides only what comes up on its own (notifications, reminders and updates), and
+never keeps a memory out of an answer the person asks for. The safeguard is a short, calm
+explanation of what is sent at the moment the person sets up Online answers
+([What private means](/design/only-marked-private.md#revised-2026-11-23-private-is-about-what-comes-up-on-its-own)).
+
 ## Context
 
 A small computer answers slowly and sometimes weakly. A person who already has an account with a
@@ -31,10 +37,10 @@ not make Nocturne depend on any one company.
   the provider through Lemonade's experimental `cloud_providers` feature. The app has no HTTPS
   client to a provider.
 - **Only the last step.** Only Ask can reach the route. Reading, the overnight tidy and the page never
-  do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; check-ins, reflections and recaps never are. Private memories are never
-  sent, nor memories being forgotten or let go. Nothing else about a memory keeps it back: Nocturne
-  does not judge whether it is about health, money, ID or anything else, so a person keeps
-  something here by marking it private. Phones use the route only while Away from home is on and the person has left phones on in its settings.
+  do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; Ask does not search check-ins, reflections and recaps, so none is. Memories being forgotten or let go are never
+  sent. Nothing else about a memory keeps it back: Nocturne does not judge whether it is about
+  health, money, ID or anything else, and since 2026-11-23 a private mark does not keep it back
+  either. Phones use the route only while Away from home is on and the person has left phones on in its settings.
 - **Bounded.** One request per question, no retry, a per-month limit that applies only if the person sets one, and a
   fallback to answering on this computer. Every answer says where it was written. Nothing ever goes
   from the computer to online automatically, and an answer that came back "not sure" is not sent
@@ -91,7 +97,8 @@ bump re-checks them.
   engine starts while Online answers is on.
 - The engine's environment, which system crash records can hold, never holds the key; it is in the
   engine's memory only. Rotate the key at the provider if you think it was exposed.
-- What the person has not marked private may go when it answers a question, whatever it is about.
+- Anything the person kept may go when it answers a question, whatever it is about and whether or
+  not it is marked private (since 2026-11-23).
   Until 2026-11-22 a check left out memories that looked like health, money or ID details unless
   the person allowed them; it was removed because it judged the person's data, and a best effort
   that could miss some promised more than it held.
