@@ -801,6 +801,19 @@ pub fn store_kept_counts(dir: &Path) -> Result<KeptCounts> {
     kept_counts_in(&conn)
 }
 
+/// Whether a store folder that is not open holds pages or reflections written there. Read only.
+pub fn store_has_writing(dir: &Path) -> Result<bool> {
+    let conn = Connection::open_with_flags(
+        dir.join(crate::DB_FILE),
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM reflections)",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
 /// The backup file, counted as age reads it, so progress can report bytes of the file itself.
 struct CountingFile {
     file: std::fs::File,

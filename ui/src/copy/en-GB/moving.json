@@ -105,5 +105,13 @@
   "moving.phone.used.warning": "Nothing from this phone went to {computer}, so removing it deletes it for good.",
   "moving.phone.aside.bring": "Bring its things to {computer}…",
   "moving.phone.aside.remove": "Remove…",
+  "moving.phone.aside.removeAsk": "Remove what was put aside {day}?",
+  "moving.phone.aside.removeBody": "Its things are on {computer} now. This removes the copy left on this phone.",
+  "moving.phone.aside.removeWriting": "Pages and reflections written on this phone go with it.",
+  "moving.phone.aside.removeYes": "Remove",
+  "moving.phone.aside.keepIt": "Keep it",
+  "moving.phone.aside.deleteAsk": "Delete what was put aside {day} for good?",
+  "moving.phone.aside.deleteBody": "Nothing from it went to {computer}. This deletes {things, plural, one {# thing} other {# things}} kept, {entries, plural, one {# journal entry} other {# journal entries}} and {media, plural, one {# photo or recording} other {# photos and recordings}}, and they can’t be brought back.",
+  "moving.phone.aside.deleteYes": "Delete for good",
   "moving.kept.when": "{day}, {time}"
 }

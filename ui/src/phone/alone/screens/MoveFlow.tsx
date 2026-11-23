@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import type { BroughtCounts, MemoryCounts } from "../../../engine/bindings";
+import type { BroughtCounts, KeptCounts, MemoryCounts } from "../../../engine/bindings";
 import {
   type MoveEnded,
   type MoveFacts,
@@ -324,6 +324,12 @@ export interface MoveAside {
   /** Its things are on the computer: it can only be removed. */
   onComputer: boolean;
   keepUntil: string | null;
+  /** When it was put aside. */
+  at?: string | null;
+  /** What it holds; none when it cannot be read. */
+  counts?: KeptCounts | null;
+  /** It holds pages or reflections written on this phone. */
+  writing?: boolean;
 }
 
 /** What This phone can do with the memory a move put aside, once the phone is a companion. */
