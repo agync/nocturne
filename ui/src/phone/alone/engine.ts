@@ -3,7 +3,13 @@
 // reaches a network; there is no computer to be away from, so the connection is always open.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { PhoneHello, PhoneKept, RemoteAnswer, RemoteCall } from "../../engine/bindings";
+import type {
+  AskDelta,
+  PhoneHello,
+  PhoneKept,
+  RemoteAnswer,
+  RemoteCall,
+} from "../../engine/bindings";
 import { toBase64Url } from "../bytes";
 import {
   type ConnectedEngine,
@@ -52,6 +58,22 @@ async function noted(kept: PhoneKept, marks: KeepMarks | undefined): Promise<Pho
       call: { cmd: "setKeptHow", id: kept.item.id, how: marks.how },
     }).catch(() => undefined);
   return kept;
+}
+
+/** The first step of a question on this phone, before anything is found. */
+function searching(askId: string): AskDelta {
+  return {
+    askId,
+    phase: "searching",
+    textDelta: null,
+    receipts: [],
+    memoryIds: [],
+    near: [],
+    found: null,
+    etaSeconds: null,
+    plain: false,
+    answeredBy: null,
+  };
 }
 
 const once = async <K extends RemoteAnswer["type"]>(call: RemoteCall, kind: K) =>
@@ -186,16 +208,21 @@ export function createLocalEngine(options: {
     async unkeep(id) {
       await once({ cmd: "unkeep", id }, "done");
     },
-    // The phone's own mind answers whole: one step, the last, with every word of the answer.
+    // The phone's own mind answers whole: a first step naming the question, so Stop can end
+    // it, then the last, with every word of the answer.
     async ask(question, onDelta) {
+      const askId = crypto.randomUUID();
+      onDelta(searching(askId));
       const { delta } = expect(
-        await run<RemoteAnswer>("home_call", { call: { cmd: "ask", question } }),
+        await run<RemoteAnswer>("home_ask", { question, askId }),
         "askDelta",
       );
-      onDelta(delta);
-      return delta.askId;
+      onDelta({ ...delta, askId });
+      return askId;
     },
-    async cancelAsk() {},
+    async cancelAsk(askId) {
+      await run("home_cancel_ask", { askId });
+    },
     async seeOnlineChange() {},
     async getPage(date) {
       return (await once({ cmd: "getPage", date: date ?? null }, "page")).page;

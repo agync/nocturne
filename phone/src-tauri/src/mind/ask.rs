@@ -4,7 +4,7 @@
 //! the mind off, or a store that will not open, the answer is unavailable.
 
 use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, NearMatch};
-use nocturne_engine::{AnswerMeta, Fact, Hit, Mind, UseKind, is_source_line};
+use nocturne_engine::{AnswerMeta, Fact, Hit, UseKind, is_source_line};
 use tokio::sync::mpsc;
 
 use super::{PhoneMind, lock};
@@ -12,6 +12,8 @@ use crate::home::Home;
 
 /// The most remembered lines handed to the mind for one question.
 const LINES: usize = 12;
+/// Questions stopped before they began that are remembered, the oldest let go first.
+const STOPPED_EARLY: usize = 8;
 /// The nearest lines shown when the answer is not sure.
 const NEAR: usize = 2;
 
@@ -41,19 +43,34 @@ fn bold_matches(text: &str, spans: &[String], cited: &[String]) -> bool {
 
 impl PhoneMind {
     /// Answers `question` from the phone's memory, telling `out` each step; the last is
-    /// terminal (`done`, `notSure`, `nothing` or `unavailable`). Blocks on `rt`: call it off the
+    /// terminal (`done`, `notSure`, `nothing` or `unavailable`). `ask_id` names it for
+    /// [`PhoneMind::stop_ask`]; one is made when none is given. Blocks on `rt`: call it off the
     /// async workers.
     pub fn ask(
         &self,
         home: &Home,
         rt: &tokio::runtime::Handle,
+        ask_id: Option<&str>,
         question: &str,
         out: &mut dyn FnMut(AskDelta),
     ) {
-        let ask_id: String = nocturne_channel::crypto::random::<8>()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let ask_id: String = match ask_id {
+            Some(id) => id.to_string(),
+            None => nocturne_channel::crypto::random::<8>()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect(),
+        };
+        let (stop_tx, stop) = tokio::sync::watch::channel(false);
+        {
+            let mut early = lock(&self.stopped_early);
+            if let Some(at) = early.iter().position(|id| *id == ask_id) {
+                early.remove(at);
+                return out(delta(&ask_id, AskPhase::Unavailable));
+            }
+            lock(&self.asking).insert(ask_id.clone(), stop_tx);
+        }
+        let _asked = Asked(self, &ask_id);
         let question = question.trim();
         let Some(on) = lock(&self.on).clone() else {
             return out(delta(&ask_id, AskPhase::Unavailable));
@@ -116,6 +133,9 @@ impl PhoneMind {
                 AskPhase::Nothing
             }));
         }
+        if *stop.borrow() {
+            return out(end(AskPhase::Unavailable));
+        }
         let facts: Vec<Fact> = hits.iter().map(|h| Fact::from(h.memory.clone())).collect();
         let mut found = delta(&ask_id, AskPhase::Reading);
         found.found = Some(facts.len() as u32);
@@ -126,7 +146,7 @@ impl PhoneMind {
         let mind = on.mind.clone();
         let mut said = String::new();
         let meta: Result<AnswerMeta, _> = rt.block_on(async {
-            let answering = mind.answer(question, &facts, tx);
+            let answering = mind.answer_until(question, &facts, tx, stop.clone());
             tokio::pin!(answering);
             loop {
                 tokio::select! {
@@ -149,10 +169,17 @@ impl PhoneMind {
             }
         });
         let meta = match meta {
+            // Answered: counted, as the service did the work, though a Stop since keeps it
+            // from showing.
             Ok(meta) => {
                 self.count(1);
+                if *stop.borrow() {
+                    return out(end(AskPhase::Unavailable));
+                }
                 meta
             }
+            // Stopped: not answered, and not counted.
+            Err(_) if *stop.borrow() => return out(end(AskPhase::Unavailable)),
             Err(x) => {
                 tracing::warn!("the online mind did not answer: {x}");
                 return out(end(AskPhase::Unavailable));
@@ -201,13 +228,41 @@ impl PhoneMind {
     }
 }
 
+/// Removes a question from those under way as it ends.
+struct Asked<'a>(&'a PhoneMind, &'a str);
+
+impl Drop for Asked<'_> {
+    fn drop(&mut self) {
+        lock(&self.0.asking).remove(self.1);
+    }
+}
+
 impl PhoneMind {
+    /// Stops the question `ask_id`: its request to the service is dropped, and it is not
+    /// answered, nor counted unless the service had already answered. A question not begun yet
+    /// is stopped as it begins; the last few such are remembered.
+    pub fn stop_ask(&self, ask_id: &str) {
+        let mut early = lock(&self.stopped_early);
+        match lock(&self.asking).get(ask_id) {
+            Some(stop) => {
+                stop.send_replace(true);
+            }
+            None => {
+                if early.len() >= STOPPED_EARLY {
+                    early.remove(0);
+                }
+                early.push(ask_id.to_string());
+            }
+        }
+    }
+
     /// A screen's `Ask` call, answered whole: the terminal step, with every word of the answer
     /// as its `text_delta`. With the mind off it is `NotReady`, as before a mind was chosen.
     pub fn answer_call(
         &self,
         home: &Home,
         rt: &tokio::runtime::Handle,
+        ask_id: Option<&str>,
         question: &str,
     ) -> nocturne_contract::RemoteAnswer {
         use nocturne_contract::{PhoneError, RemoteAnswer};
@@ -218,7 +273,7 @@ impl PhoneMind {
         }
         let mut said = String::new();
         let mut last = None;
-        self.ask(home, rt, question, &mut |d| match d.phase {
+        self.ask(home, rt, ask_id, question, &mut |d| match d.phase {
             AskPhase::Streaming => said.push_str(d.text_delta.as_deref().unwrap_or_default()),
             _ => last = Some(d),
         });

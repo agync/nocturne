@@ -510,9 +510,13 @@ fn deleting_everything_takes_the_key_the_choice_and_the_sent_list() {
 
 impl World {
     fn ask(&self, question: &str) -> Vec<AskDelta> {
+        self.ask_as(None, question)
+    }
+
+    fn ask_as(&self, id: Option<&str>, question: &str) -> Vec<AskDelta> {
         let mut steps = Vec::new();
         self.mind
-            .ask(&self.home, self.rt.handle(), question, &mut |d| {
+            .ask(&self.home, self.rt.handle(), id, question, &mut |d| {
                 steps.push(d)
             });
         steps
@@ -580,7 +584,7 @@ fn with_the_mind_off_a_question_reaches_nothing() {
     );
     let call = w
         .mind
-        .answer_call(&w.home, w.rt.handle(), "Where does Ana live?");
+        .answer_call(&w.home, w.rt.handle(), None, "Where does Ana live?");
     assert!(matches!(call, RemoteAnswer::Error { .. }));
     assert!(w.stand_in.seen().is_empty());
 }
@@ -983,4 +987,58 @@ fn a_service_at_home_that_cant_be_found_is_not_answering_and_lists_nothing() {
         "{status:?}"
     );
     assert_eq!(w.mind.sent(1000, None).len(), rows);
+}
+
+#[test]
+fn a_stopped_question_is_dropped_unanswered_and_uncounted() {
+    use super::status::MindStatus;
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.read_all();
+    let (rows, month, chats) = (
+        w.mind.sent(1000, None).len(),
+        w.mind.month().count,
+        w.stand_in.chats().len(),
+    );
+
+    // Stopped before it left: nothing reaches the service, nothing is listed or counted.
+    w.mind.stop_ask("q0");
+    let steps = w.ask_as(Some("q0"), "Where does Ana live?");
+    assert!(
+        steps
+            .iter()
+            .all(|d| d.text_delta.is_none() && d.phase != AskPhase::Done)
+    );
+    assert_eq!(w.stand_in.chats().len(), chats);
+    assert_eq!(w.mind.sent(1000, None).len(), rows);
+
+    // Stopped while the service is slow: the request is dropped at once.
+    w.stand_in.always(Answer::Hang);
+    let steps = std::thread::scope(|scope| {
+        let asking = scope.spawn(|| w.ask_as(Some("q1"), "Where does Ana live?"));
+        let began = std::time::Instant::now();
+        while w.stand_in.chats().len() == chats {
+            assert!(began.elapsed() < Duration::from_secs(10), "no request came");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let stopped = std::time::Instant::now();
+        w.mind.stop_ask("q1");
+        let steps = asking.join().unwrap();
+        assert!(
+            stopped.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            stopped.elapsed()
+        );
+        steps
+    });
+    let last = steps.last().unwrap();
+    assert_ne!(last.phase, AskPhase::Done);
+    assert!(steps.iter().all(|d| d.text_delta.is_none()));
+    assert_eq!(w.mind.month().count, month);
+    // It left, so it is listed, and it says nothing about the service.
+    let sent = w.mind.sent(1000, None);
+    assert_eq!(sent.len(), rows + 1);
+    assert_eq!(sent[0].sent_for, super::SentFor::Answer);
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
 }

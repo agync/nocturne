@@ -439,6 +439,28 @@ describe("When the service or the phone is not online", () => {
   });
 });
 
+describe("The answer screen on a phone alone", () => {
+  async function ask(question: string) {
+    await app("m=kept&mind=on");
+    await screen.findByText("Written by answers.example");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your question" }), {
+      target: { value: question },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Ask" }));
+  }
+
+  it("stops a question: the request is dropped and nothing is shown", async () => {
+    await ask("tell me slowly");
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    expect(await screen.findByText("Stopped.")).toBeVisible();
+    await waitFor(() => expect(scriptedMind.stopped).toHaveLength(1));
+    await new Promise((settle) => setTimeout(settle, 20));
+    expect(screen.queryByText("No answer came this time. Ask again in a moment.")).toBeNull();
+    expect(screen.getByText("Stopped.")).toBeVisible();
+  });
+});
+
 describe("Delete everything with a mind", () => {
   it("erases the mind in the one step, without turning it off first", async () => {
     history.replaceState(null, "", "/?m=kept&s=welcome&mind=on");

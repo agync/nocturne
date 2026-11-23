@@ -20,6 +20,7 @@ pub mod status;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -150,6 +151,10 @@ impl Noting {
             return;
         }
         self.sent.note(job, &self.host, &self.model, exchange);
+        // A request stopped here says nothing of the service.
+        if exchange.stopped {
+            return;
+        }
         let mut trouble = lock(&self.trouble);
         *trouble = status::Trouble::after(exchange.status, self.clock.now(), *trouble);
     }
@@ -231,6 +236,10 @@ pub struct PhoneMind {
     /// A new mind is in the slot: the next pass tries again what waited for the last one.
     retry: AtomicBool,
     looks: Mutex<Looks>,
+    /// Questions under way, by their ids, each with its way to stop it.
+    asking: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
+    /// Questions stopped before they began: none is asked when it does.
+    stopped_early: Mutex<Vec<String>>,
     /// Looks names up in place of the phone, and whether the service then counts as online
     /// rather than at home, so a test can take it offline.
     #[cfg(test)]
@@ -255,6 +264,8 @@ impl PhoneMind {
             thinking: Arc::default(),
             retry: AtomicBool::new(false),
             looks: Mutex::default(),
+            asking: Mutex::default(),
+            stopped_early: Mutex::default(),
             #[cfg(test)]
             lookup: Mutex::default(),
         };

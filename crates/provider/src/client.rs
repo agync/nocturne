@@ -36,7 +36,12 @@ pub struct Exchange {
     pub bytes_down: u64,
     pub seconds: f32,
     pub cost_usd: Option<f64>,
+    /// Stopped here before an answer came, so it says nothing of the provider.
+    pub stopped: bool,
 }
+
+/// Stops one request when it turns true ([`Provider::chat_until`]).
+pub type Stop = tokio::sync::watch::Receiver<bool>;
 
 /// A reply the provider wrote.
 #[derive(Debug, Clone, PartialEq)]
@@ -244,12 +249,23 @@ impl Provider {
     }
 
     /// One chat request: `body` with the model set, answered within `timeout`.
-    pub async fn chat(&self, mut body: Value, timeout: Duration) -> Result<Reply, Failed> {
+    pub async fn chat(&self, body: Value, timeout: Duration) -> Result<Reply, Failed> {
+        self.chat_until(body, timeout, None).await
+    }
+
+    /// [`Provider::chat`], dropped as soon as `stop` turns true: never sent when it already
+    /// has, and otherwise ended where it is, as a request that left.
+    pub async fn chat_until(
+        &self,
+        mut body: Value,
+        timeout: Duration,
+        stop: Option<Stop>,
+    ) -> Result<Reply, Failed> {
         body["model"] = json!(self.model);
         body["stream"] = json!(false);
         let started = Instant::now();
         let (status, bytes, mut exchange) = self
-            .send("chat/completions", Some(&body), timeout, started)
+            .send("chat/completions", Some(&body), timeout, started, stop)
             .await?;
         let reply: Value = match serde_json::from_slice(&bytes) {
             Ok(v) => v,
@@ -277,7 +293,13 @@ impl Provider {
     pub async fn models(&self) -> Result<(Vec<String>, Exchange), Failed> {
         let started = Instant::now();
         let (status, bytes, exchange) = self
-            .send("models", None, Duration::from_secs(CHECK_SECONDS), started)
+            .send(
+                "models",
+                None,
+                Duration::from_secs(CHECK_SECONDS),
+                started,
+                None,
+            )
             .await?;
         let Ok(listed) = serde_json::from_slice::<Value>(&bytes) else {
             return Err(failed(OnlineFailure::Other(status), exchange));
@@ -337,31 +359,51 @@ impl Provider {
     }
 
     /// Sends one request to `path` on the one host: a POST of `body`, or a GET without one.
-    /// Answers the status, the reply's bytes and the exchange so far.
+    /// Answers the status, the reply's bytes and the exchange so far. Turning the provider off,
+    /// or `stop`, ends it.
     async fn send(
         &self,
         path: &str,
         body: Option<&Value>,
         timeout: Duration,
         started: Instant,
+        stop: Option<Stop>,
     ) -> Result<(u16, Vec<u8>, Exchange), Failed> {
         let mut stopped = self.stopped.subscribe();
-        if *stopped.borrow_and_update() {
+        let mut stop = stop;
+        if *stopped.borrow_and_update() || stop.as_mut().is_some_and(|s| *s.borrow_and_update()) {
             return Err(never_left(OnlineFailure::Refused));
         }
+        let body = body.map(|b| serde_json::to_vec(b).unwrap_or_default());
+        let bytes_up = body.as_ref().map_or(0, |b| b.len() as u64);
+        let asked_to_stop = async {
+            match stop.as_mut() {
+                Some(s) => drop(s.wait_for(|s| *s).await),
+                None => std::future::pending().await,
+            }
+        };
+        let ended = || {
+            Err(failed(
+                OnlineFailure::Refused,
+                Exchange {
+                    bytes_up,
+                    seconds: started.elapsed().as_secs_f32(),
+                    stopped: true,
+                    ..Exchange::default()
+                },
+            ))
+        };
         tokio::select! {
             done = self.send_now(path, body, timeout, started) => done,
-            _ = stopped.wait_for(|s| *s) => Err(failed(OnlineFailure::Refused, Exchange {
-                seconds: started.elapsed().as_secs_f32(),
-                ..Exchange::default()
-            })),
+            _ = stopped.wait_for(|s| *s) => ended(),
+            () = asked_to_stop => ended(),
         }
     }
 
     async fn send_now(
         &self,
         path: &str,
-        body: Option<&Value>,
+        body: Option<Vec<u8>>,
         timeout: Duration,
         started: Instant,
     ) -> Result<(u16, Vec<u8>, Exchange), Failed> {
@@ -372,8 +414,7 @@ impl Provider {
         auth.set_sensitive(true);
         let mut exchange = Exchange::default();
         let req = match body {
-            Some(body) => {
-                let bytes = serde_json::to_vec(body).unwrap_or_default();
+            Some(bytes) => {
                 exchange.bytes_up = bytes.len() as u64;
                 self.http
                     .post(url)
