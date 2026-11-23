@@ -42,6 +42,7 @@ pub(crate) fn template_headline(date: Date) -> String {
     date.strftime("%A %-d %B").to_string()
 }
 
+/// `kept` is what was read: what still waits to be read is not counted as read.
 pub(crate) fn template_dek(kept: u32, needs: u32, let_go: u32) -> String {
     let things = if kept == 1 { "thing" } else { "things" };
     let need = if needs == 1 { "needs" } else { "need" };
@@ -573,7 +574,11 @@ fn compose(
         edition,
         variant,
         headline: template_headline(day),
-        dek: template_dek(kept_count, needs_total, let_go_count),
+        dek: template_dek(
+            kept_count.saturating_sub(pending),
+            needs_total,
+            let_go_count,
+        ),
         needs_you: needs.into_iter().map(|p| p.line).collect(),
         changed,
         let_go,
@@ -1290,7 +1295,11 @@ fn strip_stale(
         let needs =
             page.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + page.more_needs_you;
         page.headline = template_headline(day);
-        page.dek = template_dek(page.kept_count, needs, page.let_go_count);
+        page.dek = template_dek(
+            page.kept_count.saturating_sub(page.pending),
+            needs,
+            page.let_go_count,
+        );
     }
     Ok(page)
 }
@@ -1491,7 +1500,7 @@ fn edition_page(
             page.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + page.more_needs_you;
         page.headline = template_headline(day);
         page.dek = template_dek(
-            page.kept_count,
+            page.kept_count.saturating_sub(page.pending),
             needs,
             page.let_go_count.saturating_sub(dropped_let_go),
         );
