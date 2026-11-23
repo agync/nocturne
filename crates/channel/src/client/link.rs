@@ -124,6 +124,8 @@ pub enum LinkEnd {
 
 pub(crate) enum Incoming {
     Frame(Vec<u8>),
+    /// The computer is still there and has nothing to send: a ping, or a poll answered empty.
+    Alive,
     End(LinkEnd),
 }
 
@@ -148,26 +150,45 @@ impl Inbox {
     }
 
     pub(crate) async fn next(&mut self, wait: Option<Duration>) -> Got {
+        self.next_by(wait, false).await
+    }
+
+    /// As [`Inbox::next`], but each sign of life (a ping, an empty poll) starts the wait again:
+    /// for an open session, which only silence ends.
+    pub(crate) async fn next_idle(&mut self, wait: Duration) -> Got {
+        self.next_by(Some(wait), true).await
+    }
+
+    async fn next_by(&mut self, wait: Option<Duration>, alive_restarts: bool) -> Got {
         if let Some(end) = self.ended {
             return Got::End(end);
         }
-        let got = match wait {
-            Some(w) => match tokio::time::timeout(w, self.rx.recv()).await {
-                Ok(g) => g,
-                Err(_) => return Got::Timeout,
-            },
-            None => self.rx.recv().await,
-        };
-        match got {
-            Some(Incoming::Frame(f)) => Got::Frame(f),
-            Some(Incoming::End(e)) => {
-                self.ended = Some(e);
-                Got::End(e)
-            }
-            None => {
-                self.ended = Some(LinkEnd::Network);
-                Got::End(LinkEnd::Network)
-            }
+        let mut deadline = wait.map(|w| tokio::time::Instant::now() + w);
+        loop {
+            let got = match deadline {
+                Some(d) => match tokio::time::timeout_at(d, self.rx.recv()).await {
+                    Ok(g) => g,
+                    Err(_) => return Got::Timeout,
+                },
+                None => self.rx.recv().await,
+            };
+            return match got {
+                Some(Incoming::Frame(f)) => Got::Frame(f),
+                Some(Incoming::Alive) => {
+                    if alive_restarts {
+                        deadline = wait.map(|w| tokio::time::Instant::now() + w);
+                    }
+                    continue;
+                }
+                Some(Incoming::End(e)) => {
+                    self.ended = Some(e);
+                    Got::End(e)
+                }
+                None => {
+                    self.ended = Some(LinkEnd::Network);
+                    Got::End(LinkEnd::Network)
+                }
+            };
         }
     }
 }
@@ -291,6 +312,34 @@ mod tests {
         assert_eq!(parse_run(&run).unwrap(), vec![a, b]);
         assert!(parse_run(&run[..run.len() - 1]).is_none());
         assert_eq!(parse_run(&[]).unwrap(), Vec::<Vec<u8>>::new());
+    }
+
+    #[tokio::test]
+    async fn signs_of_life_hold_an_open_session_but_never_a_deadline() {
+        let wait = Duration::from_millis(150);
+        for idle in [false, true] {
+            let (tx, mut inbox) = Inbox::new();
+            let pinger = tokio::spawn(async move {
+                for _ in 0..10 {
+                    tokio::time::sleep(Duration::from_millis(40)).await;
+                    let _ = tx.send(Incoming::Alive);
+                }
+                tx
+            });
+            let began = std::time::Instant::now();
+            let got = match idle {
+                true => inbox.next_idle(wait).await,
+                false => inbox.next(Some(wait)).await,
+            };
+            assert!(matches!(got, Got::Timeout));
+            let waited = began.elapsed();
+            if idle {
+                assert!(waited >= Duration::from_millis(400), "{waited:?}");
+            } else {
+                assert!(waited < Duration::from_millis(300), "{waited:?}");
+            }
+            drop(pinger.await);
+        }
     }
 
     #[test]

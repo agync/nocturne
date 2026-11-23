@@ -3,8 +3,8 @@
 //! `pipe://<name>` reaches the listener registered under that name in this process.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tokio::sync::mpsc;
 
@@ -21,6 +21,7 @@ fn listeners() -> &'static Listeners {
 /// it is closed or dropped.
 pub(crate) struct PipeLink {
     up: Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>,
+    stalled: Arc<AtomicBool>,
 }
 
 impl PipeLink {
@@ -28,17 +29,24 @@ impl PipeLink {
     /// listens under that name.
     pub(crate) fn open(name: &str, inbox: InboxTx) -> Option<PipeLink> {
         let (up, from_phone) = mpsc::unbounded_channel();
+        let stalled = Arc::new(AtomicBool::new(false));
         let conn = Conn {
             from_phone,
             to_phone: inbox,
+            stalled: stalled.clone(),
         };
         listeners().lock().unwrap().get(name)?.send(conn).ok()?;
         Some(PipeLink {
             up: Mutex::new(Some(up)),
+            stalled,
         })
     }
 
     pub(crate) async fn send(&self, frame: Vec<u8>) -> Result<(), ()> {
+        if self.stalled.load(Ordering::SeqCst) {
+            // A socket whose far end stopped reading: the frame never leaves.
+            std::future::pending::<()>().await;
+        }
         match self.up.lock().unwrap().as_ref() {
             Some(up) => up.send(frame).map_err(|_| ()),
             None => Err(()),
@@ -54,6 +62,7 @@ impl PipeLink {
 pub(crate) struct Conn {
     from_phone: mpsc::UnboundedReceiver<Vec<u8>>,
     to_phone: InboxTx,
+    stalled: Arc<AtomicBool>,
 }
 
 impl Conn {
@@ -66,6 +75,16 @@ impl Conn {
 
     pub(crate) fn send(&self, frame: Vec<u8>) {
         let _ = self.to_phone.send(Incoming::Frame(frame));
+    }
+
+    /// A ping: the computer is there, with nothing to say.
+    pub(crate) fn alive(&self) {
+        let _ = self.to_phone.send(Incoming::Alive);
+    }
+
+    /// Stops reading: what the phone sends from now on never leaves it.
+    pub(crate) fn stall(&self) {
+        self.stalled.store(true, Ordering::SeqCst);
     }
 
     /// Ends the connection the way a socket or a poll would.

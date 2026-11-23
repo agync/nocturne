@@ -299,6 +299,138 @@ async fn a_computer_that_never_answers_is_asleep() {
     assert!(phone.identity().is_some());
 }
 
+// Waits -----------------------------------------------------------------------------------------
+
+/// A call on a session that `computer` opened, and the computer's end of that session.
+async fn first_call(
+    computer: &mut Computer,
+    phone: &Phone,
+    call: RemoteCall,
+) -> (
+    tokio::task::JoinHandle<Result<RemoteAnswer, CallError>>,
+    Conn,
+    Channel,
+) {
+    let task = tokio::spawn({
+        let phone = phone.clone();
+        async move { phone.call(call).await }
+    });
+    let mut conn = computer.listener.accept().await;
+    let channel = computer.accept(&mut conn, Computer::hello()).await;
+    (task, conn, channel)
+}
+
+/// Answers the call again on the next session the phone opens.
+async fn answer_again(computer: &mut Computer, mut conn: Conn) -> RemoteCall {
+    let mut channel = computer.accept(&mut conn, Computer::hello()).await;
+    let again = request(&mut conn, &mut channel).await;
+    reply(&conn, &mut channel, again.id, RemoteAnswer::Done);
+    again.call
+}
+
+#[tokio::test]
+async fn a_session_that_falls_silent_is_left_and_the_call_goes_again() {
+    let mut computer = Computer::new();
+    let identity = computer.pair_phone();
+    let options = Options {
+        quiet: Duration::from_millis(300),
+        ..Options::default()
+    };
+    let (phone, _) = phone(&computer, identity, options);
+    let began = std::time::Instant::now();
+    let (task, mut first, mut channel) =
+        first_call(&mut computer, &phone, RemoteCall::GetStatus).await;
+    let asked = request(&mut first, &mut channel).await;
+    assert!(matches!(asked.call, RemoteCall::GetStatus));
+    // A socket gone half way behind a tunnel: no answer, no ping, no close.
+    let second = computer.listener.accept().await;
+    assert!(matches!(
+        answer_again(&mut computer, second).await,
+        RemoteCall::GetStatus
+    ));
+    assert_eq!(task.await.unwrap().unwrap(), RemoteAnswer::Done);
+    assert!(began.elapsed() < Duration::from_secs(3));
+    drop(first);
+}
+
+#[tokio::test]
+async fn a_call_a_live_computer_never_answers_gives_up_alone() {
+    let mut computer = Computer::new();
+    let identity = computer.pair_phone();
+    let options = Options {
+        answer_wait: Duration::from_millis(300),
+        ..Options::default()
+    };
+    let (phone, _) = phone(&computer, identity, options);
+    let (task, mut conn, mut channel) =
+        first_call(&mut computer, &phone, RemoteCall::GetStatus).await;
+    let _ = request(&mut conn, &mut channel).await;
+    // It pings, so the session is not silent; the call alone has waited too long.
+    while !task.is_finished() {
+        conn.alive();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        task.await.unwrap().err(),
+        Some(CallError::Connection {
+            state: Reach::Asleep
+        })
+    );
+    // Nothing went again, and the same session takes the next call.
+    let next = tokio::spawn({
+        let phone = phone.clone();
+        async move { phone.call(RemoteCall::GetStatus).await }
+    });
+    let asked = request(&mut conn, &mut channel).await;
+    reply(&conn, &mut channel, asked.id, RemoteAnswer::Done);
+    assert_eq!(next.await.unwrap().unwrap(), RemoteAnswer::Done);
+    assert!(!another_connection(&mut computer).await);
+}
+
+#[tokio::test]
+async fn an_upload_that_stops_leaving_ends_and_the_phone_is_asleep() {
+    let mut computer = Computer::new();
+    let identity = computer.pair_phone();
+    let options = Options {
+        chunk_wait: Duration::from_millis(300),
+        ..Options::default()
+    };
+    let (phone, _) = phone(&computer, identity, options);
+    let connected = tokio::spawn({
+        let phone = phone.clone();
+        async move { phone.connect().await }
+    });
+    let mut conn = computer.listener.accept().await;
+    let _channel = computer.accept(&mut conn, Computer::hello()).await;
+    assert!(matches!(
+        connected.await.unwrap(),
+        Connection::Connected { .. }
+    ));
+
+    let name: String = crypto::random::<8>()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let file = std::env::temp_dir().join(format!("nocturne-stalled-{name}.bin"));
+    std::fs::write(&file, vec![7u8; 3 * CHUNK]).unwrap();
+    let call = RemoteCall::MemoryDone {
+        size: (3 * CHUNK) as f64,
+        sha256: "a".repeat(64),
+        passphrase: "p".repeat(32),
+    };
+    conn.stall();
+    let began = std::time::Instant::now();
+    let sent = phone.upload_memory(call, &file, |_| {}).await;
+    assert_eq!(
+        sent.err(),
+        Some(CallError::Connection {
+            state: Reach::Asleep
+        })
+    );
+    assert!(began.elapsed() < Duration::from_secs(3));
+    let _ = std::fs::remove_file(&file);
+}
+
 // REVOKED ---------------------------------------------------------------------------------------
 
 #[tokio::test]

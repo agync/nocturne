@@ -14,6 +14,8 @@ mod pipe;
 mod pipe_tests;
 mod poll;
 mod session;
+#[cfg(all(test, feature = "dev-loopback"))]
+mod socket_tests;
 mod ws;
 
 use std::path::Path;
@@ -39,7 +41,7 @@ pub type HttpClient = reqwest::Client;
 use crate::frame::MAX_CHUNK_PAYLOAD;
 use crate::phone::PhoneIdentity;
 use crate::protocol::*;
-use session::{Down, Fault, OpenFailure, OpenInit, Session};
+use session::{Down, Fault, OpenFailure, OpenInit, Session, Waits};
 
 /// Where the phone stands with its computer, as the screens show it. `Removed` is only ever the
 /// result of a sealed revocation; every unsealed failure leaves the keys alone.
@@ -191,6 +193,15 @@ pub struct Options {
     pub handshake: Duration,
     /// Open a replacement session this long before the old one lapses.
     pub renew_margin: Duration,
+    /// How long an open session may hear nothing from the computer (no frame, no ping, no empty
+    /// poll) before it counts as gone: a socket that died half way behind a tunnel says nothing.
+    pub quiet: Duration,
+    /// How long a call waits for its answer, or for each next part of one, before its session is
+    /// left and the call goes again. Calls the computer holds longer on purpose wait longer.
+    pub answer_wait: Duration,
+    /// How long each frame up (a call, or a chunk of an upload) may take to leave; each frame
+    /// that leaves starts it again.
+    pub chunk_wait: Duration,
     /// What a phone app says of itself first on each session. None: it says nothing, and speaks
     /// the builds of this tree.
     pub app: Option<PhoneAppIntro>,
@@ -203,6 +214,10 @@ impl Default for Options {
             socket_timeout: Duration::from_secs(5),
             handshake: Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
             renew_margin: Duration::from_secs(60),
+            // Three of the listener's 30-second pings, or a long poll and a half.
+            quiet: Duration::from_secs(90),
+            answer_wait: Duration::from_secs(120),
+            chunk_wait: Duration::from_secs(60),
             app: None,
         }
     }
@@ -234,6 +249,14 @@ struct Inner {
 pub struct Phone {
     inner: Arc<Inner>,
 }
+
+/// The computer asks its person about an offered memory for up to ten minutes.
+const OFFER_WAIT: Duration = Duration::from_secs(11 * 60);
+/// A moved memory is checked after any backup running there, then unpacked whole.
+const CHECK_WAIT: Duration = Duration::from_secs(30 * 60);
+/// A question's next part, or a look back being written, can wait on a slow mind reading a long
+/// context.
+const ASK_WAIT: Duration = Duration::from_secs(5 * 60);
 
 const TERMINAL: [AskPhase; 4] = [
     AskPhase::Done,
@@ -364,6 +387,11 @@ impl Phone {
             prefer_poll: self.inner.sticky_poll.load(Ordering::SeqCst),
             socket_timeout: self.inner.options.socket_timeout,
             handshake: self.inner.options.handshake,
+            quiet: self.inner.options.quiet,
+            waits: Waits {
+                answer: self.inner.options.answer_wait,
+                chunk: self.inner.options.chunk_wait,
+            },
         };
         let open_no = self.inner.opens.fetch_add(1, Ordering::SeqCst) + 1;
         let weak: Weak<Inner> = Arc::downgrade(&self.inner);
@@ -450,7 +478,8 @@ impl Phone {
                     self.forget();
                     return Err(gone(Reach::Removed));
                 }
-                Err(Fault::Closed) => {
+                // A session that does not answer its first call is no use either.
+                Err(Fault::Closed | Fault::TimedOut) => {
                     s.close();
                     if s.revoked() {
                         self.forget();
@@ -517,6 +546,8 @@ impl Phone {
                 Err(gone(Reach::Asleep))
             }
             Fault::Phone(code) => Err(CallError::Phone { code }),
+            // The session still hears the computer: nothing is sent again, and it stays open.
+            Fault::TimedOut => Err(gone(Reach::Asleep)),
         }
     }
 
@@ -692,9 +723,21 @@ impl Phone {
     }
 }
 
+/// How long the computer may take over `call` on purpose: the person deciding on an offer, or
+/// a moved memory being checked; the usual wait for everything else.
+fn answer_wait(call: &RemoteCall, waits: Waits) -> Duration {
+    match call {
+        RemoteCall::OfferMemory { .. } => waits.answer.max(OFFER_WAIT),
+        RemoteCall::MemoryDone { .. } => waits.answer.max(CHECK_WAIT),
+        RemoteCall::Ask { .. } | RemoteCall::LookBack { .. } => waits.answer.max(ASK_WAIT),
+        _ => waits.answer,
+    }
+}
+
 async fn call_once(s: &Session, call: RemoteCall) -> Result<RemoteAnswer, Fault> {
+    let wait = answer_wait(&call, s.waits);
     let (id, mut rx) = s.request(call).await?;
-    let out = session::next(&mut rx).await;
+    let out = s.next_within(id, &mut rx, wait).await;
     s.finish(id);
     match out? {
         Down::Answer(a) => Ok(a),
@@ -713,10 +756,11 @@ async fn ask_once(
         question: question.to_string(),
         place,
     };
+    let wait = answer_wait(&call, s.waits);
     let (id, mut rx) = s.request(call).await?;
     let mut ask_id = String::new();
     let out = loop {
-        match session::next(&mut rx).await {
+        match s.next_within(id, &mut rx, wait).await {
             Ok(Down::Answer(RemoteAnswer::AskStarted { ask_id: a })) => ask_id = a,
             Ok(Down::Answer(RemoteAnswer::AskDelta { delta })) => {
                 let done = TERMINAL.contains(&delta.phase);
@@ -749,7 +793,7 @@ async fn upload_once(s: &Session, call: RemoteCall, bytes: &[u8]) -> Result<Remo
         s.chunk(id, seq as u32, seq + 1 == parts.len(), part)
             .await?;
     }
-    let out = session::next(&mut rx).await;
+    let out = s.next_within(id, &mut rx, s.waits.answer).await;
     s.finish(id);
     match out? {
         Down::Answer(a) => Ok(a),
@@ -766,6 +810,7 @@ async fn memory_once(
     sent: &(impl Fn(u64) + Send + Sync),
 ) -> Result<RemoteAnswer, Fault> {
     use std::io::Read;
+    let wait = answer_wait(&call, s.waits);
     let (id, mut rx) = s.request(call).await?;
     let step = CHUNK.min(MAX_CHUNK_PAYLOAD);
     let mut buf = vec![0u8; step];
@@ -792,7 +837,7 @@ async fn memory_once(
     }
     let out = match failed {
         Some(f) => Err(f),
-        None => session::next(&mut rx).await,
+        None => s.next_within(id, &mut rx, wait).await,
     };
     s.finish(id);
     match out? {
@@ -811,7 +856,7 @@ async fn original_once(s: &Session, id: &str) -> Result<(String, Vec<u8>), Fault
     let mut bytes = Vec::new();
     let mut seq = 0;
     let out = loop {
-        match session::next(&mut rx).await {
+        match s.next_within(rid, &mut rx, s.waits.answer).await {
             Ok(Down::Answer(RemoteAnswer::OriginalStart { mime, size })) => {
                 let fine = meta.is_none()
                     && (1.0..=MAX_ITEM as f64).contains(&size)
