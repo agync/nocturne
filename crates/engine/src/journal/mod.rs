@@ -23,7 +23,7 @@ use rusqlite::{Connection, params_from_iter};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
-use crate::rows::{ITEM_COLS, item_view};
+use crate::rows::{ITEM_COL_COUNT, ITEM_COLS, item_view};
 use crate::settings::{parse_page_time, read_settings};
 use crate::util::{fmt_ts, parse_date, parse_ts};
 
@@ -161,9 +161,9 @@ pub(crate) fn load_items(
     let to_view = item_view(originals);
     let rows = stmt.query_map(params_from_iter(args.iter()), |r| {
         let view = to_view(r)?;
-        let meta: String = r.get(21 + 1)?;
-        let left_out: bool = r.get(21 + 2)?;
-        let trusted: bool = r.get(21 + 3)?;
+        let meta: String = r.get(ITEM_COL_COUNT)?;
+        let left_out: bool = r.get(ITEM_COL_COUNT + 1)?;
+        let trusted: bool = r.get(ITEM_COL_COUNT + 2)?;
         Ok(JItem {
             view,
             meta: serde_json::from_str(&meta).unwrap_or(Value::Null),

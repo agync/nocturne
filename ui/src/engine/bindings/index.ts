@@ -105,6 +105,7 @@ export type { JournalSent } from "./JournalSent";
 export type { Kept } from "./Kept";
 export type { KeptCount } from "./KeptCount";
 export type { KeptCounts } from "./KeptCounts";
+export type { KeptElsewhere } from "./KeptElsewhere";
 export type { KeptHow } from "./KeptHow";
 export type { KeyStorage } from "./KeyStorage";
 export type { LastBackup } from "./LastBackup";

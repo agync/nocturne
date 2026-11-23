@@ -387,11 +387,13 @@ fn join_same(tx: &Transaction<'_>, here: &str, p: &Arriving) -> Result<Vec<PathB
             [here],
             |r| r.get(0),
         )?;
-        let mut places: Vec<String> = had
+        let mut places: Vec<Value> = had
             .and_then(|h| serde_json::from_str(&h).ok())
             .unwrap_or_default();
-        if !places.contains(place) {
-            places.push(place.clone());
+        let named = |v: &Value| v.as_str().or_else(|| v.get("name")?.as_str()) == Some(place);
+        if !places.iter().any(named) {
+            let at = (!p.kept_at.is_empty()).then_some(p.kept_at.as_str());
+            places.push(json!({"name": place, "at": at}));
             tx.execute(
                 "UPDATE items SET metadata = json_set(metadata, '$.alsoKeptOn', json(?2)) \
                  WHERE id = ?1",

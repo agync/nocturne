@@ -153,17 +153,18 @@ fn the_same_thing_kept_on_both_is_kept_once_and_lists_both_places() {
     let kept = e.get_item(&here).unwrap();
     assert!(kept.private, "private when either is private");
     assert_eq!(kept.from_device, None, "the one here stays as it was");
+    let phone_kept = phone.engine.get_item(&there).unwrap().kept_at;
     assert_eq!(
-        sql_count(
-            computer.dir.path(),
-            &format!(
-                "SELECT COUNT(*) FROM items WHERE id = '{here}' AND \
-                 json_extract(metadata, '$.alsoKeptOn[0]') = '{PHONE}'"
-            )
-        ),
-        1,
-        "its page can list both places"
+        kept.also_kept_on,
+        vec![nocturne_contract::KeptElsewhere {
+            name: PHONE.into(),
+            at: Some(phone_kept)
+        }],
+        "its page lists the other place, with when"
     );
+    // Brought in again, the place is listed once.
+    computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(e.get_item(&here).unwrap().also_kept_on.len(), 1);
 }
 
 #[test]

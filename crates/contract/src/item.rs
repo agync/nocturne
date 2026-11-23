@@ -71,6 +71,16 @@ pub enum CouldntReadReason {
     MindUnavailable,
 }
 
+/// Another place the same thing was kept, for "Also kept on {name} · {day}, {time}".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct KeptElsewhere {
+    pub name: String,
+    /// When it was kept there, when known.
+    pub at: Option<String>,
+}
+
 /// Who turned a voice note into words, when it was not the mind that reads what is kept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -129,6 +139,10 @@ pub struct ItemView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub heard_by: Option<HeardBy>,
+    /// Other places the same thing was kept, when it came in from a phone that held it too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<KeptElsewhere>>")]
+    pub also_kept_on: Vec<KeptElsewhere>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

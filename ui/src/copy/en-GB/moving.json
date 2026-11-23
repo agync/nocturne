@@ -113,5 +113,7 @@
   "moving.phone.aside.deleteAsk": "Delete what was put aside {day} for good?",
   "moving.phone.aside.deleteBody": "Nothing from it went to {computer}. This deletes {things, plural, one {# thing} other {# things}} kept, {entries, plural, one {# journal entry} other {# journal entries}} and {media, plural, one {# photo or recording} other {# photos and recordings}}, and they can’t be brought back.",
   "moving.phone.aside.deleteYes": "Delete for good",
-  "moving.kept.when": "{day}, {time}"
+  "moving.kept.when": "{day}, {time}",
+  "moving.kept.also": "Also kept on {name} · {day}, {time}",
+  "moving.kept.alsoUndated": "Also kept on {name}"
 }

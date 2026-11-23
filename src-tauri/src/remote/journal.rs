@@ -527,6 +527,7 @@ mod tests {
             text: Some("words".into()),
             language: None,
             from_device: None,
+            also_kept_on: Vec::new(),
             journal: None,
             checkin: None,
             calendar: None,

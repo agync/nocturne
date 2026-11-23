@@ -1,7 +1,7 @@
 //! Row to view conversions shared by every module.
 
 use nocturne_contract::{
-    Certainty, ItemKind, ItemView, MemoryStatus, MemoryView, Receipt, Span, Trust,
+    Certainty, ItemKind, ItemView, KeptElsewhere, MemoryStatus, MemoryView, Receipt, Span, Trust,
 };
 use rusqlite::{Connection, Row};
 use std::path::Path;
@@ -38,7 +38,11 @@ pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.
      ON rd.id = rk.device_id AND rd.connection != 'local' \
      WHERE rk.item_id = i.id), json_extract(i.metadata, '$.keptOn')), \
     json_extract(i.metadata, '$.journal'), \
-    json_extract(i.metadata, '$.heardBy')";
+    json_extract(i.metadata, '$.heardBy'), \
+    json_extract(i.metadata, '$.alsoKeptOn')";
+
+/// How many columns `ITEM_COLS` selects: a loader that selects more reads them from here.
+pub(crate) const ITEM_COL_COUNT: usize = 23;
 
 /// Builds an `ItemView` from an `ITEM_COLS` row. `originals` is the directory the stored files
 /// live in; the view names the original only while that file exists.
@@ -83,7 +87,26 @@ fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         checkin: None,
         calendar: None,
         heard_by: de_opt(row.get(21)?)?,
+        also_kept_on: kept_elsewhere(row.get(22)?),
     })
+}
+
+/// `$.alsoKeptOn`: each other place a thing was kept, by name, with when when it is known.
+pub(crate) fn kept_elsewhere(json: Option<String>) -> Vec<KeptElsewhere> {
+    let places: Vec<serde_json::Value> = json
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default();
+    places
+        .into_iter()
+        .filter_map(|p| match p {
+            serde_json::Value::String(name) => Some(KeptElsewhere { name, at: None }),
+            serde_json::Value::Object(o) => Some(KeptElsewhere {
+                name: o.get("name")?.as_str()?.to_string(),
+                at: o.get("at").and_then(|a| a.as_str()).map(str::to_string),
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 pub(crate) fn get_item_view(
