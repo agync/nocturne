@@ -90,6 +90,11 @@ pub enum MoveView {
         others: bool,
         room: Option<Room>,
     },
+    /// "{name} is getting its memory ready…": agreed, and nothing has arrived yet while the
+    /// phone makes the copy that travels.
+    Preparing {
+        name: String,
+    },
     Arriving {
         name: String,
         done: f64,
@@ -231,11 +236,7 @@ impl Move {
                 others: self.others,
                 room: self.room,
             },
-            Phase::Accepted => MoveView::Arriving {
-                name,
-                done: 0.0,
-                size: self.bytes,
-            },
+            Phase::Accepted | Phase::Arriving { done: 0, .. } => MoveView::Preparing { name },
             Phase::Arriving { done, size } => MoveView::Arriving {
                 name,
                 done: *done as f64,
@@ -1624,7 +1625,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let moves = Moves::default();
         let owner = agreed(&moves, dir.path(), "a");
-        assert!(matches!(moves.view(), Some(MoveView::Arriving { .. })));
+        assert!(matches!(moves.view(), Some(MoveView::Preparing { .. })));
+        moves.arriving("a", 0, 10);
+        assert!(
+            matches!(moves.view(), Some(MoveView::Preparing { .. })),
+            "still being got ready until the first part is in"
+        );
+        moves.arriving("a", 4, 10);
+        assert!(matches!(
+            moves.view(),
+            Some(MoveView::Arriving {
+                done: 4.0,
+                size: 10.0,
+                ..
+            })
+        ));
         assert!(moves.begin_check(&owner, 1).is_some());
         assert!(moves.holding());
         stage_as(dir.path(), &owner, "a");
@@ -1788,7 +1803,7 @@ mod tests {
         moves.begin_check(&owner, 1).unwrap();
         let (view, answer) = moves.conclude(dir.path(), &owner, false, Err(PhoneError::Busy));
         assert_eq!(answer, err(PhoneError::Busy));
-        assert!(matches!(view, Some(MoveView::Arriving { .. })));
+        assert!(matches!(view, Some(MoveView::Preparing { .. })));
         assert_eq!(moves.agreed("a"), Some((None, false)), "not asked again");
     }
 

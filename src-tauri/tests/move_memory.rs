@@ -320,7 +320,10 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
 
     let accepted = offer_and_answer(&c, &phone, home.offer(&file), "move");
     assert_eq!(accepted, RemoteAnswer::MemoryAccepted { here: None });
-    assert!(matches!(c.view(), Some(MoveView::Arriving { .. })));
+    assert!(
+        matches!(c.view(), Some(MoveView::Preparing { .. })),
+        "nothing has arrived while the phone gets it ready"
+    );
 
     let seen = Arc::new(AtomicUsize::new(0));
     let heard = seen.clone();
@@ -623,8 +626,7 @@ fn an_interrupted_upload_changes_nothing() {
         "{out:?}"
     );
     wait_for("the computer lets go", || {
-        matches!(c.view(), Some(MoveView::Arriving { done, .. }) if done == 0.0)
-            && c.hub.core.incoming.in_flight() == 0
+        matches!(c.view(), Some(MoveView::Preparing { .. })) && c.hub.core.incoming.in_flight() == 0
     });
     assert!(!nocturne_app_lib::restore::marker_path(c.data()).exists());
     assert!(!nocturne_app_lib::restore::stage_dir(c.data()).exists());
