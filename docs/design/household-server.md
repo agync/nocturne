@@ -216,14 +216,14 @@ tidied, including one night at a time.
 
 The key that locks a memory kept on a household computer lives on the phone. So that a lost phone
 does not lose the memory, the key is also locked with a passphrase the person chooses, as the
-locked copy online does. A new phone, invited again, types it.
+nightly backup does with its phrase. A new phone, invited again, types it.
 
 | Part | Copy |
 |---|---|
 | Step label | "Keeping your memory on {household}" |
 | Title | "Choose a passphrase for your memory on {household}" |
 | Lead | "Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even {runner}." |
-| Fields, hint, tick | 0013's, as in [the locked copy](phone-first.md#step-2-the-passphrase) |
+| Fields, hint, tick | 0013's ([Back up and restore](backup-and-restore.md#the-form)) |
 | Bar | "Continue" · "Back" · 0013's disabled reason |
 
 A phone invited where its person already keeps a memory (a replacement phone) is asked instead:
@@ -252,7 +252,7 @@ Then, when this phone held a memory, the move
 |---|---|---|
 | Your memory | "Where it is" | "On this phone" · "{size}" |
 | | "Its mind" | "{household}, at home" |
-| | "A locked copy online" | As on a phone alone |
+| | "Backup" | As on a phone alone |
 | Household | "{household}" | "Run by {runner} · borrows its mind" |
 | | "What {runner} can see" | Opens the borrowing screen above |
 | | "This month" | "{count} things read, {count} questions" (counted on this phone only) |

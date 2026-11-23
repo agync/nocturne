@@ -40,7 +40,7 @@ of the design. All names and data are fictional.
 |---|---|---|
 | First run on a phone, and Today with no mind | `first-run.html`: `welcome`, `start`, `today`, `ask` | [Phone first](phone-first.md#screens) |
 | The first release of a phone alone | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `calendar`, `health`, `delete`, `damaged` | [Phone first](phone-first.md#mockups-for-the-first-release) |
-| A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | [Phone first](phone-first.md#a-locked-copy-online) |
+| Backup (a locked copy online) | `copy-online.html`: `why`, `passphrase`, `on` | [Phone first](phone-first.md#backup) |
 | Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | [Phone first](phone-first.md#choosing-a-mind) |
 | Joining a household, and a passphrase for making it your home | `household.html`: `found`, `see`, `passphrase`, `words`, `joined` | [Household](household-server.md#joining) |
 | The mind is away | `away.html`: `today`, `journal`, `back`, `removed` | [Household](household-server.md#states) |
@@ -94,13 +94,13 @@ flowchart LR
 | Step | Where the memory lives | Where the mind is | What leaves the phone | Today |
 |---|---|---|---|---|
 | 1 · A phone alone | On the phone | None yet: nothing is read, no page | Nothing | New |
-| 2 · Online | On the phone, with a locked copy online if chosen | An online service the person chose, or Apple Intelligence on iPhone | The locked copy, to the person's own online storage. Words to be read and questions, to the mind they chose | New |
+| 2 · Online | On the phone, with a locked copy online if chosen | An online service the person chose, or Apple Intelligence on iPhone | The nightly backup, locked, to the person's own iCloud or Google Drive. What is kept and questions, to the mind they chose | New |
 | 3 · Borrow a household's mind | On the phone | A household computer whose owner showed this phone its code | What each request in flight needs (a thing to read, a question with its few lines), sealed, to that computer, which keeps nothing of it | New |
 | 3 · A household computer as your home | On the household computer, locked apart | That computer | Everything kept, sealed, to that computer, only because the person paired and moved their memory there | New |
 | 4 · A computer of your own | On the computer | The computer | What phones keep and bring, sealed, to the person's own computer | Today's build |
 | Later · the phone's own mind | On the phone | On the phone | Nothing | Placeholder |
 
-The steps are built in this order: a phone alone, then online (the locked copy and an online mind),
+The steps are built in this order: a phone alone, then online (an online mind, then the locked copy),
 then the household. That is the order they are built, not a path a person is led along. **A phone
 alone with an online mind is a complete Nocturne**: a person can use it for good and never connect a
 computer or a household, and no screen, reminder or line of copy nudges them towards one. The other
@@ -171,13 +171,15 @@ flowchart TD
    so is the memory, unless she keeps a locked copy online.
 3. **Today with no mind.** The date, her calendar today, last night's sleep, today's check-in and
    what she kept, with one quiet card: "Your page needs a mind to write it."
-4. **A locked copy online.** From that card or This phone: what goes (one locked file), where (her
-   own Google Drive), who can open it (only someone with her passphrase), then the passphrase.
-5. **Choosing a mind.** She chooses an online service with her own key. The steps follow Online
+4. **Choosing a mind.** She chooses an online service with her own key. The steps follow Online
    answers: what goes, then its details, a monthly limit, then agreeing. Nocturne reads what she kept, in turn, and
    her first page comes the next morning.
+5. **Backup.** From that card or This phone: what goes (everything, locked, each night while the
+   phone charges), who can open it (only someone with her phrase), what she needs (her Google
+   account on the phone); then her Google account, the six-word phrase Nocturne made up, and a
+   recovery key she prints.
 6. **For good.** That is where Maya stays. Her page comes every morning, Ask answers with receipts,
-   and her locked copy is made every day. Nothing suggests a computer or a household; if she ever
+   and her backup runs every night. Nothing suggests a computer or a household; if she ever
    buys a laptop, "Move my memory…" in This phone is there, as Leo's journey shows.
 
 ### Tom and Ines: one household computer, one household code
@@ -296,7 +298,7 @@ Stated plainly, for each person and company that can be involved.
 | Who | A phone alone | Online: a locked copy | Online: a mind | Borrowing a household's mind | A household computer as home |
 |---|---|---|---|---|---|
 | **The person** | Everything | Everything | Everything, and a list of what was sent | Everything | Everything |
-| **Google or Apple, storing the copy** | Nothing | One locked file, its size and when it changes. Without the passphrase it can't be opened | Nothing | Nothing | Nothing |
+| **Apple or Google, keeping the backup** | Nothing | Locked pieces, their sizes and when they change. Without the phrase or recovery key they can't be opened | Nothing | Nothing | Nothing |
 | **The online service, or Apple** | Nothing | Nothing | What each reading, page and answer needs: each thing kept with its photo or recording, the journal and check-ins, each question with the lines that answer it, things marked private included (decision 37). Never what the person let go | Nothing | Nothing |
 | **The person who runs the household computer** | Nothing | Nothing | Nothing | In Nocturne: whether the mind is in use right now, not by which phone. No list of phones, no record of when or how much, and never what was read or asked | In Nocturne: the phone's name, that the memory is kept there, how much room it takes and when the phone last connected. Never its contents. Someone with full control of that computer could still get at it while it is being read or tidied |
 | **Others in the household** | Nothing | Nothing | Nothing | Nothing: no one in a household sees another's phone, memory or use | Nothing |
@@ -321,7 +323,7 @@ shows every fact in full before the person agrees.
 
 | What turns on | First step's three lines | Last step | Page |
 |---|---|---|---|
-| A locked copy online | What goes · Who can open it · You need | The passphrase, with what is lost without it | [Phone first](phone-first.md#a-locked-copy-online) |
+| Backup (a locked copy online) | What goes · Who can open it · You need | The phrase, with what is lost without it, then a recovery key offered once | [Phone first](phone-first.md#backup) |
 | An online mind | Sent · Private · You need | Everything sent, an example, who sees it, what changes, changing your mind | [Phone first](phone-first.md#choosing-a-mind) |
 | Joining a household with its code | What goes · What it keeps · Who runs it | What the person who runs it can and cannot see, then Join | [Household](household-server.md#joining) |
 | Lending a computer's mind | What they get · What you see · What it costs this computer | The household code, which anyone shown it may use until a new code replaces it | [Household](household-server.md#on-the-computer-that-runs-it) |
@@ -340,7 +342,7 @@ each clause takes effect only with the record it names.
 | Where | Today | Proposed |
 |---|---|---|
 | `AGENTS.md`, first line | "Nocturne is a private desktop app that remembers your day…" | "Nocturne is a private app for the computer and the phone that remembers your day…", and "It is a Tauri 2 app (Rust core, web-view interface); on a computer it ships and supervises a private, embedded Lemonade server." |
-| Invariant 2, Local only | Allows consented downloads, Away from home traffic and Online answers | Adds a locked copy online, an online mind on a phone that is its own home, and a household's mind for phones holding its code, used for the request in flight and keeping nothing. Exact wording in [0018](/adr/0018-a-phone-as-its-own-home.md#proposed-contract-changes). Also: "The phone app is held to the same rule." |
+| Invariant 2, Local only | Allows consented downloads, Away from home traffic and Online answers | Adds an online mind on a phone that is its own home (in since 2026-11-23), a phone's nightly backup to the person's own account, and a household's mind for phones holding its code, used for the request in flight and keeping nothing. Exact wording in [0018](/adr/0018-a-phone-as-its-own-home.md#proposed-contract-changes). Also: "The phone app is held to the same rule." |
 | Invariant 4, Receipts | Every answer and page line cites the original | Adds: "A thing waiting to go across has a receipt on the phone until its home has it." |
 | Invariant 5, Forgetting | Never silently delete | Adds: "A memory that moves is deleted from where it was only after it has arrived and the person confirms. No one deletes another person's memory without that person being told first." |
 | New invariant | | "**One memory, one person, one home.** A memory belongs to one person and lives in one place at a time. It moves only when its person pairs with a new home. Using a mind never moves it. A copy is a locked copy of that home, never a second home." |
@@ -352,7 +354,7 @@ each clause takes effect only with the record it names.
 | Record | Change |
 |---|---|
 | [0018 A phone as its own home](/adr/0018-a-phone-as-its-own-home.md), proposed | The phone app keeps its own memory with the engine's store, no mind on the phone in the first release, moving between homes by the backup format over the sealed channel, only by pairing, one home at a time enforced at pairing. Reverses "a phone that works without a computer" in [Nocturne on Android and iPhone](phone-apps.md#goals) |
-| [0019 A locked copy online](/adr/0019-a-locked-copy-online.md), proposed | The phone writes numbered copies, never overwritten, sealed with a key that is itself locked with the person's passphrase (the [0013](/adr/0013-passphrase-backup.md) format), to iCloud Drive on iPhone or the app's hidden Google Drive folder on Android, or a storage address the person runs. Originals go once each. The last seven copies are kept, and forgetting for good prunes older ones at once, so forgetting reaches the copy. This is the online backup; the phone's own device backup is out of scope, and the memory stays out of it. Triggers 0013's "revisit when kept somewhere other than a file they chose" |
+| [0019 A locked copy online](/adr/0019-a-locked-copy-online.md), proposed | Each night while the phone charges, the phone backs up what changed, in locked pieces with a small index sealed in the [0013](/adr/0013-passphrase-backup.md) way, to the person's own iCloud (the app's container) or Google Drive (the scope for files the app creates), opened with a phrase of words or a recovery key. Seven nights are kept, and forgetting for good removes a thing from every backup at once. This is the online backup; the phone's own device backup is out of scope. Adds an invariant 2 clause. Triggers 0013's "revisit when kept somewhere other than a file they chose" |
 | [0020 An online mind on a phone](/adr/0020-an-online-mind-on-a-phone.md), accepted 2026-11-23, amending [0011 Online answers](/adr/0011-online-answers.md) | On a phone alone the phone's own core calls the service, not `lemond`. The service also reads the words of what is kept and writes the page. A named second route on iPhone, Apple Intelligence on Apple's servers, with no key, against "one generic form" and "no provider-specific code". The health, money and ID check stops holding things back, on the computer too: only things marked private are held back ([decision 20](#decisions)) |
 | [0021 A household mind for invited phones](/adr/0021-a-household-mind-for-invited-phones.md), proposed | One household code admits any phone holding it to borrow the mind; nothing is kept about any borrowing phone; a new code cuts off every phone holding the old one. A separate typed set of calls for borrowing with no handle on any store, a scheduler that takes turns without counting per phone |
 | Later: a household computer as someone's home | The third role, keeps its memory here: one store and key per person, entered only by a code for that person and their own pairing, with its own Local only clause |
@@ -406,18 +408,22 @@ online mind, are complete end states, never steps towards a computer or a househ
 
 ### A locked copy online
 
-- **Decided.** Decisions 1 to 5 and 19: a locked copy of the one home, in iCloud Drive or Google
-  Drive's hidden app folder, or storage the person runs; photos and recordings once each; a
-  passphrase once; the online backup, with the device backup out of scope; no sync of any kind
-  ([0019](/adr/0019-a-locked-copy-online.md)).
-- **Depends on.** A phone alone; 0019 and the invariant 2 change; an Apple developer account with
-  iCloud; Google's sign-in limited to the app folder.
+On screen, "Backup".
 
-- **How often (owner).** Daily by default; the person can choose daily, weekly or monthly.
+- **Decided.** Decisions 1, 3, 5, 19 and 38: a backup of the one home, each night while the phone
+  charges, in locked pieces with a small index, only what changed sent; to the person's own iCloud
+  (the app's container) or Google Drive (a folder reached with the narrow scope for files the app
+  creates); a random six-word phrase by default and an optional recovery key; "Wi-Fi only" off by
+  default; export a separate full file; the device backup out of scope; no sync of any kind
+  ([0019](/adr/0019-a-locked-copy-online.md), [Backup](phone-first.md#backup)). It ships after
+  the online mind (decision 35).
+- **Depends on.** A phone alone; 0019 and its invariant 2 clause; the iCloud capability on
+  Nocturne's Apple developer account; an OAuth client for the app with Google Cloud.
 
 | Open | Options | Recommendation |
 |---|---|---|
-| Storage the person runs | A: one kind of address (WebDAV) first. B: WebDAV and S3 | **A**; S3 when someone asks |
+| Storage the person runs, or a sign-in, on the computer | WebDAV or OAuth, for a later record | Deferred |
+| The six-word phrase in other languages | A: English words everywhere. B: a word list per interface language | **B** when the app is translated; **A** until then |
 
 ### An online mind, and the phone's assistant
 
@@ -553,7 +559,7 @@ Here they label what a thing is, to help finding and grouping.
 | Can a household computer lend its mind without seeing what it reads? | No. It sees what it reads in its memory while it works. It can keep nothing, and its owner's view need show nothing about the phones | Settled |
 | Can the owner be kept out of a memory whose person made their computer its home? | Against a curious owner, yes: a store locked with a key the phone holds can't be browsed or copied readable. Against an owner with full control of the computer, no, while it is read or tidied | Settled; the wording is in [Household](household-server.md#what-the-person-who-runs-it-can-see) |
 | How do household phones reach the computer? | Simple works as it is. Most private admits only the owner's own devices. A home network alone does not work for the phone page and needs a listener the rules forbid | Settled |
-| Where does a locked copy online go? | iCloud Drive on iPhone needs no sign-in; on Android the app's hidden folder in Google Drive needs one account screen and only the narrowest access. Copies are numbered and never overwritten, so a second writer is caught, not merged. The phone's own device backup should leave the memory out | Settled; iPhone storage not yet built or tried |
+| Where does a locked copy online go? | The app's iCloud container on iPhone needs no sign-in; on Android a Google Drive folder through the phone's account picker needs one screen and only the scope for files the app creates. Indexes name the phone that wrote them, so a second writer is caught, not merged. A file in a picked folder was dropped: Google Drive's app may offer no folders to other apps. The phone's own device backup should leave the memory out | Settled (decision 38); neither store yet built or tried |
 | Does the computer's store run on a phone? | It builds for Android unchanged; iPhone not yet built | Android settled; iPhone to confirm |
 
 ## Decisions
@@ -588,9 +594,9 @@ person's data.
 | # | Question | Options | Decided |
 |---|---|---|---|
 | 1 | What a copy online is, given one home at a time | A: a locked copy of the one home, for restoring on a new phone and nothing else. B: a copy another device can open and edit | **A** |
-| 2 | Where the locked copy goes first | A: each phone's own place, with no new account: iCloud Drive on iPhone, the app's hidden folder in Google Drive on Android; a storage address the person runs, as an advanced choice. B: Google Drive on both. C: only storage the person runs | **A**, with the advanced choice |
+| 2 | Where the locked copy goes first (replaced by decision 38) | A: each phone's own place, with no new account: iCloud Drive on iPhone, the app's hidden folder in Google Drive on Android; a storage address the person runs, as an advanced choice. B: Google Drive on both. C: only storage the person runs | **A**, with the advanced choice |
 | 3 | Photos and recordings in the copy | A: all of them, each sent once, locked. B: words only. C: the person chooses | **A**, with a plain size line |
-| 4 | The copy's passphrase | A: asked once when the copy is turned on, its key then kept in the phone's own safe place. B: asked for every copy. C: no passphrase; the storage company's account holds the key | **A** |
+| 4 | The copy's passphrase (changed by decision 38: a phrase of words, a recovery key) | A: asked once when the copy is turned on, its key then kept in the phone's own safe place. B: asked for every copy. C: no passphrase; the storage company's account holds the key | **A** |
 | 5 | The phone's own device backup (iCloud Backup, Android's backup) | A: leave Nocturne's memory out of it; the locked copy is the one copy. B: let it in | **A**. The locked copy is the online backup; the device backup is out of scope and the memory stays out of it |
 | 6 | The online mind on Android, where no key-free route exists | A: an online service with the person's own key only. B: wait for the phone's own mind. C: A now, the phone's own mind as the default once it ships | **C** |
 | 7 | Apple Intelligence on Apple's servers as a named choice on iPhone | A: add it, amending 0011. B: key route only. C: a trial on iOS 27 first, then decide | **C**, then **A** |
@@ -616,7 +622,7 @@ The owner then answered the questions the first pass left open:
 | 22 | What a household computer keeps to let a borrowing phone in | A: each phone's name and key until it leaves or is removed, with pause and remove per phone. B: nothing per phone: one household code, shown as a QR code, that any phone holding it may use; "New code" replaces it | **B**. The trade-off, plainly: there is no removing or pausing one phone. To stop a phone, lost or passed on, the owner makes a new code, which stops every phone holding the old one, and shows the new one to the people who should keep borrowing. The owner's view has no list of phones, only "In use now" |
 | 23 | Check-ins and reflections with a borrowed household mind | A: check-ins go to it, sealed, and it keeps nothing, so it writes reflections. B: they stay on the phone | **A**. The journal's rule keeps check-ins from online minds; a household mind is not online |
 | 24 | The proposed `AGENTS.md` wording | Approve it as written, edit it, or approve it clause by clause | **Clause by clause**, as 0019, 0020 and 0021 are accepted |
-| 25 | How often the locked copy is made | A: after each keep. B: at most hourly, and daily. C: daily | **Daily by default**, and the person can choose daily, weekly or monthly |
+| 25 | How often the locked copy is made (replaced by decision 38: nightly) | A: after each keep. B: at most hourly, and daily. C: daily | **Daily by default**, and the person can choose daily, weekly or monthly |
 | 26 | What makes the Apple Intelligence trial pass | A: a typical day's reading and its page fit one day's limit, at a quality the owner signs off. B: answers only | **A** |
 | 27 | Which computers may host a household | A: any. B: only where the mind fits with room to spare | **A**: any computer, no check of how strong it is |
 | 28 | Managing the household from the owner's phone | A: the computer only. B: the owner's companion phone too | **B**: the lending switch, Show the code and New code (decision 22 leaves nothing per phone to manage) |
@@ -628,4 +634,5 @@ The owner then answered the questions the first pass left open:
 | 34 | ADR 0020, an online mind on a phone | Accept now, or with the rest of step 2 | **Accepted now** (owner, 2026-11-23). Its clause for the key route is in invariant 2; Apple's servers join with their own clause after the trial. Real-provider runs happen only in development once this design merges; tests use a stand-in provider |
 | 35 | Which of step 2 ships first | A: the locked copy. B: the online mind | **B, the online mind, then the copy** (owner, 2026-11-23) |
 | 37 | What an online mind the person chose may get, and what private means | A: as decided (no originals or check-ins online; private never sent). B: what a good answer needs, check-ins, originals and private things included; private decides only what comes up on its own (notifications, reminders, updates) | **B** (owner, 2026-11-23), for the phone's online mind and the computer's Online answers. Replaces decisions 8 (now C), 10 (now B) and 15 (now B). The safeguard is a short, calm explanation of what is sent when the person chooses the provider. It covers a companion phone, which shows private things as the computer does (never on its lock screen or in notifications, reminders or updates), and a borrowed household mind, which gets what an answer needs (owner). No notice for people already using Online answers (owner) |
+| 38 | The backup on a phone (replaces decision 2) | A: a file Nocturne writes into a folder the person picks through the phone's own picker, taken online by that folder's drive app (chosen first that day, then dropped: Google Drive's app may offer no folders to other apps, and it is not automatic). B: like a messaging app's backup: automatic, nightly and incremental while the phone charges, to the phone's own account (iPhone: the app's iCloud container; Android: Google Drive through the phone's account picker, scope for files the app creates), no server of Nocturne's | **B** (owner, 2026-11-23). Locked pieces plus a small index, only what changed sent; "Wi-Fi only" off by default; a random six-word phrase by default, the person's own allowed with a warning only when easy to guess, no symbol or capital rules; a recovery key offered once; restore on a new phone from the same account; the phone's system chooses the hour and This phone shows the last backup's time; export a separate full file. Needs an invariant 2 clause (0019) |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |

@@ -9,7 +9,7 @@ tags: [proposal, ux, phone, online-answers, backup, privacy, copy]
 # Nocturne on a phone of its own
 
 Part of [Phone and computer as equal starting points](phone-parity.md). This page covers a phone
-with its own memory (step 1) and what it can turn on online (step 2): a locked copy, and a mind.
+with its own memory (step 1) and what it can turn on online (step 2): a mind, and a nightly backup.
 
 Status: proposed, with the owner's decisions folded in. [The first
 release](#the-first-release-a-phone-alone) is specified to build once approved; the online mind and
@@ -24,7 +24,7 @@ In `docs/design/mockups/phone-parity/`, Android and iPhone side by side.
 | Screen | File and states | Renders |
 |---|---|---|
 | First run and Today with no mind | `first-run.html`: `welcome`, `start`, `today`, `ask` | `first-run-welcome-light.png`, `first-run-welcome-dark.png`, `first-run-start-light.png`, `first-run-today-light.png`, `first-run-today-dark.png`, `first-run-ask-light.png` |
-| A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | `copy-online-why-light.png`, `copy-online-why-dark.png`, `copy-online-passphrase-light.png`, `copy-online-on-light.png` |
+| Backup | `copy-online.html`: `why`, `passphrase`, `on` | `copy-online-why-light.png`, `copy-online-why-dark.png`, `copy-online-passphrase-light.png`, `copy-online-on-light.png` |
 | Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | `mind-choose-light.png`, `mind-choose-dark.png`, `mind-service-light.png`, `mind-consent-light.png`, `mind-apple-light.png`, `mind-first-page-light.png` |
 | This phone, a phone alone | `this-phone.html`: `alone` | `this-phone-alone-light.png`, `this-phone-alone-dark.png` |
 | The first release | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `calendar`, `health`, `delete`, `damaged` | `first-release-{state}-light.png` for every state; `first-release-welcome-dark.png`, `first-release-today-dark.png`, `first-release-mind-dark.png`, `first-release-backup-dark.png`, `first-release-this-phone-dark.png` |
@@ -39,7 +39,7 @@ flowchart LR
     S --> T[Today: calendar, last night, check-in, kept today]
     S --> J[Journal: the day's timeline]
     S --> F[Ask: found by their words]
-    S -. when chosen .-> L[(A locked copy online)]
+    S -. when chosen .-> L[(Backup, each night)]
     S -. when chosen .-> M[A mind: reads, writes the page, answers]
 ```
 
@@ -77,7 +77,7 @@ first; iPhone follows the same words once the engine is built and tried there.
 | The phone's calendar and health readings on Today and in the journal | |
 | Finding what was kept by its words, with receipts | Answers, which need a mind |
 | Forgetting and fading, delete, Delete everything, export | |
-| Backups to a file, and restoring one on a new phone | A locked copy online (phase 2b) |
+| Backups to a file, and restoring one on a new phone | A nightly backup (phase 2b) |
 | Moving the memory to a computer of one's own | An online mind (phase 2a), a household's mind (phase 3) |
 | Voice notes turned into words by the phone, where it can with no network ([below](#voice-notes-in-words)) | |
 | An item's own page on the phone, with marking it private ([below](#an-item-on-the-phone)) | |
@@ -100,7 +100,7 @@ The screens above, with these differences in the first release. Every other word
 | Today, lost phone reminder | After 30 days of keeping with no backup, once: "No backup yet. If this phone is lost, what you kept goes with it." with "Save a backup" and "Not now" |
 | Today, no mind card | As written; "Choose a mind" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release) |
 | Ask | As written in [Ask with no mind](#7-ask-with-no-mind) |
-| This phone, Your memory | "Where it is", "Its mind" ("None yet"); no locked copy row |
+| This phone, Your memory | "Where it is", "Its mind" ("None yet"); no backup row |
 | This phone, This phone | "Version" / "Nocturne {version}". No "Name" row: a phone alone shows its name nowhere, and pairing asks for one if it is ever needed |
 | This phone, Help | "Privacy policy" (opens the policy page in the phone's browser) · "What this phone can do" · "Your phone’s permissions" (the permissions help in the copy table, with "Open phone settings") |
 | This phone, actions | "Move my memory…", "Save a backup…", "Restore a backup…", "Delete everything…". "Move my memory…" opens [Giving it a mind](#giving-it-a-mind-in-the-first-release), the one place a memory can move to in this release |
@@ -172,8 +172,8 @@ aside on the same day, each label adds its time: "Put aside {day}, {time}…".
 | Delete it | Title | "Delete what was put aside {day}?" |
 | | Body | "{things} things kept, {entries} journal entries and {media} photos and recordings from before {day}. This can’t be undone." (plural forms as usual) |
 | | Can't be opened | "What was put aside {day} couldn’t be opened. Deleting it can’t be undone." |
-| | Buttons | "Delete" (careful) · "Keep it" | When the locked copy
-ships, "I have a backup" offers both: "A locked copy online" and "A backup file".
+| | Buttons | "Delete" (careful) · "Keep it" | When the nightly backup
+ships, "I have a backup" offers "Your backup in iCloud" (or "in Google Drive") and "A backup file".
 
 ### Behaviour
 
@@ -284,7 +284,7 @@ the line has no meaning when the phone is the home. Keys are the companion's.
 | Item | `phone.original.heard` | "What Nocturne heard" | "Heard by this phone" |
 | Item | `phone.original.used` | "The highlighted part is what the answer used." | From Ask: "The highlighted words are what you looked for." Otherwise not shown |
 | Health ask | `phone.health.why.title` | "Bring health readings to your computer?" | "Show health readings in Nocturne?" |
-| Health ask | `phone.health.why.where` | "Only to your computer, in locked messages only your computer can open…" | "They stay on this phone, in Nocturne’s memory, and go wherever your memory goes: into a backup you save, a locked copy or a mind, only if you turn those on." |
+| Health ask | `phone.health.why.where` | "Only to your computer, in locked messages only your computer can open…" | "They stay on this phone, in Nocturne’s memory, and go wherever your memory goes: into a backup you save, a nightly backup or a mind, only if you turn those on." |
 | Health ask | `phone.health.why.for` | "…and your page can show last night’s sleep." | "Your journal shows how you slept and moved beside what you wrote, and Today shows last night’s sleep." |
 | Health ask | `phone.health.done.body` | "Readings show on your computer as they go across. The first 30 days can take a minute." | "Readings show in your journal and on Today. The first 30 days can take a minute." |
 | Health ask | `phone.health.doneIos.body` | "Readings show on your computer as they go across." | "Readings show in your journal and on Today." |
@@ -418,11 +418,11 @@ kit of the other mockups. Names and data are fictional.
 flowchart TD
     I[Install] --> W[Welcome]
     W -->|Start on this phone| ST[Your memory lives on this phone]
-    W -->|I have a locked copy| RS[Restore: choose where, passphrase] --> T
+    W -->|I have a backup| RS[Restore: choose where, phrase] --> T
     W -->|Connect to my computer| PC[Pairing, as today]
     W -->|Join a household| HH[Household: joining]
     ST --> OF[Bring more from this phone?] --> T[Today, no mind]
-    T --> CP[A locked copy online] --> T
+    T --> CP[Backup] --> T
     T --> CM[Choose a mind]
     CM -->|An online service you choose| S1[Step 1: what goes] --> S2[Step 2: its details] --> S3[Step 3: a monthly limit] --> S4[Step 4: agree] --> FP[Reading what you kept] --> PG[First page next morning]
     CM -->|iPhone: Apple Intelligence| A1[Step 1: what goes] --> A2[Step 2: agree] --> FP
@@ -461,7 +461,7 @@ same pairing, one tap further in.
 | Main button | "Start on this phone" |
 | Second button | "Connect to my computer" |
 | Third button | "Join a household" |
-| Link | "I have a locked copy" |
+| Link | "I have a backup" |
 | Foot | "No account and no sign-in." |
 
 "Connect to my computer" opens the approved pairing ([Phone apps](phone-apps.md#3-pairing)), with
@@ -478,7 +478,7 @@ opens [Joining](household-server.md#joining).
 | Waits heading | "Waits for a mind" |
 | Waits | "Reading photos · Your morning page · Answers · Reflections and recaps" |
 | Waits hint | "Choose a mind any time: a computer at home, an online service, or your own computer." |
-| Lost phone | "If this phone is lost, what you kept goes with it, unless you keep a locked copy online. You can turn that on later." |
+| Lost phone | "If this phone is lost, what you kept goes with it, unless you back it up. You can turn that on later." |
 | Main button | "Start" |
 
 "Start" leads to the approved offer, "Bring more from this phone?", with its lead changed for a
@@ -493,7 +493,7 @@ change.
 |---|---|---|
 | Offer, lead | "Your computer can show what’s in this phone’s calendar and health readings, on your page and beside your journal. Both are optional. You can change your mind any time in {thisPhone}." | "Nocturne can show what’s in this phone’s calendar and health readings beside your days. Both are optional. You can change your mind any time in {thisPhone}." |
 | Calendar why, title | "Bring your calendar to your computer?" | "Show your calendar in Nocturne?" |
-| Calendar why, goes | "It goes only to your computer, the same way as everything this phone keeps…" | "It stays on this phone, in Nocturne’s memory, and goes wherever your memory goes: into a locked copy or to a mind, only if you turn those on." |
+| Calendar why, goes | "It goes only to your computer, the same way as everything this phone keeps…" | "It stays on this phone, in Nocturne’s memory, and goes wherever your memory goes: into your backup or to a mind, only if you turn those on." |
 | Calendar why, for | "Your page shows what’s on today and this week…" | "Today shows what’s on, and your journal shows each appointment at its time. Each line shows which calendar it came from." |
 | Which calendars | Holidays and birthdays start off | Every calendar the phone has starts on, work-profile calendars included, each named as the phone names it ([decision 20](phone-parity.md#decisions)) |
 | iPhone purpose, calendar | "Nocturne reads your calendar so your computer can show what’s on today on your morning page…" | "Nocturne reads your calendar so it can show what’s on today beside your days. It never changes your calendar." |
@@ -513,7 +513,7 @@ computer" becomes "stays on this phone".
 | In your calendar today | As approved, from this phone's calendar only. Receipt chip "Calendar · {calendar}" |
 | Check-in | Today's check-in card, as on the phone's journal |
 | Kept today | "Kept today · {count}", up to three rows, then "See today’s journal" |
-| Lost phone reminder | After 30 days of keeping with no copy, once: "No locked copy yet. If this phone is lost, what you kept goes with it." with "Keep a locked copy" and "Not now" |
+| Lost phone reminder | After 30 days of keeping with no copy, once: "No backup yet. If this phone is lost, what you kept goes with it." with "Turn on backup" and "Not now" |
 | Keep | The floating Keep button |
 
 ### 6. Journal with no mind
@@ -539,7 +539,7 @@ the phone heard them, else "waiting to be read". No reflection is offered; where
 |---|---|---|
 | Your memory | "Where it is" | "On this phone" · "{size}" |
 | | "Its mind" | "None yet" or "{service}, online" or "Apple Intelligence" or "{household}, at home". Opens [Choosing a mind](#choosing-a-mind) |
-| | "A locked copy online" | "Off" or "Last copy {time}". Opens [A locked copy online](#a-locked-copy-online) |
+| | "Backup" | "Off" or "Last backup {day}, {time}". Opens [Backup](#backup) |
 | What this phone brings | "Your calendar", "Health" | As approved |
 | When it sends | Not shown on a phone alone with no mind or copy | |
 | This phone | "Name" | Not shown on a phone alone, which shows its name nowhere; pairing asks for a name when it is needed |
@@ -551,20 +551,37 @@ the phone heard them, else "waiting to be read". No reflection is offered; where
 
 A phone alone can delete, forget and export, which a companion cannot: it holds the memory.
 
-## A locked copy online
+## Backup
 
-The owner's opt-in copy online ([decisions 1 to 5](phone-parity.md#decisions)): one
-locked copy of the one home, in the phone's own online storage, opened only with the person's
-passphrase. The phone's own device backup leaves the memory out, so this is the one copy.
+The owner's opt-in copy online, called "Backup" on screen and "the locked copy online" on the
+roadmap ([decisions 1, 3 to 5, 19 and 38](phone-parity.md#decisions),
+[0019](/adr/0019-a-locked-copy-online.md)). Like a messaging app's chat backup: each night, while
+the phone charges, Nocturne backs up what changed, locked with a phrase only the person holds, to
+their own account with the phone's company. There is no server of Nocturne's. The phone's own device
+backup leaves the memory out, so this is the one copy online. It ships after the online mind (phase
+2b). Saving one whole file, "Save a backup…", stays a separate action
+([Backups to a file](#backups-to-a-file)).
 
 ```mermaid
 flowchart LR
-    DB[(This phone's memory)] -->|every day, or each week or month if chosen| SN[A numbered copy, locked]
-    OR[Photos and recordings] -->|once each, locked| PL
-    SN --> PL[(iCloud Drive, or Google Drive's hidden app folder)]
-    KY[The key, locked with your passphrase] --> PL
-    PL -. new phone: passphrase .-> NP[Restored]
+    DB[(This phone's memory)] -->|each night, while charging| CH[What changed, in locked pieces]
+    CH --> IX[A small locked index of the night]
+    CH --> PL[(iPhone: Nocturne's place in the person's iCloud<br/>Android: a Nocturne backup folder in their Google Drive)]
+    IX --> PL
+    KY[The key, locked with the phrase, and with the recovery key if made] --> PL
+    PL -. new phone, same account: phrase .-> NP[Restored]
 ```
+
+| Part | Choice |
+|---|---|
+| Where, iPhone | The app's own iCloud container in the person's iCloud, which needs the iCloud capability on Nocturne's Apple developer account. It doesn't show among their files |
+| Where, Android | A "Nocturne backup" folder in the person's Google Drive, reached through the phone's own Google account picker with the narrow scope for files the app creates. Nocturne can reach nothing else in their Drive. Needs an OAuth client registered for the app with Google Cloud. No password is typed into Nocturne |
+| What goes each night | Each thing kept, its original and the journal, as locked pieces, each named by a hash of its locked contents; only pieces the account doesn't have yet go. Then a small locked index that lists the night's pieces |
+| How many | Seven nightly indexes. A piece no kept index lists is removed |
+| Forgetting for good | A new index without it is written at once, every older index that lists it is removed, and its pieces with them, so forgetting reaches the backup |
+| When | At night while the phone charges, at a time the phone's system chooses. Over mobile data too, unless "Wi-Fi only" is on (off by default). "Back up now" runs one at once |
+| The lock | 0013's sealing for the pieces and the index. One key locks them; that key is kept locked with the phrase, and with the recovery key if the person made one. The key itself stays in the phone's own safe place, so nightly backups need no phrase |
+| Another phone | Each index names, unlocked, a random number for the phone that wrote it and a count. A phone that finds a newer index from another phone stops, so nothing is overwritten or merged |
 
 ### Step 1: why
 
@@ -572,105 +589,146 @@ Light first step, as Online answers step 1 ([Keeping the next step in view](step
 
 | Part | Copy |
 |---|---|
-| Step label | "A locked copy online · step 1 of 2" |
-| Title | "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
-| What goes | "Everything you kept, in one locked copy, made again every day. Photos and recordings go once each." |
-| Who can open it | iPhone: "Only someone with your passphrase. Apple stores it but can’t open it, and neither can Nocturne’s makers." Android: "Only someone with your passphrase. Google stores it but can’t open it, and neither can Nocturne’s makers." |
-| You need | iPhone: "iCloud Drive turned on, and room for about {size}." Android: "A Google account, and room for about {size} in its Drive." |
-| Expander, closed | "Everything about the copy" |
+| Step label | "Backup · step 1 of 2" |
+| Title | "Back up your memory every night, so a lost phone doesn’t lose it." |
+| What goes | "Everything you kept, locked. Each night, while this phone charges, only what changed goes." |
+| Who can open it | iPhone: "Only someone with your phrase. Apple keeps it in your iCloud but can’t open it, and neither can Nocturne’s makers." Android: "Only someone with your phrase. Google keeps it in your Drive but can’t open it, and neither can Nocturne’s makers." |
+| You need | iPhone: "iCloud turned on, with room for about {size}." Android: "Your Google account on this phone, with room for about {size} in its Drive." |
+| Expander, closed | "Everything about the backup" |
 | Bar | "Continue" · "Not now" · "Nothing is turned on until the last step." |
 
 Behind the expander, in this order:
 
 | Part | Copy |
 |---|---|
-| Where | iPhone: "In iCloud Drive, in a folder only Nocturne uses. It doesn’t show among your files." Android: "In your Google Drive, in a hidden folder only Nocturne can reach. Nocturne asks Google for that folder and nothing else in your Drive." |
-| What the company sees | "{company} can see that the copy is there, how big it is and when it changes. It can’t see what is in it." |
-| How often | "Every day. You can change it to every week or every month in {thisPhone}." |
-| How many | "The last seven copies are kept. When you forget something for good, the older copies go at once, so it leaves the copy too." |
-| Your phone’s own backup | "Your phone’s own backup leaves your memory out, so this is the one copy." |
-| A new phone | "Install Nocturne, choose I have a locked copy, and type your passphrase." |
-| Turning it off | "Turn it off in {thisPhone}. You then choose whether to delete the copy." |
-| Advanced | "Use storage you run instead" opens a form for an address, a user name and a password |
+| Where | iPhone: "In your iCloud, in a place only Nocturne uses. It doesn’t show among your files." Android: "In your Google Drive, in a folder called Nocturne backup. Nocturne can reach only what it puts there, nothing else in your Drive." |
+| What the company sees | "{company} can see that the backup is there, how big it is and when it changes. It can’t see what is in it." |
+| When | "Each night while this phone charges, at a time your phone chooses. Over mobile data too, unless you choose Wi-Fi only." |
+| How many | "You can go back up to seven nights. When you forget something for good, it goes from the backup at once." |
+| Your phone’s own backup | "Your phone’s own backup leaves your memory out, so this is the one copy online." |
+| A new phone | iPhone: "Sign in with the same Apple Account, install Nocturne, choose I have a backup, and type your phrase." Android: "Install Nocturne, choose I have a backup, choose the same Google account, and type your phrase." |
+| One file | "To keep a copy somewhere else too, {saveBackup} in {thisPhone} saves everything as one file." |
+| Turning it off | "Turn it off in {thisPhone}. You then choose whether to delete the backup." |
 
 ### Choosing the account (Android only)
 
-"Continue" on Android opens Google's own account screen, which names the hidden app folder. Nocturne
-asks only for that. A refusal returns to step 1 with "Nothing was turned on. Google didn’t allow
-the folder." and the bar unchanged.
+"Continue" on Android opens the phone's own Google account picker, then Google's screen, which says
+Nocturne may see only the files it makes. A refusal returns to step 1 with "Nothing was turned on.
+Google didn’t allow it." and the bar unchanged. On iPhone there is no step: the backup goes to the
+iCloud the iPhone is signed in to. With iCloud off, step 1's bar shows "Turn on iCloud in Settings
+to back up." and Continue is not pressable.
 
-### Step 2: the passphrase
+### Step 2: the phrase
 
-The backup form's words ([Back up and restore](backup-and-restore.md#the-form)), on the phone.
+A phrase of six everyday words, made up by Nocturne, balances safety and ease: hard to guess, easy
+to write down. The person may type their own; Nocturne warns only when it is easy to guess, and has
+no rules about symbols, capitals or length.
 
 | Part | Copy |
 |---|---|
-| Step label | "A locked copy online · step 2 of 2" |
-| Title | "Choose a passphrase for the copy" |
-| Field | "Choose a passphrase" / hint "At least 8 characters. A few words that don’t go together are strong and easy to remember." (0013) |
-| Second field | "Type it again" (0013) |
-| Show | "Show passphrases" (0013) |
-| Note title | "Keep this passphrase safe" (0013) |
-| Note body | "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
+| Step label | "Backup · step 2 of 2" |
+| Title | "Your phrase for the backup" |
+| Lead | "It opens your backup on a new phone. Nocturne made this one up for you." |
+| The phrase | Six words in large type, for example "harbour violet pencil maple drift oven", with "Another phrase" |
+| Link | "Use my own phrase instead" |
+| Own phrase | Field "Your phrase" / hint "A few words that don’t go together are strong and easy to remember." |
+| Own phrase, easy to guess | "This phrase is easy to guess. Someone who finds your backup could try it. Nocturne’s own phrase is harder to guess." with "Use Nocturne’s phrase". Nothing is blocked |
+| Note title | "Keep this phrase safe" |
+| Note body | "Nocturne doesn’t keep it. Without it, nobody can open your backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager." |
 | Note tick | "I’ve written it down or saved it somewhere safe" (0013) |
-| Bar | "Turn on" · "Back" · disabled reason "Choose a passphrase, type it again and tick the box to go on." (0013) |
+| Bar | "Turn on" · "Back" · disabled reason "Tick the box to go on." |
 
-The strength hint and validation are 0013's. The passphrase locks one small key; the key itself is
-kept in the phone's own safe place, so later copies need no passphrase.
+"Easy to guess" is the strength estimate 0013 uses, below its lowest band; nothing else is checked.
+The phrase locks one small key; the key itself is kept in the phone's own safe place.
 
-### Making the first copy
+### A recovery key, offered once
+
+Straight after "Turn on", once, and never again unprompted:
 
 | Part | Copy |
 |---|---|
-| Title | "Making the first copy" |
+| Title | "A recovery key, if you want one" |
+| Body | "If you ever lose your phrase, a recovery key opens your backup instead. Print it or save it, and keep it away from this phone." |
+| Key | Six groups of four letters and numbers, in large type |
+| Buttons | "Print or save…" (the phone's own print and share sheet) · "Not now" |
+| Foot | "Nocturne shows this only once." |
+
+The key is shown on screen only here and is not kept on the phone in a form that can be shown again.
+
+### The first backup
+
+| Part | Copy |
+|---|---|
+| Title | "Backing up for the first time" |
 | Progress | "{done} of {size}" |
-| Note | "You can use Nocturne while this runs." |
-| Done | "Your locked copy is online." / "Made {time}. It is made again every day." / "OK" |
+| Note | "You can use Nocturne while this runs. If it doesn’t finish now, it carries on tonight while this phone charges." |
+| Done | "Your memory is backed up." / "{time}, in your iCloud." or "in your Google Drive." / "From now on, each night while this phone charges." / "OK" |
 
-The first copy is read back and checked before the switch shows as on. If the phone leaves the app,
-it carries on when the phone allows and the row in This phone says how far it got.
+The first backup is read back and checked before the switch shows as on.
 
-### The copy in This phone
+### Backup in This phone
 
 | Part | Copy |
 |---|---|
-| Switch | "A locked copy online" |
-| Hint, on | "Last copy {time} · {size} in iCloud Drive" or "in Google Drive" |
-| Row | "How often" / "Every day" (selected), "Every week", "Every month" |
-| Row | "Change the passphrase…" |
+| Switch | "Back up every night" |
+| Hint, on | "Last backup {day}, {time} · {size} in your iCloud" or "in your Google Drive" |
+| Row | "Wi-Fi only" (switch, off) |
+| Row | "Back up now" |
+| Row | "Change the phrase…" ("Change the phrase?" / "Your old phrase stops opening the backup. A recovery key you saved still works." then step 2's phrase screen, with "Save" for "Turn on") |
 | Row | "Turn off…" |
-| About heading | "About the copy", then the expander's "What the company sees", "How many", "Your phone’s own backup" and "A new phone", each under its label |
-| Turn off dialog | "Turn off the locked copy?" / "No new copies are made. The copy that is there stays until you delete it." / tick, off: "Also delete the copy online" / "Turn off" · "Keep it on" |
+| About heading | "About the backup", then the expander's "Where", "What the company sees", "When", "How many", "Your phone’s own backup" and "A new phone", each under its label |
+| Turn off dialog | "Turn off backup?" / "No new backups are made. The backup in your iCloud stays until you delete it." or "in your Google Drive" / tick, off: "Also delete the backup" / "Turn off" · "Keep it on" |
+
+"Last backup" is the time the last one finished. The phone's system chooses when it runs, so This
+phone shows when it last ran, never a promised time.
 
 ### Restoring on a new phone
 
-From Welcome, "I have a locked copy". On Android, Google's account screen first.
+From Welcome, "I have a backup", then "Your backup in iCloud" or "Your backup in Google Drive", or
+"A backup file". On Android, the account picker first.
 
 | Part | Copy |
 |---|---|
 | Title | "Bring back your memory" |
-| Lead | "Type the passphrase you chose for your locked copy." |
-| Found | "Copy from {time} · {size}" |
-| Field | "Passphrase for this copy" |
+| Lead | "Type the phrase for your backup." |
+| Found | "Backup from {day}, {time} · {size}" |
+| Field | "Your phrase" |
+| Link | "Use the recovery key instead" (field "Recovery key") |
 | Button | "Bring it back" |
-| Wrong | "That passphrase doesn’t open this copy. Check capital letters, and try again." (0013, worded for the copy) |
-| None found | "No locked copy found in iCloud Drive." / "in this Google account’s Drive." with "Try another account" on Android |
+| Wrong | "That phrase doesn’t open this backup. Check each word, and try again." (0013, worded for the phrase) |
+| None found | iPhone: "No backup found in this iCloud. Sign in with the Apple Account your old phone used." Android: "No backup found in this Google account’s Drive." with "Try another account" |
 | Done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
 
-The 0013 checks run before anything shows. A restored phone makes the next copy only after the
-person confirms it is now the phone in use, so two phones never both make copies: "This phone now
-makes the copies. If your old phone turns up, it stops making them."
+The 0013 checks run before anything shows. A restored phone backs up only after the person confirms
+it is now the phone in use, so two phones never both back up: "This phone now makes the backups. If
+your old phone turns up, it stops making them."
+
+### A newer backup from another phone
+
+In This phone, and nowhere else: "Another phone made a newer backup on {day}. This phone has stopped
+backing up, so nothing is overwritten." with "Make this phone the one in use", which explains first:
+"This phone’s next backup becomes the newest. The other phone stops when it next looks." / "Make
+this phone the one in use" · "Cancel".
+
+### When the memory moves to a computer
+
+Decision 19: backup stops. The move's last screen asks, as in [Moving your
+memory](moving-memory.md): "Your backup" / "Delete the backup in your iCloud" (or "in your Google
+Drive") / "Keep it as it is". A kept backup can still be brought back on a phone, as the memory was
+on the day of the move.
 
 ### States
 
-| State | What shows |
+| State | What shows in This phone |
 |---|---|
-| Copy up to date | "Last copy {time}" |
-| Waiting for a connection | "Last copy {time} · the next one waits for a connection" |
-| Storage full | In This phone: "There’s no room for the next copy in iCloud Drive." or "in your Google Drive." / "Your last copy from {time} is still there." No alert elsewhere |
-| Google access taken back | "Google no longer allows the folder. Choose the account again to keep making copies." with "Choose account" |
-| Another phone made a newer copy | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." with "Make this phone the one in use" (explained: the next copy from here is newer) |
-| Copy from a newer Nocturne | 0013's "This backup is from a newer Nocturne" words, worded for the copy |
+| Up to date | "Last backup {day}, {time}" |
+| Waiting | "Last backup {day}, {time} · the next one runs tonight while this phone charges" |
+| Waiting for Wi-Fi | "Last backup {day}, {time} · waiting for Wi-Fi" |
+| No room in the account | "There’s no room in your iCloud for tonight’s backup." or "in your Google Drive" / "Your last backup from {day} is still there." |
+| iCloud off, or Google access taken back | "Nocturne can’t reach your iCloud. Turn iCloud on in Settings to keep backing up." / "Google no longer lets Nocturne back up. Choose the account again." with "Choose account" |
+| Another phone made a newer backup | As [above](#a-newer-backup-from-another-phone) |
+| A backup from a newer Nocturne | 0013's "This backup is from a newer Nocturne" words |
+| No backup for 7 nights | The state's line, and once on Today: "Your last backup was {day}." / "Open backup" / "Not now" |
 
 ## Choosing a mind
 
@@ -859,28 +917,28 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Welcome, title | "Nocturne remembers your day" |
 | Welcome, lead | "Keep notes, photos and voice notes, write your journal, and see your calendar beside your days." |
 | Welcome, buttons | "Start on this phone" / "Connect to my computer" / "Join a household" |
-| Welcome, link | "I have a locked copy" |
+| Welcome, link | "I have a backup" |
 | Welcome, foot | "No account and no sign-in." |
 | Start, title | "Your memory lives on this phone" |
 | Start, works | "Works now" / "Keep notes, photos and voice notes" / "Write your journal and check in" / "See your calendar and health beside your days" / "Find anything you kept by its words" |
 | Start, waits | "Waits for a mind" / "Reading photos" / "Your morning page" / "Answers" / "Reflections and recaps" |
 | Start, waits hint | "Choose a mind any time: a computer at home, an online service, or your own computer." |
-| Start, lost phone | "If this phone is lost, what you kept goes with it, unless you keep a locked copy online. You can turn that on later." |
+| Start, lost phone | "If this phone is lost, what you kept goes with it, unless you back it up. You can turn that on later." |
 | Start, button | "Start" |
 | Offer, lead, alone | "Nocturne can show what’s in this phone’s calendar and health readings beside your days. Both are optional. You can change your mind any time in {thisPhone}." |
-| Calendar why, alone | "Show your calendar in Nocturne?" / "It stays on this phone, in Nocturne’s memory, and goes wherever your memory goes: into a locked copy or to a mind, only if you turn those on." / "Today shows what’s on, and your journal shows each appointment at its time. Each line shows which calendar it came from." |
+| Calendar why, alone | "Show your calendar in Nocturne?" / "It stays on this phone, in Nocturne’s memory, and goes wherever your memory goes: into your backup or to a mind, only if you turn those on." / "Today shows what’s on, and your journal shows each appointment at its time. Each line shows which calendar it came from." |
 | iPhone purpose, calendar, alone | "Nocturne reads your calendar so it can show what’s on today beside your days. It never changes your calendar." |
 | Today, status, alone | "Your memory is on this phone" |
 | Kept today | "Kept today · {count}" / "See today’s journal" |
 | No mind card | "Your page needs a mind to write it." / "A mind reads what you keep, writes this page each morning and answers your questions." / "Choose a mind" |
-| No copy reminder | "No locked copy yet. If this phone is lost, what you kept goes with it." / "Keep a locked copy" / "Not now" |
+| No backup reminder | "No backup yet. If this phone is lost, what you kept goes with it." / "Turn on backup" / "Not now" |
 | Waiting to be read | "waiting to be read" |
 | No reflection | "Reflections need a mind." |
 | Find, placeholder | "Find something you kept" |
 | Find, above | "Found by their words. Answers need a mind." |
 | Find, none | "Nothing you kept has those words." |
 | This phone, memory | "Your memory" / "Where it is" / "On this phone" / "Its mind" / "None yet" / "{service}, online" / "Apple Intelligence" / "{household}, at home" |
-| This phone, copy row | "A locked copy online" / "Off" / "Last copy {time}" |
+| This phone, backup row | "Backup" / "Off" / "Last backup {day}, {time}" |
 | This phone, can do, alone | "Your memory is on this phone. It can keep, find, forget and delete. It can save a backup to a file." |
 | This phone, actions | "Move my memory…" / "Save a backup…" / "Restore a backup…" / "Delete everything…" |
 | This phone, restore hint | "What’s on this phone now is put aside first, never deleted." |
@@ -888,38 +946,40 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Item, kept | "Kept" / "{how} · {day}, {time}" / "Typed on this phone" / "Taken on this phone" / "Chosen from your photos" / "Recorded on this phone" / "Shared from another app" / "From your calendar" / "From Health" / "Kept on {device}" |
 | Item, private | "Private" / "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask. If your memory moves, it moves too, locked like the rest." / "Journal entries can’t be marked private." |
 | Item, delete | "This will be deleted from this phone for good, along with anything Nocturne worked out from it." / "These will be deleted from this phone for good, along with anything Nocturne worked out from them." |
-| Copy, step 1 | "A locked copy online · step 1 of 2" / "Keep a locked copy of your memory online, so a lost phone doesn’t lose it." |
-| Copy, what goes | "Everything you kept, in one locked copy, made again every day. Photos and recordings go once each." |
-| Copy, who opens | "Only someone with your passphrase. {company} stores it but can’t open it, and neither can Nocturne’s makers." |
-| Copy, you need | iPhone: "iCloud Drive turned on, and room for about {size}." / Android: "A Google account, and room for about {size} in its Drive." |
-| Copy, expander | "Everything about the copy" |
-| Copy, where | iPhone: "In iCloud Drive, in a folder only Nocturne uses. It doesn’t show among your files." / Android: "In your Google Drive, in a hidden folder only Nocturne can reach. Nocturne asks Google for that folder and nothing else in your Drive." |
-| Copy, company sees | "{company} can see that the copy is there, how big it is and when it changes. It can’t see what is in it." |
-| Copy, how many | "The last seven copies are kept. When you forget something for good, the older copies go at once, so it leaves the copy too." |
-| Copy, device backup | "Your phone’s own backup leaves your memory out, so this is the one copy." |
-| Copy, new phone | "Install Nocturne, choose I have a locked copy, and type your passphrase." |
-| Copy, labels | "What the company sees" / "How many" / "Your phone’s own backup" / "A new phone" / "About the copy" |
-| Copy, turning off | "Turn it off in {thisPhone}. You then choose whether to delete the copy." |
-| Copy, advanced | "Use storage you run instead" |
-| Copy, Google refused | "Nothing was turned on. Google didn’t allow the folder." |
-| Copy, step 2 | "A locked copy online · step 2 of 2" / "Choose a passphrase for the copy" |
-| Copy, keep safe body | "Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager." |
-| Copy, bar | "Turn on" / "Back" |
-| Copy, making | "Making the first copy" / "{done} of {size}" / "You can use Nocturne while this runs." |
-| Copy, made | "Your locked copy is online." / "Made {time}. It is made again every day." / "OK" |
-| Copy, row hint | "Last copy {time} · {size} in iCloud Drive" / "Last copy {time} · {size} in Google Drive" |
-| Copy, rows | "How often" / "Every day" / "Every week" / "Every month" / "Change the passphrase…" / "Turn off…" |
-| Copy, how often | "Every day. You can change it to every week or every month in {thisPhone}." |
-| Copy, turn off | "Turn off the locked copy?" / "No new copies are made. The copy that is there stays until you delete it." / "Also delete the copy online" / "Turn off" / "Keep it on" |
-| Restore | "Bring back your memory" / "Type the passphrase you chose for your locked copy." / "Copy from {time} · {size}" / "Passphrase for this copy" / "Bring it back" |
-| Restore, wrong | "That passphrase doesn’t open this copy. Check capital letters, and try again." |
-| Restore, none | "No locked copy found in iCloud Drive." / "No locked copy found in this Google account’s Drive." / "Try another account" |
+| Backup, step 1 | "Backup · step 1 of 2" / "Back up your memory every night, so a lost phone doesn’t lose it." |
+| Backup, what goes | "Everything you kept, locked. Each night, while this phone charges, only what changed goes." |
+| Backup, who opens | iPhone: "Only someone with your phrase. Apple keeps it in your iCloud but can’t open it, and neither can Nocturne’s makers." / Android: "Only someone with your phrase. Google keeps it in your Drive but can’t open it, and neither can Nocturne’s makers." |
+| Backup, you need | iPhone: "iCloud turned on, with room for about {size}." / Android: "Your Google account on this phone, with room for about {size} in its Drive." |
+| Backup, expander | "Everything about the backup" |
+| Backup, where | iPhone: "In your iCloud, in a place only Nocturne uses. It doesn’t show among your files." / Android: "In your Google Drive, in a folder called Nocturne backup. Nocturne can reach only what it puts there, nothing else in your Drive." |
+| Backup, company sees | "{company} can see that the backup is there, how big it is and when it changes. It can’t see what is in it." |
+| Backup, when | "Each night while this phone charges, at a time your phone chooses. Over mobile data too, unless you choose Wi-Fi only." |
+| Backup, how many | "You can go back up to seven nights. When you forget something for good, it goes from the backup at once." |
+| Backup, device backup | "Your phone’s own backup leaves your memory out, so this is the one copy online." |
+| Backup, new phone | iPhone: "Sign in with the same Apple Account, install Nocturne, choose I have a backup, and type your phrase." / Android: "Install Nocturne, choose I have a backup, choose the same Google account, and type your phrase." |
+| Backup, one file | "To keep a copy somewhere else too, {saveBackup} in {thisPhone} saves everything as one file." |
+| Backup, turning off | "Turn it off in {thisPhone}. You then choose whether to delete the backup." |
+| Backup, labels | "Where" / "What the company sees" / "When" / "How many" / "Your phone’s own backup" / "A new phone" / "One file" / "Turning it off" / "About the backup" |
+| Backup, Google refused | "Nothing was turned on. Google didn’t allow it." |
+| Backup, iCloud off | "Turn on iCloud in Settings to back up." |
+| Backup, step 2 | "Backup · step 2 of 2" / "Your phrase for the backup" / "It opens your backup on a new phone. Nocturne made this one up for you." / "Another phrase" / "Use my own phrase instead" |
+| Backup, own phrase | "Your phrase" / "A few words that don’t go together are strong and easy to remember." / "This phrase is easy to guess. Someone who finds your backup could try it. Nocturne’s own phrase is harder to guess." / "Use Nocturne’s phrase" |
+| Backup, keep safe | "Keep this phrase safe" / "Nocturne doesn’t keep it. Without it, nobody can open your backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager." / "I’ve written it down or saved it somewhere safe" |
+| Backup, bar | "Turn on" / "Back" / "Tick the box to go on." |
+| Backup, recovery key | "A recovery key, if you want one" / "If you ever lose your phrase, a recovery key opens your backup instead. Print it or save it, and keep it away from this phone." / "Print or save…" / "Not now" / "Nocturne shows this only once." |
+| Backup, first | "Backing up for the first time" / "{done} of {size}" / "You can use Nocturne while this runs. If it doesn’t finish now, it carries on tonight while this phone charges." |
+| Backup, done | "Your memory is backed up." / "{time}, in your iCloud." / "{time}, in your Google Drive." / "From now on, each night while this phone charges." / "OK" |
+| Backup, rows | "Back up every night" / "Last backup {day}, {time} · {size} in your iCloud" / "Last backup {day}, {time} · {size} in your Google Drive" / "Wi-Fi only" / "Back up now" / "Change the phrase…" / "Turn off…" |
+| Backup, change phrase | "Change the phrase?" / "Your old phrase stops opening the backup. A recovery key you saved still works." / "Save" |
+| Backup, turn off | "Turn off backup?" / "No new backups are made. The backup in your iCloud stays until you delete it." / "No new backups are made. The backup in your Google Drive stays until you delete it." / "Also delete the backup" / "Turn off" / "Keep it on" |
+| Restore, backup | "Bring back your memory" / "Type the phrase for your backup." / "Backup from {day}, {time} · {size}" / "Your phrase" / "Use the recovery key instead" / "Recovery key" / "Bring it back" |
+| Restore, wrong | "That phrase doesn’t open this backup. Check each word, and try again." |
+| Restore, none | "No backup found in this iCloud. Sign in with the Apple Account your old phone used." / "No backup found in this Google account’s Drive." / "Try another account" |
 | Restore, done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
-| Restore, in use | "This phone now makes the copies. If your old phone turns up, it stops making them." |
-| Copy, waiting | "Last copy {time} · the next one waits for a connection" |
-| Copy, full | "There’s no room for the next copy in iCloud Drive." / "There’s no room for the next copy in your Google Drive." / "Your last copy from {time} is still there." |
-| Copy, access gone | "Google no longer allows the folder. Choose the account again to keep making copies." / "Choose account" |
-| Copy, another phone | "Another phone made a newer copy on {day}. This phone has stopped making copies, so nothing is overwritten." / "Make this phone the one in use" |
+| Restore, in use | "This phone now makes the backups. If your old phone turns up, it stops making them." |
+| Backup, states | "the next one runs tonight while this phone charges" / "waiting for Wi-Fi" / "There’s no room in your iCloud for tonight’s backup." / "There’s no room in your Google Drive for tonight’s backup." / "Your last backup from {day} is still there." / "Nocturne can’t reach your iCloud. Turn iCloud on in Settings to keep backing up." / "Google no longer lets Nocturne back up. Choose the account again." / "Choose account" |
+| Backup, another phone | "Another phone made a newer backup on {day}. This phone has stopped backing up, so nothing is overwritten." / "Make this phone the one in use" / "This phone’s next backup becomes the newest. The other phone stops when it next looks." / "Cancel" |
+| Backup, seven nights | "Your last backup was {day}." / "Open backup" / "Not now" |
 | Mind, choose | "Where should Nocturne’s mind be?" / "A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone unless you move it to a computer of your own." |
 | Mind, home | "A computer at home" / "Someone in your household runs Nocturne on a computer that’s always on and shows you its code. It reads and answers for you, and keeps nothing of yours." |
 | Mind, service | "An online service you choose" / "A company you have an account with reads what you keep. You’ll copy three details from its website." |
@@ -982,7 +1042,7 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Backup, save | "Save the backup…" / "Next, choose where to save it." |
 | Backup, done | "Your backup is saved." / "{size}, made {time}." / "OK" |
 | Restore, file | "Bring back your memory" / "Choose your backup file and type its passphrase." / "Choose the file" / "Bring it back" |
-| Restore, choice | "A locked copy online" / "A backup file" |
+| Restore, choice | "Your backup in iCloud" / "Your backup in Google Drive" / "A backup file" |
 | Heard by this phone | "Heard by this phone" |
 | Empty, Today | "Nothing kept yet today. Tap {keep} to keep something." / "Nothing in your calendar today." |
 | Empty, Ask | "Find anything you kept by its words." / "Nothing kept yet. What you keep can be found here by its words." |
