@@ -3,6 +3,7 @@ import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { t } from "../../copy/t";
 import type { FoundItem } from "../../engine/bindings";
+import { useStatus } from "../../engine/context";
 import styles from "./Memories.module.css";
 import { MemoryList } from "./MemoryList";
 import { useMemories, useUnread } from "./queries";
@@ -55,11 +56,16 @@ export function Results({ query }: { query: string }) {
   );
 }
 
-/** Kept things that match by their words and wait to be read, each with its original. */
+/**
+ * Kept things that match by their words and wait to be read, each with its original. With no
+ * mind yet, the line says answers need one; with one, that they are read tonight.
+ */
 function Unread({ found }: { found: FoundItem[] }) {
+  const mindless = useStatus().data?.state === "gettingReady";
+  const lead = t(mindless ? "phone.alone.find.above" : "item.status.keptTonight");
   return (
-    <section aria-label={t("phone.alone.find.above")}>
-      <p className={styles.hint}>{t("phone.alone.find.above")}</p>
+    <section aria-label={lead}>
+      <p className={styles.hint}>{lead}</p>
       <ul className={styles.unread}>
         {found.map((f) => (
           <li key={f.receipt.itemId}>
