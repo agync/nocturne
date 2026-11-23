@@ -1,0 +1,644 @@
+//! Bringing a phone's things into this store, when the computer already holds a memory
+//! (`docs/design/moving-memory.md`, "When the computer already holds a memory"). The phone's
+//! memory arrives as a backup, unpacked where it waits; this reads it and adds, in one write
+//! transaction, every kept thing with its original, how and where it was kept and its private
+//! mark, the journal and the check-ins. Nothing a mind worked out on the phone comes: no memories,
+//! pages, reflections or mentions. Calendar entries and health readings stay behind too; the phone
+//! sends them again. What arrives waits to be read as new; finding it by its words works at once.
+//!
+//! Each thing keeps its id, so bringing the same memory in twice adds nothing the second time.
+//! A thing already here (the same thing kept on both, one the phone sent as a companion of this
+//! computer, or one brought in before) is kept once: the one here stays, takes the phone's
+//! private mark, and notes the phone among the places it was kept (`$.alsoKeptOn`).
+
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use rusqlite::types::Value as Sql;
+use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
+use serde_json::{Value, json};
+
+use crate::Engine;
+use crate::capture::{extension_ok, original_path};
+use crate::error::{Error, Result};
+use crate::util::{new_id, random_hex};
+
+/// What bringing a phone's things in added, and what it found already here.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BroughtIn {
+    /// Things kept, apart from the journal and check-ins.
+    pub things: u32,
+    /// Journal entries and good things, as they stand now.
+    pub entries: u32,
+    /// Check-ins, as they stand now.
+    pub checkins: u32,
+    /// Things kept on both: the one here stays.
+    pub same: u32,
+    /// Things already here: sent earlier as a companion of this computer, or brought in before.
+    pub already: u32,
+}
+
+/// Metadata that names another item by its id.
+const REFS: [&str; 3] = ["replaces", "about", "photo"];
+
+/// Kinds a phone sends again rather than bringing.
+const SENT_AGAIN: &str = "('calendar', 'reading')";
+
+/// Columns reset on arrival: the computer reads each thing as new.
+const FRESH: [&str; 13] = [
+    "reason",
+    "lease_until",
+    "lease_token",
+    "attempts",
+    "failures",
+    "status_before",
+    "reread",
+    "understood_in_ms",
+    "priority",
+    "forget_epoch",
+    "lease_epoch",
+    "hold_until",
+    "summary",
+];
+
+/// One thing on the phone, as its row reads, with what the merge needs to decide its fate.
+struct Arriving {
+    row: Vec<Sql>,
+    id: String,
+    kind: String,
+    sha: String,
+    ext: Option<String>,
+    file: bool,
+    readable: bool,
+    private: bool,
+    kept_at: String,
+    meta: Value,
+    /// The client id it was kept under, when a keep on the phone itself made it.
+    client: Option<String>,
+    /// The name of the device it was kept on, as the phone knew it.
+    place: Option<String>,
+}
+
+impl Arriving {
+    fn role(&self) -> Option<&str> {
+        self.meta.get("journal").and_then(Value::as_str)
+    }
+
+    fn checkin(&self) -> bool {
+        self.kind == "checkin" || self.role() == Some("checkin")
+    }
+
+    fn entry_day(&self) -> Option<&str> {
+        (self.role() == Some("entry"))
+            .then(|| self.meta.get("journal_day").and_then(Value::as_str))
+            .flatten()
+    }
+
+    fn block(&self) -> u64 {
+        self.meta.get("block").and_then(Value::as_u64).unwrap_or(0)
+    }
+}
+
+enum Fate {
+    /// Added under this id.
+    Add(String),
+    /// Kept on both: the one here, by id.
+    Same(String),
+    /// Already here, by id.
+    Already(String),
+}
+
+impl Fate {
+    fn here(&self) -> &str {
+        match self {
+            Fate::Add(id) | Fate::Same(id) | Fate::Already(id) => id,
+        }
+    }
+}
+
+fn columns(conn: &Connection, schema: &str, table: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(&format!("PRAGMA {schema}.table_info({table})"))?;
+    let names = stmt.query_map([], |r| r.get::<_, String>(1))?;
+    Ok(names.collect::<rusqlite::Result<_>>()?)
+}
+
+fn is_sha256(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn text(v: &Sql) -> Option<String> {
+    match v {
+        Sql::Text(s) => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// Items a started forget still has to remove: they are as good as gone.
+fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
+    let mut stmt = phone.prepare("SELECT items FROM forget_jobs")?;
+    let lists: Vec<String> = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(lists
+        .iter()
+        .filter_map(|l| serde_json::from_str::<Vec<String>>(l).ok())
+        .flatten()
+        .collect())
+}
+
+/// Every thing on the phone that may travel, oldest first, read with the columns both stores
+/// share.
+fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<Arriving>> {
+    let at = |c: &str| shared.iter().position(|s| s == c);
+    let need = |c: &str| at(c).ok_or_else(|| Error::invalid(format!("the phone's items lack {c}")));
+    let (id, kind, sha, ext, file, txt, private, kept, meta) = (
+        need("id")?,
+        need("kind")?,
+        need("sha256")?,
+        need("ext")?,
+        need("file_name")?,
+        need("text")?,
+        need("private")?,
+        need("kept_at")?,
+        need("metadata")?,
+    );
+    let gone = forgetting(phone)?;
+    // The device each phone keep came through, and the name of any that is not the phone itself.
+    let mut keeps: HashMap<String, (String, Option<String>)> = HashMap::new();
+    {
+        let mut stmt = phone.prepare(
+            "SELECT rk.item_id, rk.client_id, CASE WHEN rd.connection = 'local' THEN NULL \
+             ELSE rd.name END FROM remote_keeps rk LEFT JOIN remote_devices rd \
+             ON rd.id = rk.device_id",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (item, client, through) = row?;
+            keeps.insert(item, (client, through));
+        }
+    }
+    let cols = shared.join(", ");
+    let mut stmt = phone.prepare(&format!(
+        "SELECT {cols} FROM items WHERE kind NOT IN {SENT_AGAIN} ORDER BY kept_at, rowid"
+    ))?;
+    let width = shared.len();
+    let rows = stmt.query_map([], |r| {
+        (0..width)
+            .map(|i| r.get::<_, Sql>(i))
+            .collect::<rusqlite::Result<Vec<Sql>>>()
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let row = row?;
+        let item_id = text(&row[id]).ok_or_else(|| Error::invalid("an item has no id"))?;
+        if gone.contains(&item_id) {
+            continue;
+        }
+        let sha256 = text(&row[sha]).unwrap_or_default();
+        let ext = text(&row[ext]);
+        let has_file = !matches!(row[file], Sql::Null);
+        if has_file && (!is_sha256(&sha256) || ext.as_deref().is_some_and(|e| !extension_ok(e))) {
+            return Err(Error::invalid("an original's name is not a stored name"));
+        }
+        let meta: Value = text(&row[meta])
+            .and_then(|m| serde_json::from_str(&m).ok())
+            .filter(Value::is_object)
+            .unwrap_or_else(|| json!({}));
+        // Only a keep through the phone itself names a client this computer may see again.
+        let (client, through) = match keeps.remove(&item_id) {
+            Some((client, None)) => (Some(client), None),
+            Some((_, through)) => (None, through),
+            None => (None, None),
+        };
+        let place = meta
+            .get("keptOn")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or(through)
+            .or_else(|| Some(name.to_string()));
+        out.push(Arriving {
+            id: item_id,
+            kind: text(&row[kind]).unwrap_or_default(),
+            sha: sha256,
+            ext,
+            file: has_file,
+            readable: has_file || !matches!(row[txt], Sql::Null),
+            private: matches!(row[private], Sql::Integer(n) if n != 0),
+            kept_at: text(&row[kept]).unwrap_or_default(),
+            meta,
+            client,
+            place,
+            row,
+        });
+    }
+    Ok(out)
+}
+
+/// The client id of the keep that made a journal item on the phone, from `$.keep`
+/// (`{device}/{client}`).
+fn journal_client(meta: &Value) -> Option<&str> {
+    meta.get("keep")?.as_str()?.split_once('/').map(|(_, c)| c)
+}
+
+/// What becomes of one thing: already here by its id, kept here already (the same original or
+/// words, or the same phone keep), or added.
+fn fate(tx: &Transaction<'_>, device: &str, p: &Arriving, taken: &HashSet<String>) -> Result<Fate> {
+    let same_id: Option<String> = tx
+        .query_row("SELECT sha256 FROM items WHERE id = ?1", [&p.id], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    if same_id.as_deref() == Some(p.sha.as_str()) {
+        return Ok(Fate::Already(p.id.clone()));
+    }
+    let same_sha: Option<String> = tx
+        .query_row("SELECT id FROM items WHERE sha256 = ?1", [&p.sha], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    if let Some(here) = same_sha {
+        return Ok(Fate::Same(here));
+    }
+    if let Some(client) = &p.client {
+        let sent: Option<String> = tx
+            .query_row(
+                "SELECT item_id FROM remote_keeps WHERE device_id = ?1 AND client_id = ?2",
+                [device, client],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(here) = sent {
+            return Ok(Fate::Already(here));
+        }
+    }
+    if let (Some(role), Some(client)) = (p.role(), journal_client(&p.meta)) {
+        let sent: Option<String> = tx
+            .query_row(
+                "SELECT id FROM items WHERE json_extract(metadata, '$.journal') = ?1 \
+                 AND json_extract(metadata, '$.keep') = ?2",
+                params![role, format!("{device}/{client}")],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(here) = sent {
+            return Ok(Fate::Already(here));
+        }
+    }
+    // An id that is taken here by something else, or by another thing arriving, gets a new one.
+    let id = if same_id.is_some() || taken.contains(&p.id) {
+        new_id("itm")
+    } else {
+        p.id.clone()
+    };
+    Ok(Fate::Add(id))
+}
+
+/// Entry blocks of `day` on both sides, numbered again in the order each was first kept, so
+/// nothing is joined into one entry and the day reads in time order. Answers the new number of
+/// each arriving block; blocks here are renumbered in place, by id.
+fn number_blocks(
+    tx: &Transaction<'_>,
+    day: &str,
+    arriving: &[(u64, &str)],
+) -> Result<HashMap<u64, u64>> {
+    let mut stmt = tx.prepare(
+        "SELECT id, COALESCE(json_extract(metadata, '$.block'), 0), kept_at FROM items \
+         WHERE json_extract(metadata, '$.journal') = 'entry' \
+         AND json_extract(metadata, '$.journal_day') = ?1",
+    )?;
+    let here: Vec<(String, u64, String)> = stmt
+        .query_map([day], |r| {
+            Ok((r.get(0)?, r.get::<_, i64>(1)? as u64, r.get(2)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut first: HashMap<(bool, u64), String> = HashMap::new();
+    for (_, block, at) in &here {
+        let e = first.entry((false, *block)).or_insert_with(|| at.clone());
+        if at < e {
+            *e = at.clone();
+        }
+    }
+    for (block, at) in arriving {
+        let e = first
+            .entry((true, *block))
+            .or_insert_with(|| at.to_string());
+        if *at < e.as_str() {
+            *e = at.to_string();
+        }
+    }
+    let mut order: Vec<((bool, u64), String)> = first.into_iter().collect();
+    order.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+    let number: HashMap<(bool, u64), u64> = order
+        .iter()
+        .enumerate()
+        .map(|(n, (key, _))| (*key, n as u64))
+        .collect();
+    for (id, block, _) in &here {
+        let new = number[&(false, *block)];
+        if new != *block {
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.block', ?2) WHERE id = ?1",
+                params![id, new as i64],
+            )?;
+        }
+    }
+    Ok(number
+        .into_iter()
+        .filter(|((phone, _), _)| *phone)
+        .map(|((_, block), n)| (block, n))
+        .collect())
+}
+
+/// The name of the place a thing here was kept, or none when it was kept on this computer.
+fn place_here(tx: &Transaction<'_>, id: &str) -> Result<Option<String>> {
+    Ok(tx.query_row(
+        "SELECT COALESCE((SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+           ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), \
+           json_extract(i.metadata, '$.keptOn')) FROM items i WHERE i.id = ?1",
+        [id],
+        |r| r.get(0),
+    )?)
+}
+
+/// A thing kept on both stays as it is here; the phone's private mark holds, and the phone joins
+/// the places it was kept. Answers cached audio to shred once committed.
+fn join_same(tx: &Transaction<'_>, here: &str, p: &Arriving) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let private: bool = tx.query_row("SELECT private FROM items WHERE id = ?1", [here], |r| {
+        r.get(0)
+    })?;
+    if p.private && !private {
+        tx.execute("UPDATE items SET private = 1 WHERE id = ?1", [here])?;
+        for m in crate::lifecycle::memories_of(tx, here, false)? {
+            files.extend(crate::lifecycle::set_private_tx(tx, &m, true)?);
+        }
+    }
+    if let Some(place) = &p.place
+        && place_here(tx, here)?.as_deref() != Some(place.as_str())
+    {
+        let had: Option<String> = tx.query_row(
+            "SELECT json_extract(metadata, '$.alsoKeptOn') FROM items WHERE id = ?1",
+            [here],
+            |r| r.get(0),
+        )?;
+        let mut places: Vec<String> = had
+            .and_then(|h| serde_json::from_str(&h).ok())
+            .unwrap_or_default();
+        if !places.contains(place) {
+            places.push(place.clone());
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.alsoKeptOn', json(?2)) \
+                 WHERE id = ?1",
+                params![
+                    here,
+                    serde_json::to_string(&places).expect("names serialise")
+                ],
+            )?;
+        }
+    }
+    Ok(files)
+}
+
+/// The originals the arriving things need that are not here yet, copied in beside the others
+/// under a passing name and then renamed. Answers the ones made, so a merge that does not commit
+/// takes them away again.
+fn copy_originals(from: &Path, to: &Path, items: &[&Arriving]) -> Result<Vec<PathBuf>> {
+    let mut made = Vec::new();
+    let copied = (|| {
+        for p in items.iter().filter(|p| p.file) {
+            let dest = original_path(to, &p.sha, p.ext.as_deref());
+            if dest.exists() {
+                continue;
+            }
+            let src = original_path(from, &p.sha, p.ext.as_deref());
+            if !src.is_file() {
+                continue;
+            }
+            let tmp = to.join(format!(".tmp-{}", random_hex(8)));
+            let written = (|| {
+                let mut input = std::fs::File::open(&src)?;
+                let mut output = crate::fsutil::create_private_file(&tmp)?;
+                std::io::copy(&mut input, &mut output)?;
+                output.sync_all()?;
+                std::fs::rename(&tmp, &dest)?;
+                Ok::<_, Error>(())
+            })();
+            if let Err(e) = written {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(e);
+            }
+            made.push(dest);
+        }
+        Ok(())
+    })();
+    match copied {
+        Ok(()) => Ok(made),
+        Err(e) => {
+            for f in made {
+                crate::fsutil::shred(&f);
+            }
+            Err(e)
+        }
+    }
+}
+
+impl Engine {
+    /// Bring the phone's memory in the store folder `staged` (a backup unpacked where it waits)
+    /// into this one, as things kept through paired phone `device`. All of it is added in one
+    /// write transaction, or none of it. Refused when `device` is not a live pairing here.
+    pub fn bring_in(&self, staged: &Path, device: &str) -> Result<BroughtIn> {
+        let db = staged.join(crate::DB_FILE);
+        if !db.is_file() {
+            return Err(Error::not_found("the phone's memory"));
+        }
+        let phone = crate::store::open_untrusted(&db)?;
+        let name: Option<String> = self.read(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT name FROM remote_devices WHERE id = ?1 AND connection != 'local' \
+                     AND revoked_at IS NULL",
+                    [device],
+                    |r| r.get(0),
+                )
+                .optional()?)
+        })?;
+        let name = name.ok_or_else(|| Error::not_found(format!("device {device}")))?;
+        let here_cols = self.read(|conn| columns(conn, "main", "items"))?;
+        let shared: Vec<String> = columns(&phone, "main", "items")?
+            .into_iter()
+            .filter(|c| here_cols.contains(c))
+            .collect();
+        let arriving = read_phone(&phone, &shared, &name)?;
+        drop(phone);
+
+        // The originals go first, outside the transaction, so the store is never held while
+        // they are copied. What the transaction then finds here already needs none of them.
+        let needed: Vec<&Arriving> = {
+            let have: HashSet<String> = self.read(|conn| {
+                let mut stmt = conn.prepare("SELECT sha256 FROM items")?;
+                let shas = stmt.query_map([], |r| r.get(0))?;
+                Ok(shas.collect::<rusqlite::Result<_>>()?)
+            })?;
+            arriving.iter().filter(|p| !have.contains(&p.sha)).collect()
+        };
+        let made = copy_originals(&staged.join("originals"), &self.originals_dir(), &needed)?;
+
+        let written = self.write(|tx| self.add_arriving(tx, device, &arriving, &shared));
+        match written {
+            Ok((brought, files)) => {
+                if !files.is_empty() {
+                    self.bump_audio();
+                }
+                crate::audio::shred_all(files);
+                Ok(brought)
+            }
+            Err(e) => {
+                for f in made {
+                    crate::fsutil::shred(&f);
+                }
+                Err(e)
+            }
+        }
+    }
+
+    fn add_arriving(
+        &self,
+        tx: &Transaction<'_>,
+        device: &str,
+        arriving: &[Arriving],
+        shared: &[String],
+    ) -> Result<(BroughtIn, Vec<PathBuf>)> {
+        let mut brought = BroughtIn::default();
+        let mut files = Vec::new();
+        let mut fates: Vec<Fate> = Vec::with_capacity(arriving.len());
+        let mut taken: HashSet<String> = HashSet::new();
+        for p in arriving {
+            let f = fate(tx, device, p, &taken)?;
+            if let Fate::Add(id) = &f {
+                taken.insert(id.clone());
+            }
+            fates.push(f);
+        }
+        let map: HashMap<&str, &str> = arriving
+            .iter()
+            .zip(&fates)
+            .map(|(p, f)| (p.id.as_str(), f.here()))
+            .collect();
+
+        // Entry blocks of days both sides wrote on, in time order.
+        let mut days: HashMap<&str, Vec<(u64, &str)>> = HashMap::new();
+        for (p, f) in arriving.iter().zip(&fates) {
+            if let (Fate::Add(_), Some(day)) = (f, p.entry_day()) {
+                days.entry(day)
+                    .or_default()
+                    .push((p.block(), p.kept_at.as_str()));
+            }
+        }
+        let mut blocks: HashMap<&str, HashMap<u64, u64>> = HashMap::new();
+        for (day, list) in &days {
+            blocks.insert(day, number_blocks(tx, day, list)?);
+        }
+
+        let at = |c: &str| shared.iter().position(|s| s == c);
+        let cols = shared.join(", ");
+        let marks = (1..=shared.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let insert = format!("INSERT INTO items({cols}) VALUES ({marks})");
+        for (p, f) in arriving.iter().zip(&fates) {
+            let id = match f {
+                Fate::Add(id) => id,
+                Fate::Same(here) => {
+                    brought.same += 1;
+                    files.extend(join_same(tx, here, p)?);
+                    continue;
+                }
+                Fate::Already(here) => {
+                    brought.already += 1;
+                    files.extend(join_same(tx, here, p)?);
+                    continue;
+                }
+            };
+            let mut meta = p.meta.clone();
+            let obj = meta.as_object_mut().expect("metadata is an object");
+            for key in REFS {
+                if let Some(to) = obj
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .and_then(|r| map.get(r))
+                {
+                    obj.insert(key.into(), json!(to));
+                }
+            }
+            if let Some(client) = journal_client(&p.meta) {
+                obj.insert("keep".into(), json!(format!("{device}/{client}")));
+            }
+            if let Some(place) = &p.place {
+                obj.insert("keptOn".into(), json!(place));
+            }
+            if let Some(n) = p
+                .entry_day()
+                .and_then(|d| blocks.get(d))
+                .and_then(|b| b.get(&p.block()))
+            {
+                obj.insert("block".into(), json!(n));
+            }
+            obj.remove("phone");
+            if p.readable {
+                obj.remove("read_at");
+            }
+            let mut row = p.row.clone();
+            let mut set = |c: &str, v: Sql| {
+                if let Some(i) = at(c) {
+                    row[i] = v;
+                }
+            };
+            set("id", Sql::Text(id.clone()));
+            set("metadata", Sql::Text(meta.to_string()));
+            if p.readable {
+                set("status", Sql::Text("kept".into()));
+            }
+            for c in FRESH {
+                set(
+                    c,
+                    match c {
+                        "attempts" | "failures" | "reread" | "priority" | "forget_epoch"
+                        | "lease_epoch" => Sql::Integer(0),
+                        _ => Sql::Null,
+                    },
+                );
+            }
+            tx.execute(&insert, params_from_iter(row.iter()))?;
+            if let Some(client) = &p.client {
+                tx.execute(
+                    "INSERT OR IGNORE INTO remote_keeps(item_id, device_id, client_id, kept_at) \
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![id, device, client, p.kept_at],
+                )?;
+            }
+            // Counted as they stand now: an earlier version replaced by another arriving one
+            // is not counted again.
+            let replaced = arriving.iter().zip(&fates).any(|(q, g)| {
+                matches!(g, Fate::Add(_))
+                    && q.meta.get("replaces").and_then(Value::as_str) == Some(p.id.as_str())
+            });
+            if replaced {
+                continue;
+            }
+            match p.role() {
+                _ if p.checkin() => brought.checkins += 1,
+                Some("entry") | Some("good") => brought.entries += 1,
+                Some(_) => {}
+                None => brought.things += 1,
+            }
+        }
+        Ok((brought, files))
+    }
+}
