@@ -10,7 +10,6 @@
 //! Policy (decay, ranking, windows) takes its time from the [`Clock`], so tests control it.
 
 mod admin;
-mod arrival;
 mod audio;
 mod backup;
 mod capture;
