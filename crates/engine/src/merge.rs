@@ -150,7 +150,8 @@ fn text(v: &Sql) -> Option<String> {
 
 /// Items a started forget still has to remove: they are as good as gone. Only a forget that takes
 /// originals removes items, and then only those no memory outside a forget still cites; the
-/// others stay on the phone, so they travel, with what was forgotten from them.
+/// others stay on the phone, so they travel, with what was forgotten from them. A thing goes with
+/// every earlier version of it.
 fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
     let mut stmt = phone.prepare(
         "SELECT DISTINCT j.value FROM forget_jobs f, json_each(f.items) j \
@@ -158,8 +159,15 @@ fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
            SELECT 1 FROM memory_sources ms JOIN memories m ON m.id = ms.memory_id \
            WHERE ms.item_id = j.value AND m.forgetting = 0)",
     )?;
-    let items = stmt.query_map([], |r| r.get::<_, String>(0))?;
-    Ok(items.collect::<rusqlite::Result<_>>()?)
+    let items: Vec<String> = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut gone = HashSet::new();
+    for item in items {
+        gone.extend(crate::journal::keep::earlier_versions(phone, &item)?);
+        gone.insert(item);
+    }
+    Ok(gone)
 }
 
 /// What the person forgot on the phone, as the claims kept for each item that said them, so the
