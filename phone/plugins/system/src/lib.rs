@@ -2,8 +2,9 @@
 //! to edge), the phone's name for the default device name, this app's settings page for a
 //! camera turned off there, and what the app was opened for from outside (a shortcut on its
 //! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
-//! the room left on the phone, and on an iPhone a folder kept out of its backup. On a computer
-//! every command answers a stand-in.
+//! the room left on the phone, and on an iPhone a folder kept out of its backup. For the core
+//! alone: a secret kept in the phone's safe place (Android's keystore, the iPhone's keychain).
+//! On a computer every command answers a stand-in, and no secret is kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -115,6 +116,19 @@ struct Free {
 }
 
 #[derive(Debug, Serialize)]
+struct Secret<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<&'a str>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SecretValue {
+    #[serde(default)]
+    value: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct SaveFile<'a> {
     path: &'a str,
     name: &'a str,
@@ -203,6 +217,30 @@ impl<R: Runtime> System<R> {
     pub fn choose_file(&self, dir: &Path) -> Result<Sheet, Error> {
         let sheet = self.native("chooseFile", Folder { path: plain(dir)? })?;
         Ok(sheet.unwrap_or(Sheet::Failed))
+    }
+
+    /// Keeps `value` as the secret `name` in the phone's safe place, in place of one kept
+    /// before. An error where there is no safe place, as on a computer.
+    pub fn keep_secret(&self, name: &str, value: &str) -> Result<(), Error> {
+        let args = Secret {
+            name,
+            value: Some(value),
+        };
+        let kept: Option<serde_json::Value> = self.native("secretKeep", args)?;
+        kept.map(drop).ok_or_else(|| Error("no safe place".into()))
+    }
+
+    /// The secret `name`, or `None` when none is kept.
+    pub fn secret(&self, name: &str) -> Result<Option<String>, Error> {
+        let read: Option<SecretValue> = self.native("secretRead", Secret { name, value: None })?;
+        Ok(read.and_then(|r| r.value))
+    }
+
+    /// Removes the secret `name`, and on Android the key that sealed it.
+    pub fn forget_secret(&self, name: &str) -> Result<(), Error> {
+        let _: Option<serde_json::Value> =
+            self.native("secretForget", Secret { name, value: None })?;
+        Ok(())
     }
 
     /// Keep a folder of the app's out of the phone's own backup. Only an iPhone needs asking:

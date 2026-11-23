@@ -12,6 +12,11 @@ struct SaveArgs: Decodable {
   var name: String
 }
 
+struct SecretArgs: Decodable {
+  var name: String
+  var value: String?
+}
+
 /// Room left over after a copy, so the phone is not filled to the last byte.
 private let spare: Int64 = 16 * 1024 * 1024
 
@@ -54,6 +59,27 @@ private final class Sheet: NSObject, UIDocumentPickerDelegate, UIAdaptivePresent
 /// phone's own sheets to save a file and to choose one. Every other command answers its stand-in.
 class SystemPlugin: Plugin {
   private var sheet: Sheet?
+
+  /// Keeps a secret in the keychain, in place of one of the same name.
+  @objc public func secretKeep(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecretArgs.self)
+    guard Safe.validName(args.name), let value = args.value else { return invoke.reject("invalid") }
+    Safe.keep(args.name, value) ? invoke.resolve() : invoke.reject("failed")
+  }
+
+  /// A kept secret, or null.
+  @objc public func secretRead(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecretArgs.self)
+    guard Safe.validName(args.name) else { return invoke.reject("invalid") }
+    let value: Any = Safe.read(args.name) ?? NSNull()
+    invoke.resolve(["value": value])
+  }
+
+  @objc public func secretForget(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecretArgs.self)
+    guard Safe.validName(args.name) else { return invoke.reject("invalid") }
+    Safe.forget(args.name) ? invoke.resolve() : invoke.reject("failed")
+  }
 
   /// Marks a folder of the app's own so iCloud and computer backups leave it out. The mark is
   /// on the folder: what is written in it later stays out too.

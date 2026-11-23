@@ -16,7 +16,7 @@ use crate::home::{Home, dispatch};
 struct Shared(Arc<MemoryKeys>);
 
 impl Keys for Shared {
-    fn keep(&self, key: OnlineKey) {
+    fn keep(&self, key: OnlineKey) -> bool {
         self.0.keep(key)
     }
     fn key(&self) -> Option<OnlineKey> {
@@ -357,4 +357,108 @@ fn the_first_page_waits_for_the_next_morning() {
         w.pass();
     }
     assert_eq!(pages(), 1);
+}
+
+#[test]
+fn a_key_in_the_safe_place_turns_the_mind_on_again_at_the_next_start() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    let again = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Shared(w.keys.clone())),
+        w.clock.clone(),
+    );
+    assert!(matches!(again.chosen(), Chosen::On { .. }));
+    again.turn_off();
+    assert!(w.keys.key().is_none());
+}
+
+/// A safe place that keeps nothing.
+struct Refusing;
+
+impl Keys for Refusing {
+    fn keep(&self, _: OnlineKey) -> bool {
+        false
+    }
+    fn key(&self) -> Option<OnlineKey> {
+        None
+    }
+    fn forget(&self) {}
+}
+
+#[test]
+fn a_key_the_safe_place_refuses_lasts_until_the_app_closes() {
+    let w = world();
+    let refusing = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Refusing),
+        w.clock.clone(),
+    );
+    refusing.turn_on(w.settings()).unwrap();
+    assert!(refusing.is_on());
+    let again = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Refusing),
+        w.clock.clone(),
+    );
+    assert!(matches!(again.chosen(), Chosen::NeedsKey { .. }));
+}
+
+/// A safe place that holds what it already had and refuses anything new.
+struct Stuck(Arc<MemoryKeys>);
+
+impl Keys for Stuck {
+    fn keep(&self, _: OnlineKey) -> bool {
+        false
+    }
+    fn key(&self) -> Option<OnlineKey> {
+        self.0.key()
+    }
+    fn forget(&self) {
+        self.0.forget()
+    }
+}
+
+#[test]
+fn a_new_choice_whose_key_is_refused_leaves_no_older_key_behind() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    let other = w.rt.block_on(StandIn::start());
+    let stuck = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Stuck(w.keys.clone())),
+        w.clock.clone(),
+    );
+    let settings = ProviderSettings {
+        url: other.url(),
+        key: "another-key".into(),
+        model: MODEL.into(),
+    };
+    stuck.turn_on(settings).unwrap();
+    assert!(w.keys.key().is_none());
+    let again = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Shared(w.keys.clone())),
+        w.clock.clone(),
+    );
+    assert!(matches!(again.chosen(), Chosen::NeedsKey { .. }));
+}
+
+#[test]
+fn a_key_given_for_another_address_is_never_used() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    let other = w.rt.block_on(StandIn::start());
+    let wrong = OnlineKey::new(format!("{}:{KEY}", "0".repeat(64)));
+    w.keys.keep(wrong);
+    let again = PhoneMind::new(
+        w._dir.path().to_path_buf(),
+        Box::new(Shared(w.keys.clone())),
+        w.clock.clone(),
+    );
+    again.host().set_charging(Some(true));
+    assert!(matches!(again.chosen(), Chosen::NeedsKey { .. }));
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    assert_eq!(again.pass(&w.home, w.rt.handle()), Pass::Off);
+    assert!(w.stand_in.seen().is_empty() && other.seen().is_empty());
 }

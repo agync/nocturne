@@ -6,10 +6,11 @@
 //!
 //! The screens call [`PhoneMind::check`], [`PhoneMind::turn_on`], [`PhoneMind::turn_off`] and
 //! [`PhoneMind::chosen`]. The address and model are kept in a file of the app's; the key is held
-//! by a [`Keys`], in memory ([`MemoryKeys`]) until the phone's keystore-backed safe place is
-//! behind the same trait. With no key held, a chosen provider is not reached.
+//! by a [`Keys`], the phone's safe place ([`SafeKeys`]). With no key held, a chosen provider is
+//! not reached.
 
 pub mod host;
+pub mod keys;
 #[cfg(test)]
 mod tests;
 
@@ -30,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use crate::home::Home;
 use crate::sync::ledger::write_private;
 use host::PhoneHost;
+pub use keys::{Keys, MemoryKeys, SafeKeys};
 
 const FILE: &str = "mind.json";
 /// How long between passes while nothing is left to read.
@@ -76,31 +78,6 @@ pub enum Pass {
     Ran { read: usize, scheduled: bool },
 }
 
-/// Where the key is held.
-pub trait Keys: Send + Sync {
-    fn keep(&self, key: OnlineKey);
-    fn key(&self) -> Option<OnlineKey>;
-    fn forget(&self);
-}
-
-/// The key in this process's memory only, wiped when forgotten.
-#[derive(Default)]
-pub struct MemoryKeys(Mutex<Option<OnlineKey>>);
-
-impl Keys for MemoryKeys {
-    fn keep(&self, key: OnlineKey) {
-        *lock(&self.0) = Some(key);
-    }
-
-    fn key(&self) -> Option<OnlineKey> {
-        lock(&self.0).clone()
-    }
-
-    fn forget(&self) {
-        lock(&self.0).take();
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Saved {
     url: String,
@@ -124,6 +101,25 @@ struct Thinking {
     generation: u64,
     reader: Reader,
     scheduler: Scheduler,
+}
+
+/// The key as it is held: tied to the address it was given for, so it is never sent to another.
+fn bound(url: &str, key: &OnlineKey) -> OnlineKey {
+    OnlineKey::new(format!("{}:{}", address_tag(url), key.expose()))
+}
+
+/// The held key, when it was given for `url`.
+fn unbound(url: &str, held: &OnlineKey) -> Option<OnlineKey> {
+    let (tag, key) = held.expose().split_once(':')?;
+    (tag == address_tag(url)).then(|| OnlineKey::new(key.to_string()))
+}
+
+fn address_tag(url: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(url.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -155,7 +151,8 @@ impl PhoneMind {
             thinking: Arc::default(),
             retry: AtomicBool::new(false),
         };
-        if let (Some(saved), Some(key)) = (mind.saved(), mind.keys.key())
+        if let Some(saved) = mind.saved()
+            && let Some(key) = mind.keys.key().and_then(|held| unbound(&saved.url, &held))
             && let Err(e) = mind.fill(&saved, key)
         {
             tracing::warn!("the chosen provider's address no longer passes: {e:?}");
@@ -230,7 +227,11 @@ impl PhoneMind {
             tracing::warn!("the chosen provider could not be kept: {e}");
             UrlProblem::Invalid
         })?;
-        self.keys.keep(key.clone());
+        // A key kept before belongs to the provider chosen before: none outlives a new choice.
+        if !self.keys.keep(bound(&saved.url, &key)) {
+            self.keys.forget();
+            tracing::warn!("the mind works until the app closes, and then asks for its key");
+        }
         self.fill(&saved, key)
     }
 

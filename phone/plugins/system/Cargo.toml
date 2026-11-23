@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-nocturne-system"
-description = "The phone's own bits Nocturne needs: screen insets, the phone's name, its app settings"
+description = "The phone's own bits Nocturne needs: screen insets, the phone's name, its app settings, its safe place"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

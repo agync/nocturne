@@ -37,7 +37,8 @@ pub fn run() {
                 clock.clone(),
                 exclude_from_backup(app.handle()),
             );
-            let thinking = mind::PhoneMind::new(dir, Box::new(mind::MemoryKeys::default()), clock);
+            let thinking =
+                mind::PhoneMind::new(dir, Box::new(mind::SafeKeys(app.handle().clone())), clock);
             thinking.follow(&home);
             app.manage(home);
             app.manage(thinking);
