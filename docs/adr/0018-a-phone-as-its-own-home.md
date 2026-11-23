@@ -52,6 +52,14 @@ These change `AGENTS.md`. The owner approved them clause by clause: each clause 
 `AGENTS.md` when the record it names is accepted, and not before. They are written here so the phone
 parity records share one wording.
 
+| Clause | In `AGENTS.md` |
+|---|---|
+| Invariant 2, an online mind on a phone (0020), the key route | **Yes**, since 2026-11-23, when the owner accepted 0020 |
+| Invariant 2, Apple's servers as a phone's mind | No: later, with the Apple trial |
+| Invariant 2, a locked copy online (0019) | No: 0019 is proposed |
+| Invariant 2, a household's mind (0021) | No: 0021 is proposed |
+| First line, invariants 4 and 5, the new invariant | No: they go in with this record |
+
 **First line.** "Nocturne is a private app for the computer and the phone that remembers your day,
 tidies its memory overnight, and hands you one page each morning. It is a Tauri 2 app (Rust core,
 web-view interface); on a computer it ships and supervises a private, embedded Lemonade server."
@@ -67,11 +75,11 @@ web-view interface); on a computer it ships and supervises a private, embedded L
 > at that provider's list of models each time the engine starts; while the person has turned on a
 > locked copy online, copies of their memory locked with a key only they hold, to the one place they
 > chose for it, plus the sign-in and listing that place needs (0019); while a phone that is its own
-> home has an online mind, that phone's requests to the one service the person chose, or to Apple's
-> servers through the phone's own system (the words of what it reads, each question with the few
-> remembered sentences it needs, and the lines a page is written from; never photos or recordings
-> themselves, check-ins, or anything marked private), plus one look at that service's list of models
-> when it is checked (0020); and, while the person borrows a household's mind with the code its
+> home has an online mind the person chose, that phone's requests to the one provider they chose,
+> online or on their own network (the words of what it reads, each question with the few remembered
+> sentences it needs, and the lines a page is written from; never the originals themselves, such as
+> photos and recordings, never check-ins, and never anything marked private), plus one look at that
+> provider's list of models when it is checked (0020); and, while the person borrows a household's mind with the code its
 > owner showed them, sealed traffic between their phone and that household's computer through the
 > connection its owner chose, carrying only what the request in flight needs and never anything
 > marked private, plus, on that computer while its owner lends its mind, the same sealed traffic to

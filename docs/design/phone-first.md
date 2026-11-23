@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Nocturne on a phone of its own
-description: Proposal for steps 1 and 2 of the phone parity roadmap, a phone with its own memory and no computer, then a locked copy online and an online mind, with first run, Today with no mind, finding by words, the consent screens, This phone, states and copy, and a build-ready specification of the first release, a phone alone.
+description: Proposal for steps 1 and 2 of the phone parity roadmap, a phone with its own memory and no computer, then an online mind and a locked copy online, with first run, Today with no mind, finding by words, the consent screens, This phone, states and copy, and a build-ready specification of the first release, a phone alone.
 status: draft
 tags: [proposal, ux, phone, online-answers, backup, privacy, copy]
 ---
@@ -11,9 +11,11 @@ tags: [proposal, ux, phone, online-answers, backup, privacy, copy]
 Part of [Phone and computer as equal starting points](phone-parity.md). This page covers a phone
 with its own memory (step 1) and what it can turn on online (step 2): a locked copy, and a mind.
 
-Status: proposed, with the owner's decisions folded in. Nothing here is built. [The first
-release](#the-first-release-a-phone-alone) is specified to build once approved; the locked copy and
-the online mind follow it, in that order.
+Status: proposed, with the owner's decisions folded in. [The first
+release](#the-first-release-a-phone-alone) is specified to build once approved; the online mind and
+the locked copy follow it, in that order (owner, 2026-11-23). The online mind's record,
+[0020](/adr/0020-an-online-mind-on-a-phone.md), is accepted and its clause is in invariant 2; [its
+first release](#the-first-release-of-an-online-mind) is Android with the key route.
 
 ## Mockups
 
@@ -75,8 +77,8 @@ first; iPhone follows the same words once the engine is built and tried there.
 | The phone's calendar and health readings on Today and in the journal | |
 | Finding what was kept by its words, with receipts | Answers, which need a mind |
 | Forgetting and fading, delete, Delete everything, export | |
-| Backups to a file, and restoring one on a new phone | A locked copy online (phase 2a) |
-| Moving the memory to a computer of one's own | An online mind (phase 2b), a household's mind (phase 3) |
+| Backups to a file, and restoring one on a new phone | A locked copy online (phase 2b) |
+| Moving the memory to a computer of one's own | An online mind (phase 2a), a household's mind (phase 3) |
 | Voice notes turned into words by the phone, where it can with no network ([below](#voice-notes-in-words)) | |
 | An item's own page on the phone, with marking it private ([below](#an-item-on-the-phone)) | |
 | On the computer: "Already use Nocturne on your phone?" in first run, and receiving a phone's memory ([Moving](moving-memory.md#on-the-computer-a-phone-with-its-own-memory)) | Moving a memory from a computer to a phone, which waits for a phone that can hold one |
@@ -693,6 +695,24 @@ The memory-stays line is true of the first three: using a mind never moves a mem
 copy of it where the mind runs. The fourth moves the memory, by pairing, and says so in its own
 line. "On this phone" joins the list only when the phone's own mind ships.
 
+### The first release of an online mind
+
+Phase 2a, Android first. It ships the key route alone, so the choice screen shows only what ships.
+
+| Part | In the first release |
+|---|---|
+| Choices | "An online service you choose" and "A computer of your own", in that order. "A computer at home" comes with phase 3; "Apple Intelligence" is later, after its trial and its own clause in invariant 2, and is not shown, hinted or greyed |
+| The form | Online answers' one form, on the phone: "API URL", "API key", "Model name", for one provider, with 0011's address rules (online over `https://`, or the person's own network over either) and its check. No list of providers and nothing specific to any one |
+| The limit | Step 3, as Online answers: no limit by default, or a number of things read and answered, or an amount |
+| Sent online | "See what was sent" in This phone opens the Sent online list on the phone: what went, to which host, when, for 90 days, removed with the key by Delete everything |
+| When it reads | While the phone charges and the system allows a background task, a few things at a time, and at once for a question asked in Ask |
+| The key | In Android's keystore-backed safe place, never in the memory or a backup |
+| iPhone | The same screens and route once the engine and this mind are built and tried on iPhone |
+
+The first release's "Give Nocturne a mind" becomes [Where should Nocturne's mind
+be?](#where-should-nocturnes-mind-be) with these two choices. The `choose` mockup shows the list as it reads once every
+phase has shipped.
+
 ### An online service you choose
 
 Four steps, following Online answers' five less the step that chooses which questions go, because a
@@ -802,6 +822,27 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 | Key refused, no credit | 0011's titles and bodies, with "this computer answers" replaced by "Ask finds by words" |
 | Paused by the limit | 0011's words, "until {day}" |
 | No connection | "This phone isn’t online. What you keep waits to be read." |
+
+### Checks before the online mind ships
+
+As [0020](/adr/0020-an-online-mind-on-a-phone.md#checks-before-it-ships) states them, on an Android
+emulator with every packet it sends captured and a stand-in provider at an address no one else uses.
+No real provider, address or key is in a test, a fixture or this page.
+
+| Check | Passes when |
+|---|---|
+| Off | A phone alone with the mind never turned on, and again after "Turn off", reaches nothing but consented app downloads |
+| On, one host | Every connection goes to the one host entered: the check, one look at its list of models, reading, the page and answers. Nothing else, no redirect followed |
+| What goes | A fixture memory with check-ins, a thing marked private, a photo and a recording, each with a marker phrase, is read, paged and asked about. No request holds a marker phrase or a byte of an original |
+| The record | The Sent online list matches what the stand-in received, request for request |
+| Turning off | Nothing goes after the off mark; the key is gone from the safe place |
+| The limit | With a limit of 3 things, the fourth waits and the paused words show |
+| No network | Keeping, finding by words and the journal work as a phone alone; what is kept waits to be read |
+
+The network rule: neither phone lets an app name a host the person types in its built-in rules, and
+the phone's core opens its own connections, so the one-host rule lives in the core's client and the
+check above proves it. iPhone asks for local network access only when the host is on the person's
+own network.
 
 ## Copy
 

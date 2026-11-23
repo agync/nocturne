@@ -331,7 +331,8 @@ shows every fact in full before the person agrees.
 ## Rule changes this needs
 
 Proposed wording. The owner approved it clause by clause: each clause goes into `AGENTS.md` when its
-record (0019, 0020, 0021) is accepted. None is made by this page. The exact wording is in
+record (0019, 0020, 0021) is accepted. None is made by this page. The online mind clause (0020, the
+key route) is in `AGENTS.md` since 2026-11-23. The exact wording is in
 [0018 A phone as its own home](/adr/0018-a-phone-as-its-own-home.md#proposed-contract-changes), and
 each clause takes effect only with the record it names.
 
@@ -353,7 +354,7 @@ each clause takes effect only with the record it names.
 |---|---|
 | [0018 A phone as its own home](/adr/0018-a-phone-as-its-own-home.md), proposed | The phone app keeps its own memory with the engine's store, no mind on the phone in the first release, moving between homes by the backup format over the sealed channel, only by pairing, one home at a time enforced at pairing. Reverses "a phone that works without a computer" in [Nocturne on Android and iPhone](phone-apps.md#goals) |
 | [0019 A locked copy online](/adr/0019-a-locked-copy-online.md), proposed | The phone writes numbered copies, never overwritten, sealed with a key that is itself locked with the person's passphrase (the [0013](/adr/0013-passphrase-backup.md) format), to iCloud Drive on iPhone or the app's hidden Google Drive folder on Android, or a storage address the person runs. Originals go once each. The last seven copies are kept, and forgetting for good prunes older ones at once, so forgetting reaches the copy. This is the online backup; the phone's own device backup is out of scope, and the memory stays out of it. Triggers 0013's "revisit when kept somewhere other than a file they chose" |
-| [0020 An online mind on a phone](/adr/0020-an-online-mind-on-a-phone.md), proposed, amending [0011 Online answers](/adr/0011-online-answers.md) | On a phone alone the phone's own core calls the service, not `lemond`. The service also reads the words of what is kept and writes the page. A named second route on iPhone, Apple Intelligence on Apple's servers, with no key, against "one generic form" and "no provider-specific code". The health, money and ID check stops holding things back, on the computer too: only things marked private are held back ([decision 20](#decisions)) |
+| [0020 An online mind on a phone](/adr/0020-an-online-mind-on-a-phone.md), accepted 2026-11-23, amending [0011 Online answers](/adr/0011-online-answers.md) | On a phone alone the phone's own core calls the service, not `lemond`. The service also reads the words of what is kept and writes the page. A named second route on iPhone, Apple Intelligence on Apple's servers, with no key, against "one generic form" and "no provider-specific code". The health, money and ID check stops holding things back, on the computer too: only things marked private are held back ([decision 20](#decisions)) |
 | [0021 A household mind for invited phones](/adr/0021-a-household-mind-for-invited-phones.md), proposed | One household code admits any phone holding it to borrow the mind; nothing is kept about any borrowing phone; a new code cuts off every phone holding the old one. A separate typed set of calls for borrowing with no handle on any store, a scheduler that takes turns without counting per phone |
 | Later: a household computer as someone's home | The third role, keeps its memory here: one store and key per person, entered only by a code for that person and their own pairing, with its own Local only clause |
 | [Nocturne on Android and iPhone](phone-apps.md#decisions-for-the-owner), decision 6 | Every calendar starts on for companions too ([decision 20](#decisions)) |
@@ -363,12 +364,12 @@ each clause takes effect only with the record it names.
 
 ## Phasing
 
-The owner's order: a phone alone, then online, then the household.
+The owner's order: a phone alone, then online (the online mind first, then the locked copy), then the household.
 
 ```mermaid
 flowchart LR
     P0["Now<br/>companion apps<br/>Android, then iPhone"] --> P1["1 · A phone alone<br/>own memory, calendar, health,<br/>find by words, move to a computer"]
-    P1 --> P2["2 · Online<br/>a locked copy online,<br/>an online mind"]
+    P1 --> P2["2 · Online<br/>an online mind,<br/>then a locked copy online"]
     P2 --> P3["3 · Household: borrow its mind<br/>one household code, the desktop app hosts"]
     P3 --> P4["4 · Household: make it your home<br/>by pairing"]
     P4 --> P5["5 · A household computer<br/>without a window"]
@@ -379,8 +380,8 @@ flowchart LR
 |---|---|---|---|
 | Now | Today's companion apps, as designed | Nothing new | Approved and being built |
 | 1 | A phone alone: its own memory, keep, journal, check-ins, calendar and health on the phone, find by words, backups to a file, and moving that memory to a computer | The native app; the engine's store built for the phone; the backup format | The owner's first step: a satellite with its own data and connections. Moving to a computer ships with it, so no one is stuck |
-| 2a | A locked copy online, and restoring it on a new phone | Phase 1; the invariant 2 change | A lost phone must not lose a memory once people rely on it |
-| 2b | An online mind for a phone alone: the key route on both, Apple Intelligence after a trial | Phase 1; 0011 amended; the invariant 2 change | The first way a phone alone gets a page and answers |
+| 2a | An online mind for a phone alone: the key route, Android first, then iPhone; Apple Intelligence later, after a trial | Phase 1; 0011 amended; 0020 and its invariant 2 clause, both in since 2026-11-23 | The first way a phone alone gets a page and answers. The owner put it first (decision 35) |
+| 2b | A locked copy online, and restoring it on a new phone | Phase 1; 0019 | A lost phone must not lose a memory once people rely on it |
 | 3 | Borrowing a household's mind with its code, hosted by the desktop app | Phase 1 (the phone keeps its own memory and drives its own reading); the guest calls and turn-taking on the computer | Needs nothing kept on the host, so it is the smaller household promise |
 | 4 | A household computer as someone's home, by pairing | Phase 3 (the Household page and its calls); one store and key per person; moving a memory | The larger promise: another person's memory on a computer someone else runs |
 | 5 | A household computer with no window (the server image) | Phase 4; 0012's blockers closed; Away from home without a window | Most households have no spare computer with a screen on all night |
@@ -427,7 +428,11 @@ online mind, are complete end states, never steps towards a computer or a househ
   on iOS 27 (decision 7). It reads words, writes the page and answers, never photos or recordings
   (decision 8); check-ins stay home (decision 10); nothing else is held back unless marked private
   (decision 20) ([0020](/adr/0020-an-online-mind-on-a-phone.md)).
-- **Depends on.** A phone alone; 0020 and the invariant 2 change; for Apple, the trial.
+- **Accepted.** 0020 and its invariant 2 clause, 2026-11-23 (decision 34). The first release is
+  Android with the key route: Online answers' one form, the limit and the Sent online list on the
+  phone ([The first release of an online mind](phone-first.md#the-first-release-of-an-online-mind)).
+  Apple Intelligence is later, with its trial and its own clause.
+- **Depends on.** A phone alone; for Apple, the trial.
 
 - **Apple trial (owner, A).** It passes when a typical day's reading (about 50 things) and its page
   fit inside one day's limit, at a quality the owner signs off on a fixed set.
@@ -620,4 +625,6 @@ The owner then answered the questions the first pass left open:
 | 31 | Finishing a move on the computer (question 9) | A: reopen the memory in place. B: restart Nocturne, saying so before and after. C: no restart: an empty computer brings the phone's things in | **C, no restart: an empty computer brings the phone's things in** (owner, 2026-11-23). It runs as bringing things in does (decision 32), without the question, since an empty computer has nothing to choose about: kept things with their originals, how and where they were kept and their private marks, journal entries and check-ins travel; calendar and health are sent again from the phone; the phone becomes a companion and puts its memory aside (removed now or kept 30 days). Pages and reflections stay in what is put aside on the phone. Why: in the end-to-end test the restart (B, chosen earlier by build cost) gave a Simple connection a new address, and the phone, still waiting on "Finishing on {computer}…", could never reach the computer again. Restoring a backup file still restarts (0013) |
 | 32 | A memory moving to a computer that already holds one | A: put the computer's memory aside and take the phone's (0013's replace). B: bring the phone's things into the computer's memory. C: use the computer's memory and bring nothing | **B or C, the person chooses on the computer** (owner). Replace leaves the move; it stays only for restoring a backup file. Bringing things in is the one merge in Nocturne, and still one home afterwards |
 | 33 | How the choice in decision 32 works | Default selection; a way back after "Use this computer’s memory"; which moves it covers | **"Bring the phone’s things in" is selected when the dialog opens. After "Use this computer’s memory", what was put aside on the phone offers "Bring its things to {computer}…" later. The two choices apply to any move into a computer that already holds a memory**, not only from a phone alone (owner) |
+| 34 | ADR 0020, an online mind on a phone | Accept now, or with the rest of step 2 | **Accepted now** (owner, 2026-11-23). Its clause for the key route is in invariant 2; Apple's servers join with their own clause after the trial. Real-provider runs happen only in development once this design merges; tests use a stand-in provider |
+| 35 | Which of step 2 ships first | A: the locked copy. B: the online mind | **B, the online mind, then the copy** (owner, 2026-11-23) |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |

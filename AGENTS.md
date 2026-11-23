@@ -24,10 +24,16 @@ is not built or a build that is not designed.
 2. **Local only.** No telemetry, no cloud calls, no network traffic other than consented model and app
    downloads; while the person has turned on Away from home, sealed traffic to their own paired
    phones through the connection they chose, plus that connection's own traffic to its company's
-   servers and relays to stay connected; and, while the person has turned on Online answers, the
+   servers and relays to stay connected; while the person has turned on Online answers, the
    embedded engine's requests to the one provider they chose for answers, online or on their own
    network (a question with the few remembered sentences it needs, never anything marked private),
-   plus one look at that provider's list of models each time the engine starts. The embedded `lemond` binds loopback with a per-launch key.
+   plus one look at that provider's list of models each time the engine starts; and, while a phone
+   that is its own home has an online mind the person chose, that phone's requests to the one
+   provider they chose, online or on their own network (the words of what it reads, each question
+   with the few remembered sentences it needs, and the lines a page is written from; never the
+   originals themselves, such as photos and recordings, never check-ins, and never anything marked
+   private), plus one look at that provider's list of models when it is checked. The embedded
+   `lemond` binds loopback with a per-launch key.
 3. **No jargon in the interface.** Model, inference, token, NPU, GPU, embedding and graph appear only
    in advanced details views. See `docs/design/experience-principles.md`.
 4. **Receipts or it did not happen.** Every answer and page line cites the original it came from.

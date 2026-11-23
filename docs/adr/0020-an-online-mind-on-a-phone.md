@@ -1,14 +1,14 @@
 ---
 type: Decision
 title: "0020 An online mind on a phone"
-description: "Proposed: a phone that is its own home can choose an online service with the person's own key, or Apple's servers on iPhone after a trial, to read the words of what it keeps, write its page and answer; called by the phone's core, opt-in, never photos, recordings, check-ins or anything marked private."
-status: draft
+description: "Accepted: a phone that is its own home can choose an online service with the person's own key to read the words of what it keeps, write its page and answer, Android first; called by the phone's core, opt-in, never originals, check-ins or anything marked private; Apple's servers on iPhone come later, after a trial."
+status: stable
 tags: [adr, phone, online, privacy, mind]
 ---
 
 # 0020 An online mind on a phone
 
-Status: proposed. Date: 2026-11-22.
+Status: accepted by the owner on 2026-11-23 ("ADR 0020 accepted now"). Proposed 2026-11-22.
 
 ## Context
 
@@ -26,6 +26,11 @@ with no key on iOS 27. The design is [Choosing a mind](/design/phone-first.md#ch
   consent steps in the design: a service with the person's own address, key and model name, on both
   phones; and, on iPhone, Apple Intelligence on Apple's servers, after a trial on iOS 27 confirms its
   limits and terms. Android's default becomes the phone's own mind once that ships.
+- **Android first, the key route only.** The first release is Android, with Online answers' one
+  form (one provider, its key, the model), its address rules, an optional monthly limit and the Sent
+  online list on the phone. iPhone follows with the same route once its build is tried. Apple
+  Intelligence is later: it needs its trial and its own clause in invariant 2, and nothing about it
+  ships with the first release.
 - **The phone's core makes the call.** There is no `lemond` on a phone. The phone's Rust core calls
   the service, with the same typed steps the computer's mind uses (read a thing's words, answer
   from the few lines found, write the page), never a general chat.
@@ -41,7 +46,34 @@ with no key on iOS 27. The design is [Choosing a mind](/design/phone-first.md#ch
   code". On the computer too, the check for health, money or ID details stops holding sentences
   back: only things marked private are held back.
 - **Invariant 2** gains the online mind clause proposed in
-  [0018](0018-a-phone-as-its-own-home.md#proposed-contract-changes).
+  [0018](0018-a-phone-as-its-own-home.md#proposed-contract-changes), for the key route. It went into
+  `AGENTS.md` on 2026-11-23. Apple's servers are not in it; they join with their own words when the
+  trial passes and the owner accepts that route.
+
+## Checks before it ships
+
+The phone's network check, the online mind's counterpart of `scripts/net-check.sh online`, runs on
+an Android emulator with every packet the emulator sends captured, against a stand-in provider at an
+address no one else uses. The design is [Checks before the online mind
+ships](/design/phone-first.md#checks-before-the-online-mind-ships).
+
+- **Off means silent.** With the mind off, or never turned on, the phone reaches nothing but
+  consented app downloads, as a phone alone does today.
+- **On means one host.** With it on, every connection the app makes goes to the one host the person
+  entered: the check, one look at its list of models, and the reading, page and answer requests. No
+  redirect is followed. After turning off, nothing more goes, and the key is gone from the phone's
+  safe place.
+- **Never check-ins, private things or originals.** A fixture memory with check-ins, a thing marked
+  private, a photo and a recording, each carrying a marker phrase, is read, written into a page and
+  asked about. No request body the stand-in receives holds a marker phrase or a byte of an original.
+  The Sent online list matches what the stand-in received, request for request.
+- **The network rule.** Neither phone lets an app name a host the person types in its built-in
+  network rules: Android's network security config and iPhone's App Transport Security are fixed when
+  the app is built, and the phone's Rust core opens its own connections outside both. So the rule
+  lives in the core's one client, built for the one host with 0011's address rules, and the check
+  above proves it. The platform adds what it can: Android needs only the internet permission the app
+  already holds, and iPhone asks for local network access only when the host is on the person's own
+  network.
 
 ## Consequences
 
