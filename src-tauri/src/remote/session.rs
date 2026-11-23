@@ -701,11 +701,16 @@ impl Core {
         );
         drop(f);
         let mut channel = Channel::new(Side::Computer, sid, keys);
+        let mut hello = self.shell.hello(&device, connection);
+        // A phone that holds its own memory says, before it offers it, that this computer
+        // holds one too and the person here chooses how it joins.
+        hello.memory_here = self
+            .shell
+            .engine()
+            .is_some_and(|e| super::moving::holds_memory(&e));
         let hello = RemoteReply {
             id: 0,
-            answer: RemoteAnswer::Hello {
-                hello: self.shell.hello(&device, connection),
-            },
+            answer: RemoteAnswer::Hello { hello },
         };
         let body = serde_json::to_vec(&hello).expect("serialises");
         let first = channel

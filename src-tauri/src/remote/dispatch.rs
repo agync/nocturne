@@ -462,11 +462,18 @@ impl<R: Runtime> Call<R> {
                 counts,
                 bytes,
                 schema,
-                ..
+                since,
+                bring,
             } => {
+                let offer = super::moving::Offer {
+                    counts,
+                    bytes,
+                    schema,
+                    since,
+                    bring,
+                };
                 let (app, core) = (&self.app, &self.core);
-                super::moving::offer(app, core, &self.out, &self.device, counts, bytes, schema)
-                    .await
+                super::moving::offer(app, core, &self.out, &self.device, offer).await
             }
             RemoteCall::MemoryDone {
                 size,
