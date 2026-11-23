@@ -10,6 +10,7 @@
 //! not reached.
 
 pub mod ask;
+pub mod events;
 pub mod host;
 pub mod keys;
 pub mod sent;
@@ -148,6 +149,8 @@ pub struct PhoneMind {
     keys: Box<dyn Keys>,
     clock: Arc<dyn Clock>,
     sent: Arc<SentLog>,
+    /// Who hears of things read and pages saved.
+    events: Mutex<Arc<dyn nocturne_intelligence::Events>>,
     slot: MindSlot,
     host: Arc<PhoneHost>,
     on: Mutex<Option<On>>,
@@ -161,6 +164,7 @@ impl PhoneMind {
     pub fn new(dir: PathBuf, keys: Box<dyn Keys>, clock: Arc<dyn Clock>) -> PhoneMind {
         let mind = PhoneMind {
             sent: Arc::new(SentLog::new(dir.clone(), clock.clone())),
+            events: Mutex::new(Arc::new(NullEvents)),
             dir,
             keys,
             clock,
@@ -185,6 +189,11 @@ impl PhoneMind {
         home.on_close(Box::new(move || {
             lock(&thinking).take();
         }));
+    }
+
+    /// Tells `events` of things read and pages saved, from the next store opened.
+    pub fn tell(&self, events: Arc<dyn nocturne_intelligence::Events>) {
+        *lock(&self.events) = events;
     }
 
     /// Where the phone's charging is told.
@@ -343,7 +352,7 @@ impl PhoneMind {
         let generation = home.generation();
         let clock = home.clock();
         if thinking.as_ref().is_none_or(|t| t.generation != generation) {
-            let events: Arc<dyn nocturne_intelligence::Events> = Arc::new(NullEvents);
+            let events = lock(&self.events).clone();
             let host: Arc<dyn nocturne_intelligence::Host> = self.host.clone();
             let reader = Reader::new(
                 open.engine.clone(),
