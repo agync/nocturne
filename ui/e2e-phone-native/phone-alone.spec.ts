@@ -378,9 +378,9 @@ test.describe("200 per cent text", () => {
       await fits(page);
       const where = await page.evaluate(() => {
         const buttons = [...document.querySelectorAll("button")];
-        const last = buttons[buttons.length - 1];
-        const r = last.getBoundingClientRect();
-        return { last: last.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight };
+        const last = buttons.at(-1);
+        const r = last?.getBoundingClientRect() ?? new DOMRect();
+        return { last: last?.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight };
       });
       expect(where).toEqual({ last: "Done", inView: true });
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

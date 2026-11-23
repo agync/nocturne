@@ -134,7 +134,7 @@ for (const scheme of ["light", "dark"] as const) {
         await expect(done).toBeVisible();
         const last = await page.evaluate(() => {
           const buttons = [...document.querySelectorAll("button")];
-          return buttons[buttons.length - 1].textContent;
+          return buttons.at(-1)?.textContent;
         });
         expect(last).toBe("Done");
         await clean(page);
