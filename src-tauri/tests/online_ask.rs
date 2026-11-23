@@ -4,7 +4,7 @@
 
 mod common;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::*;
@@ -103,6 +103,35 @@ impl Lab {
                                 "limit": {"kind": "questions", "questions": questions, "usd": null}}}),
         );
         assert_eq!(view["state"]["type"], "on", "{view}");
+    }
+
+    /// Start a question whose steps are kept in the order they were sent. The `ask` command
+    /// hands steps to the test through the app's event listeners, which do not keep order when
+    /// another thread emits at the same moment (a turn-off, say), so a test that acts while a
+    /// question is being answered and then reads its last step uses this.
+    fn start_ordered(&self, question: &str) -> (String, Arc<Mutex<Vec<AskDelta>>>) {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let kept = seen.clone();
+        tauri::async_runtime::spawn(async move {
+            while let Some(d) = rx.recv().await {
+                kept.lock().unwrap().push(d);
+            }
+        });
+        let id = block_on(async {
+            ask::start_with(
+                self.h.app.handle(),
+                question.to_string(),
+                AskOptions {
+                    public_only: false,
+                    lane: AskLane::Desktop,
+                    sink: AskSink::Channel(tx),
+                    place: AskPlace::Auto,
+                    help: false,
+                },
+            )
+        });
+        (id, seen)
     }
 
     fn ask(&self, question: &str, place: Option<&str>) -> Vec<AskDelta> {
@@ -583,12 +612,7 @@ fn turn_off_mid_answer_switches() {
     dentist(&l);
     l.turn_on(true, 200);
     l.script(json!({"delay_ms": 15000}));
-    let seen = l.h.ask_deltas();
-    let id =
-        l.h.ok("ask", json!({"question": "When is the dentist?"}))
-            .as_str()
-            .unwrap()
-            .to_string();
+    let (id, seen) = l.start_ordered("When is the dentist?");
     wait_for("the question to go online", || {
         deltas_for(&seen, &id)
             .iter()
@@ -820,12 +844,7 @@ fn turn_off_between_choice_and_send_sends_nothing() {
     let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
     let hold = Arc::new(nocturne_app_lib::online::controller::SendHold::default());
     hub.hold_sends(Some(hold.clone()));
-    let seen = l.h.ask_deltas();
-    let id =
-        l.h.ok("ask", json!({"question": "When is the dentist?"}))
-            .as_str()
-            .unwrap()
-            .to_string();
+    let (id, seen) = l.start_ordered("When is the dentist?");
     block_on(async {
         tokio::time::timeout(Duration::from_secs(60), hold.reached.notified())
             .await
