@@ -4,7 +4,16 @@ import type { PhoneCalendar } from "../../../engine/bindings";
 import { BackBar, Bar, Button, Page } from "../../screens/ui";
 import type { CalendarSettings, NativeChannel, ThisPhoneSources } from "../api";
 import { askCalendar, type CalendarAccess, calendarAccess, openAppSettings } from "../sources";
-import { DoneBar, KeptSoFar, openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
+import {
+  DoneBar,
+  KeptSoFar,
+  openPolicy,
+  places,
+  placesRich,
+  Switch,
+  sentAt,
+  useHeading,
+} from "./parts";
 
 type Step = "loading" | "why" | "refused" | "settings";
 

@@ -74,8 +74,9 @@ html.ph-native .ph-screen--fixed {
 /* Done sits at the bottom of the screen at any text size; the page scrolls above it. */
 .ph-done {
   position: sticky;
-  bottom: 0;
   z-index: 2;
+  bottom: calc(-1 * var(--ph-inset-bottom, 0px));
+  margin-bottom: calc(-1 * var(--ph-inset-bottom, 0px));
   padding: 12px 24px calc(16px + var(--ph-inset-bottom, 0px));
   border-top: 1px solid var(--rule);
   background: var(--bg);
