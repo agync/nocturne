@@ -109,7 +109,7 @@ describe("bringing a backup back", () => {
       here: null,
       putAside: null,
     },
-    backup: { things: 3, journalEntries: 1, photosAndRecordings: 1 },
+    backup: { things: 3, journalEntries: 1, photosAndRecordings: 1, checkins: 0 },
     here: null,
   };
 

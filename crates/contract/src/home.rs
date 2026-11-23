@@ -84,7 +84,7 @@ pub struct BroughtCounts {
 
 /// What a memory holds, in the columns a phone shows before a restore replaces it: things kept
 /// (not the journal, check-ins, the calendar or readings), journal entries and good things as
-/// they stand now, and photos and recordings.
+/// they stand now, photos and recordings, and check-ins.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -92,6 +92,7 @@ pub struct KeptCounts {
     pub things: u32,
     pub journal_entries: u32,
     pub photos_and_recordings: u32,
+    pub checkins: u32,
 }
 
 /// A memory put aside on this phone: by a restore that replaced it, by bringing back another,

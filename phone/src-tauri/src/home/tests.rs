@@ -554,6 +554,7 @@ fn a_backup_comes_back_on_another_phone() {
             things: 3,
             journal_entries: 0,
             photos_and_recordings: 1,
+            checkins: 0,
         }
     );
     // A companion's memory is on its computer.
