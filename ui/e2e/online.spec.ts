@@ -215,9 +215,12 @@ test.describe("O2 to O6, setting up", () => {
     await press(page, "button", "Continue");
     await connectAndCheck(page);
     await press(page, "button", "Continue");
+    await expect(page.getByText("Online answers · step 3 of 5")).toBeVisible();
     await expect(page.getByRole("switch", { name: /Health, money and ID/ })).toHaveCount(0);
     await press(page, "button", "Continue");
+    await expect(page.getByText("Online answers · step 4 of 5")).toBeVisible();
     await press(page, "button", "Continue");
+    await expect(page.getByText("Online answers · step 5 of 5")).toBeVisible();
     await press(page, "button", "Turn on online answers");
     await expect(page.getByRole("switch", { name: "Online answers are on" })).toBeChecked();
     await expect(page.getByText(/health, money/i)).toHaveCount(0);
