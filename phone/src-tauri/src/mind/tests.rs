@@ -471,7 +471,7 @@ fn only_a_pass_that_read_its_fill_or_wrote_has_more_to_do() {
     assert!(ran(super::FEW, false).more());
     assert!(ran(0, true).more());
     assert!(!ran(1, false).more());
-    for idle in [Pass::Off, Pass::NotCharging, Pass::NotReady] {
+    for idle in [Pass::Off, Pass::NotCharging, Pass::Paused, Pass::NotReady] {
         assert!(!idle.more());
     }
 }
@@ -676,4 +676,87 @@ impl crate::home::voice::Reader for NoWords {
     fn read(&self, _: &Path, _: &str) -> crate::home::voice::Heard {
         crate::home::voice::Heard::Nothing
     }
+}
+
+#[test]
+fn with_a_limit_of_three_things_the_fourth_waits() {
+    use super::status::{MindLimit, MindReading, MindStatus};
+    let w = world();
+    let ids: Vec<String> = (0..4)
+        .map(|n| {
+            w.keep(
+                &format!("Note {n}. {}", prompts::EXAMPLE_NOTE),
+                &format!("c{n}"),
+            )
+        })
+        .collect();
+    assert!(w.mind.set_limit(MindLimit::Things { count: 3 }));
+    w.mind.turn_on(w.settings()).unwrap();
+    for _ in 0..5 {
+        w.pass();
+    }
+    let waiting = ids
+        .iter()
+        .filter(|id| w.status(id) == ItemStatus::Kept)
+        .count();
+    assert_eq!(waiting, 1);
+    assert_eq!(w.pass(), Pass::Paused);
+    assert_eq!(w.mind.month().count, 3);
+    assert_eq!(w.mind.reading(&w.home), MindReading { done: 3, count: 4 });
+    assert!(matches!(w.mind.status(), MindStatus::Paused { until, .. } if until == "2026-12-01"));
+    let asked = w.stand_in.chats().len();
+    assert_eq!(w.ask("Ana").last().unwrap().phase, AskPhase::Unavailable);
+    assert_eq!(w.stand_in.chats().len(), asked);
+    // A new month starts the count again.
+    w.clock.advance_days(10);
+    assert!(matches!(w.pass(), Pass::Ran { read: 1, .. }));
+}
+
+#[test]
+fn a_service_that_stops_answering_is_told_until_it_answers_again() {
+    use super::status::MindStatus;
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+    w.stand_in.always(Answer::Status(401, "{}".into()));
+    w.pass();
+    assert!(matches!(w.mind.status(), MindStatus::KeyRefused { .. }));
+    w.stand_in.always(Answer::Status(503, "{}".into()));
+    w.mind.turn_on(w.settings()).unwrap();
+    w.pass();
+    assert!(matches!(w.mind.status(), MindStatus::Unreachable { .. }));
+    w.mind.turn_off();
+    assert_eq!(w.mind.status(), MindStatus::Off);
+}
+
+#[test]
+fn the_screens_read_the_sent_list_and_the_month_as_mind_ts_says() {
+    use super::status::{MindLimit, MindSent};
+    let w = world();
+    w.rt.block_on(w.mind.check(&w.settings()));
+    let sent: Vec<MindSent> = w
+        .mind
+        .sent(10, None)
+        .into_iter()
+        .map(MindSent::from)
+        .collect();
+    let json = serde_json::to_value(&sent[0]).unwrap();
+    assert_eq!(json["kind"], "check");
+    assert_eq!(json["id"], "2");
+    assert!(json["bytes"].as_u64().unwrap() > 0);
+    assert!(json.get("words").is_some());
+    let limit: MindLimit =
+        serde_json::from_value(serde_json::json!({"kind": "amount", "usd": 5.0})).unwrap();
+    assert_eq!(limit, MindLimit::Amount { usd: 5.0 });
+    w.mind.set_limit(limit);
+    let month = serde_json::to_value(w.mind.month()).unwrap();
+    assert_eq!(
+        month,
+        serde_json::json!({"count": 0, "limit": {"kind": "amount", "usd": 5.0}})
+    );
+    assert_eq!(
+        serde_json::to_value(MindLimit::None).unwrap(),
+        serde_json::json!({"kind": "none"})
+    );
 }
