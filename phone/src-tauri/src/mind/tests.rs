@@ -493,3 +493,15 @@ fn the_sent_list_matches_what_the_provider_received() {
     assert_eq!(checks.count(), 2);
     assert_eq!(sent.last().unwrap().sent_for, super::SentFor::Check);
 }
+
+#[test]
+fn deleting_everything_takes_the_key_the_choice_and_the_sent_list() {
+    let w = world();
+    w.rt.block_on(w.mind.check(&w.settings()));
+    w.mind.turn_on(w.settings()).unwrap();
+    assert!(!w.mind.sent(10, None).is_empty());
+    w.mind.erase();
+    assert!(w.keys.key().is_none());
+    assert_eq!(w.mind.chosen(), Chosen::Off);
+    assert!(w.mind.sent(10, None).is_empty());
+}

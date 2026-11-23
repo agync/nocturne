@@ -161,7 +161,12 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
         }
         let answer = worker.state::<Home>().local_call(call, paired, &progress);
         match (&answer, source) {
-            (HomeAnswer::Deleted, _) if deletes => syncer.ledger.reset(),
+            (HomeAnswer::Deleted, _) if deletes => {
+                syncer.ledger.reset();
+                // The mind's key, its choice and what it sent go in the same step: a new
+                // start chooses again.
+                worker.state::<crate::mind::PhoneMind>().erase();
+            }
             (HomeAnswer::SourceDeleted, Some((source, also_stop))) => {
                 forget_source_sends(&syncer.ledger, source, also_stop)
             }
