@@ -188,14 +188,14 @@ fn an_address_off_the_rules_is_never_reached_or_kept() {
         model: MODEL.into(),
     };
     assert_eq!(
-        w.rt.block_on(PhoneMind::check(&settings)),
+        w.rt.block_on(w.mind.check(&settings)),
         CheckOutcome::NotHttps
     );
     assert!(w.mind.turn_on(settings).is_err());
     assert_eq!(w.mind.chosen(), Chosen::Off);
     assert!(w.keys.key().is_none());
     assert_eq!(
-        w.rt.block_on(PhoneMind::check(&w.settings())),
+        w.rt.block_on(w.mind.check(&w.settings())),
         CheckOutcome::Works {
             host: format!("127.0.0.1:{}", w.stand_in.addr.port()),
             model: MODEL.into()
@@ -472,4 +472,24 @@ fn only_a_pass_that_read_its_fill_or_wrote_has_more_to_do() {
     for idle in [Pass::Off, Pass::NotCharging, Pass::NotReady] {
         assert!(!idle.more());
     }
+}
+
+#[test]
+fn the_sent_list_matches_what_the_provider_received() {
+    let w = world();
+    assert!(matches!(
+        w.rt.block_on(w.mind.check(&w.settings())),
+        CheckOutcome::Works { .. }
+    ));
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    let seen = w.stand_in.seen();
+    let sent = w.mind.sent(1000, None);
+    assert_eq!(sent.len(), seen.len());
+    let host = format!("127.0.0.1:{}", w.stand_in.addr.port());
+    assert!(sent.iter().all(|s| s.host == host && s.status == Some(200)));
+    let checks = sent.iter().filter(|s| s.sent_for == super::SentFor::Check);
+    assert_eq!(checks.count(), 2);
+    assert_eq!(sent.last().unwrap().sent_for, super::SentFor::Check);
 }

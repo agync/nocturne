@@ -11,6 +11,7 @@
 
 pub mod host;
 pub mod keys;
+pub mod sent;
 #[cfg(test)]
 mod tests;
 
@@ -25,13 +26,14 @@ use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
 };
 use nocturne_provider::address::{OnlineKey, UrlProblem, host_of, validate_url};
-use nocturne_provider::{Provider, ProviderMind};
+use nocturne_provider::{Job, Provider, ProviderMind};
 use serde::{Deserialize, Serialize};
 
 use crate::home::Home;
 use crate::sync::ledger::write_private;
 use host::PhoneHost;
 pub use keys::{Keys, MemoryKeys, SafeKeys};
+pub use sent::{Sent, SentFor, SentLog};
 
 const FILE: &str = "mind.json";
 /// How long between passes while nothing is left to read.
@@ -144,6 +146,7 @@ pub struct PhoneMind {
     dir: PathBuf,
     keys: Box<dyn Keys>,
     clock: Arc<dyn Clock>,
+    sent: Arc<SentLog>,
     slot: MindSlot,
     host: Arc<PhoneHost>,
     on: Mutex<Option<On>>,
@@ -156,6 +159,7 @@ impl PhoneMind {
     /// The mind kept in `dir`, on again when its key is held.
     pub fn new(dir: PathBuf, keys: Box<dyn Keys>, clock: Arc<dyn Clock>) -> PhoneMind {
         let mind = PhoneMind {
+            sent: Arc::new(SentLog::new(dir.clone(), clock.clone())),
             dir,
             keys,
             clock,
@@ -199,7 +203,11 @@ impl PhoneMind {
     fn fill(&self, saved: &Saved, key: OnlineKey) -> Result<(), UrlProblem> {
         let provider = Provider::new(&saved.url, &saved.model, key)?;
         let (host, model) = (provider.host().to_string(), provider.model().to_string());
-        let mind = Arc::new(ProviderMind::new(provider));
+        let record: nocturne_provider::Record = {
+            let (sent, host, model) = (self.sent.clone(), host.clone(), model.clone());
+            Arc::new(move |job, exchange| sent.note(job, &host, &model, exchange))
+        };
+        let mind = Arc::new(ProviderMind::new(provider).with_record(record));
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
         *self.slot.write().unwrap_or_else(|e| e.into_inner()) = Some(slotted);
         let on = On {
@@ -216,11 +224,19 @@ impl PhoneMind {
     }
 
     /// The connection check for `settings`: one look at the provider's list of models and one
-    /// short question, no memories. Nothing is kept.
-    pub async fn check(settings: &ProviderSettings) -> CheckOutcome {
+    /// short question, no memories. Each request goes on the Sent online list; nothing else is
+    /// kept.
+    pub async fn check(&self, settings: &ProviderSettings) -> CheckOutcome {
         let key = OnlineKey::new(settings.key.trim().to_string());
         match Provider::new(settings.url.trim(), &settings.model, key) {
-            Ok(provider) => provider.check().await.0,
+            Ok(provider) => {
+                let (outcome, made) = provider.check().await;
+                for exchange in &made {
+                    self.sent
+                        .note(Job::Check, provider.host(), provider.model(), exchange);
+                }
+                outcome
+            }
             Err(UrlProblem::NotHttps) => CheckOutcome::NotHttps,
             Err(_) => CheckOutcome::AddressNotAllowed,
         }
@@ -272,6 +288,12 @@ impl PhoneMind {
             Some((host, model)) => Chosen::NeedsKey { host, model },
             None => Chosen::Off,
         }
+    }
+
+    /// The Sent online list: up to `limit` requests, newest first, before the one with id
+    /// `before` when given.
+    pub fn sent(&self, limit: usize, before: Option<u64>) -> Vec<Sent> {
+        self.sent.list(limit, before)
     }
 
     pub fn is_on(&self) -> bool {
