@@ -15,8 +15,11 @@ import { useRemoteAct } from "./useRemote";
 
 const OFFER_MS = 5 * 60_000;
 
-/** The typed code, in the four groups of six it is read out in. */
-export const groups = (code: string): string[] => code.match(/.{1,6}/g) ?? [];
+/** The code without the spaces the computer sends it with. */
+const plain = (code: string) => code.replace(/[\s-]/g, "");
+
+/** The typed code, in the four groups of six it is read out in, however it came spaced. */
+export const groups = (code: string): string[] => plain(code).match(/.{1,6}/g) ?? [];
 
 type Shown = "waiting" | "added" | "expired" | "refused" | "timedOut" | "spent" | "unavailable";
 
@@ -128,7 +131,7 @@ export function AddPhone({ view }: { view: RemoteView }) {
   const copyCode = async () => {
     if (!offer) return;
     try {
-      await navigator.clipboard.writeText(offer.typedCode);
+      await navigator.clipboard.writeText(plain(offer.typedCode));
       toast.show({ message: t("away.add.copied") });
     } catch {
       toast.show({ message: t("away.add.copyFailed") });

@@ -24,7 +24,7 @@ describe("mock.remote", () => {
     expect(await state(engine)).toMatchObject({ type: "on" });
 
     const offer = await engine.beginPairing();
-    expect(offer.typedCode).toHaveLength(24);
+    expect(offer.typedCode.replaceAll(" ", "")).toHaveLength(24);
     expect(offer.qr.modules).toHaveLength(offer.qr.size * offer.qr.size);
     engine.remote.phoneArrives();
     expect(pairing).toHaveBeenCalledOnce();
