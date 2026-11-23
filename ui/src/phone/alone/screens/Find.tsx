@@ -3,7 +3,7 @@ import { formatLongDay, formatTimeOfDay, journalDay } from "../../../copy/format
 import { t } from "../../../copy/t";
 import type { FoundItem, ItemKind, Receipt } from "../../../engine/bindings";
 import { Icon, type IconName, Page } from "../../screens/ui";
-import type { MindStatus } from "../mind";
+import type { MindTrouble } from "../mind";
 import { MindNotice, UnreachableAsk } from "./MindNotice";
 
 type State =
@@ -115,7 +115,7 @@ export function HomeFind({
   /** A mind is chosen: nothing says one is needed. */
   mind?: boolean;
   /** How the chosen service is doing. */
-  status?: MindStatus | null;
+  status?: MindTrouble | null;
   /** "Check the key…", "Check again" and "Change limit". */
   onFixMind?(): void;
 }) {

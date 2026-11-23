@@ -42,6 +42,7 @@ import {
   type MindChosen,
   type MindReading,
   type MindStatus,
+  type MindTrouble,
 } from "./mind";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { Restore, SaveBackup } from "./screens/Backup";
@@ -212,10 +213,15 @@ export function HomeApp({
   const mind = useMemo(() => services.mind ?? createMindApi(), [services]);
   const [mindChosen, setMindChosen] = useState<MindChosen | null>(null);
   const [mindStatus, setMindStatus] = useState<MindStatus | null>(null);
+  // Changes whenever the mind has read or written, for what looks at its counts again.
+  const [mindTick, setMindTick] = useState(0);
   const ask = useAskSession(engine);
   // The form, its key included, lives here and never in the history entries.
   const draft = useRef<MindDraft>(NEW_DRAFT);
   const host = chosenHost(mindChosen);
+  // A key the phone no longer holds is told like one the service refused.
+  const shownStatus: MindTrouble | null =
+    mindChosen?.state === "needsKey" ? { state: "needsKey", host: mindChosen.host } : mindStatus;
   const shown = useRef(view);
   shown.current = view;
   const [tab, setTab] = useState<Tab>(view.name === "tab" ? view.tab : "today");
@@ -277,25 +283,37 @@ export function HomeApp({
   );
   const refresh = useCallback(() => setFresh((n) => n + 1), []);
 
-  // The mind reads and writes in the background: what it did shows as soon as it is done, a
-  // burst of readings as one change.
+  // The mind reads and writes in the background: how it is doing shows as soon as it is done, a
+  // burst as one change. Only a page written reloads the screens, so what is open stays put
+  // while readings go by.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const soon = () => {
+    let page = false;
+    const soon = (isPage: boolean) => {
+      page ||= isPage;
       clearTimeout(timer);
       timer = setTimeout(() => {
         void lookMind();
-        refresh();
+        setMindTick((n) => n + 1);
+        if (page) refresh();
+        page = false;
       }, 400);
     };
-    const stops = ["item-changed", "page-ready"].map((name) =>
-      listen(name, soon).catch(() => () => undefined),
-    );
+    const stops = [
+      listen("item-changed", () => soon(false)),
+      listen("page-ready", () => soon(true)),
+    ].map((p) => p.catch(() => () => undefined));
     return () => {
       clearTimeout(timer);
       for (const stop of stops) void stop.then((off) => off()).catch(() => undefined);
     };
   }, [lookMind, refresh]);
+
+  // An answer that ended without one: how the service is doing may have changed.
+  const askPhase = ask.model.phase;
+  useEffect(() => {
+    if (askPhase === "unavailable") void lookMind();
+  }, [askPhase, lookMind]);
 
   // Once per phone: a plain line, then the phone's own prompt for what reads voice notes.
   // Resolves false when the person said "Not now": nothing then opens the phone's prompt.
@@ -461,6 +479,13 @@ export function HomeApp({
   const fixMind = () => {
     draft.current = NEW_DRAFT;
     go({ name: "mindOnline", step: 2, depth: 1 });
+    // The limit step starts from the limit now set.
+    void mind.month().then(
+      (m) => {
+        if (m && draft.current === NEW_DRAFT) draft.current = { ...NEW_DRAFT, limit: m.limit };
+      },
+      () => undefined,
+    );
   };
   const leaveMind = (depth: number) => {
     draft.current = NEW_DRAFT;
@@ -468,14 +493,15 @@ export function HomeApp({
   };
   const turnOn = async (depth: number) => {
     const d = draft.current;
+    const wasOn = mindChosen !== null && mindChosen.state !== "off";
     await mind.turnOn(d.form);
-    if (d.limit.kind !== "none") {
-      // A limit that can't be kept turns the mind off again: nothing goes past it unkept.
-      await mind.setLimit(d.limit).catch(async (e: unknown) => {
-        await mind.turnOff().catch(() => undefined);
-        throw e;
-      });
-    }
+    // "No limit" is kept too, so it lifts a limit set before.
+    // A limit that can't be kept turns a mind that was just turned on off again: nothing goes
+    // past it unkept. One that was already working is left on.
+    await mind.setLimit(d.limit).catch(async (e: unknown) => {
+      if (!wasOn) await mind.turnOff().catch(() => undefined);
+      throw e;
+    });
     draft.current = NEW_DRAFT;
     await lookMind();
     refresh();
@@ -604,7 +630,7 @@ export function HomeApp({
             onMove: () => go({ name: "mindComputer" }),
             onSent: () => go({ name: "mindSent" }),
             onCheckKey: fixMind,
-            fresh,
+            fresh: mindTick,
             onTurnOff: async () => {
               await mind.turnOff();
               setMindChosen({ state: "off" });
@@ -829,7 +855,7 @@ export function HomeApp({
             onJournal={() => toTab("journal")}
             nearlyFull={nearlyFull}
             mind={host}
-            status={mindStatus}
+            status={shownStatus}
             onFixMind={fixMind}
             queue={services.queue}
             onQueued={refresh}
@@ -867,7 +893,7 @@ export function HomeApp({
       } else {
         screen = (
           <HomeFind
-            status={mindStatus}
+            status={shownStatus}
             onFixMind={fixMind}
             bar={bar("ask")}
             empty={empty}
