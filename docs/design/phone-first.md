@@ -25,7 +25,7 @@ In `docs/design/mockups/phone-parity/`, Android and iPhone side by side.
 | A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | `copy-online-why-light.png`, `copy-online-why-dark.png`, `copy-online-passphrase-light.png`, `copy-online-on-light.png` |
 | Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | `mind-choose-light.png`, `mind-choose-dark.png`, `mind-service-light.png`, `mind-consent-light.png`, `mind-apple-light.png`, `mind-first-page-light.png` |
 | This phone, a phone alone | `this-phone.html`: `alone` | `this-phone-alone-light.png`, `this-phone-alone-dark.png` |
-| The first release | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `delete`, `damaged` | `first-release-{state}-light.png` for every state; `first-release-welcome-dark.png`, `first-release-today-dark.png`, `first-release-mind-dark.png`, `first-release-backup-dark.png`, `first-release-this-phone-dark.png` |
+| The first release | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `calendar`, `health`, `delete`, `damaged` | `first-release-{state}-light.png` for every state; `first-release-welcome-dark.png`, `first-release-today-dark.png`, `first-release-mind-dark.png`, `first-release-backup-dark.png`, `first-release-this-phone-dark.png` |
 
 ## What a phone alone is
 
@@ -291,7 +291,9 @@ the line has no meaning when the phone is the home. Keys are the companion's.
 | Health rationale | `phone.rationale.keeping` | "Your computer keeps readings until you delete them there." | "Nocturne keeps readings on this phone until you delete them." |
 | Health rationale | `phone.rationale.stopping` | "…To delete what went across, use {fromYourPhones} on your computer." | "Turn Health off in Nocturne’s {thisPhone}, or take the permission back in Health Connect. To delete readings already kept, use {deleteReadings} in {thisPhone}." |
 | Calendar and Health screens, delete | (new) | | The delete screens in the copy table: "Delete what Nocturne kept from your calendar?" or "Delete the health readings Nocturne kept?", with an "Also stop…" tick, on by default as on the computer, and the line that the phone's own calendar or Health isn't touched |
-| Calendar and Health screens | `phone.sources.already` | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." | "What Nocturne already kept stays until you delete it." with "Delete what was kept…", opening the computer's From your phones delete preview worded for this phone |
+| Calendar screen | Switch, note, last sent | "Bring my calendar" / "Every calendar starts on. Turn off any you don’t want on your page." / "Last sent {time} · {count} appointments" | "Show my calendar" / "Every calendar starts on. Turn off any you don’t want in Nocturne." / not shown |
+| Health screen | Switch, last sent | "Bring health readings" / "Last sent {time} · {count} readings" | "Show health readings" / not shown |
+| Calendar and Health screens | `phone.sources.already` | "What already went across stays on your computer. To delete it, use {fromYourPhones} there." | A quiet group above "Done", headed "Kept so far": "What Nocturne already kept stays until you delete it." and a small link in the careful colour, "Delete what was kept…", opening the delete screens. "Done", the main button, is the last thing on the screen |
 | Calendar screen | `phone.calendar.stoppedOnComputer.*` | "Your computer isn’t taking your calendar from this phone." | Not shown |
 | Journal | `phone.journal.empty.body` | "Anything you keep, here or on your computer, shows up here." | "Anything you keep shows up here." |
 | Check-in saved | `phone.journal.checkin.from` | "Check-in · {time} · kept from {name}" | "Check-in · {time}" |
@@ -388,6 +390,8 @@ kit of the other mockups. Names and data are fictional.
 | `restore` | Bring back your memory from a file | `first-release-restore-light.png` |
 | `item` | An item's page with its private switch | `first-release-item-light.png` |
 | `this-phone` | This phone in the first release | `first-release-this-phone-light.png`, `first-release-this-phone-dark.png` |
+| `calendar` | Your calendar on a phone alone: a second line for calendars that share a name, "Kept so far", then "Done" | `first-release-calendar-light.png`, `first-release-calendar-dark.png` |
+| `health` | Health on a phone alone, with "Kept so far" and "Done" | `first-release-health-light.png` |
 | `delete` | Delete everything on this phone | `first-release-delete-light.png` |
 | `damaged` | The memory can't be opened | `first-release-damaged-light.png` |
 
@@ -927,6 +931,8 @@ New strings only. Strings from Online answers, backup and the phone apps are mar
 | Voice, iPhone purpose | "Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it." |
 | Voice, This phone row | "Voice notes in words" / "Off" / "Turn on" / "Off in your phone’s settings" / "Open phone settings" |
 | Find, clear | "Clear" |
+| Settings screens | "Done" / "Kept so far" / "What Nocturne already kept stays until you delete it." / "Delete what was kept…" |
+| Calendar and Health switches | "Show my calendar" / "Show health readings" / "Every calendar starts on. Turn off any you don’t want in Nocturne." |
 | Give it a mind | "Give Nocturne a mind" / "A mind reads what you keep, writes your page each morning and answers your questions. It can run on a computer of your own." / "1. Install Nocturne on your computer." / "2. Choose Add a phone there, and scan its code from this phone." / "3. Your memory moves to the computer, and this phone works with it." / "Scan the code" / "Not now" |
 | Backup, row | "Save a backup…" / "Last backup {day}" / "No backup yet" |
 | Backup, form | "Save a backup" / "One file with everything you kept, locked with a passphrase you choose. Keep it somewhere other than this phone." |

@@ -17,11 +17,13 @@
   "restore": { "bar": "back", "title": "", "back": "Back" },
   "item": { "bar": "back", "title": "", "back": "Journal" },
   "this-phone": { "bar": "back", "title": "This phone", "back": "Today" },
-  "delete": { "bar": "modal", "title": "Delete everything", "back": "Cancel" }
+  "delete": { "bar": "modal", "title": "Delete everything", "back": "Cancel" },
+  "calendar": { "bar": "back", "title": "Your calendar", "back": "This phone" },
+  "health": { "bar": "back", "title": "Health", "back": "This phone" }
 }
 </script>
 </head>
-<body data-frame="duo" data-states="welcome start today reminder full ask mind backup saved restore item this-phone delete damaged">
+<body data-frame="duo" data-states="welcome start today reminder full ask mind backup saved restore item this-phone calendar health delete damaged">
 <main id="content">
 
   <!-- Welcome, two ways in -->
@@ -199,6 +201,44 @@
       <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Delete everything…</span></span></div>
     </div>
   </div>
+
+  <!-- Your calendar, a phone alone -->
+  <div class="group" data-state="calendar">
+    <div class="rows"><div class="row"><span class="rowText"><span class="rowLabel">Show my calendar</span><span class="rowHint">Two days back to two weeks ahead, read only.</span></span><span class="sw"></span></div></div>
+  </div>
+  <div class="group" data-state="calendar">
+    <p class="ghead">Which calendars</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B7556;margin-right:10px"></span>Rota</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2C4BCF;margin-right:10px"></span>Personal</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#A8402A;margin-right:10px"></span>Holidays in Germany</span><span class="rowHint">maya.k@example.com</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6B4FA0;margin-right:10px"></span>Holidays in Germany</span><span class="rowHint">Hospital</span></span><span class="sw off"></span></div>
+    </div>
+    <p class="small" style="padding-top: 6px">Every calendar starts on. Turn off any you don’t want in Nocturne.</p>
+  </div>
+
+  <!-- Health, a phone alone -->
+  <div class="group" data-state="health">
+    <div class="rows"><div class="row"><span class="rowText"><span class="rowLabel">Show health readings</span><span class="rowHint">Readings from 1 November onwards</span></span><span class="sw"></span></div></div>
+  </div>
+  <div class="group" data-state="health">
+    <p class="ghead">Which kinds</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Sleep</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Steps</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Workouts</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Resting heart rate</span></span><span class="sw off"></span></div>
+    </div>
+    <p class="small" style="padding-top: 6px">Nocturne can’t tell what your numbers mean for your health. A doctor or nurse can.</p>
+  </div>
+
+  <!-- Kept so far, then Done -->
+  <div class="group" data-state="calendar health" style="padding-top: 8px">
+    <p class="ghead">Kept so far</p>
+    <p class="small" style="margin: 0">What Nocturne already kept stays until you delete it.</p>
+    <span class="small" style="color: var(--ember)">Delete what was kept…</span>
+  </div>
+  <div class="foot" data-state="calendar health"><span class="btn" data-kind="primary">Done</span></div>
 
   <!-- Delete everything on this phone -->
   <h1 class="stepH" data-state="delete">Delete everything on this phone?</h1>

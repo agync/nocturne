@@ -39,7 +39,7 @@ of the design. All names and data are fictional.
 | Screen | File and states | Page |
 |---|---|---|
 | First run on a phone, and Today with no mind | `first-run.html`: `welcome`, `start`, `today`, `ask` | [Phone first](phone-first.md#screens) |
-| The first release of a phone alone | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `delete`, `damaged` | [Phone first](phone-first.md#mockups-for-the-first-release) |
+| The first release of a phone alone | `first-release.html`: `welcome`, `start`, `today`, `reminder`, `full`, `ask`, `mind`, `backup`, `saved`, `restore`, `item`, `this-phone`, `calendar`, `health`, `delete`, `damaged` | [Phone first](phone-first.md#mockups-for-the-first-release) |
 | A locked copy online | `copy-online.html`: `why`, `passphrase`, `on` | [Phone first](phone-first.md#a-locked-copy-online) |
 | Choosing a mind | `mind.html`: `choose`, `service`, `consent`, `apple`, `first-page` | [Phone first](phone-first.md#choosing-a-mind) |
 | Joining a household, and a passphrase for making it your home | `household.html`: `found`, `see`, `passphrase`, `words`, `joined` | [Household](household-server.md#joining) |
