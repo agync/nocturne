@@ -91,8 +91,9 @@ export function ThisPhone({
       const moved = await aside.bring(setProgress);
       setStep({ name: "brought", moved, busy: false });
     } catch (e) {
+      // Stopped here: Stop says so itself once the computer heard.
       const why = endedFor(e);
-      setStep(why ? { name: "failed", why } : null);
+      if (why) setStep({ name: "failed", why });
     }
   };
   const settle = (remove: boolean) => {
@@ -114,7 +115,7 @@ export function ThisPhone({
         bring
         progress={progress}
         onStop={() => {
-          void aside?.stop().finally(() => setStep(null));
+          void aside?.stop().finally(() => setStep({ name: "failed", why: "stoppedHere" }));
         }}
       />
     );
@@ -123,6 +124,7 @@ export function ThisPhone({
       <MoveFailed
         computer={computer}
         why={step.why}
+        bring
         onTryAgain={() => void bring()}
         onBack={() => setStep(null)}
       />

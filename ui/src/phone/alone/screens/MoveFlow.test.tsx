@@ -483,6 +483,63 @@ describe("moving to a computer that already holds a memory", () => {
     expect(api.putAside).toHaveBeenCalledWith(true);
   });
 
+  it("asks its own way before it stops bringing the things in, then says nothing changed there", async () => {
+    const api = fakeApi(true);
+    const { onExit } = open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer("bring");
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    const sheet = await screen.findByRole("dialog");
+    expect(sheet).toHaveTextContent(
+      "Stop bringing your things in? Nothing changes on Maya’s laptop, and your memory stays on this phone.",
+    );
+    expect(within(sheet).getByRole("button", { name: "Keep going" })).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Stop" }));
+    expect(
+      await screen.findByText("Stopped. Nothing changed on Maya’s laptop."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+    ).toBeInTheDocument();
+    expect(api.stop).toHaveBeenCalled();
+    api.finishMove("stopped");
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+  });
+
+  it("says the computer stopped it under the bringing title", async () => {
+    const api = fakeApi(true);
+    open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer("bring");
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    api.finishMove("stoppedThere");
+    expect(
+      await screen.findByText(
+        "Maya’s laptop stopped the move. Nothing changed, and your memory is still on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says this phone was removed when the computer removes it part way", async () => {
+    const api = fakeApi(false);
+    const { onExit } = open(api);
+    await toMoving(api);
+    api.finishMove("declined");
+    expect(
+      await screen.findByRole("heading", { name: "This phone was removed from Nocturne." }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("To use it again, pair it from your computer.")).toBeInTheDocument();
+    expect(onExit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+    expect(api.undo).toHaveBeenCalled();
+  });
+
   it("uses the computer's memory, keeping this one put aside unless removed", async () => {
     const api = fakeApi(true);
     const { onDone } = open(api);

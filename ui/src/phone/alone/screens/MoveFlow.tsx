@@ -158,6 +158,8 @@ export function MoveFlow({
   const [progress, setProgress] = useState<MoveProgress | null>(null);
   const offer = useRef<Promise<MoveOffered> | null>(null);
   const leaving = useRef(false);
+  // The computer took the offer: a pairing it undoes after this is this phone being removed.
+  const agreed = useRef(false);
 
   const exit = (undo: boolean) => {
     if (leaving.current) return;
@@ -230,6 +232,7 @@ export function MoveFlow({
     setProgress(null);
     try {
       const answer = await reached();
+      agreed.current = true;
       // The person there chose the computer's memory: what was here is already put aside.
       if (answer.useHere) return setStep({ name: "used", busy: false });
       if (answer.bring && !bring) {
@@ -240,6 +243,8 @@ export function MoveFlow({
       setStep({ name: "moved", items: moved.items, brought: moved.brought ?? null, busy: false });
     } catch (e) {
       const why = errorOf(e);
+      if (why === "declined" && agreed.current && !leaving.current)
+        return setStep({ name: "failed", why: "removed", bring });
       if (why === "declined" || why === "stopped") return exit(why === "declined");
       setStep({ name: "failed", why: ENDED[why] ?? "notWhole", bring });
     }
@@ -278,7 +283,11 @@ export function MoveFlow({
           progress={progress}
           onStop={() => {
             leaving.current = true;
-            void api.stop().finally(onExit);
+            const bring = current.bring;
+            void api.stop().finally(() =>
+              // Bringing things in says it stopped; a whole move just ends.
+              bring ? setStep({ name: "failed", why: "stoppedHere", bring }) : onExit(),
+            );
           }}
         />
       );
@@ -287,11 +296,12 @@ export function MoveFlow({
         <MoveFailed
           computer={computer}
           why={current.why}
+          bring={current.bring}
           onTryAgain={() => {
             offer.current = null;
             void move(current.bring);
           }}
-          onBack={() => exit(true)}
+          onBack={() => (leaving.current ? onExit() : exit(true))}
         />
       );
     case "moved":

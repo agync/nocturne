@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AsideApi, MoveAside, Moved, MoveError } from "../alone/screens/MoveFlow";
 import type { MoveProgress } from "../alone/screens/MoveScreens";
@@ -126,6 +126,26 @@ describe("the memory a move put aside, in This phone", () => {
         "Maya’s laptop ran out of room, so nothing changed. Your memory is still on this phone.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("stops bringing them in when asked its own way, and says nothing changed there", async () => {
+    const aside = fakeAside({ onComputer: false, keepUntil: null });
+    open(aside);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+    );
+    await waitFor(() => expect(aside.bring).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    const sheet = await screen.findByRole("dialog");
+    expect(sheet).toHaveTextContent(
+      "Stop bringing your things in? Nothing changes on Maya’s laptop, and your memory stays on this phone.",
+    );
+    fireEvent.click(within(sheet).getByRole("button", { name: "Stop" }));
+    aside.finish("stopped");
+    expect(
+      await screen.findByText("Stopped. Nothing changed on Maya’s laptop."),
+    ).toBeInTheDocument();
+    expect(aside.stop).toHaveBeenCalled();
   });
 
   it("shows nothing of it when no move put a memory aside", async () => {
