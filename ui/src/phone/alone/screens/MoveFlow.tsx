@@ -48,6 +48,8 @@ export interface Moved {
   items: number;
   brought: BroughtCounts;
   behind?: LeftBehind | null;
+  /** When what was put aside goes by itself; null while anything stays only on this phone. */
+  keepUntil: string | null;
 }
 
 /** The phone's way to move its memory to the computer it has just paired with. */
@@ -334,6 +336,7 @@ export function MoveFlow({
           computer={computer}
           brought={current.moved.brought}
           behind={current.moved.behind}
+          lapses={current.moved.keepUntil !== null}
           busy={current.busy}
           onDone={keepOrRemove}
         />
