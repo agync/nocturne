@@ -145,7 +145,11 @@
   "phone.mind.sent.answer": "Answered a question",
   "phone.mind.sent.page": "Wrote your page",
   "phone.mind.sent.check": "Connection check",
-  "phone.mind.sent.row": "{time} · {size}",
+  "phone.mind.sent.exact": "Exactly what was sent",
+  "phone.mind.sent.photo": "The photo itself",
+  "phone.mind.sent.recording": "The recording itself",
+  "phone.mind.sent.forgotten": "Removed when you forgot it",
+  "phone.mind.sent.row": "{time} · {host} · {size}",
   "phone.mind.sent.footer": "Older than 90 days are removed by themselves.",
 
   "phone.mind.ask.notSure": "Open each one to see which is right.",

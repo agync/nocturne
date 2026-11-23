@@ -233,11 +233,25 @@ export function writtenPage(): PageView {
 
 const SENT: MindSent[] = [
   {
+    id: "s4",
+    at: `${HOME_DAY}T07:40:00.000Z`,
+    kind: "read",
+    host: MIND_HOST,
+    bytes: 2_310,
+    said: [],
+    forgotten: true,
+  },
+  {
     id: "s3",
     at: `${HOME_DAY}T07:12:00.000Z`,
     kind: "read",
     host: MIND_HOST,
     bytes: 1_840,
+    said: [
+      { kind: "words", text: "Read this note and list what it says will happen." },
+      { kind: "words", text: "Ask about the swap for the 28th" },
+    ],
+    forgotten: false,
   },
   {
     id: "s2",
@@ -245,6 +259,8 @@ const SENT: MindSent[] = [
     kind: "page",
     host: MIND_HOST,
     bytes: 3_210,
+    said: [{ kind: "words", text: "You meant to ask about the swap for the 28th." }],
+    forgotten: false,
   },
   {
     id: "s1",
@@ -252,6 +268,8 @@ const SENT: MindSent[] = [
     kind: "check",
     host: MIND_HOST,
     bytes: 412,
+    said: [],
+    forgotten: false,
   },
 ];
 

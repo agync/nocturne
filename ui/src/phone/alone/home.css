@@ -705,13 +705,38 @@ h2.ph-mind-sech {
 }
 
 .ph-mind-sent {
+  border-bottom: 1px solid var(--rule);
+}
+
+div.ph-mind-sent,
+.ph-mind-sent summary {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px 12px;
   min-height: 48px;
   padding: 12px 0;
-  border-bottom: 1px solid var(--rule);
+}
+
+.ph-mind-sent summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ph-mind-sent summary::-webkit-details-marker {
+  display: none;
+}
+
+.ph-mind-sent-words {
+  margin: 6px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .ph-mind-sent-what {

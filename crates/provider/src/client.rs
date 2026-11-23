@@ -38,6 +38,51 @@ pub struct Exchange {
     pub cost_usd: Option<f64>,
     /// Stopped here before an answer came, so it says nothing of the provider.
     pub stopped: bool,
+    /// What it carried, and where that came from.
+    pub carried: Box<Carried>,
+}
+
+/// What a request carried, as a person reads it, and the things kept and the memories whose
+/// words those were.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Carried {
+    pub said: Vec<Said>,
+    pub items: Vec<String>,
+    pub memories: Vec<String>,
+}
+
+/// A part of what a request carried, as a person reads it: its words as they left, and in place
+/// of a photo or a recording, which it was.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "text", rename_all = "camelCase")]
+pub enum Said {
+    Words(String),
+    Photo,
+    Recording,
+}
+
+/// What a chat request's `body` carried, part by part.
+fn said_of(body: &Value) -> Vec<Said> {
+    let mut said = Vec::new();
+    for message in body["messages"].as_array().into_iter().flatten() {
+        match &message["content"] {
+            Value::String(words) => said.push(Said::Words(words.clone())),
+            Value::Array(parts) => {
+                for part in parts {
+                    match part["type"].as_str() {
+                        Some("text") => said.push(Said::Words(
+                            part["text"].as_str().unwrap_or_default().to_string(),
+                        )),
+                        Some("image_url") => said.push(Said::Photo),
+                        Some("input_audio") => said.push(Said::Recording),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    said
 }
 
 /// Stops one request when it turns true ([`Provider::chat_until`]).
@@ -374,6 +419,7 @@ impl Provider {
         if *stopped.borrow_and_update() || stop.as_mut().is_some_and(|s| *s.borrow_and_update()) {
             return Err(never_left(OnlineFailure::Refused));
         }
+        let said = body.map(said_of).unwrap_or_default();
         let body = body.map(|b| serde_json::to_vec(b).unwrap_or_default());
         let bytes_up = body.as_ref().map_or(0, |b| b.len() as u64);
         let asked_to_stop = async {
@@ -389,12 +435,25 @@ impl Provider {
                     bytes_up,
                     seconds: started.elapsed().as_secs_f32(),
                     stopped: true,
+                    carried: Box::new(Carried {
+                        said: said.clone(),
+                        ..Carried::default()
+                    }),
                     ..Exchange::default()
                 },
             ))
         };
+        let sent = async {
+            let mut done = self.send_now(path, body, timeout, started).await;
+            match &mut done {
+                Ok((_, _, exchange)) => exchange.carried.said = said.clone(),
+                Err(f) if !f.refused => f.exchange.carried.said = said.clone(),
+                Err(_) => {}
+            }
+            done
+        };
         tokio::select! {
-            done = self.send_now(path, body, timeout, started) => done,
+            done = sent => done,
             _ = stopped.wait_for(|s| *s) => ended(),
             () = asked_to_stop => ended(),
         }

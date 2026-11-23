@@ -79,17 +79,40 @@ pub async fn home_call<R: Runtime>(app: AppHandle<R>, call: RemoteCall) -> Remot
                 .state::<crate::mind::PhoneMind>()
                 .answer_call(&home, &rt, None, question);
         }
-        match home.using() {
+        let answer = |call| match home.using() {
             Ok((_use, open)) => dispatch::answer(&open, call),
             Err(_) => RemoteAnswer::Error {
                 code: PhoneError::NotReady,
             },
+        };
+        if matches!(call, RemoteCall::Unkeep { .. }) {
+            let mind = app.state::<crate::mind::PhoneMind>();
+            return forgetting(&home, &mind, || answer(call));
         }
+        answer(call)
     })
     .await
     .unwrap_or(RemoteAnswer::Error {
         code: PhoneError::Busy,
     })
+}
+
+/// Runs `forget`, a forget, an unkeep or a delete, and removes from the Sent online list the
+/// words of what it took. The store is not held while `forget` runs.
+pub(crate) fn forgetting<T>(
+    home: &Home,
+    mind: &crate::mind::PhoneMind,
+    forget: impl FnOnce() -> T,
+) -> T {
+    let before = home
+        .using()
+        .map(|(_use, open)| mind.still_kept(&open.engine))
+        .unwrap_or_default();
+    let done = forget();
+    if let Ok((_use, open)) = home.using() {
+        mind.forget_words(&open.engine, &before);
+    }
+    done
 }
 
 /// A question for the online mind, named `ask_id` so `home_cancel_ask` can stop it. Answered
@@ -176,6 +199,10 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     );
     let restores = matches!(call, HomeCall::RestoreBackup { .. });
     let deletes = matches!(call, HomeCall::DeleteEverything { .. });
+    let forgets = matches!(
+        call,
+        HomeCall::Forget { .. } | HomeCall::DeleteSource { .. }
+    );
     let source = match &call {
         HomeCall::DeleteSource {
             source, also_stop, ..
@@ -195,7 +222,13 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
                 PhoneSource::Health => l.health.settings.bring = false,
             });
         }
-        let answer = worker.state::<Home>().local_call(call, paired, &progress);
+        let home = worker.state::<Home>();
+        let answer = if forgets {
+            let mind = worker.state::<crate::mind::PhoneMind>();
+            forgetting(&home, &mind, || home.local_call(call, paired, &progress))
+        } else {
+            home.local_call(call, paired, &progress)
+        };
         match (&answer, source) {
             (HomeAnswer::Deleted, _) if deletes => {
                 syncer.ledger.reset();

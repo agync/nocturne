@@ -142,6 +142,10 @@ impl PhoneMind {
         out(found);
         out(delta(&ask_id, AskPhase::AskingOnline));
 
+        let before = home
+            .using()
+            .ok()
+            .map(|(_use, open)| (self.sent.last_id(), open.engine.forget_generation()));
         let (tx, mut rx) = mpsc::channel::<String>(32);
         let mind = on.mind.clone();
         let mut said = String::new();
@@ -168,6 +172,9 @@ impl PhoneMind {
                 }
             }
         });
+        if let (Some((from, forgets)), Ok((_use, open))) = (before, home.using()) {
+            self.after_request(&open.engine, from, forgets);
+        }
         let meta = match meta {
             // Answered: counted, as the service did the work, though a Stop since keeps it
             // from showing.

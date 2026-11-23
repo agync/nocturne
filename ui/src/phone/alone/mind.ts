@@ -35,10 +35,10 @@ export interface MindReading {
   count: number;
 }
 
-/**
- * One request to the chosen service. The phone keeps what left it only as a count of bytes, so
- * its words are not shown.
- */
+/** A part of what a request carried: its words as they left, or which photo or recording. */
+export type MindSaid = { kind: "words"; text: string } | { kind: "photo" } | { kind: "recording" };
+
+/** One request to the chosen service, with what it carried. */
 export interface MindSent {
   id: string;
   at: string;
@@ -46,6 +46,10 @@ export interface MindSent {
   host: string;
   /** Bytes that left this phone. */
   bytes: number;
+  /** What it carried, as it left; empty once something it carried was forgotten. */
+  said: MindSaid[];
+  /** Its words were removed when something it carried was forgotten. */
+  forgotten: boolean;
 }
 
 /** How the mind is doing, for Today, Ask and This phone. */

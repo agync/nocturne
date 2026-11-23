@@ -86,7 +86,10 @@ pub struct MindSent {
     pub host: String,
     /// Bytes that left this phone.
     pub bytes: u64,
-    pub words: String,
+    /// What it carried, as it left: empty once something it carried was forgotten.
+    pub said: Vec<nocturne_provider::Said>,
+    /// Its words were removed when something it carried was forgotten.
+    pub forgotten: bool,
 }
 
 impl From<Sent> for MindSent {
@@ -102,7 +105,8 @@ impl From<Sent> for MindSent {
             },
             host: s.host,
             bytes: s.bytes_up,
-            words: String::new(),
+            said: s.said,
+            forgotten: s.forgotten,
         }
     }
 }

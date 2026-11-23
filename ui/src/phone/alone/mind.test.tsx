@@ -281,21 +281,32 @@ describe("The mind in This phone", () => {
     expect(screen.queryByRole("region", { name: "Nocturne’s mind online" })).toBeNull();
   });
 
-  it("opens the Sent online list: what each was for, when and how much, never its words", async () => {
+  it("opens the Sent online list: what each was for, when, where, how much and its words", async () => {
     await app("m=kept&mind=on");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     fireEvent.click(await screen.findByRole("button", { name: "See what was sent" }));
     expect(
       await screen.findByText(/Everything this phone sent to answers\.example/),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Read a thing you kept")).toBeInTheDocument();
+    expect(await screen.findAllByText("Read a thing you kept")).toHaveLength(2);
     expect(screen.getByText("Wrote your page")).toBeInTheDocument();
     expect(screen.getByText("Connection check")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Saturday 21 November" })).toBeInTheDocument();
     expect(screen.getByText("Older than 90 days are removed by themselves.")).toBeInTheDocument();
-    expect(screen.getByText("1.8 kB", { exact: false })).toBeInTheDocument();
-    expect(screen.queryByText("Exactly what was sent")).toBeNull();
-    expect(document.querySelector("details")).toBeNull();
+    expect(screen.getByText(/ · answers\.example · 1\.8 kB/)).toBeInTheDocument();
+    // Two rows carry words, each behind a tap; the check's look at the list and the row whose
+    // thing was forgotten carry none.
+    const rows = document.querySelectorAll("details");
+    expect(rows).toHaveLength(2);
+    expect(screen.getByText("Removed when you forgot it")).toBeInTheDocument();
+    const read = rows[0];
+    if (!read) throw new Error("a row with words");
+    expect(
+      within(read as HTMLElement).getByText("Ask about the swap for the 28th"),
+    ).not.toBeVisible();
+    fireEvent.click(within(read as HTMLElement).getByText("Read a thing you kept"));
+    expect(within(read as HTMLElement).getByText("Exactly what was sent")).toBeVisible();
+    expect(within(read as HTMLElement).getByText("Ask about the swap for the 28th")).toBeVisible();
   });
 
   it("says so when the Sent online list can't be read", async () => {

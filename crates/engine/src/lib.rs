@@ -204,6 +204,12 @@ impl Engine {
         f(&guard)
     }
 
+    /// How many forgets and undone keeps have begun since the store was opened: a caller that
+    /// holds words from the store can tell whether any may have gone meanwhile.
+    pub fn forget_generation(&self) -> u64 {
+        self.inner.forget_gen.load(Ordering::SeqCst)
+    }
+
     /// Note that a forget or an undone keep has begun (see `forget_gen`).
     pub(crate) fn bump_forget(&self) {
         self.inner.forget_gen.fetch_add(1, Ordering::SeqCst);
