@@ -40,6 +40,11 @@ const MOVED: &str = "moved.json";
 const KEEP_DAYS: i64 = 30;
 /// Characters of the passphrase made for one move, from the channel's id alphabet.
 const PASSPHRASE_CHARS: usize = 32;
+/// The passphrase work the move's backup asks for. Its passphrase is 32 random characters of 64
+/// (192 bits) and goes only inside the sealed session, so stretching it guards nothing. The work
+/// a person's own passphrase gets, run twice (written, then read back), held the move for
+/// minutes on a slower phone before anything went across.
+const MOVE_WORK_FACTOR: u8 = 10;
 /// How long a paused move waits before it tries the computer again.
 const RETRY_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
 /// How often a finishing move asks the computer whether the memory opened.
@@ -244,7 +249,7 @@ impl Home {
             progress,
             cancel,
             started: &|_| {},
-            work_factor: self.work_factor,
+            work_factor: Some(MOVE_WORK_FACTOR),
         };
         let made = open
             .engine
@@ -935,6 +940,33 @@ mod tests {
 
     fn block<T>(f: impl Future<Output = T>) -> T {
         tauri::async_runtime::block_on(f)
+    }
+
+    /// The passphrase work a backup asks of whoever opens it, from its header.
+    fn work_factor_of(file: &Path) -> u8 {
+        let bytes = std::fs::read(file).unwrap();
+        let head = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]).into_owned();
+        let stanza = head
+            .lines()
+            .find(|l| l.starts_with("-> scrypt "))
+            .expect("a passphrase stanza")
+            .to_string();
+        stanza.rsplit(' ').next().unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn the_moves_backup_is_quick_to_open_whatever_a_backup_here_asks() {
+        let dir = tempfile::tempdir().unwrap();
+        // As the app makes it: no lighter work set, so its own backups ask the full work.
+        let clock = Arc::new(ManualClock::at("2026-11-22T09:00:00Z", "Europe/London"));
+        let home = Home::new(dir.path().to_path_buf(), clock, Box::new(|_: &Path| {}));
+        home.start_alone("Pixel", false).unwrap();
+        let only = home.exclusive();
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
+        drop(only);
+        assert_eq!(work_factor_of(&prepared.file), super::MOVE_WORK_FACTOR);
+        home.drop_move();
     }
 
     #[test]
