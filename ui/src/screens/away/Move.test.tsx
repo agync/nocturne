@@ -274,6 +274,19 @@ describe("a phone joining a computer that already holds a memory", () => {
     expect(within(screen.getByRole("alertdialog")).queryByRole("button")).toBeNull();
   });
 
+  it("drops the answered question once the things come in", async () => {
+    const { engine } = await withChoice();
+    act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone", bring: true }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Maya’s phone is getting its things ready…",
+    });
+    expect(dialog).not.toHaveTextContent("this computer has one too");
+    act(() => engine.setMove({ phase: "adding", name: "Maya’s phone" }));
+    expect(
+      await screen.findByRole("alertdialog", { name: "Adding them to the memory here…" }),
+    ).not.toHaveTextContent("this computer has one too");
+  });
+
   it("stops bringing them in when asked", async () => {
     const { engine } = await withChoice();
     act(() => engine.setMove({ phase: "preparing", name: "Maya’s phone", bring: true }));

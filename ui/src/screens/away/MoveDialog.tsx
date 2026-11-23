@@ -135,6 +135,9 @@ function MovePanel({ view }: { view: MoveView }) {
     </Button>
   );
   let title = t("moving.receive.title", { name });
+  // While a phone's things come in, the line under way is all the dialog says: its question
+  // is answered, and the title only names the dialog.
+  let quiet = false;
   let body: ReactNode = null;
   let foot: ReactNode = null;
   switch (view.phase) {
@@ -266,7 +269,10 @@ function MovePanel({ view }: { view: MoveView }) {
       break;
     }
     case "preparing":
-      if (bring) title = t("moving.choose.title", { name });
+      if (bring) {
+        title = t("moving.bring.preparing", { name });
+        quiet = true;
+      }
       body = (
         <Progress
           value={null}
@@ -277,7 +283,14 @@ function MovePanel({ view }: { view: MoveView }) {
       foot = stopButton;
       break;
     case "arriving":
-      if (bring) title = t("moving.choose.title", { name });
+      if (bring) {
+        title = t("moving.bring.arriving", {
+          name,
+          done: formatBytes(view.done),
+          size: formatBytes(view.size),
+        });
+        quiet = true;
+      }
       body = (
         <Progress
           value={view.done}
@@ -293,7 +306,8 @@ function MovePanel({ view }: { view: MoveView }) {
       break;
     // Stop is no longer offered: what arrived is being added in one step.
     case "adding":
-      title = t("moving.choose.title", { name });
+      title = t("moving.bring.adding");
+      quiet = true;
       body = <Progress value={null} max={1} label={t("moving.bring.adding")} />;
       break;
     case "brought":
@@ -403,7 +417,7 @@ function MovePanel({ view }: { view: MoveView }) {
         aria-busy={stoppable || view.phase === "restarting" || view.phase === "adding"}
         tabIndex={-1}
       >
-        <h2 id={titleId} className={styles.statement}>
+        <h2 id={titleId} className={quiet ? "sr-only" : styles.statement}>
           {title}
         </h2>
         <div className={styles.pairBody}>{body}</div>
