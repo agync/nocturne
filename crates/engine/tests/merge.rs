@@ -627,6 +627,68 @@ fn a_forget_on_the_phone_covers_every_version_of_the_thing() {
     );
 }
 
+/// A phone with two unfinished forgets that both name one thing: one takes originals, the other
+/// leaves it in place and its memory still cites it. `first_takes_originals` says which began
+/// first. Returns the computer the phone was brought into, and the thing.
+fn two_forgets_on_one_thing(first_takes_originals: bool) -> (Engine, String) {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let thing = keep(&phone.engine, "The fox prefers the shed.");
+    let (other, memory) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    let conn = rusqlite::Connection::open(phone.dir.path().join("nocturne.db")).unwrap();
+    // The memory of the forget that leaves the thing in place cites it, and is being forgotten.
+    conn.execute(
+        "INSERT INTO memory_sources(memory_id, item_id) VALUES (?1, ?2)",
+        [&memory, &thing],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE memories SET forgetting = 1 WHERE id = ?1",
+        [&memory],
+    )
+    .unwrap();
+    let with_memory = (
+        0,
+        format!("[\"{memory}\"]"),
+        format!("[\"{thing}\",\"{other}\"]"),
+    );
+    let with_originals = (1, "[]".to_string(), format!("[\"{thing}\"]"));
+    let jobs = if first_takes_originals {
+        [with_originals, with_memory]
+    } else {
+        [with_memory, with_originals]
+    };
+    for (originals, ids, items) in jobs {
+        conn.execute(
+            "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, ?3)",
+            rusqlite::params![ids, items, originals],
+        )
+        .unwrap();
+    }
+    drop(conn);
+    computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    (computer.engine, thing)
+}
+
+#[test]
+fn a_thing_a_later_forget_leaves_in_place_still_comes() {
+    let (computer, thing) = two_forgets_on_one_thing(true);
+    assert!(
+        computer.get_item(&thing).is_ok(),
+        "the cleanup that takes originals finds the later forget's memory still citing it"
+    );
+}
+
+#[test]
+fn a_thing_an_earlier_forget_clears_the_way_for_is_gone() {
+    let (computer, thing) = two_forgets_on_one_thing(false);
+    assert!(
+        computer.get_item(&thing).is_err(),
+        "the earlier forget clears its memory first, so the cleanup that takes originals removes it"
+    );
+}
+
 #[test]
 fn a_forget_on_the_phone_holds_for_the_same_thing_already_here() {
     let phone = fixture();

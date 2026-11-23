@@ -1209,6 +1209,63 @@ fn unpacking_scrubs_what_belongs_to_the_old_machine() {
 }
 
 #[test]
+fn an_original_another_pending_forget_keeps_is_not_left_out() {
+    let f = fixture();
+    let src = tempfile::tempdir().unwrap();
+    let photo = match f
+        .engine
+        .keep_file(
+            &write_file(src.path(), "card.jpg", b"JPEG bytes of the card"),
+            Source::Screenshot,
+        )
+        .unwrap()
+    {
+        Kept::New { item } => item.id,
+        _ => unreachable!(),
+    };
+    f.engine
+        .apply(
+            &photo,
+            vec![cand("Zed", Predicate::Knows, "x", "Zed knows x.")],
+        )
+        .unwrap();
+    let memory = f.engine.memories(Default::default()).unwrap()[0].id.clone();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&memory), true)
+        .unwrap();
+    f.engine.forget_begin_only(&preview.token).unwrap();
+    // A later unfinished forget leaves the photo in place: its memory still cites it.
+    let (_, other) = learn(
+        &f.engine,
+        "Ann knows y.",
+        cand("Ann", Predicate::Knows, "y", "Ann knows y."),
+    );
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(
+        "INSERT INTO memory_sources(memory_id, item_id) VALUES (?1, ?2)",
+        [&other, &photo],
+    )
+    .unwrap();
+    conn.execute("UPDATE memories SET forgetting = 1 WHERE id = ?1", [&other])
+        .unwrap();
+    conn.execute(
+        "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, 0)",
+        [format!("[\"{other}\"]"), format!("[\"{photo}\"]")],
+    )
+    .unwrap();
+    drop(conn);
+
+    let out = tempfile::tempdir().unwrap();
+    let dest = backup(&f, out.path());
+    assert_eq!(
+        check(&dest).unwrap().originals,
+        1,
+        "it stays on the phone, so its original goes with it"
+    );
+}
+
+#[test]
 fn an_original_in_a_pending_forget_is_left_out() {
     let f = fixture();
     let src = tempfile::tempdir().unwrap();
