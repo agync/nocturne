@@ -584,7 +584,8 @@ export class RemoteSim {
       link: `https://${HOST}/p#v1.sample.sample`,
       qr: fakeQr(10 + this.counter),
       typedAddress,
-      typedCode: "7KQ2M9XDR4TB0HJ5WCP8N3VA",
+      // Spaced as the computer sends it.
+      typedCode: "7KQ2M9 XDR4TB 0HJ5WC P8N3VA",
       expiresAt,
     };
     this.set({ pairing: { pairingId, phase: { type: "waitingForScan" }, expiresAt } });
