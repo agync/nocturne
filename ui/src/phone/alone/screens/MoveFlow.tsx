@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import type { BroughtCounts, KeptCounts, MemoryCounts } from "../../../engine/bindings";
 import {
+  type LeftBehind,
   type MoveEnded,
   type MoveFacts,
   MoveFailed,
@@ -39,10 +40,14 @@ export interface MoveOffered {
   useHere?: boolean;
 }
 
-/** A finished move: how many things arrived, and what was added there. */
+/**
+ * A finished move: how many things arrived, what was added there, and what the memory put aside
+ * here holds that did not go.
+ */
 export interface Moved {
   items: number;
   brought: BroughtCounts;
+  behind?: LeftBehind | null;
 }
 
 /** The phone's way to move its memory to the computer it has just paired with. */
@@ -328,6 +333,7 @@ export function MoveFlow({
         <MoveMoved
           computer={computer}
           brought={current.moved.brought}
+          behind={current.moved.behind}
           busy={current.busy}
           onDone={keepOrRemove}
         />
@@ -346,8 +352,8 @@ export interface MoveAside {
   at?: string | null;
   /** What it holds; none when it cannot be read. */
   counts?: KeptCounts | null;
-  /** It holds pages or reflections written on this phone. */
-  writing?: boolean;
+  /** What it holds that did not go to the computer with its things. */
+  behind?: LeftBehind | null;
 }
 
 /** What This phone can do with the memory a move put aside, once the phone is a companion. */

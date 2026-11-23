@@ -32,7 +32,7 @@ use nocturne_contract::{
     BackupPhase, BackupReport, BroughtCounts, HomeError, KeptCounts, MemoryCounts, PhoneError,
     PhoneMode, RemoteAnswer, RemoteCall,
 };
-use nocturne_engine::BackupRun;
+use nocturne_engine::{BackupRun, LeftBehind};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -139,12 +139,14 @@ pub struct MoveOffered {
     pub use_here: bool,
 }
 
-/// The finished move, for "Your things are on {computer}."
+/// The finished move, for "Your things are on {computer}.", with what the memory put aside here
+/// holds that did not go, for the warning before removing it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Moved {
     pub items: u32,
     pub brought: BroughtCounts,
+    pub behind: LeftBehind,
 }
 
 /// The memory put aside after a move, and until when it stays: none when nothing of it is on
@@ -176,8 +178,8 @@ pub struct MoveAside {
     pub at: Option<String>,
     /// What it holds, for deleting it for good; none when it cannot be read.
     pub counts: Option<KeptCounts>,
-    /// It holds pages or reflections written on this phone.
-    pub writing: bool,
+    /// What it holds that did not go to the computer with its things.
+    pub behind: LeftBehind,
 }
 
 /// How the computer took what was sent: its things were checked (these counts) and added to the
@@ -350,6 +352,22 @@ impl Home {
         Ok(Moved {
             items: arrival.counts.items,
             brought: arrival.added,
+            behind: self.left_behind(),
+        })
+    }
+
+    /// What the memory put aside holds that did not go with its things. One that cannot be read
+    /// counts as holding settings, so removing it is never said to lose nothing.
+    fn left_behind(&self) -> LeftBehind {
+        let Some(note) = self.put_aside_note() else {
+            return LeftBehind::default();
+        };
+        nocturne_engine::store_left_behind(&self.path(&note.folder)).unwrap_or_else(|e| {
+            tracing::warn!("could not read what stays in the memory put aside: {e}");
+            LeftBehind {
+                settings: true,
+                ..LeftBehind::default()
+            }
         })
     }
 
@@ -413,7 +431,7 @@ impl Home {
             keep_until: note.keep_until,
             at: self.put_aside_at(&note.folder),
             counts: nocturne_engine::store_kept_counts(&dir).ok(),
-            writing: nocturne_engine::store_has_writing(&dir).unwrap_or(false),
+            behind: self.left_behind(),
         })
     }
 
@@ -497,6 +515,7 @@ impl Home {
         Ok(Moved {
             items: counts.items,
             brought: added,
+            behind: self.left_behind(),
         })
     }
 
@@ -1482,6 +1501,15 @@ mod tests {
         let moved = home.finish_move(&prepared, arrival).unwrap();
         drop(only);
         assert_eq!(moved.brought, added());
+        assert_eq!(
+            (
+                moved.behind.pages,
+                moved.behind.reflections,
+                moved.behind.answers
+            ),
+            (0, 0, 0),
+            "nothing written here stays behind"
+        );
         assert_eq!(home.mode(true), Some(PhoneMode::Companion));
         let aside = home.move_aside().unwrap();
         assert!(aside.on_computer, "only removing is offered");
@@ -1511,7 +1539,11 @@ mod tests {
             .counts
             .expect("what it holds, for deleting it for good");
         assert!(counts.things + counts.journal_entries > 0, "{counts:?}");
-        assert!(!aside.writing, "no pages or reflections were written here");
+        assert_eq!(
+            (aside.behind.pages, aside.behind.reflections),
+            (0, 0),
+            "no pages or reflections were written here"
+        );
         clock.advance_days(400);
         home.clear_old_put_aside();
         assert_eq!(home.put_aside_names().len(), 1, "it is the only copy");
