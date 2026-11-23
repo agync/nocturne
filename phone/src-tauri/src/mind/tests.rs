@@ -569,3 +569,24 @@ fn with_the_mind_off_a_question_reaches_nothing() {
     assert!(matches!(call, RemoteAnswer::Error { .. }));
     assert!(w.stand_in.seen().is_empty());
 }
+
+/// Keeps the ids of items it hears of.
+#[derive(Default)]
+struct Heard(std::sync::Mutex<Vec<String>>);
+
+impl nocturne_intelligence::Events for Heard {
+    fn item_changed(&self, item: &nocturne_contract::ItemView) {
+        self.0.lock().unwrap().push(item.id.clone());
+    }
+}
+
+#[test]
+fn the_screens_hear_of_each_thing_read() {
+    let w = world();
+    let heard = Arc::new(Heard::default());
+    w.mind.tell(heard.clone());
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    w.pass();
+    assert!(heard.0.lock().unwrap().contains(&id));
+}
