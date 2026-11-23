@@ -259,9 +259,13 @@ describe("What Nocturne remembers", () => {
       state: "gettingReady",
     }));
     await browse("#/memories?q=marmalade", engine);
-    const found = await screen.findByRole("region", {
-      name: "Found by their words. Answers need a mind.",
-    });
+    const found = await screen.findByRole("region", { name: "Not read yet" });
+    expect(
+      within(found).getByText("Found by their words. Answers need a mind."),
+    ).toBeInTheDocument();
+    expect(
+      within(found).getByText("Kept Monday 23 November · waiting to be read"),
+    ).toBeInTheDocument();
     expect(within(found).getByText("marmalade", { selector: "mark" })).toBeInTheDocument();
     // Only the list of names says nothing of theirs matches; the results do not.
     expect(screen.getAllByText(/Nothing matches “marmalade”/)).toHaveLength(1);
@@ -289,7 +293,13 @@ describe("What Nocturne remembers", () => {
       },
     ]);
     await browse("#/memories?q=marmalade", engine);
-    expect(await screen.findByRole("region", { name: "Kept · reads tonight" })).toBeInTheDocument();
+    const found = await screen.findByRole("region", { name: "Not read yet" });
+    expect(
+      within(found).getByText(
+        "Nocturne hasn’t read these yet, so they are found by their words. It reads them tonight.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(found).getByText("Kept Monday 23 November · reads tonight")).toBeInTheDocument();
     expect(screen.queryByText("Found by their words. Answers need a mind.")).toBeNull();
   });
 
