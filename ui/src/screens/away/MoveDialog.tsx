@@ -331,15 +331,7 @@ function MovePanel({ view }: { view: MoveView }) {
           ? t("moving.failed.room", { name, size: formatBytes(view.room?.need ?? 0) })
           : t("moving.failed.notOpened", { name });
       foot = (
-        <Button
-          variant="primary"
-          disabled={busy}
-          onClick={() =>
-            void run(() => engine.finishMove()).then(() =>
-              client.invalidateQueries({ queryKey: MOVE_KEY }),
-            )
-          }
-        >
+        <Button variant="primary" disabled={busy} onClick={() => finish()}>
           {t("moving.failed.ok")}
         </Button>
       );
@@ -353,15 +345,7 @@ function MovePanel({ view }: { view: MoveView }) {
         </>
       );
       foot = (
-        <Button
-          variant="primary"
-          disabled={busy}
-          onClick={() =>
-            void run(() => engine.finishMove()).then((done) => {
-              if (done) goTo("/today");
-            })
-          }
-        >
+        <Button variant="primary" disabled={busy} onClick={() => finish(() => goTo("/today"))}>
           {t("moving.arrived.open")}
         </Button>
       );
