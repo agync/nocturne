@@ -331,6 +331,7 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         bytes: 10.0,
         schema: 14,
         since: None,
+        things: None,
         bring: false,
     };
     assert_eq!(
@@ -342,11 +343,12 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         bytes: 10.0,
         schema: 14,
         since: Some("2026-03-03".into()),
+        things: Some(2),
         bring: true,
     };
     assert_eq!(
         serde_json::to_string(&bring).unwrap(),
-        r#"{"cmd":"offerMemory","counts":{"items":3,"memories":2,"pages":1,"originals":3},"bytes":10.0,"schema":14,"since":"2026-03-03","bring":true}"#
+        r#"{"cmd":"offerMemory","counts":{"items":3,"memories":2,"pages":1,"originals":3},"bytes":10.0,"schema":14,"since":"2026-03-03","things":2,"bring":true}"#
     );
     assert_eq!(
         serde_json::to_string(&RemoteAnswer::MemoryArrived { counts }).unwrap(),

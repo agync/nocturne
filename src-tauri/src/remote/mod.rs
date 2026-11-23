@@ -605,6 +605,7 @@ mod tests {
                 bytes: 0.0,
                 schema: 1,
                 since: None,
+                things: None,
                 bring: false,
             },
             RemoteCall::MemoryDone {

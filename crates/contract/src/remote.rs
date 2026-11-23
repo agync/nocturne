@@ -574,6 +574,11 @@ pub enum RemoteCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         since: Option<String>,
+        /// Things kept, apart from the journal and check-ins, as "What moves" on the phone counts
+        /// them, so both say one count. `counts.items` stays the count checked on arrival.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        things: Option<u32>,
         /// The person chose on the phone to bring its things in from what a move put aside: the
         /// computer adds them to its memory without asking again.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]

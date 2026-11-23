@@ -282,6 +282,7 @@ impl PhoneHome {
             bytes: std::fs::metadata(file).unwrap().len() as f64,
             schema: nocturne_engine::store::latest_version(),
             since: None,
+            things: Some(self.counts().items.saturating_sub(1)),
             bring: false,
         }
     }
@@ -293,6 +294,7 @@ impl PhoneHome {
             bytes: std::fs::metadata(file).unwrap().len() as f64,
             schema: nocturne_engine::store::latest_version(),
             since: Some("2026-11-13".into()),
+            things: None,
             bring: true,
         }
     }
@@ -481,6 +483,35 @@ fn moved(c: &Computer, home: &PhoneHome, phone: &Phone) {
 }
 
 #[test]
+fn the_computer_counts_the_things_as_the_phone_does() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, _) = home.backup();
+    let offer = home.offer(&file);
+    let RemoteCall::OfferMemory {
+        things: Some(things),
+        counts,
+        ..
+    } = offer.clone()
+    else {
+        panic!("the phone says how many things it kept");
+    };
+    assert_ne!(things, counts.items, "the check-ins are counted apart");
+    let p = phone.clone();
+    let asked = tauri::async_runtime::spawn(async move { p.call(offer).await });
+    wait_for("the computer asks", || {
+        matches!(c.view(), Some(MoveView::Offered { .. }))
+    });
+    let Some(MoveView::Offered { items, .. }) = c.view() else {
+        panic!("the question shows");
+    };
+    assert_eq!(items, things);
+    c.h.ok("answer_move", json!({"choice": "notNow"}));
+    let _ = block(asked);
+}
+
+#[test]
 fn removing_the_phone_before_the_next_start_lets_its_memory_go() {
     let home = phone_home();
     let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
@@ -516,6 +547,7 @@ fn removing_the_phone_while_its_memory_comes_stages_nothing() {
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
@@ -621,6 +653,7 @@ fn an_interrupted_upload_changes_nothing() {
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
@@ -654,6 +687,7 @@ fn an_interrupted_upload_changes_nothing() {
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     assert_eq!(
@@ -701,6 +735,7 @@ fn a_memory_is_not_taken_without_the_persons_word() {
         bytes: 5e9,
         schema: 1,
         since: None,
+        things: None,
         bring: false,
     }));
     assert_eq!(
@@ -714,6 +749,7 @@ fn a_memory_is_not_taken_without_the_persons_word() {
         bytes: 10.0,
         schema: nocturne_engine::store::latest_version() + 1,
         since: None,
+        things: None,
         bring: false,
     }));
     assert_eq!(
@@ -784,6 +820,7 @@ fn stopping_on_the_computer_ends_the_move_and_the_phone_hears_so() {
         bytes: bytes.len() as f64,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     offer_and_answer(&c, &phone, offer, "move");
@@ -908,6 +945,7 @@ fn the_phone_asks_where_its_memory_stands_then_sends_it() {
         bytes: 4096.0,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     let accepted = offer_and_answer(&c, &phone, offer, "move");
@@ -1154,6 +1192,7 @@ fn stopping_a_bring_in_before_its_things_are_added_changes_nothing() {
         bytes: size,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     offer_and_answer(&c, &phone, offer, "bring");
@@ -1212,6 +1251,7 @@ fn removing_the_phone_while_its_things_arrive_adds_nothing() {
         bytes: size,
         schema: nocturne_engine::store::latest_version(),
         since: None,
+        things: None,
         bring: false,
     };
     offer_and_answer(&c, &phone, offer, "bring");

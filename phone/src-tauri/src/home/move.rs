@@ -622,6 +622,7 @@ pub(crate) async fn offer(
         bytes: facts.bytes.max(1.0),
         schema: nocturne_engine::store::latest_version(),
         since: facts.since.clone(),
+        things: Some(facts.things),
         bring,
     };
     tracing::info!(

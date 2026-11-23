@@ -463,6 +463,7 @@ impl<R: Runtime> Call<R> {
                 bytes,
                 schema,
                 since,
+                things,
                 bring,
             } => {
                 let offer = super::moving::Offer {
@@ -470,6 +471,7 @@ impl<R: Runtime> Call<R> {
                     bytes,
                     schema,
                     since,
+                    things,
                     bring,
                 };
                 let (app, core) = (&self.app, &self.core);
