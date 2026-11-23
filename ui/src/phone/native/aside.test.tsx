@@ -85,11 +85,16 @@ describe("the memory a move put aside, in This phone", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Adding them to the memory on Maya’s laptop…",
     );
-    aside.finish({ items: 40, brought: { things: 38, entries: 2, checkins: 0 } });
+    aside.finish({
+      items: 40,
+      brought: { things: 38, entries: 2, checkins: 0 },
+      keepUntil: null,
+    });
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Keep it put aside for 30 days" })).toBeChecked();
+    // It was the only copy, so bringing it in never makes it go by itself.
+    expect(screen.getByRole("radio", { name: "Keep it put aside" })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(aside.putAside).toHaveBeenCalledWith(false));
   });
@@ -231,7 +236,11 @@ describe("the memory a move put aside, in This phone", () => {
       within(await screen.findByRole("dialog")).getByRole("button", { name: "Stop" }),
     );
     await waitFor(() => expect(aside.stop).toHaveBeenCalled());
-    aside.finish({ items: 40, brought: { things: 38, entries: 2, checkins: 0 } });
+    aside.finish({
+      items: 40,
+      brought: { things: 38, entries: 2, checkins: 0 },
+      keepUntil: null,
+    });
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
     ).toBeInTheDocument();

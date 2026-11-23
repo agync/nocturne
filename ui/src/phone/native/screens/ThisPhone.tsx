@@ -180,6 +180,7 @@ export function ThisPhone({
         computer={computer}
         brought={step.moved.brought}
         behind={step.moved.behind}
+        lapses={step.moved.keepUntil !== null}
         busy={step.busy}
         onDone={settle}
       />

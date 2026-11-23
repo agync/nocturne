@@ -147,10 +147,13 @@ pub struct Moved {
     pub items: u32,
     pub brought: BroughtCounts,
     pub behind: LeftBehind,
+    /// When what was put aside goes by itself: none while anything stays only on this phone,
+    /// or when it was the only copy, so only the person removes it.
+    pub keep_until: Option<String>,
 }
 
 /// The memory put aside after a move, and until when it stays: none when nothing of it is on
-/// the computer, since then it is the only copy and only the person removes it.
+/// the computer, or when anything stays only in it, since then only the person removes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PutAside {
@@ -336,7 +339,8 @@ impl Home {
     }
 
     /// The computer added its things: check its counts against what was sent, then put the
-    /// store aside, read only, for 30 days, and become its companion. Call it holding
+    /// store aside, read only, and become its companion. It goes by itself after 30 days only
+    /// when nothing stays only in it; otherwise only the person removes it. Call it holding
     /// [`Home::exclusive`].
     pub(crate) fn finish_move(
         &self,
@@ -346,13 +350,24 @@ impl Home {
         if !whole(prepared, arrival.counts) {
             return Err(MoveError::NotWhole);
         }
-        let keep_until = Some(self.thirty_days()?);
-        self.become_companion(keep_until, true)?;
+        let lapse = self.thirty_days()?;
+        self.become_companion(None, true)?;
+        let behind = self.left_behind();
+        let keep_until = (!behind.any()).then_some(lapse);
+        if keep_until.is_some()
+            && let Some(note) = self.put_aside_note()
+        {
+            self.write_put_aside(&PutAside {
+                keep_until: keep_until.clone(),
+                ..note
+            });
+        }
         calls::clear(&self.moving_dir());
         Ok(Moved {
             items: arrival.counts.items,
             brought: arrival.added,
-            behind: self.left_behind(),
+            behind,
+            keep_until,
         })
     }
 
@@ -494,8 +509,8 @@ impl Home {
         Ok((prepared, since))
     }
 
-    /// What was put aside is now on the computer too: it stays 30 days, unless the person
-    /// removes it sooner.
+    /// What was put aside is now on the computer too. It was the only copy, so it never went by
+    /// itself, and it still does not: only the person removes it.
     pub(crate) fn finish_bring(
         &self,
         prepared: &Prepared,
@@ -506,8 +521,8 @@ impl Home {
             return Err(MoveError::NotWhole);
         }
         let note = self.put_aside_note().ok_or(MoveError::Failed)?;
+        let keep_until = note.keep_until.clone();
         self.write_put_aside(&PutAside {
-            keep_until: Some(self.thirty_days()?),
             on_computer: true,
             ..note
         });
@@ -516,6 +531,7 @@ impl Home {
             items: counts.items,
             brought: added,
             behind: self.left_behind(),
+            keep_until,
         })
     }
 
@@ -544,16 +560,29 @@ impl Home {
     }
 
     /// Remove the memory a move put aside once its 30 days are over. One that is the only copy
-    /// has no end and stays.
+    /// has no end and stays, and so does one that holds anything that stays only in it: deleting
+    /// that is the person's to choose, never silent. Such a one loses its end instead.
     pub fn clear_old_put_aside(&self) {
         let Some(note) = self.put_aside_note() else {
             return;
         };
         let due = note
             .keep_until
+            .as_deref()
             .and_then(|k| k.parse::<Timestamp>().ok())
             .is_some_and(|until| self.clock.now() >= until);
-        if due && let Err(e) = self.remove_put_aside() {
+        if !due {
+            return;
+        }
+        if self.left_behind().any() {
+            tracing::info!("the memory put aside holds what stays only here: it stays");
+            self.write_put_aside(&PutAside {
+                keep_until: None,
+                ..note
+            });
+            return;
+        }
+        if let Err(e) = self.remove_put_aside() {
             tracing::warn!("the memory put aside could not be removed: {e:?}");
         }
     }
@@ -1501,6 +1530,7 @@ mod tests {
         let moved = home.finish_move(&prepared, arrival).unwrap();
         drop(only);
         assert_eq!(moved.brought, added());
+        assert!(moved.keep_until.is_some(), "nothing stays only here");
         assert_eq!(
             (
                 moved.behind.pages,
@@ -1517,6 +1547,75 @@ mod tests {
         clock.advance_days(30);
         home.clear_old_put_aside();
         assert!(home.put_aside_names().is_empty());
+    }
+
+    /// A setting of its own in the phone's store: something that stays only on the phone.
+    fn with_a_setting(home: &Home) {
+        rusqlite::Connection::open(home.store_dir().join("nocturne.db"))
+            .unwrap()
+            .execute(
+                "INSERT OR REPLACE INTO settings(key, value) VALUES ('pageTime', '07:30')",
+                [],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn what_stays_only_here_is_never_removed_by_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, clock) = alone(dir.path());
+        with_a_setting(&home);
+        let only = home.exclusive();
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let prepared = home.prepare_move(&|_, _, _| {}, &stop).unwrap();
+        let arrival = block(carry(
+            &Fake::new(),
+            &prepared,
+            &|_, _, _| {},
+            std::time::Duration::ZERO,
+            false,
+        ))
+        .unwrap();
+        let moved = home.finish_move(&prepared, arrival).unwrap();
+        drop(only);
+        assert!(moved.behind.settings);
+        assert_eq!(
+            moved.keep_until, None,
+            "no 30 days while something stays only here"
+        );
+        assert_eq!(home.move_aside().unwrap().keep_until, None);
+        clock.advance_days(400);
+        home.clear_old_put_aside();
+        assert_eq!(
+            home.put_aside_names().len(),
+            1,
+            "only the person removes it"
+        );
+    }
+
+    #[test]
+    fn an_old_note_that_would_lapse_keeps_what_stays_only_here() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, clock) = alone(dir.path());
+        with_a_setting(&home);
+        let only = home.exclusive();
+        home.use_computer().unwrap();
+        drop(only);
+        // As a note written before: 30 days, whatever it holds.
+        let note = home.put_aside_note().unwrap();
+        home.write_put_aside(&super::PutAside {
+            keep_until: Some("2026-12-22T09:00:00Z".into()),
+            on_computer: true,
+            ..note
+        });
+        clock.advance_days(31);
+        home.clear_old_put_aside();
+        assert_eq!(home.put_aside_names().len(), 1, "it stays");
+        assert_eq!(
+            home.move_aside().unwrap().keep_until,
+            None,
+            "with no end now"
+        );
     }
 
     #[test]
@@ -1557,7 +1656,7 @@ mod tests {
     }
 
     #[test]
-    fn what_was_put_aside_is_brought_in_later_and_then_kept_thirty_days() {
+    fn what_was_put_aside_is_brought_in_later_and_still_kept_until_removed() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let only = home.exclusive();
@@ -1596,9 +1695,10 @@ mod tests {
         assert!(!home.move_aside().unwrap().on_computer, "nothing changed");
         let moved = home.finish_bring(&prepared, arrival).unwrap();
         assert_eq!(moved.brought, added());
+        assert_eq!(moved.keep_until, None, "never shortened to 30 days");
         let aside = home.move_aside().unwrap();
         assert!(aside.on_computer);
-        assert!(aside.keep_until.is_some());
+        assert_eq!(aside.keep_until, None);
         assert!(
             home.prepare_bring(&|_, _, _| {}, &stop).is_err(),
             "its things are on the computer already"

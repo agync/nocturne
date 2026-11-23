@@ -407,19 +407,23 @@ export function MoveFailed({
 }
 
 /**
- * "Your things are on {computer}.", and what becomes of the memory put aside here: kept for 30
- * days unless the person chooses to remove it now, with what stays only on this phone said first.
+ * "Your things are on {computer}.", and what becomes of the memory put aside here: kept unless
+ * the person chooses to remove it now, with what stays only on this phone said first. It goes
+ * by itself after 30 days only when `lapses` (nothing stays only here); otherwise it stays until
+ * the person removes it.
  */
 export function MoveMoved({
   computer,
   brought,
   behind = null,
+  lapses = true,
   busy,
   onDone,
 }: {
   computer: string;
   brought: BroughtCounts;
   behind?: LeftBehind | null;
+  lapses?: boolean;
   busy: boolean;
   onDone(remove: boolean): void;
 }) {
@@ -450,7 +454,7 @@ export function MoveMoved({
               onChange={() => setRemove(false)}
             />
             <span className="ph-radio" aria-hidden="true" />
-            <span>{t("moving.phone.moved.keep")}</span>
+            <span>{t(lapses ? "moving.phone.moved.keep" : "moving.phone.used.keep")}</span>
           </label>
           <label className="ph-option">
             <input

@@ -215,7 +215,11 @@ describe("moving the memory to a computer", () => {
     expect(screen.queryByText(/restarts/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
 
-    api.finishMove({ items: 1284, brought: { things: 1172, entries: 12, checkins: 100 } });
+    api.finishMove({
+      items: 1284,
+      brought: { things: 1172, entries: 12, checkins: 100 },
+      keepUntil: "2026-12-23T09:00:00Z",
+    });
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
     ).toBeInTheDocument();
@@ -464,7 +468,11 @@ describe("how long is left", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move my memory" }));
     api.answerOffer("empty");
     await waitFor(() => expect(api.move).toHaveBeenCalled());
-    api.finishMove({ items: 1, brought: { things: 1, entries: 1, checkins: 1 } });
+    api.finishMove({
+      items: 1,
+      brought: { things: 1, entries: 1, checkins: 1 },
+      keepUntil: "2026-12-23T09:00:00Z",
+    });
     expect(
       await screen.findByText(
         "1 thing, 1 journal entry and 1 check-in were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
@@ -516,6 +524,7 @@ describe("moving to a computer that already holds a memory", () => {
       items: 1284,
       brought: { things: 1284, entries: 212, checkins: 96 },
       behind: { pages: 3, reflections: 1, answers: 5, names: 2, choices: 0, settings: true },
+      keepUntil: null,
     });
     expect(
       await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
@@ -525,7 +534,8 @@ describe("moving to a computer that already holds a memory", () => {
         "1,284 things, 212 journal entries and 96 check-ins were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Keep it put aside for 30 days" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Keep it put aside" })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: "Keep it put aside for 30 days" })).toBeNull();
     expect(
       screen.getByText(
         "These stay only on this phone, so removing it deletes them for good: 3 pages, 1 reflection, 5 answers to the morning question, 2 names you taught it and its settings.",
