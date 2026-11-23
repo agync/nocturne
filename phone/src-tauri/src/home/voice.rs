@@ -228,6 +228,9 @@ fn read_in_pieces(
     stop: &dyn Fn() -> bool,
 ) -> Heard {
     if let [_] = ranges {
+        if stop() {
+            return Heard::Waits;
+        }
         return reader.read(pcm, language);
     }
     let Ok(mut file) = std::fs::File::open(pcm) else {
@@ -331,11 +334,7 @@ impl Home {
                     return heard;
                 }
                 seen.insert(id.clone());
-                // One note at a time holds the store, so a restore waits for a note, not a pass.
-                let Ok((_use, open)) = self.using() else {
-                    return heard;
-                };
-                if self.hear_one(&open.engine, reader, &language, &id, &original, &scratch) {
+                if self.hear_one(reader, &language, &id, &original, &scratch) {
                     heard += 1;
                 }
             }
@@ -343,10 +342,11 @@ impl Home {
         heard
     }
 
-    /// Read one note; answers whether its words were kept.
+    /// Read one note; answers whether its words were kept. The store is held only to lease the
+    /// note and to keep its words, never while the reader reads: a move or a restore waits for
+    /// no piece, and no new piece starts while one waits or runs.
     fn hear_one(
         &self,
-        e: &nocturne_engine::Engine,
         reader: &dyn Reader,
         language: &str,
         id: &str,
@@ -356,9 +356,12 @@ impl Home {
         let pcm = scratch.join(format!("{id}.pcm"));
         let decoded = pcm_from_wav(original, &pcm).or_else(|| reader.decode(original, &pcm));
         let Some(duration_ms) = decoded else {
-            // Not tried again this run: the phone cannot decode it.
             let _ = std::fs::remove_file(&pcm);
-            lock(&self.voice.nothing).insert(id.to_string());
+            // The original may have moved with a store being swapped: tried again next time.
+            if !self.store_wanted() {
+                // Not tried again this run: the phone cannot decode it.
+                lock(&self.voice.nothing).insert(id.to_string());
+            }
             return false;
         };
         let Ok(ranges) = pieces_of(&pcm) else {
@@ -368,12 +371,27 @@ impl Home {
         let lease = LEASE
             + Duration::from_millis(u64::from(duration_ms) * 3)
             + PER_PIECE * ranges.len() as u32;
-        let Ok(leased) = e.lease_item(id, lease) else {
+        let leased = self.using().ok().and_then(|(_use, open)| {
+            let leased = open.engine.lease_item(id, lease).ok()?;
+            Some((leased, self.generation()))
+        });
+        let Some((leased, store)) = leased else {
             let _ = std::fs::remove_file(&pcm);
             return false;
         };
+        let heard = read_in_pieces(reader, &pcm, &ranges, language, &|| self.store_wanted());
+        let _ = std::fs::remove_file(&pcm);
+        // The store may have changed places while the reader read: another store knows nothing
+        // of this lease, and its note is read in a later pass.
+        let Ok((_use, open)) = self.using() else {
+            return false;
+        };
+        if self.generation() != store {
+            return false;
+        }
+        let e = &open.engine;
         let mut kept = false;
-        match read_in_pieces(reader, &pcm, &ranges, language, &|| self.store_wanted()) {
+        match heard {
             Heard::Words(text) if !text.trim().is_empty() => {
                 let title = spoken_title(&text);
                 let t = Transcript {
@@ -404,7 +422,6 @@ impl Home {
             }
             Heard::Waits => {}
         }
-        let _ = std::fs::remove_file(&pcm);
         if let Err(x) = e.release_lease(id, &leased.lease, false) {
             tracing::warn!("a voice note's read was not given back: {x}");
         }
