@@ -148,7 +148,7 @@ pub(crate) fn candidate(e: &CalendarEntry, day: Date, tz: &TimeZone) -> Candidat
 }
 
 /// The calendars a send names. The first batch of a send lists them all, so it replaces what was
-/// kept; later batches add to it. A name or colour too long to be one is left out.
+/// kept; later batches add to it. A name, colour or account too long to be one is left out.
 fn calendars_merged(stored: &str, sent: &[PhoneCalendar], first: bool) -> Vec<PhoneCalendar> {
     let mut all: Vec<PhoneCalendar> = if first {
         Vec::new()
@@ -160,6 +160,9 @@ fn calendars_merged(stored: &str, sent: &[PhoneCalendar], first: bool) -> Vec<Ph
             && c.id.len() <= 200
             && c.name.chars().count() <= 200
             && c.colour.as_deref().is_none_or(|x| x.len() <= 40)
+            && c.account
+                .as_deref()
+                .is_none_or(|x| x.chars().count() <= 200)
     };
     for c in sent.iter().filter(fits) {
         match all.iter_mut().find(|a| a.id == c.id) {
