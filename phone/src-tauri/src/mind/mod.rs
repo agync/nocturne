@@ -78,6 +78,20 @@ pub enum Pass {
     Ran { read: usize, scheduled: bool },
 }
 
+impl Pass {
+    /// A pass that read all it may at once, or wrote something, may have more to do.
+    pub fn more(&self) -> bool {
+        matches!(
+            self,
+            Pass::Ran { read: FEW, .. }
+                | Pass::Ran {
+                    scheduled: true,
+                    ..
+                }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Saved {
     url: String,
@@ -393,22 +407,49 @@ impl PhoneMind {
     }
 }
 
-/// Runs a pass every [`TICK`] while the app runs, sooner while things are left to read. While
-/// the mind is off a pass returns at once and asks nothing.
+/// Runs a pass every [`TICK`] while the app runs, sooner while there is more to do. Before each,
+/// the phone says whether it charges. While the mind is on the system is asked for background
+/// windows while the phone charges, and for none while it is off; an open window is ended once
+/// a pass finds nothing more to do. While the mind is off a pass returns at once and asks nothing.
 pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     use tauri::Manager;
+    use tauri_plugin_nocturne_system::SystemExt;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        let mut asked: Option<bool> = None;
         loop {
             let worker = app.clone();
-            let pass = tauri::async_runtime::spawn_blocking(move || {
+            let more = tauri::async_runtime::spawn_blocking(move || {
                 let rt = tokio::runtime::Handle::current();
-                worker
-                    .state::<PhoneMind>()
-                    .pass(&worker.state::<Home>(), &rt)
+                let system = worker.system();
+                let mind = worker.state::<PhoneMind>();
+                let power = system.power().unwrap_or_default();
+                mind.host().set_charging(power.charging);
+                let on = mind.is_on();
+                if asked != Some(on) {
+                    match system.background(on) {
+                        Ok(()) => asked = Some(on),
+                        Err(e) => tracing::warn!("background work could not be arranged: {e:?}"),
+                    }
+                }
+                let more = mind.pass(&worker.state::<Home>(), &rt).more();
+                if power.window
+                    && !more
+                    && let Err(e) = system.background_done()
+                {
+                    tracing::warn!("the background window could not be ended: {e:?}");
+                }
+                (more, asked)
             })
             .await;
-            if !matches!(pass, Ok(Pass::Ran { read: FEW, .. })) {
+            let more = match more {
+                Ok((more, now_asked)) => {
+                    asked = now_asked;
+                    more
+                }
+                Err(_) => false,
+            };
+            if !more {
                 tokio::time::sleep(TICK).await;
             }
         }

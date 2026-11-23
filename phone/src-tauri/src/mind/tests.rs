@@ -462,3 +462,14 @@ fn a_key_given_for_another_address_is_never_used() {
     assert_eq!(again.pass(&w.home, w.rt.handle()), Pass::Off);
     assert!(w.stand_in.seen().is_empty() && other.seen().is_empty());
 }
+
+#[test]
+fn only_a_pass_that_read_its_fill_or_wrote_has_more_to_do() {
+    let ran = |read, scheduled| Pass::Ran { read, scheduled };
+    assert!(ran(super::FEW, false).more());
+    assert!(ran(0, true).more());
+    assert!(!ran(1, false).more());
+    for idle in [Pass::Off, Pass::NotCharging, Pass::NotReady] {
+        assert!(!idle.more());
+    }
+}
