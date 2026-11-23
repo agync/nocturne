@@ -108,6 +108,11 @@ impl StandIn {
         self.script().models_status = Some(status);
     }
 
+    /// The list of models is answered again, after [`StandIn::models_status`].
+    pub fn models_listed(&self) {
+        self.script().models_status = None;
+    }
+
     /// Every request received so far, in order.
     pub fn seen(&self) -> Vec<Seen> {
         self.script().seen.clone()
