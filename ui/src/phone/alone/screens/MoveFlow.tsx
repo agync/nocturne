@@ -143,10 +143,13 @@ type Step =
  */
 export function MoveFlow({
   api,
+  resumed = false,
   onExit,
   onDone,
 }: {
   api: MoveApi;
+  /** Opened again part way: the computer already agreed once, so a refusal is a removal. */
+  resumed?: boolean;
   onExit(): void;
   onDone(): void;
 }) {
@@ -159,7 +162,7 @@ export function MoveFlow({
   const offer = useRef<Promise<MoveOffered> | null>(null);
   const leaving = useRef(false);
   // The computer took the offer: a pairing it undoes after this is this phone being removed.
-  const agreed = useRef(false);
+  const agreed = useRef(resumed);
 
   const exit = (undo: boolean) => {
     if (leaving.current) return;
@@ -182,7 +185,10 @@ export function MoveFlow({
     const sent = api.offer();
     offer.current = sent;
     sent.then(answered, (e: MoveError) => {
-      // The person on the computer kept what it has: the phone stays as it was.
+      // The person on the computer kept what it has: the phone stays as it was. A move that
+      // was agreed before was ended by removing this phone there.
+      if (e === "declined" && agreed.current && !leaving.current)
+        return setStep({ name: "failed", why: "removed", bring: false });
       if (e === "declined") return exit(true);
       // Waiting for the person there: the connection went, or the question timed out. It is
       // asked again, and the phone keeps waiting until they choose or this one cancels. While

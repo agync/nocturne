@@ -38,7 +38,8 @@ type Screen =
   | { name: "address"; text: string; busy: boolean; error: "incomplete" | "noAnswer" | null }
   | { name: "code"; address: string; busy: boolean; error: "bad" | "noAnswer" | null }
   | { name: "pair"; pairing: PairingLike }
-  | { name: "move" }
+  /** `resumed`: opened again part way, rather than just paired. */
+  | { name: "move"; resumed?: boolean }
   | { name: "paired"; device: PairedDevice; offer: boolean };
 
 /** A page opened by its own address: from Health Connect, or from This phone. */
@@ -97,7 +98,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       // A phone alone that holds a pairing is part way through moving its memory (pairing
       // undone on every other way out): the move carries on where it was.
       if (mode === "alone" && (await (services.move ?? nativeMoveApi).pending()))
-        return setScreen({ name: "move" });
+        return setScreen({ name: "move", resumed: true });
       if (mode === "alone")
         return setScreen((now) =>
           now.name === "alone" && !offer ? now : { name: "alone", offer },
@@ -363,7 +364,14 @@ export function NativeRoot({ services }: { services: NativeServices }) {
         setScreen({ name: "loading" });
         void home();
       };
-      return <MoveFlow api={services.move ?? nativeMoveApi} onExit={leave} onDone={leave} />;
+      return (
+        <MoveFlow
+          api={services.move ?? nativeMoveApi}
+          resumed={screen.resumed}
+          onExit={leave}
+          onDone={leave}
+        />
+      );
     }
     case "paired":
       return (
