@@ -168,13 +168,13 @@ impl Home {
         self.clock.clone()
     }
 
-    /// Runs `f` each time the open store is let go, under [`Home::exclusive`], so whatever
-    /// holds it lets go too before the store changes.
     /// The phone's own speech reader, for what a mind leaves to it.
     pub(crate) fn voice(&self) -> Arc<voice::Voice> {
         self.voice.clone()
     }
 
+    /// Runs `f` each time the open store is let go, under [`Home::exclusive`], so whatever
+    /// holds it lets go too before the store changes.
     pub fn on_close(&self, f: OnClose) {
         lock(&self.on_close).push(f);
     }
