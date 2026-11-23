@@ -10,6 +10,7 @@ import {
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
 import { t } from "../../copy/t";
 import type { FeelingPart, PeriodKind, Receipt, SameNameQuestion } from "../../engine/bindings";
+import { nativeAsideApi } from "../alone/screens/MoveFlow";
 import type { Connection, PairedDevice } from "../engine";
 import { addressFromRelinkText, addressFromWords } from "../relink";
 import { Ask, useAskSession } from "../screens/Ask";
@@ -317,6 +318,7 @@ export function NativeApp({
           connection={conn}
           version={services.version}
           waiting={waiting}
+          aside={services.aside ?? nativeAsideApi}
           onBack={back}
           onCalendar={() => go({ name: "calendar" })}
           onHealth={() => go({ name: "health" })}

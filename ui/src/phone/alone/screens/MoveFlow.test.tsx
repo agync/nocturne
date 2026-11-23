@@ -1,24 +1,27 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemoryCounts } from "../../../engine/bindings";
-import { type MoveApi, type MoveError, MoveFlow, type MoveOffered } from "./MoveFlow";
+import { type MoveApi, type Moved, type MoveError, MoveFlow, type MoveOffered } from "./MoveFlow";
 import { MEASURE_MS, MoveMoving, type MoveProgress } from "./MoveScreens";
 
 afterEach(cleanup);
 
 const COUNTS: MemoryCounts = { items: 1284, memories: 0, pages: 0, originals: 40 };
 
+type Answer = MemoryCounts | null | MoveError | "opened" | "bring" | "useHere";
+
 interface Fake extends MoveApi {
   progress?: (p: MoveProgress) => void;
-  finishMove(result: { items: number } | MoveError): void;
-  answerOffer(result: MemoryCounts | null | MoveError | "opened"): void;
+  finishMove(result: Moved | MoveError): void;
+  answerOffer(result: Answer): void;
 }
 
-function fakeApi(): Fake {
-  let settleMove: ((r: { items: number } | MoveError) => void) | null = null;
-  let settleOffer: ((r: MemoryCounts | null | MoveError | "opened") => void) | null = null;
+function fakeApi(holds = false): Fake {
+  let settleMove: ((r: Moved | MoveError) => void) | null = null;
+  let settleOffer: ((r: Answer) => void) | null = null;
   const api: Fake = {
     computer: vi.fn(async () => "Maya’s laptop"),
+    holds: vi.fn(async () => holds),
     facts: vi.fn(async () => ({
       counts: COUNTS,
       things: 1284,
@@ -32,14 +35,18 @@ function fakeApi(): Fake {
           settleOffer = (r) =>
             r === "opened"
               ? ok({ opened: true, here: null })
-              : typeof r === "string"
-                ? no(r)
-                : ok({ opened: false, here: r });
+              : r === "bring"
+                ? ok({ opened: false, here: COUNTS, bring: true })
+                : r === "useHere"
+                  ? ok({ opened: false, here: null, useHere: true })
+                  : typeof r === "string"
+                    ? no(r)
+                    : ok({ opened: false, here: r });
         }),
     ),
     move: vi.fn(
       (onProgress: (p: MoveProgress) => void) =>
-        new Promise<{ items: number }>((ok, no) => {
+        new Promise<Moved>((ok, no) => {
           api.progress = onProgress;
           settleMove = (r) => (typeof r === "string" ? no(r) : ok(r));
         }),
@@ -333,5 +340,121 @@ describe("how long is left", () => {
       />,
     );
     expect(screen.getByText(/About 10 minutes left/)).toBeInTheDocument();
+  });
+});
+
+describe("moving to a computer that already holds a memory", () => {
+  it("waits while the person there chooses, and Cancel undoes the pairing", async () => {
+    const api = fakeApi(true);
+    const { onExit } = open(api);
+    expect(
+      await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Choose on Maya’s laptop what happens to yours. Nothing changes until you do.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for Maya’s laptop…");
+    expect(
+      screen.queryByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+    expect(api.undo).toHaveBeenCalled();
+  });
+
+  it("brings its things in by itself once chosen there, and says what was added", async () => {
+    const api = fakeApi(true);
+    const { onDone } = open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer("bring");
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    expect(
+      screen.getByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Getting your things ready…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    act(() => api.progress?.({ phase: "sending", done: 700_000_000, total: 1_400_000_000 }));
+    expect(screen.getByText(/^700\sMB of 1\.4\sGB/)).toBeInTheDocument();
+    act(() => api.progress?.({ phase: "checking", done: 1_400_000_000, total: 1_400_000_000 }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Adding them to the memory on Maya’s laptop…",
+    );
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    api.finishMove({ items: 1284, brought: { things: 1284, entries: 212, checkins: 96 } });
+    expect(
+      await screen.findByRole("heading", { name: "Your things are on Maya’s laptop." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "1,284 things, 212 journal entries and 96 check-ins were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Remove it from this phone" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(api.putAside).toHaveBeenCalledWith(true);
+  });
+
+  it("uses the computer's memory, keeping this one put aside unless removed", async () => {
+    const api = fakeApi(true);
+    const { onDone } = open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer("useHere");
+    expect(
+      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Nothing went to Maya’s laptop. What this phone held is put aside here, and its calendar and health go to Maya’s laptop from now on.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Keep it put aside" })).toBeChecked();
+    expect(
+      screen.getByText(
+        "Nothing from this phone went to Maya’s laptop, so removing it deletes it for good.",
+      ),
+    ).toBeInTheDocument();
+    expect(api.move).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(api.putAside).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps waiting, and asks again, when the connection goes while the person there chooses", async () => {
+    const api = fakeApi(true);
+    const { onExit } = open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer("paused");
+    await waitFor(() => expect(api.offer).toHaveBeenCalledTimes(2), { timeout: 8000 });
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for Maya’s laptop…");
+    expect(onExit).not.toHaveBeenCalled();
+    api.answerOffer("useHere");
+    expect(
+      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+    ).toBeInTheDocument();
+  }, 12_000);
+
+  it("follows the choice made there when the person here already chose to move", async () => {
+    const api = fakeApi(false);
+    open(api);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move my memory" }));
+    api.answerOffer("useHere");
+    expect(
+      await screen.findByRole("heading", { name: "This phone now works with Maya’s laptop." }),
+    ).toBeInTheDocument();
+    expect(api.move).not.toHaveBeenCalled();
+  });
+
+  it("asks as for any move when the computer takes the memory whole after all", async () => {
+    const api = fakeApi(true);
+    open(api);
+    await screen.findByRole("heading", { name: "Maya’s laptop already holds a memory." });
+    api.answerOffer(null);
+    expect(
+      await screen.findByRole("heading", { name: "Move your memory to Maya’s laptop?" }),
+    ).toBeInTheDocument();
   });
 });

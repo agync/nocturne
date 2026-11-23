@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { MemoryCounts } from "../../../engine/bindings";
+import type { BroughtCounts, MemoryCounts } from "../../../engine/bindings";
 import { useHeading } from "../../native/screens/parts";
 import { BottomSheet } from "../../screens/Dialog";
 import { Button, Icon, Page } from "../../screens/ui";
@@ -89,6 +89,36 @@ export function MoveFound({
   );
 }
 
+/**
+ * "{computer} already holds a memory.": the person there chooses how this phone joins it, and
+ * this one waits. Cancel undoes the pairing and leaves the phone as it was.
+ */
+export function MoveWaiting({ computer, onCancel }: { computer: string; onCancel(): void }) {
+  const waiting = t("moving.phone.waiting.wait", { computer });
+  return (
+    <Page bar={null}>
+      <main className="ph-main" aria-busy="true" style={{ gap: 14, paddingTop: 32 }}>
+        <Hero title={t("moving.phone.waiting.title", { computer })} icon="laptop" />
+        <p className="ph-body">{t("moving.phone.waiting.body", { computer })}</p>
+        <div
+          className="ph-progress ph-progress--unknown"
+          role="progressbar"
+          aria-label={waiting}
+          aria-valuetext={waiting}
+        >
+          <span />
+        </div>
+        <p className="ph-small" role="status">
+          {waiting}
+        </p>
+      </main>
+      <footer className="ph-foot">
+        <Button onClick={onCancel}>{t("phone.cancel")}</Button>
+      </footer>
+    </Page>
+  );
+}
+
 /** "What moves": how much, how long, and what changes here once it has arrived. */
 export function MoveSize({
   facts,
@@ -157,31 +187,39 @@ function useLeft(progress: MoveProgress | null, now: () => number): number | nul
 /**
  * "Moving your memory": how far and, once measured, how long is left; kept things waiting; Stop
  * with its question. While the computer restarts to open it, it says so, and there is nothing
- * left to stop.
+ * left to stop. With `bring`, "Bringing your things to {computer}": once everything went, the
+ * computer adds them to its memory, and there is nothing left to stop either.
  */
 export function MoveMoving({
   computer,
+  bring = false,
   progress,
   onStop,
   now = Date.now,
 }: {
   computer: string;
+  bring?: boolean;
   progress: MoveProgress | null;
   onStop(): void;
   now?: () => number;
 }) {
   const [asking, setAsking] = useState(false);
-  const title = t("moving.phone.moving.title");
+  const title = bring
+    ? t("moving.phone.bringing.title", { computer })
+    : t("moving.phone.moving.title");
+  const ready = bring ? t("moving.phone.bringing.preparing") : t("moving.phone.moving.preparing");
   const sent = progress && progress.phase !== "preparing" ? progress : null;
   // Until the first part goes: the copy that travels is being made, and its size is not known.
   const preparing = !progress || progress.phase === "preparing";
   const share = sent && sent.total > 0 ? Math.min(1, sent.done / sent.total) : 0;
   const paused = progress?.phase === "paused";
   const finishing = progress?.phase === "finishing";
+  const adding = bring && progress?.phase === "checking";
+  const settled = finishing || adding;
   const left = useLeft(progress, now);
   useEffect(() => {
-    if (finishing) setAsking(false);
-  }, [finishing]);
+    if (settled) setAsking(false);
+  }, [settled]);
   return (
     <Page bar={null}>
       <main className="ph-main" aria-busy="true" style={{ gap: 14 }}>
@@ -194,7 +232,7 @@ export function MoveMoving({
             className="ph-progress ph-progress--unknown"
             role="progressbar"
             aria-label={title}
-            aria-valuetext={t("moving.phone.moving.preparing")}
+            aria-valuetext={ready}
           >
             <span />
           </div>
@@ -210,8 +248,8 @@ export function MoveMoving({
             <span style={{ width: `${Math.round(share * 100)}%` }} />
           </div>
         )}
-        {preparing ? <p className="ph-small">{t("moving.phone.moving.preparing")}</p> : null}
-        {sent && !paused && !finishing ? (
+        {preparing ? <p className="ph-small">{ready}</p> : null}
+        {sent && !paused && !settled ? (
           <p className="ph-small">
             {t("moving.phone.moving.progress", {
               done: formatBytes(sent.done),
@@ -234,11 +272,15 @@ export function MoveMoving({
           <p className="ph-body" role="status">
             {t("moving.phone.moving.finishing", { computer })}
           </p>
-        ) : (
+        ) : adding ? (
+          <p className="ph-body" role="status">
+            {t("moving.phone.bringing.adding", { computer })}
+          </p>
+        ) : bring ? null : (
           <p className="ph-small">{t("moving.phone.moving.note")}</p>
         )}
       </main>
-      {finishing ? null : (
+      {settled ? null : (
         <footer className="ph-foot">
           <Button onClick={() => setAsking(true)}>{t("moving.phone.moving.stop")}</Button>
         </footer>
@@ -323,15 +365,20 @@ export function MoveFailed({
   );
 }
 
-/** "Your memory is on {computer}.", and what becomes of the memory put aside here. */
+/**
+ * "Your memory is on {computer}.", or with `brought` "Your things are on {computer}.", and what
+ * becomes of the memory put aside here.
+ */
 export function MoveMoved({
   computer,
   items,
+  brought = null,
   busy,
   onDone,
 }: {
   computer: string;
   items: number;
+  brought?: BroughtCounts | null;
   busy: boolean;
   onDone(remove: boolean): void;
 }) {
@@ -341,10 +388,26 @@ export function MoveMoved({
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
         <div className="ph-hero" style={{ paddingTop: 40 }} role="status">
-          <Hero title={t("moving.phone.moved.title", { computer })} icon="check" />
-          <p className="ph-body">
-            {t("moving.phone.moved.body", { count: count(items), computer })}
-          </p>
+          {brought ? (
+            <>
+              <Hero title={t("moving.phone.brought.title", { computer })} icon="check" />
+              <p className="ph-body">
+                {t("moving.phone.brought.body", {
+                  count: count(brought.things),
+                  entries: count(brought.entries),
+                  checkins: count(brought.checkins),
+                  computer,
+                })}
+              </p>
+            </>
+          ) : (
+            <>
+              <Hero title={t("moving.phone.moved.title", { computer })} icon="check" />
+              <p className="ph-body">
+                {t("moving.phone.moved.body", { count: count(items), computer })}
+              </p>
+            </>
+          )}
         </div>
         <fieldset className="ph-options" aria-label={choice}>
           <legend className="ph-lbl">{choice}</legend>
@@ -369,6 +432,62 @@ export function MoveMoved({
             <span>{t("moving.phone.moved.keep")}</span>
           </label>
         </fieldset>
+      </main>
+      <footer className="ph-foot">
+        <Button kind="primary" disabled={busy} onClick={() => onDone(remove)}>
+          {t("moving.phone.moved.done")}
+        </Button>
+      </footer>
+    </Page>
+  );
+}
+
+/**
+ * "This phone now works with {computer}.": nothing went, and what this phone held is put aside
+ * here, kept unless the person removes it, which deletes it for good.
+ */
+export function MoveUsed({
+  computer,
+  busy,
+  onDone,
+}: {
+  computer: string;
+  busy: boolean;
+  onDone(remove: boolean): void;
+}) {
+  const [remove, setRemove] = useState(false);
+  const choice = t("moving.phone.moved.choice");
+  return (
+    <Page bar={null}>
+      <main className="ph-main" style={{ gap: 14 }}>
+        <div className="ph-hero" style={{ paddingTop: 40 }} role="status">
+          <Hero title={t("moving.phone.used.title", { computer })} icon="check" />
+          <p className="ph-body">{t("moving.phone.used.body", { computer })}</p>
+        </div>
+        <fieldset className="ph-options" aria-label={choice}>
+          <legend className="ph-lbl">{choice}</legend>
+          <label className="ph-option">
+            <input
+              type="radio"
+              name="put-aside"
+              checked={!remove}
+              onChange={() => setRemove(false)}
+            />
+            <span className="ph-radio" aria-hidden="true" />
+            <span>{t("moving.phone.used.keep")}</span>
+          </label>
+          <label className="ph-option">
+            <input
+              type="radio"
+              name="put-aside"
+              checked={remove}
+              onChange={() => setRemove(true)}
+            />
+            <span className="ph-radio" aria-hidden="true" />
+            <span>{t("moving.phone.used.remove")}</span>
+          </label>
+        </fieldset>
+        <p className="ph-small">{t("moving.phone.used.warning", { computer })}</p>
       </main>
       <footer className="ph-foot">
         <Button kind="primary" disabled={busy} onClick={() => onDone(remove)}>

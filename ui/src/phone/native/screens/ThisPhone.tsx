@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { t } from "../../../copy/t";
+import { type AsideApi, endedFor, type MoveAside, type Moved } from "../../alone/screens/MoveFlow";
+import {
+  type MoveEnded,
+  MoveFailed,
+  MoveMoved,
+  MoveMoving,
+  type MoveProgress,
+} from "../../alone/screens/MoveScreens";
 import type { Connection, PairedDevice } from "../../engine";
 import { BackBar, Button, Page } from "../../screens/ui";
 import type { NativeChannel, ThisPhoneSources } from "../api";
@@ -7,9 +15,15 @@ import { Group, Row } from "./chrome";
 import { calendarValue, healthValue, offered } from "./Offer";
 import { openPolicy, sentAt, useHeading } from "./parts";
 
+type AsideStep =
+  | { name: "bringing" }
+  | { name: "failed"; why: MoveEnded }
+  | { name: "brought"; moved: Moved; busy: boolean }
+  | { name: "remove"; busy: boolean };
+
 /**
  * This phone: where it is connected, what it brings, when it sends, its name and version, help,
- * and Disconnect. Opened from the top bar on every tab.
+ * the memory a move put aside here, and Disconnect. Opened from the top bar on every tab.
  */
 export function ThisPhone({
   channel,
@@ -17,6 +31,7 @@ export function ThisPhone({
   connection,
   version,
   waiting,
+  aside,
   onBack,
   onCalendar,
   onHealth,
@@ -28,6 +43,8 @@ export function ThisPhone({
   /** This app's version. */
   version: string;
   waiting: number;
+  /** The memory a move put aside here, when the app can reach it. */
+  aside?: AsideApi;
   onBack(): void;
   onCalendar(): void;
   onHealth(): void;
@@ -36,8 +53,17 @@ export function ThisPhone({
   const [sources, setSources] = useState<ThisPhoneSources | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const heading = useHeading(confirming ? "confirm" : "phone");
+  const [put, setPut] = useState<MoveAside | null>(null);
+  const [step, setStep] = useState<AsideStep | null>(null);
+  const [progress, setProgress] = useState<MoveProgress | null>(null);
+  const heading = useHeading(confirming ? "confirm" : step?.name === "remove" ? "remove" : "phone");
   const connected = connection.kind === "connected";
+
+  const look = useCallback(() => {
+    if (!aside) return;
+    void aside.aside().then(setPut, () => setPut(null));
+  }, [aside]);
+  useEffect(look, [look]);
 
   useEffect(() => {
     let gone = false;
@@ -56,6 +82,84 @@ export function ThisPhone({
   const mostPrivate = (hello?.connection ?? device.connection) === "mostPrivate";
   const computerVersion = hello?.version ?? device.version;
   const last = sources?.lastSent;
+
+  const bring = async () => {
+    if (!aside) return;
+    setProgress(null);
+    setStep({ name: "bringing" });
+    try {
+      const moved = await aside.bring(setProgress);
+      setStep({ name: "brought", moved, busy: false });
+    } catch (e) {
+      const why = endedFor(e);
+      setStep(why ? { name: "failed", why } : null);
+    }
+  };
+  const settle = (remove: boolean) => {
+    if (!aside || (step?.name !== "brought" && step?.name !== "remove")) return;
+    setStep({ ...step, busy: true });
+    void aside
+      .putAside(remove)
+      .catch(() => undefined)
+      .finally(() => {
+        setStep(null);
+        look();
+      });
+  };
+
+  if (step?.name === "bringing")
+    return (
+      <MoveMoving
+        computer={computer}
+        bring
+        progress={progress}
+        onStop={() => {
+          void aside?.stop().finally(() => setStep(null));
+        }}
+      />
+    );
+  if (step?.name === "failed")
+    return (
+      <MoveFailed
+        computer={computer}
+        why={step.why}
+        onTryAgain={() => void bring()}
+        onBack={() => setStep(null)}
+      />
+    );
+  if (step?.name === "brought")
+    return (
+      <MoveMoved
+        computer={computer}
+        items={step.moved.items}
+        brought={step.moved.brought}
+        busy={step.busy}
+        onDone={settle}
+      />
+    );
+  if (step?.name === "remove" && put) {
+    return (
+      <Page bar={<BackBar title={t("phone.sheet.title")} onBack={() => setStep(null)} />}>
+        <main className="ph-main">
+          <h2 className="ph-h1" tabIndex={-1} ref={heading}>
+            {t("moving.phone.moved.choice")}
+          </h2>
+          {put.onComputer ? null : (
+            <p className="ph-body">{t("moving.phone.used.warning", { computer })}</p>
+          )}
+          <div className="ph-spacer" />
+          <div className="ph-stack">
+            <Button kind="danger" disabled={step.busy} onClick={() => settle(true)}>
+              {t("moving.phone.used.remove")}
+            </Button>
+            <Button kind="quiet" onClick={() => setStep(null)}>
+              {t("moving.phone.used.keep")}
+            </Button>
+          </div>
+        </main>
+      </Page>
+    );
+  }
 
   if (confirming) {
     return (
@@ -154,6 +258,21 @@ export function ThisPhone({
             value={t("phone.sheet.versionValue", { version })}
           />
         </Group>
+        {put ? (
+          <Group title={t("moving.phone.moved.choice")}>
+            {put.onComputer ? null : (
+              <Row
+                label={t("moving.phone.aside.bring", { computer })}
+                onPress={() => void bring()}
+              />
+            )}
+            <Row
+              label={t("moving.phone.aside.remove")}
+              danger
+              onPress={() => setStep({ name: "remove", busy: false })}
+            />
+          </Group>
+        ) : null}
         <Group title={t("phone.app.settings.help")}>
           <Row label={t("phone.sources.privacy")} onPress={openPolicy} />
           <Row label={t("phone.app.settings.can")} hint={t("phone.sheet.can")} />
