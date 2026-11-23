@@ -11,7 +11,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use base64::Engine as _;
 use futures_util::StreamExt;
 use jiff::civil::Date;
 use nocturne_contract::{ComponentRole, PageView, Tier};
@@ -31,7 +30,6 @@ use crate::error::RuntimeError;
 use crate::npu::{Npu, Placement, Work};
 use crate::selection::Picks;
 
-const MAX_IMAGE_EDGE: u32 = 2048;
 const MAX_AUDIO_SECONDS: f64 = 2.0 * 3600.0;
 /// What has been checked or loaded since the engine last (re)started.
 #[derive(Default)]
@@ -554,9 +552,10 @@ impl LemonadeMind {
 
     async fn read_image_impl(&self, image: &Path) -> Result<Understanding, MindError> {
         let path = image.to_path_buf();
-        let uri = tokio::task::spawn_blocking(move || image_data_uri(&path))
-            .await
-            .map_err(|e| MindError::Failed(e.to_string()))??;
+        let uri =
+            tokio::task::spawn_blocking(move || nocturne_provider::image::image_data_uri(&path))
+                .await
+                .map_err(|e| MindError::Failed(e.to_string()))??;
         let uri = uri.as_str();
         self.with_mind(
             Work::Reading,
@@ -773,60 +772,6 @@ fn engine_message(e: &RuntimeError) -> String {
 fn non_empty(s: String) -> Option<String> {
     let t = s.trim();
     (!t.is_empty()).then(|| t.to_string())
-}
-
-fn image_data_uri(path: &Path) -> Result<String, MindError> {
-    let bytes = std::fs::read(path).map_err(|e| MindError::Failed(e.to_string()))?;
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    let (bytes, mime) = match image::load_from_memory(&bytes) {
-        Ok(img) if img.width().max(img.height()) > MAX_IMAGE_EDGE => {
-            let small = img.resize(
-                MAX_IMAGE_EDGE,
-                MAX_IMAGE_EDGE,
-                image::imageops::FilterType::Triangle,
-            );
-            let mut out = std::io::Cursor::new(Vec::new());
-            let jpeg = matches!(ext.as_str(), "jpg" | "jpeg");
-            let format = if jpeg {
-                image::ImageFormat::Jpeg
-            } else {
-                image::ImageFormat::Png
-            };
-            let prepared = if jpeg {
-                image::DynamicImage::ImageRgb8(small.to_rgb8())
-            } else {
-                small
-            };
-            prepared
-                .write_to(&mut out, format)
-                .map_err(|e| MindError::Failed(e.to_string()))?;
-            (
-                out.into_inner(),
-                if jpeg { "image/jpeg" } else { "image/png" },
-            )
-        }
-        Ok(_) => (bytes, mime_for(&ext)),
-        Err(_) => match ext.as_str() {
-            "gif" | "webp" | "bmp" => (bytes, mime_for(&ext)),
-            _ => return Err(MindError::Unsupported(format!("image type .{ext}"))),
-        },
-    };
-    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-    Ok(format!("data:{mime};base64,{b64}"))
-}
-
-fn mime_for(ext: &str) -> &'static str {
-    match ext {
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "bmp" => "image/bmp",
-        _ => "image/png",
-    }
 }
 
 pub use nocturne_mind::read::REPLY_TARGET;

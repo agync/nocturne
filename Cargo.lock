@@ -3829,6 +3829,7 @@ dependencies = [
  "nocturne-engine",
  "nocturne-lemonade",
  "nocturne-mind",
+ "nocturne-provider",
  "pdf-extract",
  "process-wrap",
  "quick-xml",
@@ -3885,6 +3886,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "nocturne-provider"
+version = "0.7.2"
+dependencies = [
+ "base64 0.23.1",
+ "image",
+ "nocturne-engine",
+ "tokio",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
