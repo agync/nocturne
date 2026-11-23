@@ -147,6 +147,8 @@ export type MoveView =
       /** Not enough room yet: the move button waits. */
       room?: MoveRoom | null;
     }
+  /** Agreed, and nothing has arrived yet: the phone makes the copy that travels. */
+  | { phase: "preparing"; name: string }
   | { phase: "arriving"; name: string; done: number; size: number }
   | { phase: "checking"; name: string }
   | { phase: "restarting"; name: string }

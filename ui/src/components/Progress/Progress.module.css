@@ -37,3 +37,26 @@
 .progress[data-paused="true"] .fill {
   background: repeating-linear-gradient(90deg, var(--ink3) 0 4px, transparent 4px 7px);
 }
+
+/* The amount is not known yet: a short stretch travels along the track. */
+.progress[data-unknown="true"] .fill {
+  width: 30%;
+  animation: travel 1.6s ease-in-out infinite;
+}
+
+@keyframes travel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress[data-unknown="true"] .fill {
+    width: 100%;
+    animation: none;
+    opacity: 0.35;
+  }
+}

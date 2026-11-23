@@ -67,7 +67,8 @@ function MovePanel({ view }: { view: MoveView }) {
       : offered
         ? () => void answer("notNow")
         : null;
-  const stoppable = view.phase === "arriving" || view.phase === "checking";
+  const stoppable =
+    view.phase === "preparing" || view.phase === "arriving" || view.phase === "checking";
   useEffect(() => {
     if (!stoppable) setStopping(false);
   }, [stoppable]);
@@ -165,6 +166,10 @@ function MovePanel({ view }: { view: MoveView }) {
       );
       break;
     }
+    case "preparing":
+      body = <Progress value={null} max={1} label={t("moving.receive.preparing", { name })} />;
+      foot = stopButton;
+      break;
     case "arriving":
       body = (
         <Progress

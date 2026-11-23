@@ -145,7 +145,7 @@ function remoteFromAddress(): RemoteOptions {
 }
 
 /**
- * `?mockMove=offered|here|room|arriving|checking|restarting|arrived|ranOut|notOpened` opens with a
+ * `?mockMove=offered|here|room|preparing|arriving|checking|restarting|arrived|ranOut|notOpened` opens with a
  * phone's memory moving here.
  */
 function moveFromAddress(): MoveView | null {
@@ -156,6 +156,8 @@ function moveFromAddress(): MoveView | null {
       return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: false };
     case "here":
       return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: true };
+    case "preparing":
+      return { phase: "preparing", name };
     case "arriving":
       return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000 };
     case "checking":
@@ -1943,9 +1945,7 @@ export class MockEngine implements EngineClient {
   answerMove = async (choice: MoveChoice): Promise<void> => {
     const now = this.moving;
     if (now?.phase !== "offered") throw new Error("There is no offer to answer");
-    this.setMove(
-      choice === "move" ? { phase: "arriving", name: now.name, done: 0, size: now.bytes } : null,
-    );
+    this.setMove(choice === "move" ? { phase: "preparing", name: now.name } : null);
   };
   finishMove = async (): Promise<void> => {
     if (this.moving?.phase !== "arrived" && this.moving?.phase !== "failed")
@@ -1954,7 +1954,7 @@ export class MockEngine implements EngineClient {
   };
   stopMove = async (): Promise<void> => {
     const now = this.moving;
-    if (now?.phase !== "arriving" && now?.phase !== "checking")
+    if (now?.phase !== "preparing" && now?.phase !== "arriving" && now?.phase !== "checking")
       throw new Error("There is no move to stop");
     this.setMove(null);
   };

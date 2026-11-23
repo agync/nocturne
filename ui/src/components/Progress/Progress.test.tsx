@@ -34,4 +34,13 @@ describe("Progress", () => {
     render(<Progress value={20} max={10} label="Reading" />);
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "10");
   });
+
+  it("shows no amount while the amount is not known", () => {
+    const { container } = render(<Progress value={null} max={1} label="Getting it ready" />);
+    const bar = screen.getByRole("progressbar");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(bar).not.toHaveAttribute("aria-valuemax");
+    expect(bar).toHaveAttribute("aria-valuetext", "Getting it ready");
+    expect(container.firstElementChild).toHaveAttribute("data-unknown", "true");
+  });
 });

@@ -120,6 +120,28 @@ describe("moving the memory to a computer", () => {
     ).toBeInTheDocument();
   });
 
+  it("says it is getting the memory ready, with a bar of no amount, until the first part goes", async () => {
+    const api = fakeApi();
+    open(api);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move my memory" }));
+    // Still waiting for the computer's word: getting ready already.
+    expect(screen.getByText("Getting your memory ready to move…")).toBeInTheDocument();
+    api.answerOffer(null);
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    act(() => api.progress?.({ phase: "preparing", done: 300, total: 1000 }));
+    const bar = screen.getByRole("progressbar");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(bar).toHaveAttribute("aria-valuetext", "Getting your memory ready to move…");
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.queryByText(/ of /)).toBeNull();
+
+    act(() => api.progress?.({ phase: "sending", done: 262_144, total: 1_400_000_000 }));
+    expect(screen.queryByText("Getting your memory ready to move…")).toBeNull();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText(/^262\skB of 1\.4\sGB$/)).toBeInTheDocument();
+  });
+
   it("moves, shows how far, then lets the person choose what happens to it here", async () => {
     const api = fakeApi();
     const { onDone } = open(api);
