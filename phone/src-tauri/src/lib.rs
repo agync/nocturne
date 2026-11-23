@@ -4,6 +4,7 @@
 
 pub mod commands;
 pub mod home;
+pub mod log;
 pub mod sources;
 pub mod state;
 pub mod store;
@@ -27,6 +28,7 @@ pub fn run() {
     builder
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
+            log::start(&dir.join("logs"));
             app.manage(state::AppState::new(dir.clone()));
             app.manage(home::Home::new(
                 dir,
