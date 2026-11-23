@@ -9,6 +9,7 @@
 //! by a [`Keys`], the phone's safe place ([`SafeKeys`]). With no key held, a chosen provider is
 //! not reached.
 
+pub mod ask;
 pub mod host;
 pub mod keys;
 pub mod sent;
