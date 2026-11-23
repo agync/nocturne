@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Phone alone · a locked copy online · Nocturne</title>
+<title>Phone alone · backup · Nocturne</title>
 <link rel="stylesheet" href="parity.css">
 <script type="application/json" id="frames">
 {
   "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "This phone" },
-  "on": { "title": "A locked copy online", "back": "This phone" }
+  "on": { "title": "Backup", "back": "This phone" }
 }
 </script>
 </head>
@@ -16,64 +16,61 @@
 <main id="content">
 
   <!-- Step 1 -->
-  <p class="stepLbl" data-state="why">A locked copy online · step 1 of 2</p>
-  <h1 class="stepH" data-state="why">Keep a locked copy of your memory online, so a lost phone doesn’t lose it.</h1>
+  <p class="stepLbl" data-state="why">Backup · step 1 of 2</p>
+  <h1 class="stepH" data-state="why">Back up your memory every night, so a lost phone doesn’t lose it.</h1>
   <ul class="lines" data-state="why">
-    <li><b>What goes</b><span>Everything you kept, in one locked copy, made again every day. Photos and recordings go once each.</span></li>
-    <li><b>Who can open it</b><span data-os="ios">Only someone with your passphrase. Apple stores it but can’t open it, and neither can Nocturne’s makers.</span><span data-os="android">Only someone with your passphrase. Google stores it but can’t open it, and neither can Nocturne’s makers.</span></li>
-    <li><b>You need</b><span data-os="ios">iCloud Drive turned on, and room for about 1.4 GB.</span><span data-os="android">A Google account, and room for about 1.4 GB in its Drive.</span></li>
+    <li><b>What goes</b><span>Everything you kept, locked. Each night, while this phone charges, only what changed goes.</span></li>
+    <li><b>Who can open it</b><span data-os="ios">Only someone with your phrase. Apple keeps it in your iCloud but can’t open it, and neither can Nocturne’s makers.</span><span data-os="android">Only someone with your phrase. Google keeps it in your Drive but can’t open it, and neither can Nocturne’s makers.</span></li>
+    <li><b>You need</b><span data-os="ios">iCloud turned on, with room for about 1.4 GB.</span><span data-os="android">Your Google account on this phone, with room for about 1.4 GB in its Drive.</span></li>
   </ul>
-  <div class="expander" data-state="why"><span>Everything about the copy</span><span data-icon="chevron-down" data-size="18"></span></div>
+  <div class="expander" data-state="why"><span>Everything about the backup</span><span data-icon="chevron-down" data-size="18"></span></div>
   <div class="foot" data-state="why">
     <span class="btn" data-kind="primary">Continue</span>
     <span class="btn" data-kind="quiet">Not now</span>
     <p class="barLine">Nothing is turned on until the last step.</p>
   </div>
 
-  <!-- Step 2: passphrase -->
-  <p class="stepLbl" data-state="passphrase">A locked copy online · step 2 of 2</p>
-  <h1 class="stepH" data-state="passphrase">Choose a passphrase for the copy</h1>
-  <div class="fieldWrap" data-state="passphrase">
-    <span class="fieldLabel">Choose a passphrase</span>
-    <div class="fieldInput"><span>••••••••••••••••••••</span></div>
-    <p class="small">At least 8 characters. A few words that don’t go together are strong and easy to remember.</p>
-    <p class="small"><span style="letter-spacing: 2px">▮▮▮</span> Strong.</p>
+  <!-- Step 2: the phrase -->
+  <p class="stepLbl" data-state="passphrase">Backup · step 2 of 2</p>
+  <h1 class="stepH" data-state="passphrase">Your phrase for the backup</h1>
+  <p class="plead" data-state="passphrase">It opens your backup on a new phone. Nocturne made this one up for you.</p>
+  <div class="card2" data-state="passphrase" style="gap: 10px; align-items: flex-start">
+    <p style="font-family: var(--serif, Georgia, serif); font-size: 1.375rem; line-height: 1.45; margin: 0">harbour violet pencil<br>maple drift oven</p>
+    <span class="link2">Another phrase</span>
   </div>
-  <div class="fieldWrap" data-state="passphrase">
-    <span class="fieldLabel">Type it again</span>
-    <div class="fieldInput"><span>••••••••••••••••••••</span></div>
-  </div>
+  <p class="link2" data-state="passphrase">Use my own phrase instead</p>
   <div class="card2" data-state="passphrase" style="gap: 8px">
-    <strong style="font-weight: 500">Keep this passphrase safe</strong>
-    <p class="small" style="color: var(--ink)">Nocturne doesn’t keep it anywhere you can read. If the passphrase is lost, nobody can open this copy, not even Nocturne. You need it only on a new phone. Write it down and keep it somewhere safe, or save it in a password manager.</p>
+    <strong style="font-weight: 500">Keep this phrase safe</strong>
+    <p class="small" style="color: var(--ink)">Nocturne doesn’t keep it. Without it, nobody can open your backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager.</p>
     <div style="display: flex; gap: 10px; align-items: center"><span class="tick" style="width: 18px; height: 18px; border: 1.5px solid var(--ink3); border-radius: 4px"></span><span style="font-size: 0.9375rem">I’ve written it down or saved it somewhere safe</span></div>
   </div>
   <div class="foot" data-state="passphrase">
     <span class="btn" data-kind="primary" style="opacity: 0.45">Turn on</span>
     <span class="btn" data-kind="quiet">Back</span>
-    <p class="barLine">Choose a passphrase, type it again and tick the box to go on.</p>
+    <p class="barLine">Tick the box to go on.</p>
   </div>
 
   <!-- On, in This phone -->
   <div class="group" data-state="on">
     <div class="rows">
-      <div class="row"><span class="rowText"><span class="rowLabel">A locked copy online</span><span class="rowHint" data-os="ios">Last copy 9:32 am · 1.4 GB in iCloud Drive</span><span class="rowHint" data-os="android">Last copy 9:32 am · 1.4 GB in Google Drive</span></span><span class="sw"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Back up every night</span><span class="rowHint" data-os="ios">Last backup today, 3:12 am · 1.4 GB in your iCloud</span><span class="rowHint" data-os="android">Last backup today, 3:12 am · 1.4 GB in your Google Drive</span></span><span class="sw"></span></div>
     </div>
   </div>
   <div class="group" data-state="on">
     <div class="rows">
-      <div class="row"><span class="rowText"><span class="rowLabel">How often</span></span><span class="rowValue">Every day</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
-      <div class="row"><span class="rowText"><span class="rowLabel">Change the passphrase…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span></span><span class="sw off"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Back up now</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Change the phrase…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Turn off…</span></span></div>
     </div>
   </div>
   <div class="group" data-state="on">
-    <p class="ghead">About the copy</p>
+    <p class="ghead">About the backup</p>
     <ul class="lines">
-      <li><b>What the company sees</b><span data-os="ios">Apple can see that the copy is there, how big it is and when it changes. It can’t see what is in it.</span><span data-os="android">Google can see that the copy is there, how big it is and when it changes. It can’t see what is in it.</span></li>
-      <li><b>How many</b><span>The last seven copies are kept. When you forget something for good, the older copies go at once, so it leaves the copy too.</span></li>
-      <li><b>Your phone’s own backup</b><span>Your phone’s own backup leaves your memory out, so this is the one copy.</span></li>
-      <li><b>A new phone</b><span>Install Nocturne, choose I have a locked copy, and type your passphrase.</span></li>
+      <li><b>Where</b><span data-os="ios">In your iCloud, in a place only Nocturne uses. It doesn’t show among your files.</span><span data-os="android">In your Google Drive, in a folder called Nocturne backup. Nocturne can reach only what it puts there, nothing else in your Drive.</span></li>
+      <li><b>When</b><span>Each night while this phone charges, at a time your phone chooses. Over mobile data too, unless you choose Wi-Fi only.</span></li>
+      <li><b>How many</b><span>You can go back up to seven nights. When you forget something for good, it goes from the backup at once.</span></li>
+      <li><b>A new phone</b><span data-os="ios">Sign in with the same Apple Account, install Nocturne, choose I have a backup, and type your phrase.</span><span data-os="android">Install Nocturne, choose I have a backup, choose the same Google account, and type your phrase.</span></li>
     </ul>
   </div>
 </main>

@@ -116,7 +116,7 @@ person removes what was put aside.
 |---|---|---|
 | The phone | A companion of the new home | A phone alone, its mind "None yet" unless the person chooses one |
 | The old memory on the phone | Put aside; the person removes it or keeps it put aside for 30 days | Not applicable |
-| A locked copy online | Turned off. "Delete the copy online" or "Keep it as it is" ([decision 19](phone-parity.md#decisions)) | Offered: "Keep a locked copy online?" |
+| A locked copy online | Turned off. "Delete the backup in your iCloud" (or "in your Google Drive") or "Keep it as it is" ([decision 19](phone-parity.md#decisions)) | Offered: "Turn on backup?" |
 | Its online mind | Turned off on the phone. The computer has its own mind, and Online answers can be set up there | Offered: "Choose a mind" |
 | Calendar and health | Keep coming, now to the new home | Stay on the phone |
 | The Sent online list | Moves with the memory | Moves with the memory |
@@ -144,7 +144,7 @@ this phone holds" after "becomes the home of your memory".
 | Counts | "{count} things you kept since {date}" · "{count} journal entries" · "About {size}, most of it photos and recordings". The journal line shows only when above zero. Pages are not counted: they stay on the phone, in what is put aside. When photos and recordings are under half the size, the line is "About {size}" alone |
 | Time | "Keep Nocturne open; it carries on if the phone allows." No time estimate before the move starts: the speed isn't known yet |
 | After, on this phone | "Your memory here is put aside once it has arrived. You choose then whether to remove it." |
-| Locked copy line, when on | "Your locked copy online stops being made. You choose then whether to delete it." |
+| Backup line, when on | "Your nightly backup stops. You choose then whether to delete it." |
 | Online mind line, when on | "Nocturne’s mind online turns off on this phone. {computer} has its own." |
 | Bar | "Move my memory" · "Back" |
 
@@ -170,7 +170,7 @@ place of Moved. Moving and Moved are for a move into a household computer.
 | Body | "{count} things arrived, and every count matches. This phone now works with {computer}." |
 | Choice heading | "Your memory on this phone" |
 | Choice | "Remove it from this phone" (selected) / "Keep it put aside for 30 days" |
-| Copy choice, when on | "Your locked copy online" / "Delete the copy online" · "Keep it as it is" |
+| Backup choice, when on | "Your backup" / "Delete the backup in your iCloud" (or "in your Google Drive") · "Keep it as it is" |
 | Button | "Done" |
 
 ### On the computer: a phone with its own memory
@@ -358,10 +358,10 @@ it deletes them for good: 12 pages, 3 reflections, 140 calendar entries from bef
 | Found | "Move your memory to {computer}?" / "{computer} becomes the home of your memory. It reads, tidies and writes your page from now on." / "This phone then works with {computer}: keep, ask and read your page from here." / "Your memory lives in one place at a time, so it moves rather than copies." |
 | Found, household | "keeps your memory, locked with a key this phone holds" |
 | What moves | "What moves" / "{count} things you kept since {date}" / "{count} journal entries" / "About {size}, most of it photos and recordings" / "Keep Nocturne open; it carries on if the phone allows." |
-| What changes | "Your memory here is put aside once it has arrived. You choose then whether to remove it." / "Your locked copy online stops being made. You choose then whether to delete it." / "Nocturne’s mind online turns off on this phone. {computer} has its own." |
+| What changes | "Your memory here is put aside once it has arrived. You choose then whether to remove it." / "Your nightly backup stops. You choose then whether to delete it." / "Nocturne’s mind online turns off on this phone. {computer} has its own." |
 | Buttons | "Move my memory" / "Back" / "Not now" |
 | Moving | "Moving your memory" / "Getting your memory ready to move…" / "{done} of {size}" / "About {minutes} minutes left" / "You can still keep things. They go across at the end." / "Stop" / "Stop moving? Nothing has changed here, and {computer} keeps nothing of it." / "Stop moving" / "Keep moving" |
-| Moved | "Your memory is on {computer}." / "{count} things arrived, and every count matches. This phone now works with {computer}." / "Your memory on this phone" / "Remove it from this phone" / "Keep it put aside for 30 days" / "Your locked copy online" / "Delete the copy online" / "Keep it as it is" / "Done" |
+| Moved | "Your memory is on {computer}." / "{count} things arrived, and every count matches. This phone now works with {computer}." / "Your memory on this phone" / "Remove it from this phone" / "Keep it put aside for 30 days" / "Your backup" / "Delete the backup in your iCloud" / "Delete the backup in your Google Drive" / "Keep it as it is" / "Done" |
 | Leaving a household | "Delete your memory from {household}?" |
 | Computer, choose | "{name} has its own memory, and this computer has one too." / "{count} things kept on {name} since {date} · about {size}" / "A computer holds one person’s memory. Choose how {name} joins this one." / "Bring the phone’s things in" / "What was kept on {name}, with its journal and check-ins, joins the memory here, and Nocturne reads it as new. Its calendar and health readings are sent again, with nothing doubled." / "Use this computer’s memory" / "Nothing comes in from {name}. It works with this computer like your other phones, and what it holds now is put aside on it." / "Continue" / "Not now" |
 | Computer, bringing in | "{name} is getting its things ready…" / "Bringing in {name}’s things · {done} of {size}" / "Adding them to the memory here…" / "Stop" / "Stop bringing them in? Nothing changes here, and {name} keeps its memory." / "Stop" / "Keep going" |

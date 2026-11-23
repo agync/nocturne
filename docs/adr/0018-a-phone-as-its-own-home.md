@@ -43,7 +43,7 @@ SQLite bundled. The phone app today links only the channel and the contract.
 - **One home is enforced at pairing.** A phone that holds a memory and pairs with a computer ends in
   a move, or in nothing changing. It never ends with two homes.
 - **The device backup is out of scope.** The store stays out of iCloud Backup and Android's backup,
-  as the app's files already do. The online backup is the locked copy of
+  as the app's files already do. The online backup is the nightly backup of
   [0019](0019-a-locked-copy-online.md).
 
 ## Proposed contract changes
@@ -57,7 +57,7 @@ parity records share one wording.
 | Invariant 2, an online mind on a phone (0020), the key route | **Yes**, since 2026-11-23, when the owner accepted 0020 |
 | Invariant 2, Online answers and the online mind send what a good answer needs, private things, check-ins and originals included | **Yes**, since 2026-11-23 (owner): private decides only what comes up on its own |
 | Invariant 2, Apple's servers as a phone's mind | No: later, with the Apple trial |
-| Invariant 2, a locked copy online (0019) | No: 0019 is proposed |
+| Invariant 2, a nightly backup to the person's own account (0019) | No: 0019 is proposed. Its clause is below. (The file in a picked folder, which needed none, was dropped on 2026-11-23) |
 | Invariant 2, a household's mind (0021) | No: 0021 is proposed |
 | First line, invariants 4 and 5, the new invariant | No: they go in with this record |
 
@@ -73,9 +73,10 @@ web-view interface); on a computer it ships and supervises a private, embedded L
 > servers and relays to stay connected; while the person has turned on Online answers, the embedded
 > engine's requests to the one provider they chose for answers, online or on their own network (each
 > question with what a good answer to it needs), plus one look at that provider's list of models
-> each time the engine starts; while the person has turned on a locked copy online, copies of their
-> memory locked with a key only they hold, to the one place they chose for it, plus the sign-in and
-> listing that place needs (0019); while a phone that is its own home has an online mind the person
+> each time the engine starts; while a phone that is its own home has backup turned on, that phone's
+> backups of its memory, locked with a phrase only the person holds, to the person's own iCloud or
+> Google Drive account that the phone is signed in to, plus the sign-in, listing and removal that
+> account needs (0019); while a phone that is its own home has an online mind the person
 > chose, that phone's requests to the one provider they chose, online or on their own network (what
 > each reading, page or answer needs to be done well), plus one look at that provider's list of
 > models when it is checked (0020); and, while the person borrows a household's mind with the code its
