@@ -134,7 +134,7 @@ this phone holds" after "becomes the home of your memory".
 | Part | Copy |
 |---|---|
 | Title | "What moves" |
-| Counts | "{count} things you kept since {date}" · "{count} journal entries" · "{count} pages" · "About {size}, most of it photos and recordings". The journal and pages lines each show only when above zero; a phone alone with no mind has no pages |
+| Counts | "{count} things you kept since {date}" · "{count} journal entries" · "{count} pages" · "About {size}, most of it photos and recordings". The journal and pages lines each show only when above zero; a phone alone with no mind has no pages. When photos and recordings are under half the size, the line is "About {size}" alone |
 | Time | "Keep Nocturne open; it carries on if the phone allows." No time estimate before the move starts: the speed isn't known yet |
 | After, on this phone | "Your memory here is put aside once it has arrived. You choose then whether to remove it." |
 | Locked copy line, when on | "Your locked copy online stops being made. You choose then whether to delete it." |
@@ -238,6 +238,18 @@ phone as it was.
 | Computer | Stopped by the phone | "{name} stopped bringing its things in. Nothing changed here." / "OK" |
 | Computer | Done | "{name}’s things are here." / "{count} things, {entries} journal entries and {checkins} check-ins were added. Nocturne reads them as new over the next while; finding them by their words works now." / "Open today’s page" |
 
+**Finding them before they are read.** On the computer, Ask finds brought-in things by their words
+at once, in their own section under the answer's results:
+
+| Part | With a mind | With no mind yet |
+|---|---|---|
+| Section heading | "Not read yet" | "Not read yet" |
+| Lead | "Nocturne hasn’t read these yet, so they are found by their words. It reads them tonight." | "Found by their words. Answers need a mind." |
+| Each row | The words with the match marked, then "Kept {day} · reads tonight" | The words with the match marked, then "Kept {day} · waiting to be read" |
+
+The same section shows any other thing kept but not yet read. When it has been read, it moves up
+into the answer's results.
+
 Nothing is added until everything has arrived and every count matches; then all of it is added in
 one step, or none of it. Adding happens while Nocturne runs: no restart. The phone puts its memory
 aside only once the computer says the things were added.
@@ -258,8 +270,11 @@ aside only once the computer says the things were added.
 | Later | "Remove…" in This phone | "Bring its things to {computer}…" in This phone, which runs the bringing in from what was put aside (decision 33), or "Remove…" |
 | "Remove…" asks | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." and, when the phone had pages or reflections, "Pages and reflections written on this phone go with it." / "Remove" (careful) · "Keep it" | "Delete what was put aside {day} for good?" / "Nothing from it went to {computer}. This deletes {things} things kept, {entries} journal entries and {media} photos and recordings, and they can’t be brought back." / "Delete for good" (careful) · "Keep it" |
 
-A later "Bring its things to {computer}…" runs the same stages as bringing things in, from what was
-put aside. Stopping it on the phone stops it on the computer too, with the lines above; what was put
+A later "Bring its things to {computer}…" asks first: "Bring the things put aside {day} to
+{computer}?" / "{things} things kept, {entries} journal entries and {checkins} check-ins join the
+memory on {computer}, which reads them as new. What is put aside here stays until you remove it." /
+"Bring them in" · "Not now". It then runs the same stages as bringing things in, from what was put
+aside, and afterwards "Remove…" asks as it does after bringing things in. Stopping it on the phone stops it on the computer too, with the lines above; what was put
 aside stays as it was.
 
 **What travels, and what doesn't, when things are brought in.** Every kept thing with its original,
@@ -308,7 +323,7 @@ already has counts as unchanged.
 
 | State | What shows |
 |---|---|
-| Connection lost while moving | "Moving paused. It carries on when {computer} is back." Nothing is put aside until it completes |
+| Connection lost while moving, or {computer} out of reach | "Moving paused. It carries on when {computer} is back." (as built). Nothing is put aside until it completes |
 | Counts don't match | "Something didn’t arrive whole, so nothing changed. Try again." with "Try again" |
 | Not enough room on the new home | Before anything moves: the computer's not-enough-room line, and on the phone "{computer} needs more free room for your memory. Free some there, then try again." |
 | Room runs out during the move | Computer: "There wasn’t room for {name}’s memory, so nothing changed. Free about {size} here, then move it again from {name}." Phone: "{computer} ran out of room, so nothing changed. Your memory is still on this phone." with "Try again" · "Not now". Nothing is retried silently |
@@ -348,6 +363,9 @@ already has counts as unchanged.
 | Remove, after bringing in | "Remove what was put aside {day}?" / "Its things are on {computer} now. This removes the copy left on this phone." / "Pages and reflections written on this phone go with it." / "Remove" / "Keep it" |
 | Remove, after using the computer's | "Delete what was put aside {day} for good?" / "Nothing from it went to {computer}. This deletes {things} things kept, {entries} journal entries and {media} photos and recordings, and they can’t be brought back." / "Delete for good" / "Keep it" |
 | Item, also kept | "Also kept on {name} · {day}, {time}" / "Also kept on {name}" |
+| Bring them in later | "Bring the things put aside {day} to {computer}?" / "{things} things kept, {entries} journal entries and {checkins} check-ins join the memory on {computer}, which reads them as new. What is put aside here stays until you remove it." / "Bring them in" / "Not now" |
+| Computer, not read yet | "Not read yet" / "Nocturne hasn’t read these yet, so they are found by their words. It reads them tonight." / "Found by their words. Answers need a mind." / "Kept {day} · reads tonight" / "Kept {day} · waiting to be read" |
+| Counts, plural forms | "{count, plural, one {# thing} other {# things}}" · "{entries, plural, one {# journal entry} other {# journal entries}}" · "{checkins, plural, one {# check-in} other {# check-ins}}" · "{media, plural, one {# photo or recording} other {# photos and recordings}}" |
 | Computer, phone removed | "{name} was removed, so nothing came in from it." / "{name} was removed while they were added, so it still holds its own memory." |
 | Computer, arriving | "{name} is getting its memory ready…" / "Arriving from {name} · {done} of {size}" / "Stop" / "Stop this move? Nothing changes here, and {name} keeps its memory." / "Stop moving" / "Keep moving" / "Checking · every count must match before {name} lets go of it" / "Nocturne restarts to open the memory from {name}. It opens again by itself." |
 | Computer, room | "This computer needs about {size} free for it and has {free}. Free some room here, then choose {moveItHere}." / "There wasn’t room for {name}’s memory, so nothing changed. Free about {size} here, then move it again from {name}." |
