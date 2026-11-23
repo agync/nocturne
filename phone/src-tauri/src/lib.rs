@@ -118,6 +118,10 @@ pub fn run() {
             mind::status::mind_month,
             mind::status::mind_reading,
             mind::status::mind_status,
+            mind::commands::mind_check,
+            mind::commands::mind_turn_on,
+            mind::commands::mind_turn_off,
+            mind::commands::mind_chosen,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
