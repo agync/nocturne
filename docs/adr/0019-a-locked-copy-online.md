@@ -1,15 +1,17 @@
 ---
 type: Decision
 title: "0019 A locked copy online"
-description: "Proposed: a phone that is its own home backs up its memory each night while it charges, in locked pieces, to the person's own iCloud or Google Drive, opened with a phrase of words only they hold; opt-in, off by default, never a second home, with no server of Nocturne's."
-status: draft
+description: "Accepted: a phone that is its own home backs up its memory each night while it charges, in locked pieces, to the person's own iCloud or Google Drive, opened with a phrase of words only they hold; opt-in, off by default, never a second home, with no server of Nocturne's."
+status: stable
 tags: [adr, phone, backup, privacy, online]
 ---
 
 # 0019 A locked copy online
 
-Status: proposed. Date: 2026-11-22. Revised 2026-11-23 (owner): a nightly backup to the person's
-own account, replacing both the first proposal and the same day's file in a picked folder.
+Status: accepted by the owner on 2026-11-24. Proposed 2026-11-22. Revised 2026-11-23 (owner): a
+nightly backup to the person's own account, replacing both the first proposal and the same day's
+file in a picked folder. Revised 2026-11-24 (owner): restoring onto a phone that holds a memory
+brings the backup's things in.
 
 ## Context
 
@@ -41,11 +43,15 @@ apps, and a backup that needs the person to set up a folder is not automatic. Th
   open a backup.
 - **Seven nights, and forgetting reaches it.** Seven nightly indexes are kept; a piece no kept index
   lists is removed. Forgetting for good writes a new index at once and removes every older index
-  that lists the thing, with its pieces.
-- **A backup of the one home, never a home.** It is used to restore on a new phone, signed in to the
-  same account, and nothing else. Each index names, unlocked, a random number for the phone that
-  wrote it and a count; a phone that finds a newer index from another phone stops, so nothing is
-  overwritten or merged.
+  that lists the thing, with its pieces, also while backup is off and the backup kept. Delete
+  everything deletes the backup in the account too, or the next time the phone reaches it, and
+  turns backup off. Things marked private are backed up like everything else.
+- **A backup of the one home, never a home.** It is used only to restore, and nothing opens or
+  edits it in place. On an empty phone it comes back as it was. On a phone that already holds a
+  memory, restoring brings the backup's things in, as a computer that holds a memory brings a
+  phone's in: nothing there is put aside or deleted, and a thing on both is kept once. Each index
+  names, unlocked, a random number for the phone that wrote it and a count; a phone that finds a
+  newer index from another phone stops, so nightly backups never overwrite or merge.
 - **Export is separate.** Saving everything as one 0013 file stays its own action.
 - **It is the online backup.** The phone's own device backup is out of scope, and the memory stays
   out of it.
@@ -55,9 +61,9 @@ apps, and a backup that needs the person to set up a folder is not automatic. Th
 
 ## Invariant 2
 
-Nocturne itself now sends the backup, so invariant 2 gains this clause, proposed here and in
-[0018](0018-a-phone-as-its-own-home.md#proposed-contract-changes), going into `AGENTS.md` only when
-this record is accepted:
+Nocturne itself now sends the backup, so invariant 2 gains this clause, written here and in
+[0018](0018-a-phone-as-its-own-home.md#proposed-contract-changes). It is in `AGENTS.md` since this
+record was accepted:
 
 > while a phone that is its own home has backup turned on, that phone's backups of its memory,
 > locked with a phrase only the person holds, to the person's own iCloud or Google Drive account
