@@ -182,6 +182,7 @@ class Table(unittest.TestCase):
             "Makefile",
             "rust-toolchain.toml",
             "scripts/ci-areas.sh",
+            "scripts/affected_crates.py",
         ):
             with self.subTest(path=path):
                 self.assertEqual(selected(path), EVERY)

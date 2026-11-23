@@ -48,8 +48,8 @@ check-changed: ## Run the basics for what changed since BASE (default merge base
 rust/build: ## Build the Rust workspace
 	cargo build --workspace
 
-# The packages rust/test runs: the workspace, or `-p` flags for some of its packages. The second
-# run, the app with its server, runs when the app is one.
+# The packages rust/test runs: the workspace, or the `-p` flags CI picks for a pull request
+# (scripts/affected_crates.py). The second run, the app with its server, runs when the app is one.
 RUST_PACKAGES ?= --workspace
 # cargo-nextest runs the tests when it is installed, with these profiles from .config/nextest.toml;
 # cargo test runs them otherwise. nextest runs no doctests, so cargo test --doc follows it.

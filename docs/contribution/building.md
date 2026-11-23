@@ -59,14 +59,14 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 
 | Job | Runs | Covers | Runs when these change |
 |---|---|---|---|
-| `rust` | `make rust/lint rust/test contract/check`, `scripts/away-integration.sh interop` | rustfmt, clippy for both feature sets, the tests under nextest and the doctests, the app's server run, the release build's compile check, the bindings drift check, the Rust and TypeScript phone sides against each other | the Rust side (`crates/`, `src-tauri/`, `phone/`, `docs/guide/`, `.cargo/`, `.config/nextest.toml`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh`, `scripts/away-integration.sh` |
+| `rust` | `make rust/lint rust/test contract/check`, `scripts/away-integration.sh interop` | rustfmt, clippy for both feature sets on the whole workspace, the affected packages' tests under nextest and their doctests, the app's server run, the release build's compile check, the bindings drift check, the Rust and TypeScript phone sides against each other | the Rust side (`crates/`, `src-tauri/`, `phone/`, `docs/guide/`, `.cargo/`, `.config/nextest.toml`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh`, `scripts/away-integration.sh` |
 | `ui` | `make ui/lint ui/test`, `npm run build`, `scripts/check_ui_dist.py` | Biome, the type check, the interface tests, the interface the app ships and its check | `ui/`, `src-tauri/` |
 | `packaging scripts` | `make scripts/test` | the packaging scripts' tests | `scripts/`, the Rust side, `flatpak/`, `docs/contribution/flatpak.md`, `LICENSE`, `ui/package*.json` |
 | `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` | `helpers/`, `scripts/test-tailnet.sh`, `scripts/tailnet-tags.sh` |
 | `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them | always |
 | `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium | `ui/`, `src-tauri/` |
 | `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks | `site/`, `docs/`, `lemonade.lock`, `ui/package*.json` |
-| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo nextest run` and `cargo test --doc` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64, and the real engine started on Windows | the Rust side |
+| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo nextest run` and `cargo test --doc` on `macos-15` and `windows-2022` | the affected packages' tests on Linux arm64, macOS arm64 and Windows x64, and the real engine started on Windows | the Rust side |
 | `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | the Rust side |
 | `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
 | `android` | `make ui/install phone/android`, then the plugins' `testDebugUnitTest` and `lintDebug` through Gradle | the phone app's debug APK for arm64, its plugins' JVM tests and Android lint; the APK is kept for 7 days for emulator checks | `phone/`, `crates/channel/`, `ui/src/phone/`, `ui/phone/`, `ui/vite.phone.config.ts`, `ui/package*.json`, `Cargo.*` |
@@ -77,13 +77,30 @@ The `changed paths` job compares a pull request with its merge base, and its run
 which jobs it chose. The table of areas is `scripts/ci-areas.sh`; `scripts/test_ci_areas.py`
 checks one changed path for each of its patterns, that each job's `if:` reads the flag of its
 area and it needs only `changes`, that none continues on error, and that `gate` needs every job.
-A change to a workflow, an action, the `Makefile`, `rust-toolchain.toml` or that script, a push to
-`main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
+A change to a workflow, an action, the `Makefile`, `rust-toolchain.toml`, that script or
+`scripts/affected_crates.py`, a push to `main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
 the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in
 `ui/` and write the bindings there, and the interface's tests read files in `src-tauri/`, so on
 x86_64 Linux both sides run when either changes, while the other platforms run only their own
 side. A job skipped this way counts as passed in `gate`. Every run on `main` finishes, and none is
 dropped while queued.
+
+The Rust jobs of a pull request test only the workspace packages it reaches.
+`scripts/affected_crates.py` reads the changed files and the workspace from `cargo metadata`, and
+picks the package each file is in, every package that depends on it through a normal, dev or build
+dependency, and the packages that read the file from outside their own folder (the guide and the
+interface's copy the app embeds, the interface files its drift tests compare, the changelog and
+the reference vectors the channel's tests read). A change to `Cargo.lock`, the workspace
+`Cargo.toml`, the toolchain, `.cargo/`, `.config/nextest.toml`, `clippy.toml`, a workflow or an
+action, the `Makefile` or that script tests the whole workspace, and so does a file under
+`crates/`, `src-tauri/` or `phone/` that no package owns. A change that reaches no package (only
+`scripts/bindings.sh`, say) runs lint, the drift check and the interop tests, and no package
+tests. `scripts/test_affected_crates.py` scans every string in the Rust sources that leads out of
+its package to a file in the repository, and fails when the script's tables miss one. The `rust`
+job prints which packages it picked and why, and its summary lists them. Clippy stays workspace
+wide: it checks without generating code, so the whole workspace costs little next to the tests.
+A push to `main` and a hand run test everything, so a read the tables miss fails
+on `main` and not later.
 
 The tests run under cargo-nextest, at the version `NEXTEST_TOOL` in `ci.yml` names, installed
 with `taiki-e/install-action`, which checks the download's sha256. The `ci` profile runs every

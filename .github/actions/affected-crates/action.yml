@@ -1,0 +1,46 @@
+# The workspace packages a pull request needs tested, from scripts/affected_crates.py: the
+# packages its files are in, every package that depends on them, and the packages whose tests
+# read them. A push, the nightly run and a hand run test the whole workspace.
+#
+# A pull request is checked out as GitHub's merge commit, so its first parent is the base branch
+# and the diff between them is the pull request's change. The checkout needs fetch-depth: 2 for
+# that parent; without it, the whole workspace is tested.
+name: Affected crates
+description: Pick the workspace packages to test for this run.
+
+outputs:
+  scope:
+    description: all, some or none.
+    value: ${{ steps.pick.outputs.scope }}
+  packages:
+    description: --workspace, or the -p flags of the packages to test.
+    value: ${{ steps.pick.outputs.packages }}
+  app:
+    description: Whether nocturne-app is one of them.
+    value: ${{ steps.pick.outputs.app }}
+
+runs:
+  using: composite
+  steps:
+    - id: pick
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        # Python on Windows is python, not python3.
+        python=$(command -v python3 || command -v python)
+        picked="$RUNNER_TEMP/affected"
+        if [ "$EVENT" = pull_request ] && git rev-parse -q --verify 'HEAD^2' > /dev/null; then
+          git -c core.quotePath=false diff --no-renames --name-only 'HEAD^1' HEAD \
+            > "$RUNNER_TEMP/affected-paths"
+          "$python" -I scripts/affected_crates.py < "$RUNNER_TEMP/affected-paths" > "$picked"
+        else
+          "$python" -I scripts/affected_crates.py --all > "$picked"
+        fi
+        tr -d '\r' < "$picked" >> "$GITHUB_OUTPUT"
+        {
+          echo "### Rust packages this run tests"
+          echo
+          sed -n 's/^packages=\(.\{1,\}\)$/`\1`/p; s/^scope=none$/None: no change reaches a Rust package./p' "$picked"
+        } >> "$GITHUB_STEP_SUMMARY"
