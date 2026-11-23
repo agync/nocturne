@@ -41,7 +41,11 @@ const MARK_STATES: Record<MarkState, true> = {
   needsYou: true,
   paused: true,
 };
-const LEVELS: Record<Level, true> = { sure: true, fairlySure: true, notSure: true };
+const LEVELS: Record<Level, true> = {
+  sure: true,
+  fairlySure: true,
+  notSure: true,
+};
 const ENGINE_STATES: Record<EngineState, true> = {
   starting: true,
   gettingReady: true,
@@ -68,7 +72,11 @@ const SPOKEN: Record<SpokenKind, true> = {
   letGo: true,
   question: true,
 };
-const PAPER: Record<PaperSize, true> = { a4: true, letter: true, receipt: true };
+const PAPER: Record<PaperSize, true> = {
+  a4: true,
+  letter: true,
+  receipt: true,
+};
 const PERIODS: PeriodKind[] = ["week", "month", "year"];
 const STEPS: Strength[] = ["little", "quite", "strongly"];
 
@@ -80,7 +88,11 @@ const each = (record: Record<string, true>, build: (member: string) => string[])
  * the code can produce from the values it is built from; a key under the family's prefix that
  * code cannot produce is dead, and the first test below fails on it.
  */
-const BUILT_AT_RUN_TIME: Array<{ prefix: string; why: string; producible: string[] }> = [
+const BUILT_AT_RUN_TIME: Array<{
+  prefix: string;
+  why: string;
+  producible: string[];
+}> = [
   {
     prefix: "kind.",
     why: "t(`kind.${kind}.spoken`) for an item kind",
@@ -144,10 +156,33 @@ const producible = new Set(
   NAMED_IN_RUST.concat(BUILT_AT_RUN_TIME.flatMap((family) => family.producible)),
 );
 
-const text = Object.values(sources).join("\n");
+/**
+ * Every run of key characters between two matching quotes in `text`, found in one pass. The
+ * lookahead takes no characters, so a quote that closes one literal can open the next.
+ */
+const KEY_LITERAL = /(?=(["'`])([\w.-]+)\1)/g;
 
-const named = (key: string) =>
-  ['"', "'", "`"].some((quote) => text.includes(`${quote}${key}${quote}`));
+const literals = (text: string): Set<string> =>
+  new Set(Array.from(text.matchAll(KEY_LITERAL), (match) => match[2] ?? ""));
+
+const written = literals(Object.values(sources).join("\n"));
+
+const named = (key: string) => written.has(key);
+
+describe("literals", () => {
+  it("finds a key only between matching quotes", () => {
+    const found = literals(`t("a.b") t('c-d') t(\`e_f\`) t("g.h') t(i.j) "k" 'l.m"`);
+    expect([...found].sort()).toEqual(["a.b", "c-d", "e_f", "k"]);
+  });
+
+  it("finds a literal that starts where the last one ended", () => {
+    expect([...literals(`"a.b"c.d"`)].sort()).toEqual(["a.b", "c.d"]);
+  });
+
+  it("does not take a key from a longer string", () => {
+    expect(literals(`"a.b c.d" "a.b.c"`).has("a.b")).toBe(false);
+  });
+});
 
 describe("the copy deck", () => {
   it("has no key that no code uses", () => {
