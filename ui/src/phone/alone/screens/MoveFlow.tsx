@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import type { MemoryCounts } from "../../../engine/bindings";
+import type { BroughtCounts, MemoryCounts } from "../../../engine/bindings";
 import {
   type MoveEnded,
   type MoveFacts,
@@ -11,6 +11,8 @@ import {
   MoveMoving,
   type MoveProgress,
   MoveSize,
+  MoveUsed,
+  MoveWaiting,
 } from "./MoveScreens";
 
 /** Why a move did not finish. Nothing changed on the phone in any of them. */
@@ -29,14 +31,27 @@ export type MoveError =
 
 /** The computer's answer to the offer. */
 export interface MoveOffered {
+  /** It already opened there, or its things were added: the move only has to finish. */
   opened: boolean;
   here: MemoryCounts | null;
+  /** The person there chose to bring this phone's things in: the move starts by itself. */
+  bring?: boolean;
+  /** The person there chose the computer's memory: what was here is already put aside. */
+  useHere?: boolean;
+}
+
+/** A finished move: how many things arrived, and with `brought` what was added there. */
+export interface Moved {
+  items: number;
+  brought?: BroughtCounts | null;
 }
 
 /** The phone's way to move its memory to the computer it has just paired with. */
 export interface MoveApi {
   /** The computer's name, from the session the pairing opened. */
   computer(): Promise<string>;
+  /** The computer already holds a memory: the person there chooses how this phone joins it. */
+  holds(): Promise<boolean>;
   facts(): Promise<MoveFacts>;
   /**
    * Offers the memory and waits for the person on the computer: what it holds, or that the
@@ -45,7 +60,7 @@ export interface MoveApi {
    */
   offer(): Promise<MoveOffered>;
   /** "Move my memory": answers how many things arrived. Rejects with a `MoveError`. */
-  move(onProgress: (p: MoveProgress) => void): Promise<{ items: number }>;
+  move(onProgress: (p: MoveProgress) => void): Promise<Moved>;
   stop(): Promise<void>;
   /** "Not now", or the computer kept what it has: the pairing is undone on both. */
   undo(): Promise<void>;
@@ -54,6 +69,9 @@ export interface MoveApi {
   /** A move is part way: this phone still holds its memory and a pairing for it. */
   pending(): Promise<boolean>;
 }
+
+/** How long a phone waiting for the person on the computer waits before it asks again. */
+const ASK_AGAIN_MS = 5000;
 
 const errorOf = (e: unknown): MoveError => (typeof e === "string" ? (e as MoveError) : "failed");
 
@@ -67,18 +85,28 @@ const ENDED: Partial<Record<MoveError, MoveEnded>> = {
   stoppedThere: "stoppedThere",
 };
 
+/** How a move that did not finish ends on screen: none when the person stopped it. */
+export function endedFor(e: unknown): MoveEnded | null {
+  const why = errorOf(e);
+  return why === "stopped" ? null : (ENDED[why] ?? "notWhole");
+}
+
 /** The move through the app's own commands. */
 export const nativeMoveApi: MoveApi = {
   computer: async () => {
     const state = await invoke<{ kind: string; hello?: { computerName: string } }>("connect");
     return state.hello?.computerName ?? "";
   },
+  holds: async () => {
+    const state = await invoke<{ kind: string; hello?: { memoryHere?: boolean } }>("connect");
+    return state.hello?.memoryHere === true;
+  },
   facts: () => invoke<MoveFacts>("move_facts"),
   offer: () => invoke<MoveOffered>("move_offer").catch((e) => Promise.reject(errorOf(e))),
   move: async (onProgress) => {
     const stop = await listen<MoveProgress>("move-progress", (e) => onProgress(e.payload));
     try {
-      return await invoke<{ items: number }>("move_memory");
+      return await invoke<Moved>("move_memory");
     } catch (e) {
       throw errorOf(e);
     } finally {
@@ -93,16 +121,20 @@ export const nativeMoveApi: MoveApi = {
 
 type Step =
   | { name: "found" }
+  | { name: "waiting" }
   | { name: "size" }
-  | { name: "moving" }
-  | { name: "failed"; why: MoveEnded }
-  | { name: "moved"; items: number; busy: boolean };
+  | { name: "moving"; bring: boolean }
+  | { name: "failed"; why: MoveEnded; bring: boolean }
+  | { name: "moved"; items: number; brought: BroughtCounts | null; busy: boolean }
+  | { name: "used"; busy: boolean };
 
 /**
  * Moving this phone's memory to the computer it has just paired with: the question, what moves,
  * moving, and moved. The offer goes to the computer as soon as the question shows, so the person
- * there is asked while this one reads. `onExit` returns to the phone alone (nothing changed, the
- * pairing undone); `onDone` follows the computer once the memory is there.
+ * there is asked while this one reads. A computer that already holds a memory asks the person
+ * there how this phone joins it, and this one waits: its things are brought in, or the
+ * computer's memory is used and nothing goes. `onExit` returns to the phone alone (nothing
+ * changed, the pairing undone); `onDone` follows the computer once it is decided.
  */
 export function MoveFlow({
   api,
@@ -113,7 +145,9 @@ export function MoveFlow({
   onExit(): void;
   onDone(): void;
 }) {
-  const [step, setStep] = useState<Step>({ name: "found" });
+  const [current, setStep] = useState<Step>({ name: "found" });
+  const step = useRef(current);
+  step.current = current;
   const [computer, setComputer] = useState("");
   const [facts, setFacts] = useState<MoveFacts | null>(null);
   const [progress, setProgress] = useState<MoveProgress | null>(null);
@@ -126,44 +160,74 @@ export function MoveFlow({
     void (undo ? api.undo() : Promise.resolve()).finally(onExit);
   };
 
+  // Before the person here has moved on: the computer's answer decides the next screen.
+  const deciding = () => ["found", "waiting", "size"].includes(step.current.name);
+
+  const answered = (answer: MoveOffered) => {
+    if (!deciding()) return;
+    if (answer.opened) void move(answer.bring === true);
+    else if (answer.useHere) setStep({ name: "used", busy: false });
+    else if (answer.bring) void move(true);
+    else setStep((s) => (s.name === "waiting" ? { name: "found" } : s));
+  };
+
   const ask = () => {
     const sent = api.offer();
     offer.current = sent;
-    // The person on the computer kept what it has: the phone stays as it was.
-    sent.catch((e: MoveError) => {
-      if (e === "declined") exit(true);
+    sent.then(answered, (e: MoveError) => {
+      // The person on the computer kept what it has: the phone stays as it was.
+      if (e === "declined") return exit(true);
+      // Waiting for the person there: the connection went, or the question timed out. It is
+      // asked again, and the phone keeps waiting until they choose or this one cancels.
+      if (step.current.name === "waiting")
+        setTimeout(() => {
+          if (!leaving.current && step.current.name === "waiting") ask();
+        }, ASK_AGAIN_MS);
     });
     return sent;
   };
 
   // The pairing just opened the session: the question and the offer go at once. A memory that
-  // already opened there finishes straight away.
+  // already opened there finishes straight away. A computer that holds a memory has this phone
+  // wait for the person there, and its answer carries the move on by itself.
   useEffect(() => {
     void api.computer().then(setComputer, () => undefined);
     void api.facts().then(setFacts, () => undefined);
-    ask().then(
-      (answer) => {
-        if (answer.opened) void move();
-      },
+    void api.holds().then(
+      (holds) => holds && setStep((s) => (s.name === "found" ? { name: "waiting" } : s)),
       () => undefined,
     );
+    ask();
   }, []);
 
-  const move = async () => {
-    setStep({ name: "moving" });
+  const move = async (asked: boolean) => {
+    let bring = asked;
+    setStep({ name: "moving", bring });
     setProgress(null);
     try {
-      await (offer.current ?? ask());
+      const answer = await (offer.current ?? ask());
+      // The person there chose the computer's memory: what was here is already put aside.
+      if (answer.useHere) return setStep({ name: "used", busy: false });
+      if (answer.bring && !bring) {
+        bring = true;
+        setStep({ name: "moving", bring });
+      }
       const moved = await api.move(setProgress);
-      setStep({ name: "moved", items: moved.items, busy: false });
+      setStep({ name: "moved", items: moved.items, brought: moved.brought ?? null, busy: false });
     } catch (e) {
       const why = errorOf(e);
       if (why === "declined" || why === "stopped") return exit(why === "declined");
-      setStep({ name: "failed", why: ENDED[why] ?? "notWhole" });
+      setStep({ name: "failed", why: ENDED[why] ?? "notWhole", bring });
     }
   };
 
-  switch (step.name) {
+  const keepOrRemove = (remove: boolean) => {
+    if (current.name !== "moved" && current.name !== "used") return;
+    setStep({ ...current, busy: true });
+    void api.putAside(remove).finally(onDone);
+  };
+
+  switch (current.name) {
     case "found":
       return (
         <MoveFound
@@ -172,11 +236,13 @@ export function MoveFlow({
           onNotNow={() => exit(true)}
         />
       );
+    case "waiting":
+      return <MoveWaiting computer={computer} onCancel={() => exit(true)} />;
     case "size":
       return facts ? (
         <MoveSize
           facts={facts}
-          onMove={() => void move()}
+          onMove={() => void move(false)}
           onBack={() => setStep({ name: "found" })}
         />
       ) : null;
@@ -184,6 +250,7 @@ export function MoveFlow({
       return (
         <MoveMoving
           computer={computer}
+          bring={current.bring}
           progress={progress}
           onStop={() => {
             leaving.current = true;
@@ -195,10 +262,10 @@ export function MoveFlow({
       return (
         <MoveFailed
           computer={computer}
-          why={step.why}
+          why={current.why}
           onTryAgain={() => {
             offer.current = null;
-            void move();
+            void move(current.bring);
           }}
           onBack={() => exit(true)}
         />
@@ -207,13 +274,47 @@ export function MoveFlow({
       return (
         <MoveMoved
           computer={computer}
-          items={step.items}
-          busy={step.busy}
-          onDone={(remove) => {
-            setStep({ ...step, busy: true });
-            void api.putAside(remove).finally(onDone);
-          }}
+          items={current.items}
+          brought={current.brought}
+          busy={current.busy}
+          onDone={keepOrRemove}
         />
       );
+    case "used":
+      return <MoveUsed computer={computer} busy={current.busy} onDone={keepOrRemove} />;
   }
 }
+
+/** The memory a move put aside on this phone, as This phone shows it. */
+export interface MoveAside {
+  /** Its things are on the computer: it can only be removed. */
+  onComputer: boolean;
+  keepUntil: string | null;
+}
+
+/** What This phone can do with the memory a move put aside, once the phone is a companion. */
+export interface AsideApi {
+  aside(): Promise<MoveAside | null>;
+  /** "Bring its things to {computer}…": rejects with a `MoveError`. */
+  bring(onProgress: (p: MoveProgress) => void): Promise<Moved>;
+  stop(): Promise<void>;
+  /** Removed now, or kept as it is. */
+  putAside(remove: boolean): Promise<void>;
+}
+
+/** What was put aside, through the app's own commands. */
+export const nativeAsideApi: AsideApi = {
+  aside: () => invoke<MoveAside | null>("move_aside").catch(() => null),
+  bring: async (onProgress) => {
+    const stop = await listen<MoveProgress>("move-progress", (e) => onProgress(e.payload));
+    try {
+      return await invoke<Moved>("move_bring_aside");
+    } catch (e) {
+      throw errorOf(e);
+    } finally {
+      stop();
+    }
+  },
+  stop: () => invoke<void>("move_bring_stop"),
+  putAside: (remove) => invoke<void>("move_put_aside", { remove }),
+};

@@ -4,7 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { createHomeApi, type HomeApi } from "../alone/api";
 import { createLocalEngine } from "../alone/engine";
-import type { MoveApi } from "../alone/screens/MoveFlow";
+import type { AsideApi, MoveApi } from "../alone/screens/MoveFlow";
 import type { OpenFailure } from "../channel";
 import { PairingError, type PairingResult } from "../pairing";
 import { idbQueue } from "../queue";
@@ -84,6 +84,9 @@ export interface NativeServices extends Services {
   home: HomeApi;
   /** Moving that memory to a computer; the app's own commands when not set. */
   move?: MoveApi;
+  /** The memory a move put aside, once the phone works with a computer; the app's own commands
+   * when not set. */
+  aside?: AsideApi;
   /** What the phone still lets Nocturne use, for Welcome after Delete everything. */
   granted(): Promise<StillGranted>;
 }
