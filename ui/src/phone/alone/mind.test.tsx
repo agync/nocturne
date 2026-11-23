@@ -321,6 +321,24 @@ describe("Today and Ask with a mind", () => {
     expect(screen.queryByText(/Written by/)).toBeNull();
   });
 
+  it("answers a question from the phone's own mind, with its receipt", async () => {
+    await app("m=kept&mind=on");
+    await screen.findByText("Written by answers.example");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your question" }), {
+      target: { value: "What did I mean to ask?" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Ask" }));
+    expect(
+      await screen.findByText("You meant to ask about the swap for the 28th."),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Answered online by your provider (answers.example)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/listed on your computer|on your computer/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Choose a mind" })).toBeNull();
+  });
+
   it("finds by words, saying answers are back when the service is", async () => {
     await app("m=kept&mind=on&trouble=unreachable");
     expect(

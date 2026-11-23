@@ -27,6 +27,7 @@ import { HealthConnect } from "../native/screens/HealthConnect";
 import { Offer } from "../native/screens/Offer";
 import { ShareSheet } from "../native/screens/ShareSheet";
 import type { NativeServices } from "../native/services";
+import { Ask, useAskSession } from "../screens/Ask";
 import { CheckIn } from "../screens/CheckIn";
 import { Journal } from "../screens/Journal";
 import { Keep } from "../screens/Keep";
@@ -211,6 +212,7 @@ export function HomeApp({
   const mind = useMemo(() => services.mind ?? createMindApi(), [services]);
   const [mindChosen, setMindChosen] = useState<MindChosen | null>(null);
   const [mindStatus, setMindStatus] = useState<MindStatus | null>(null);
+  const ask = useAskSession(engine);
   // The form, its key included, lives here and never in the history entries.
   const draft = useRef<MindDraft>(NEW_DRAFT);
   const host = chosenHost(mindChosen);
@@ -845,6 +847,21 @@ export function HomeApp({
             day={null}
             today={null}
             tabBar={(action) => bar("journal", action)}
+          />
+        );
+      } else if (mindStatus?.state === "fine") {
+        screen = (
+          <Ask
+            model={ask.model}
+            connected={conn.kind === "connected"}
+            onAsk={(q) => void ask.ask(q)}
+            onStop={() => void ask.stop()}
+            onOpen={open}
+            onBack={back}
+            onSeeChange={() => void ask.seeChange()}
+            onAskHere={() => void ask.askHere()}
+            tabBar={bar("ask")}
+            alone
           />
         );
       } else {

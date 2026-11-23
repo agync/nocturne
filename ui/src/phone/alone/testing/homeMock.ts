@@ -276,6 +276,26 @@ function mindStatus(mind: MindChosen): MindStatus {
   }
 }
 
+/** The answer the scripted online mind gives, with a receipt for the line it used. */
+function answered(host: string): RemoteAnswer {
+  const receipt = pageLine("answer", "", "note-swap", "07:05").receipts[0];
+  return {
+    type: "askDelta",
+    delta: {
+      askId: "ask-1",
+      phase: "done",
+      textDelta: "You meant to ask about the swap for the 28th.",
+      receipts: receipt ? [receipt] : [],
+      memoryIds: [],
+      near: [],
+      found: 1,
+      etaSeconds: null,
+      plain: true,
+      answeredBy: { type: "online", host },
+    },
+  };
+}
+
 /** What the scripted phone holds, and how it answers. */
 export function homeState(scenario: HomeScenario) {
   let mode: PhoneMode | null = scenario === "first" ? null : "alone";
@@ -329,6 +349,8 @@ export function homeState(scenario: HomeScenario) {
         return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
       case "getJournalDay":
         return { type: "journalDay", day: day() };
+      case "ask":
+        return mind.state === "on" ? answered(mind.host) : { type: "error", code: "notReady" };
       case "getPage":
         return mind.state === "on"
           ? { type: "page", page: writtenPage() }

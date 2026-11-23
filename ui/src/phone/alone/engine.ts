@@ -186,8 +186,14 @@ export function createLocalEngine(options: {
     async unkeep(id) {
       await once({ cmd: "unkeep", id }, "done");
     },
-    async ask() {
-      throw new PhoneRequestError("notReady");
+    // The phone's own mind answers whole: one step, the last, with every word of the answer.
+    async ask(question, onDelta) {
+      const { delta } = expect(
+        await run<RemoteAnswer>("home_call", { call: { cmd: "ask", question } }),
+        "askDelta",
+      );
+      onDelta(delta);
+      return delta.askId;
     },
     async cancelAsk() {},
     async seeOnlineChange() {},

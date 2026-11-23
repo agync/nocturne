@@ -233,6 +233,8 @@ interface AskProps {
   onAskHere(): void;
   /** In the app's Ask tab: its own top bar in place of the back bar. */
   tabBar?: ReactNode;
+  /** A phone alone: no computer to say where it was sent, or to correct an answer on. */
+  alone?: boolean;
 }
 
 export function Ask({
@@ -245,6 +247,7 @@ export function Ask({
   onSeeChange,
   onAskHere,
   tabBar,
+  alone = false,
 }: AskProps) {
   const [draft, setDraft] = useState("");
   const working =
@@ -362,9 +365,11 @@ export function Ask({
                     />
                   ))}
                 </ul>
-                <p className="ph-body" style={{ fontSize: "0.9375rem" }}>
-                  {t("phone.ask.notSure.hint")}
-                </p>
+                {alone ? null : (
+                  <p className="ph-body" style={{ fontSize: "0.9375rem" }}>
+                    {t("phone.ask.notSure.hint")}
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -419,10 +424,10 @@ export function Ask({
                   : t("phone.ask.mark.computer")}
               </p>
             )}
-            {done && model.answeredBy?.type === "online" && (
+            {done && !alone && model.answeredBy?.type === "online" && (
               <p className="ph-hint ph-hint--ink2">{tc("phone.ask.mark.sent")}</p>
             )}
-            {done && <p className="ph-hint ph-hint--ink2">{t("phone.ask.wrong")}</p>}
+            {done && !alone && <p className="ph-hint ph-hint--ink2">{t("phone.ask.wrong")}</p>}
           </>
         )}
       </main>
