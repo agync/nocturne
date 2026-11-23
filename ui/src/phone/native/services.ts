@@ -4,6 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { createHomeApi, type HomeApi } from "../alone/api";
 import { createLocalEngine } from "../alone/engine";
+import type { MindApi } from "../alone/mind";
 import type { AsideApi, MoveApi } from "../alone/screens/MoveFlow";
 import type { OpenFailure } from "../channel";
 import { PairingError, type PairingResult } from "../pairing";
@@ -82,6 +83,8 @@ export interface NativeServices extends Services {
   store: NativeKeyStore;
   /** The phone's own memory, when it is a phone alone. */
   home: HomeApi;
+  /** Its online mind; the app's own commands when not set. */
+  mind?: MindApi;
   /** Moving that memory to a computer; the app's own commands when not set. */
   move?: MoveApi;
   /** The memory a move put aside, once the phone works with a computer; the app's own commands

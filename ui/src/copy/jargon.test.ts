@@ -10,9 +10,16 @@ const JARGON =
 /**
  * Whole phrases the approved designs use on purpose (the bracketed words of the Online answers
  * form, and "your provider (host)"). Each is taken out of a string before the checks below, and
- * only where it stands whole: "API keys" or "the provider" are still caught.
+ * only where it stands whole: "API keys" or "the provider" are still caught. "Model name" is the
+ * phone's field label for the same word.
  */
-export const ALLOWED_PHRASES = ["API URL", "API key", "model name", "your provider"] as const;
+export const ALLOWED_PHRASES = [
+  "API URL",
+  "API key",
+  "model name",
+  "Model name",
+  "your provider",
+] as const;
 
 const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ALLOWED = new RegExp(`\\b(?:${ALLOWED_PHRASES.map(literal).join("|")})\\b`, "g");
@@ -52,8 +59,14 @@ describe("no jargon outside Advanced details", () => {
 });
 
 describe("the allowed phrases", () => {
-  it("are exactly the four the designs use", () => {
-    expect([...ALLOWED_PHRASES]).toEqual(["API URL", "API key", "model name", "your provider"]);
+  it("are exactly the five the designs use", () => {
+    expect([...ALLOWED_PHRASES]).toEqual([
+      "API URL",
+      "API key",
+      "model name",
+      "Model name",
+      "your provider",
+    ]);
   });
 
   it("are allowed only whole", () => {

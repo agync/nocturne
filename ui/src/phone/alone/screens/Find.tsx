@@ -97,6 +97,7 @@ export function HomeFind({
   find,
   onOpen,
   onMind,
+  mind = false,
 }: {
   bar: ReactNode;
   /** Nothing has been kept yet. */
@@ -106,6 +107,8 @@ export function HomeFind({
   /** Opens what was found, with the first matched words to mark there. */
   onOpen(receipt: Receipt, words: string | null): void;
   onMind(): void;
+  /** A mind is chosen: nothing says one is needed. */
+  mind?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<State>({ name: "idle" });
@@ -181,7 +184,9 @@ export function HomeFind({
             <p className="ph-small" role="status">
               {state.name === "found" && state.items.length === 0
                 ? t("phone.alone.find.none")
-                : t("phone.alone.find.above")}
+                : mind
+                  ? t("phone.mind.find.above")
+                  : t("phone.alone.find.above")}
             </p>
             {state.name === "found" && state.items.length > 0 ? (
               <ul className="ph-kept-list">
@@ -190,9 +195,11 @@ export function HomeFind({
                 ))}
               </ul>
             ) : null}
-            <button type="button" className="ph-link" onClick={onMind}>
-              {t("phone.alone.noMind.choose")}
-            </button>
+            {mind ? null : (
+              <button type="button" className="ph-link" onClick={onMind}>
+                {t("phone.alone.noMind.choose")}
+              </button>
+            )}
           </>
         )}
       </main>

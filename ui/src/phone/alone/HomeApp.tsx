@@ -34,12 +34,24 @@ import { Original } from "../screens/Original";
 import { Which } from "../screens/Which";
 import "./home.css";
 import { HomeRequestError, NEARLY_FULL } from "./api";
+import { chosenHost, createMindApi, type MindChosen, type MindReading } from "./mind";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { Restore, SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
 import { DeleteKept } from "./screens/DeleteKept";
 import { HomeFind } from "./screens/Find";
 import { ForgetItem } from "./screens/Forget";
+import {
+  ChooseMind,
+  MindAgree,
+  MindDetails,
+  type MindDraft,
+  MindLimitStep,
+  MindReadingScreen,
+  MindWhat,
+  NEW_DRAFT,
+} from "./screens/Mind";
+import { MindSentList } from "./screens/MindSent";
 import { Permissions } from "./screens/Permissions";
 import { PutAside } from "./screens/PutAside";
 import { HomeThisPhone } from "./screens/ThisPhone";
@@ -54,6 +66,11 @@ type View =
   | { name: "calendar" }
   | { name: "health" }
   | { name: "mind" }
+  | { name: "mindComputer" }
+  /** `depth`: the entries this way in pushed, so "Not now" leaves them all. */
+  | { name: "mindOnline"; step: 1 | 2 | 3 | 4; depth: number }
+  | { name: "mindReading"; depth: number; first: MindReading }
+  | { name: "mindSent" }
   | { name: "backup" }
   | { name: "restore" }
   | { name: "delete" }
@@ -76,6 +93,10 @@ const OWN: ReadonlySet<string> = new Set([
   "calendar",
   "health",
   "mind",
+  "mindComputer",
+  "mindOnline",
+  "mindReading",
+  "mindSent",
   "backup",
   "restore",
   "delete",
@@ -132,11 +153,18 @@ function useView(first: View) {
     history.replaceState({ view: next }, "");
     setView(next);
   }, []);
+  /** Steps back over `n` entries at once. */
+  const leave = useCallback((n: number) => {
+    if (n <= 0) return;
+    // The one popstate this makes takes off one more.
+    depth.current = Math.max(0, depth.current - (n - 1));
+    history.go(-n);
+  }, []);
   const back = useCallback(() => {
     if (history.length > 1 && history.state?.view?.name !== "tab") history.back();
     else replace(TODAY);
   }, [replace]);
-  return { view, go, back, replace, unwind };
+  return { view, go, back, replace, unwind, leave };
 }
 
 /** The phone's language for reading voice notes, as the web view knows it. */
@@ -172,7 +200,14 @@ export function HomeApp({
   const engine = useMemo(() => services.engineFor(() => ""), [services]);
   useEffect(() => () => engine.close(), [engine]);
   const conn = engine.connection();
-  const { view, go, back, replace, unwind } = useView(offer ? { name: "offer" } : TODAY);
+  const { view, go, back, replace, unwind, leave } = useView(offer ? { name: "offer" } : TODAY);
+  const mind = useMemo(() => services.mind ?? createMindApi(), [services]);
+  const [mindChosen, setMindChosen] = useState<MindChosen | null>(null);
+  // The form, its key included, lives here and never in the history entries.
+  const draft = useRef<MindDraft>(NEW_DRAFT);
+  const host = chosenHost(mindChosen);
+  const shown = useRef(view);
+  shown.current = view;
   const [tab, setTab] = useState<Tab>(view.name === "tab" ? view.tab : "today");
   const [chosen, setChosen] = useState<ReadonlySet<"calendar" | "health">>(new Set());
   const [shared, setShared] = useState<Shared | null>(null);
@@ -182,12 +217,24 @@ export function HomeApp({
   const [asking, setAsking] = useState<((go: boolean) => void) | null>(null);
   const found = useRef(false);
   const quote = useRef<string | null>(null);
-  const draft = useRef("");
+  const keepDraft = useRef("");
   const [nearlyFull, setNearlyFull] = useState(false);
 
   useEffect(() => {
     if (view.name === "tab") setTab(view.tab);
   }, [view]);
+
+  const lookMind = useCallback(
+    () =>
+      mind.chosen().then(
+        (c) => setMindChosen(c),
+        () => undefined,
+      ),
+    [mind],
+  );
+  useEffect(() => {
+    void lookMind();
+  }, [lookMind]);
 
   const stats = useCallback(
     () =>
@@ -372,6 +419,29 @@ export function HomeApp({
   );
   const toKeep = () => go({ name: "keep" });
   const toMind = () => go({ name: "mind" });
+  const leaveMind = (depth: number) => {
+    draft.current = NEW_DRAFT;
+    leave(depth);
+  };
+  const turnOn = async (depth: number) => {
+    const d = draft.current;
+    await mind.turnOn(d.form);
+    if (d.limit.kind !== "none") {
+      // A limit that can't be kept turns the mind off again: nothing goes past it unkept.
+      await mind.setLimit(d.limit).catch(async (e: unknown) => {
+        await mind.turnOff().catch(() => undefined);
+        throw e;
+      });
+    }
+    draft.current = NEW_DRAFT;
+    await lookMind();
+    refresh();
+    const first = await mind.reading().catch(() => null);
+    // The person stepped away meanwhile: they are left where they went.
+    if (shown.current.name !== "mindOnline") return;
+    if (first && first.count > 0) replace({ name: "mindReading", depth, first });
+    else leave(depth);
+  };
 
   let screen: ReactNode = null;
   let tabbed = false;
@@ -484,11 +554,97 @@ export function HomeApp({
           onDeleteKept={() => go({ name: "deleteKept", source: "calendar", choose: true })}
           onPermissions={() => go({ name: "permissions" })}
           nearlyFull={nearlyFull}
+          mind={{
+            chosen: mindChosen,
+            month: mind.month,
+            reading: mind.reading,
+            sentReady: mind.ready,
+            onMove: () => go({ name: "mindComputer" }),
+            onSent: () => go({ name: "mindSent" }),
+            onCheckKey: () => {
+              draft.current = NEW_DRAFT;
+              go({ name: "mindOnline", step: 2, depth: 1 });
+            },
+            onTurnOff: async () => {
+              await mind.turnOff();
+              setMindChosen({ state: "off" });
+              refresh();
+            },
+          }}
         />
       );
       break;
     case "mind":
+      screen = (
+        <ChooseMind
+          onBack={() => {
+            draft.current = NEW_DRAFT;
+            back();
+          }}
+          onChoose={(way) =>
+            way === "online"
+              ? go({ name: "mindOnline", step: 1, depth: 2 })
+              : go({ name: "mindComputer" })
+          }
+        />
+      );
+      break;
+    case "mindComputer":
       screen = <GiveMind backLabel={t("phone.back")} onBack={back} onScan={onScan} />;
+      break;
+    case "mindOnline": {
+      const { depth } = view;
+      // Opened again with the form gone (the app was closed): its details are asked again.
+      const step = view.step > 2 && !draft.current.works ? 2 : view.step;
+      const next = () =>
+        go({ name: "mindOnline", step: (step + 1) as 2 | 3 | 4, depth: depth + 1 });
+      const setDraft = (d: MindDraft) => {
+        draft.current = d;
+      };
+      if (step === 1)
+        screen = <MindWhat onBack={back} onNext={next} onNotNow={() => leaveMind(depth)} />;
+      else if (step === 2)
+        screen = (
+          <MindDetails
+            draft={draft.current}
+            check={mind.check}
+            onDraft={setDraft}
+            onBack={back}
+            onNext={next}
+          />
+        );
+      else if (step === 3)
+        screen = (
+          <MindLimitStep
+            draft={draft.current}
+            limits={mind.ready}
+            onDraft={setDraft}
+            onBack={back}
+            onNext={next}
+          />
+        );
+      else
+        screen = (
+          <MindAgree
+            draft={draft.current}
+            onBack={back}
+            onNotNow={() => leaveMind(depth)}
+            onTurnOn={() => turnOn(depth)}
+          />
+        );
+      break;
+    }
+    case "mindReading":
+      screen = (
+        <MindReadingScreen
+          first={view.first}
+          reading={mind.reading}
+          onDone={() => leave(view.depth)}
+        />
+      );
+      break;
+    case "mindSent":
+      screen = <MindSentList host={host ?? ""} sent={mind.sent} onBack={back} />;
       break;
     case "backup":
       screen = (
@@ -522,9 +678,12 @@ export function HomeApp({
         <DeleteEverything
           onKeep={back}
           onDelete={async (phrase) => {
+            // The service and its key go first: if that fails, nothing is deleted.
+            await mind.turnOff();
             await home.deleteEverything(phrase);
             await services.queue.clear().catch(() => undefined);
             await forgetReminder(home.notes);
+            setMindChosen({ state: "off" });
             // Welcome is a new start: the back gesture does not walk into the screens before.
             unwind();
             onDeleted();
@@ -543,7 +702,7 @@ export function HomeApp({
           onHome={back}
           onQueued={refresh}
           onMoreWords={(part) => go({ name: "checkin", part })}
-          draft={draft}
+          draft={keepDraft}
           recording={view.recording}
           alone={keepAlone}
         />
@@ -635,6 +794,13 @@ export function HomeApp({
             onNight={(to) => go({ name: "journal", day: readingDay(to), today: null })}
             onJournal={() => toTab("journal")}
             nearlyFull={nearlyFull}
+            mind={host}
+            queue={services.queue}
+            onQueued={refresh}
+            onOpen={open}
+            onJournalDay={(day) =>
+              day ? go({ name: "journal", day, today: null }) : toTab("journal")
+            }
           />
         );
       } else if (view.tab === "journal") {
@@ -656,6 +822,7 @@ export function HomeApp({
             find={home.find}
             onOpen={openFound}
             onMind={toMind}
+            mind={host !== null}
           />
         );
       }

@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, PutAsideMemory } from "../../../engine/bindings";
+import { usdText } from "../../../screens/online/limits";
 import type { NativeChannel, ThisPhoneSources } from "../../native/api";
 import { Group, Row } from "../../native/screens/chrome";
 import { calendarValue, healthValue } from "../../native/screens/Offer";
 import { openPolicy, useHeading } from "../../native/screens/parts";
 import { openAppSettings } from "../../native/sources";
-import { BackBar, Page } from "../../screens/ui";
+import { BottomSheet } from "../../screens/Dialog";
+import { BackBar, Button, Page } from "../../screens/ui";
 import type { VoiceAccess } from "../api";
+import type { MindChosen, MindLimit, MindMonth, MindReading } from "../mind";
 
 /** On a phone alone nothing is sent to a computer: the phone takes what it brings itself. */
 export function aloneSources(s: ThisPhoneSources): ThisPhoneSources {
@@ -35,6 +38,133 @@ function putAsideLabel(m: PutAsideMemory, all: readonly PutAsideMemory[]): strin
     : t("phone.alone.thisPhone.putAside", { day });
 }
 
+function limitValue(limit: MindLimit): string {
+  return limit.kind === "amount"
+    ? usdText(limit.usd)
+    : t("phone.mind.row.limitThings", { count: limit.kind === "things" ? limit.count : 0 });
+}
+
+/** "Nocturne's mind online": the chosen service, what goes, what was sent, and turning off. */
+export function MindGroup({
+  chosen,
+  month,
+  reading,
+  sentReady,
+  onSent,
+  onChange,
+  onCheckKey,
+  onTurnOff,
+}: {
+  chosen: Exclude<MindChosen, { state: "off" }>;
+  month(): Promise<MindMonth>;
+  reading(): Promise<MindReading>;
+  /** Whether the Sent online list can be read on this phone yet. */
+  sentReady: boolean;
+  onSent(): void;
+  onChange(): void;
+  onCheckKey(): void;
+  onTurnOff(): Promise<void>;
+}) {
+  const [counted, setCounted] = useState<MindMonth | null>(null);
+  const [read, setRead] = useState<MindReading | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let gone = false;
+    month().then(
+      (m) => !gone && setCounted(m),
+      () => undefined,
+    );
+    reading().then(
+      (r) => !gone && setRead(r),
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [month, reading]);
+
+  const turnOff = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await onTurnOff();
+      setAsking(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const host = chosen.host;
+  const underWay = read && read.count > 0 && read.done < read.count ? read : null;
+  return (
+    <Group title={t("phone.mind.group")}>
+      {chosen.state === "needsKey" ? (
+        <div className="ph-mind-nokey" role="status">
+          <p className="ph-error-title">{t("phone.mind.noKey.title")}</p>
+          <p className="ph-hint ph-hint--ink2">{t("phone.mind.noKey.body", { host })}</p>
+          <button type="button" className="ph-link" onClick={onCheckKey}>
+            {t("phone.mind.noKey.action")}
+          </button>
+        </div>
+      ) : null}
+      <Row
+        icon="moon"
+        label={t("phone.mind.row.mind")}
+        hint={[
+          t("phone.mind.row.mindValue", { host }),
+          underWay
+            ? t("phone.mind.row.reading", { done: underWay.done, count: underWay.count })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      />
+      <Row label={t("phone.mind.row.goes")} hint={t("phone.mind.row.goesValue")} />
+      {sentReady ? <Row label={t("phone.mind.row.sent")} onPress={onSent} /> : null}
+      {counted ? (
+        <Row
+          label={t("phone.mind.row.month")}
+          hint={
+            counted.limit.kind === "none"
+              ? t("phone.mind.row.monthNone", { count: counted.count })
+              : t("phone.mind.row.monthLimit", {
+                  count: counted.count,
+                  limit: limitValue(counted.limit),
+                })
+          }
+        />
+      ) : null}
+      <Row label={t("phone.mind.row.change")} onPress={onChange} />
+      <Row label={t("phone.mind.row.turnOff")} danger onPress={() => setAsking(true)} />
+      {asking ? (
+        <BottomSheet label={t("phone.mind.off.title")} onClose={() => setAsking(false)}>
+          <div className="ph-sheet-body ph-stack" style={{ gap: 16 }}>
+            <h2 className="ph-h1 ph-h1--small">{t("phone.mind.off.title")}</h2>
+            <p className="ph-body">{t("phone.mind.off.body")}</p>
+            {failed ? (
+              <p className="ph-error" role="alert">
+                {t("phone.mind.off.failed")}
+              </p>
+            ) : null}
+            <Button kind="danger" disabled={busy} onClick={() => void turnOff()}>
+              {t("phone.mind.off.yes")}
+            </Button>
+            <button type="button" className="ph-textbtn" onClick={() => setAsking(false)}>
+              {t("phone.mind.off.no")}
+            </button>
+          </div>
+        </BottomSheet>
+      ) : null}
+    </Group>
+  );
+}
+
 /**
  * This phone on a phone alone: where the memory is and its mind, what the phone brings, its
  * name and what it can do, then moving, a backup and deleting everything.
@@ -56,7 +186,19 @@ export function HomeThisPhone({
   onDeleteKept,
   onPermissions,
   nearlyFull,
+  mind,
 }: {
+  /** The mind chosen, and its rows' ways out; none until it is known. */
+  mind: {
+    chosen: MindChosen | null;
+    month(): Promise<MindMonth>;
+    reading(): Promise<MindReading>;
+    sentReady: boolean;
+    onMove(): void;
+    onSent(): void;
+    onCheckKey(): void;
+    onTurnOff(): Promise<void>;
+  };
   channel: NativeChannel;
   stats(): Promise<HomeStats>;
   /** The memories put aside on this phone, newest first. */
@@ -137,12 +279,14 @@ export function HomeThisPhone({
               {t("phone.alone.full.title")} {t("phone.alone.full.body")}
             </p>
           ) : null}
-          <Row
-            icon="moon"
-            label={t("phone.alone.thisPhone.mind")}
-            hint={t("phone.alone.thisPhone.mindNone")}
-            onPress={onMind}
-          />
+          {!mind.chosen || mind.chosen.state === "off" ? (
+            <Row
+              icon="moon"
+              label={t("phone.alone.thisPhone.mind")}
+              hint={t("phone.alone.thisPhone.mindNone")}
+              onPress={onMind}
+            />
+          ) : null}
           {aside.map((m) => (
             <Row
               key={m.id}
@@ -151,6 +295,18 @@ export function HomeThisPhone({
             />
           ))}
         </Group>
+        {mind.chosen && mind.chosen.state !== "off" ? (
+          <MindGroup
+            chosen={mind.chosen}
+            month={mind.month}
+            reading={mind.reading}
+            sentReady={mind.sentReady}
+            onSent={mind.onSent}
+            onChange={onMind}
+            onCheckKey={mind.onCheckKey}
+            onTurnOff={mind.onTurnOff}
+          />
+        ) : null}
         {sources ? (
           <Group title={t("phone.app.settings.brings")}>
             <Row
@@ -200,7 +356,7 @@ export function HomeThisPhone({
           />
         </Group>
         <Group>
-          <Row label={t("phone.alone.thisPhone.move")} onPress={onMind} />
+          <Row label={t("phone.alone.thisPhone.move")} onPress={mind.onMove} />
           <Row
             label={t("phone.alone.thisPhone.save")}
             hint={

@@ -491,3 +491,256 @@
   padding: 0 16px 12px 50px;
   color: var(--ember);
 }
+
+/* Choosing a mind, and the online service's four steps */
+
+.ph-mind-step {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+}
+
+.ph-mind-ways {
+  gap: 10px;
+}
+
+.ph-mind-way {
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+
+.ph-mind-way .ph-radio {
+  margin-top: 2px;
+}
+
+.ph-mind-way strong {
+  display: block;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.ph-mind-way-hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.ph-mind-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+}
+
+.ph-mind-lines div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ph-mind-lines dt {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+
+.ph-mind-lines dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.ph-mind-more {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.ph-mind-expander {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ph-mind-chevron {
+  display: inline-flex;
+  transform: rotate(90deg);
+}
+
+.ph-mind-chevron--open {
+  transform: rotate(-90deg);
+}
+
+.ph-mind-what {
+  padding-bottom: 14px;
+}
+
+.ph-mind-barline {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--ink2);
+}
+
+.ph-mind-agree-title {
+  font-size: 1.4375rem;
+}
+
+h2.ph-mind-sech {
+  margin: 0;
+  padding-top: 6px;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.ph-mind-small {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.ph-mind-example {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--sheet);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ph-mind-works {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.ph-mind-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ph-mind-problem .ph-error-title {
+  color: var(--ember);
+}
+
+.ph-mind-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ph-mind-limit-field {
+  padding-left: 16px;
+}
+
+.ph-mind-mark {
+  width: 40px;
+  height: 40px;
+  border-width: 2px;
+}
+
+.ph-foot--plain {
+  border-top: 0;
+}
+
+.ph-alone-page .ph-article h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.125rem;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+}
+
+.ph-byline {
+  margin: -6px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.ph-mind-nokey {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+}
+
+.ph-mind-sent-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-mind-sent {
+  border-bottom: 1px solid var(--rule);
+}
+
+.ph-mind-sent summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-height: 48px;
+  padding: 12px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ph-mind-sent summary::-webkit-details-marker {
+  display: none;
+}
+
+.ph-mind-sent-what {
+  font-size: 0.9375rem;
+}
+
+.ph-mind-sent-meta {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--ink2);
+}
+
+.ph-mind-sent-words {
+  margin: 6px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
