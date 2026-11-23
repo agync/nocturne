@@ -14,7 +14,7 @@ import { CalendarToday, LastNight } from "../../screens/PageSections";
 import { Button, Page } from "../../screens/ui";
 import type { MindTrouble } from "../mind";
 import { KeptLine } from "./kept";
-import { MindNotice, UnreachableToday } from "./MindNotice";
+import { MindNotice, Offline, UnreachableToday } from "./MindNotice";
 import { chips, NearlyFull } from "./parts";
 
 /** Rows that are things kept, not plans or readings the phone brought. */
@@ -151,6 +151,7 @@ export function HomeToday(p: HomeTodayProps) {
           </div>
         ) : null}
         {p.status && p.onFixMind ? <MindNotice status={p.status} onFix={p.onFixMind} /> : null}
+        {p.status?.state === "offline" ? <Offline /> : null}
         {p.mind === null ? (
           <section className="ph-nomind" aria-labelledby="ph-nomind-title">
             <h2 id="ph-nomind-title">{t("phone.alone.noMind.title")}</h2>

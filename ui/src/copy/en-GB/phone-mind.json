@@ -135,6 +135,7 @@
   "phone.mind.trouble.paused.action": "Change limit",
   "phone.mind.trouble.unreachable.today": "Written {day}. {host} hasn’t answered since {time}.",
   "phone.mind.trouble.unreachable.ask": "Answers are back when {host} is.",
+  "phone.mind.trouble.offline": "This phone isn’t online. What you keep waits to be read.",
   "phone.mind.sent.title": "What was sent",
   "phone.mind.sent.dek": "Everything this phone sent to {host}, word for word as it left. Kept for 90 days.",
   "phone.mind.sent.empty": "Nothing has been sent online.",

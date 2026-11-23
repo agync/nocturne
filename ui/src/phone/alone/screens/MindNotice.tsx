@@ -68,6 +68,15 @@ export function UnreachableToday({
   );
 }
 
+/** On Today and over what Ask finds by words while this phone has no way online. */
+export function Offline() {
+  return (
+    <p className="ph-small" role="status">
+      {t("phone.mind.trouble.offline")}
+    </p>
+  );
+}
+
 /** Over what Ask found by words while the service is not answering. */
 export function UnreachableAsk({ host }: { host: string }) {
   return <p className="ph-small">{t("phone.mind.trouble.unreachable.ask", { host })}</p>;

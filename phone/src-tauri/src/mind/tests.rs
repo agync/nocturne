@@ -894,3 +894,93 @@ fn an_unreachable_service_is_looked_at_again_until_it_answers() {
         AskPhase::Done
     );
 }
+
+/// The stand-in reached by a name that is looked up only while `online` holds, judged as a
+/// service online (`public`) or on the person's own network, with what was kept read.
+fn by_name(w: &World, public: bool) -> (Arc<std::sync::atomic::AtomicBool>, ProviderSettings) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let online = Arc::new(AtomicBool::new(true));
+    let lookup: nocturne_provider::address::Lookup = {
+        let online = online.clone();
+        Arc::new(move |_: String, _: u16| {
+            let up = online.load(Ordering::SeqCst);
+            Box::pin(async move {
+                if up {
+                    Ok(vec![std::net::IpAddr::from([127, 0, 0, 1])])
+                } else {
+                    Err(std::io::Error::other("no network"))
+                }
+            })
+        })
+    };
+    *w.mind.lookup.lock().unwrap() = Some((lookup, public));
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    let settings = ProviderSettings {
+        url: format!("http://stand-in.local:{}/v1", w.stand_in.addr.port()),
+        ..w.settings()
+    };
+    w.mind.turn_on(settings.clone()).unwrap();
+    w.read_all();
+    (online, settings)
+}
+
+#[test]
+fn a_phone_with_no_way_online_says_so_and_lists_nothing() {
+    use super::status::MindStatus;
+    use std::sync::atomic::Ordering;
+    let w = world();
+    let (online, settings) = by_name(&w, true);
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+
+    // Chosen again, so no connection made while online is kept for the next request.
+    online.store(false, Ordering::SeqCst);
+    w.mind.turn_on(settings).unwrap();
+    let (rows, seen, month) = (
+        w.mind.sent(1000, None).len(),
+        w.stand_in.seen().len(),
+        w.mind.month().count,
+    );
+    assert_eq!(
+        w.ask("Where does Ana live?").last().unwrap().phase,
+        AskPhase::Unavailable
+    );
+    let status = w.mind.status();
+    assert!(matches!(status, MindStatus::Offline { .. }), "{status:?}");
+    assert_eq!(
+        serde_json::to_value(&status).unwrap(),
+        serde_json::json!({ "state": "offline", "host": format!("stand-in.local:{}", w.stand_in.addr.port()) })
+    );
+    w.later(1);
+    assert!(w.look_again());
+    assert!(matches!(w.mind.status(), MindStatus::Offline { .. }));
+    assert_eq!(w.mind.sent(1000, None).len(), rows);
+    assert_eq!(w.stand_in.seen().len(), seen);
+    assert_eq!(w.mind.month().count, month);
+
+    online.store(true, Ordering::SeqCst);
+    w.later(5);
+    assert!(w.look_again());
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
+    assert_eq!(w.mind.sent(1000, None).len(), rows + 1);
+}
+
+#[test]
+fn a_service_at_home_that_cant_be_found_is_not_answering_and_lists_nothing() {
+    use super::status::MindStatus;
+    use std::sync::atomic::Ordering;
+    let w = world();
+    let (online, settings) = by_name(&w, false);
+    online.store(false, Ordering::SeqCst);
+    w.mind.turn_on(settings).unwrap();
+    let rows = w.mind.sent(1000, None).len();
+    assert_eq!(
+        w.ask("Where does Ana live?").last().unwrap().phase,
+        AskPhase::Unavailable
+    );
+    let status = w.mind.status();
+    assert!(
+        matches!(status, MindStatus::Unreachable { .. }),
+        "{status:?}"
+    );
+    assert_eq!(w.mind.sent(1000, None).len(), rows);
+}

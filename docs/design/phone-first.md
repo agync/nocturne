@@ -916,7 +916,7 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 | Key refused | On Today and Ask: "Your provider refused the key" / "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words." with "Check the key…", which opens the details step |
 | No credit | On Today and Ask: "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." with "Check again", which opens the details step |
 | Paused by the limit | On Today and Ask: "Paused by your limit" / "You’ve reached this month’s limit. Ask finds by words until {day}." with "Change limit", which opens the details step, then the limit |
-| No connection | When this phone can’t reach the internet at all (the service’s name can’t be looked up, or there is no route), on Today and over what Ask finds by words: "This phone isn’t online. What you keep waits to be read." Nothing left the phone, so nothing is added to Sent online and nothing is counted. The phone looks again as for an unreachable service; a look that can’t leave the phone isn’t listed either |
+| No connection | When this phone can’t reach the internet at all (an online service’s name can’t be looked up, or there is no route), on Today and over what Ask finds by words: "This phone isn’t online. What you keep waits to be read." Nothing left the phone, so nothing is added to Sent online and nothing is counted. The phone looks again as for an unreachable service; a look that can’t leave the phone isn’t listed either. A service on the person’s own network that can’t be found is told as not answering instead, since the phone may simply be away from home |
 
 ### Checks before the online mind ships
 

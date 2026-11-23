@@ -166,6 +166,18 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `mind-ask-${scheme}`);
     });
 
+    test("This phone isn't online", async ({ page }) => {
+      const line = "This phone isn’t online. What you keep waits to be read.";
+      await page.goto("/?m=kept&mind=on&trouble=offline");
+      await expect(page.getByText(line)).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-today-offline-${scheme}`);
+      await page.goto("/?m=kept&mind=on&trouble=offline&v=ask");
+      await expect(page.getByText(line)).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-ask-offline-${scheme}`);
+    });
+
     test("The service doesn't answer", async ({ page }) => {
       await page.goto("/?m=kept&mind=on&trouble=unreachable");
       await expect(

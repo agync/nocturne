@@ -54,6 +54,8 @@ export type MindStatus =
   | { state: "fine"; host: string }
   /** No answer came from the service since `since`, a time. */
   | { state: "unreachable"; host: string; since: string }
+  /** This phone has no way to the internet: nothing left it. */
+  | { state: "offline"; host: string }
   | { state: "keyRefused"; host: string }
   | { state: "noCredit"; host: string }
   /** The month's limit is reached: nothing goes until `until`, a date. */

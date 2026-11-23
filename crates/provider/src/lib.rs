@@ -12,4 +12,4 @@ pub mod mind;
 pub mod stand_in;
 
 pub use client::{Exchange, Provider};
-pub use mind::{Decode, Job, ProviderMind, Record};
+pub use mind::{Decode, Job, ProviderMind, Record, Unsent};
