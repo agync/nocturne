@@ -81,8 +81,8 @@ pub enum Pass {
     Paused,
     /// The phone holds no memory now (not alone, or the store will not open).
     NotReady,
-    /// How many things were read to an end (understood, or not readable), and whether the
-    /// scheduler did anything.
+    /// How many things the reader took, and whether the scheduler started or wrote something.
+    /// A tidy waiting on its reading is not counted: the reading is.
     Ran { read: usize, scheduled: bool },
 }
 
@@ -118,6 +118,8 @@ struct On {
     since: Option<Timestamp>,
     /// Things read to an end since it was turned on, this run.
     read: u32,
+    /// Cleared as it is turned off or replaced: a request that ends after that is not noted.
+    live: Arc<AtomicBool>,
 }
 
 /// The reader, the tidy and the scheduler over one open store.
@@ -233,10 +235,15 @@ impl PhoneMind {
     fn fill(&self, saved: &Saved, key: OnlineKey) -> Result<(), UrlProblem> {
         let provider = Provider::new(&saved.url, &saved.model, key)?;
         let (host, model) = (provider.host().to_string(), provider.model().to_string());
+        let live = Arc::new(AtomicBool::new(true));
         let record: nocturne_provider::Record = {
             let (sent, host, model) = (self.sent.clone(), host.clone(), model.clone());
             let (trouble, clock) = (self.trouble.clone(), self.clock.clone());
+            let live = live.clone();
             Arc::new(move |job, exchange| {
+                if !live.load(Ordering::SeqCst) {
+                    return;
+                }
                 sent.note(job, &host, &model, exchange);
                 let mut trouble = lock(&trouble);
                 *trouble = status::Trouble::after(exchange.status, clock.now(), *trouble);
@@ -259,9 +266,11 @@ impl PhoneMind {
             model,
             since: saved.since.as_deref().and_then(|s| s.parse().ok()),
             read: 0,
+            live,
         };
         lock(&self.trouble).take();
         if let Some(before) = lock(&self.on).replace(on) {
+            before.live.store(false, Ordering::SeqCst);
             before.mind.provider().stop();
         }
         self.retry.store(true, Ordering::SeqCst);
@@ -315,6 +324,7 @@ impl PhoneMind {
     pub fn turn_off(&self) {
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(on) = lock(&self.on).take() {
+            on.live.store(false, Ordering::SeqCst);
             on.mind.provider().stop();
         }
         self.keys.forget();
@@ -473,8 +483,13 @@ impl PhoneMind {
                     reading.await
                 }
             };
-            // Turned off meanwhile, or before the first morning: nothing more is written.
-            if home.store_wanted() || !self.is_on() || !self.morning_come() {
+            // Turned off, paused by the limit, or before the first morning: nothing more is
+            // written.
+            if home.store_wanted()
+                || !self.is_on()
+                || !self.morning_come()
+                || self.paused_until().is_some()
+            {
                 return (
                     Pass::Ran {
                         read,
@@ -487,7 +502,15 @@ impl PhoneMind {
             // reader, the tidy and the scheduler are made anew at the next pass.
             tokio::select! {
                 step = t.scheduler.tick() => {
-                    let scheduled = step != nocturne_intelligence::SchedStep::Idle;
+                    use nocturne_intelligence::{SchedStep, TidyStep};
+                    let scheduled = matches!(
+                        step,
+                        SchedStep::Started(_)
+                            | SchedStep::Reflected(_)
+                            | SchedStep::Tidy(
+                                TidyStep::Finished(_) | TidyStep::Resaved(_) | TidyStep::Skipped
+                            )
+                    );
                     (Pass::Ran { read, scheduled }, false)
                 }
                 () = wanted() => (Pass::Ran { read, scheduled: false }, true),

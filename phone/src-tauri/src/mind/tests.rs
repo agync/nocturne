@@ -726,6 +726,13 @@ fn a_service_that_stops_answering_is_told_until_it_answers_again() {
     w.mind.turn_on(w.settings()).unwrap();
     w.pass();
     assert!(matches!(w.mind.status(), MindStatus::Unreachable { .. }));
+    w.stand_in.always(Answer::text(prompts::EXAMPLE_REPLY));
+    w.clock.advance_days(1);
+    w.mind
+        .retry
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    w.pass();
+    assert!(matches!(w.mind.status(), MindStatus::Fine { .. }));
     w.mind.turn_off();
     assert_eq!(w.mind.status(), MindStatus::Off);
 }
@@ -769,6 +776,11 @@ fn net_check_off_is_silent_and_on_reaches_only_the_chosen_host() {
     let w = world();
     let elsewhere = w.rt.block_on(StandIn::start());
     w.keep(prompts::EXAMPLE_NOTE, "c1");
+    // The chosen host sends its first reading on to another: it is not followed.
+    w.stand_in.then(Answer::Redirect(format!(
+        "{}/chat/completions",
+        elsewhere.url()
+    )));
     let quiet = |w: &World| {
         for _ in 0..3 {
             w.pass();
@@ -813,4 +825,14 @@ fn the_platform_network_rules_name_no_host() {
     let plist = std::fs::read_to_string(root.join("Info.ios.plist")).unwrap();
     assert!(!plist.contains("NSAppTransportSecurity"));
     assert!(!plist.contains("NSExceptionDomains"));
+}
+
+#[test]
+fn a_request_that_ends_after_delete_everything_leaves_no_row() {
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while_a_request_hangs(&w, || w.mind.erase());
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(w.mind.sent(10, None).is_empty());
 }

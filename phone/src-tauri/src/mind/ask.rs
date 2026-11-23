@@ -224,7 +224,9 @@ impl PhoneMind {
         });
         match last {
             Some(mut delta) => {
-                if !said.is_empty() {
+                // Half an answer that did not end is not shown.
+                let ended = matches!(delta.phase, AskPhase::Done | AskPhase::NotSure);
+                if ended && !said.is_empty() {
                     delta.text_delta = Some(said);
                 }
                 RemoteAnswer::AskDelta { delta }

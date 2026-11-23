@@ -1,11 +1,11 @@
 //! What the screens show of a phone alone's mind beyond its choice: the monthly limit and this
 //! month's count, the reading under way since it was turned on, how it is doing, and the Sent
-//! online list, each with its command. Shapes match the screens' `mind.ts`.
+//! online list, each with its command, in the shapes the screens read.
 
 use jiff::Timestamp;
 use jiff::ToSpan;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::{PhoneMind, Sent, SentFor, lock};
 use crate::home::Home;
@@ -275,44 +275,52 @@ impl PhoneMind {
 /// The Sent online list, newest first: up to `limit` (100 when not given) before the row
 /// `before`.
 #[tauri::command]
-pub fn mind_sent(
-    mind: State<'_, PhoneMind>,
+pub async fn mind_sent<R: Runtime>(
+    app: AppHandle<R>,
     limit: Option<u32>,
     before: Option<String>,
 ) -> Vec<MindSent> {
     let before = before.and_then(|b| b.parse().ok());
     let limit = limit.unwrap_or(100).min(1000) as usize;
-    mind.sent(limit, before)
-        .into_iter()
-        .map(MindSent::from)
-        .collect()
+    blocking(move || {
+        let mind = app.state::<PhoneMind>();
+        mind.sent(limit, before)
+            .into_iter()
+            .map(MindSent::from)
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    tauri::async_runtime::spawn_blocking(f).await.ok()
 }
 
 /// Sets the monthly limit; `failed` when it could not be kept.
 #[tauri::command]
-pub fn mind_set_limit(mind: State<'_, PhoneMind>, limit: MindLimit) -> Result<(), String> {
-    if mind.set_limit(limit) {
-        Ok(())
-    } else {
-        Err("failed".into())
+pub async fn mind_set_limit<R: Runtime>(app: AppHandle<R>, limit: MindLimit) -> Result<(), String> {
+    match blocking(move || app.state::<PhoneMind>().set_limit(limit)).await {
+        Some(true) => Ok(()),
+        _ => Err("failed".into()),
     }
 }
 
 #[tauri::command]
-pub fn mind_month(mind: State<'_, PhoneMind>) -> MindMonth {
-    mind.month()
+pub async fn mind_month<R: Runtime>(app: AppHandle<R>) -> Option<MindMonth> {
+    blocking(move || app.state::<PhoneMind>().month()).await
 }
 
 #[tauri::command]
 pub async fn mind_reading<R: Runtime>(app: AppHandle<R>) -> MindReading {
-    tauri::async_runtime::spawn_blocking(move || {
-        app.state::<PhoneMind>().reading(&app.state::<Home>())
-    })
-    .await
-    .unwrap_or(MindReading { done: 0, count: 0 })
+    blocking(move || app.state::<PhoneMind>().reading(&app.state::<Home>()))
+        .await
+        .unwrap_or(MindReading { done: 0, count: 0 })
 }
 
 #[tauri::command]
-pub fn mind_status(mind: State<'_, PhoneMind>) -> MindStatus {
-    mind.status()
+pub async fn mind_status<R: Runtime>(app: AppHandle<R>) -> MindStatus {
+    blocking(move || app.state::<PhoneMind>().status())
+        .await
+        .unwrap_or(MindStatus::Off)
 }
