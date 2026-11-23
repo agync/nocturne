@@ -280,14 +280,13 @@ Rules that hold in every mode:
 - Receipts: every line, answer and journal row cites an original in the person's own memory.
   A thing still waiting to go across has a receipt on the phone that becomes the home's receipt
   when it arrives.
-- Things marked private never go to an online mind and never reach a phone that is a companion, as
-  today. Where a household computer is the person's home, it is their own Nocturne and reads
-  everything, private things included. A household mind that is only borrowed never receives
-  private things ([decision 15](#decisions)).
-- Nothing is held back by what it seems to be about. Only what the person marked private is held
-  back from an online or borrowed mind, and check-ins never go to an online mind, by the journal's
-  agreed rule ([decision 10](#decisions), [decision 20](#decisions)). Check-ins do go, sealed, to a
-  borrowed household mind, which keeps nothing ([decision 23](#decisions)).
+- A private mark decides only what comes up on its own: notifications, reminders, updates and a
+  lock screen. Private things reach a companion phone, an online mind and a borrowed household mind
+  like everything else ([decision 37](#decisions)). Where a household computer is the person's
+  home, it is their own Nocturne and reads everything.
+- Nothing is held back by what it seems to be about ([decision 20](#decisions)). A mind the person
+  chose gets what a good answer needs, check-ins included ([decision 37](#decisions)); a borrowed
+  household mind gets them sealed and keeps nothing ([decision 23](#decisions)).
 - Notifications, the lock screen, reading aloud and the tray follow today's rules in every mode.
 
 ## Who sees what
@@ -298,7 +297,7 @@ Stated plainly, for each person and company that can be involved.
 |---|---|---|---|---|---|
 | **The person** | Everything | Everything | Everything, and a list of what was sent | Everything | Everything |
 | **Google or Apple, storing the copy** | Nothing | One locked file, its size and when it changes. Without the passphrase it can't be opened | Nothing | Nothing | Nothing |
-| **The online service, or Apple** | Nothing | Nothing | Each question with the few lines that answer it, and the words of each thing it reads. Never photos, recordings themselves, check-ins, reflections or things marked private | Nothing | Nothing |
+| **The online service, or Apple** | Nothing | Nothing | What each reading, page and answer needs: each thing kept with its photo or recording, the journal and check-ins, each question with the lines that answer it, things marked private included (decision 37). Never what the person let go | Nothing | Nothing |
 | **The person who runs the household computer** | Nothing | Nothing | Nothing | In Nocturne: whether the mind is in use right now, not by which phone. No list of phones, no record of when or how much, and never what was read or asked | In Nocturne: the phone's name, that the memory is kept there, how much room it takes and when the phone last connected. Never its contents. Someone with full control of that computer could still get at it while it is being read or tidied |
 | **Others in the household** | Nothing | Nothing | Nothing | Nothing: no one in a household sees another's phone, memory or use | Nothing |
 | **The connection's company (Cloudflare for household phones, Cloudflare or Tailscale otherwise)** | Nothing | Nothing | Nothing | As Away from home: when the phone connects, from where, sizes and timing. Never content | As Away from home |
@@ -323,7 +322,7 @@ shows every fact in full before the person agrees.
 | What turns on | First step's three lines | Last step | Page |
 |---|---|---|---|
 | A locked copy online | What goes · Who can open it · You need | The passphrase, with what is lost without it | [Phone first](phone-first.md#a-locked-copy-online) |
-| An online mind | Sent · Never sent · You need | Everything sent, an example, who sees it, what changes, changing your mind | [Phone first](phone-first.md#choosing-a-mind) |
+| An online mind | Sent · Private · You need | Everything sent, an example, who sees it, what changes, changing your mind | [Phone first](phone-first.md#choosing-a-mind) |
 | Joining a household with its code | What goes · What it keeps · Who runs it | What the person who runs it can and cannot see, then Join | [Household](household-server.md#joining) |
 | Lending a computer's mind | What they get · What you see · What it costs this computer | The household code, which anyone shown it may use until a new code replaces it | [Household](household-server.md#on-the-computer-that-runs-it) |
 | Moving a memory, to any home | Where it goes · How big it is · What happens here after | Confirm after it has arrived, before anything is deleted | [Moving](moving-memory.md) |
@@ -425,9 +424,10 @@ online mind, are complete end states, never steps towards a computer or a househ
 - **Decided.** The phone's Claude, Gemini or ChatGPT app is not a route, and Nocturne inside an
   assistant is parked (decision 21). A service with the person's own key on both phones, Android's
   default moving to the phone's own mind once it ships (decision 6). Apple Intelligence after a trial
-  on iOS 27 (decision 7). It reads words, writes the page and answers, never photos or recordings
-  (decision 8); check-ins stay home (decision 10); nothing else is held back unless marked private
-  (decision 20) ([0020](/adr/0020-an-online-mind-on-a-phone.md)).
+  on iOS 27 (decision 7). It reads what is kept, photos and recordings included, writes the page,
+  reflections and recaps, and answers; it gets what a good answer needs, check-ins and things marked
+  private included, and private decides only what comes up on its own (decision 37, replacing 8 and
+  10) ([0020](/adr/0020-an-online-mind-on-a-phone.md)).
 - **Accepted.** 0020 and its invariant 2 clause, 2026-11-23 (decision 34). The first release is
   Android with the key route: Online answers' one form, the limit and the Sent online list on the
   phone ([The first release of an online mind](phone-first.md#the-first-release-of-an-online-mind)).
@@ -439,13 +439,13 @@ online mind, are complete end states, never steps towards a computer or a househ
 
 | Open | Options | Recommendation |
 |---|---|---|
-| Reading on mobile data | A: allowed. B: only on Wi-Fi. C: the person chooses | **A**: what goes is words, which are small; photos never go |
+| Reading on mobile data | A: allowed. B: only on Wi-Fi. C: the person chooses | **C**, allowed by default: photos and recordings now go to be read (decision 37), so a person on a small data plan may want Wi-Fi only |
 
 ### Household: borrowing its mind
 
 - **Decided.** One household code that any phone holding it may use, a mind only, nothing kept about
-  any borrowing phone, a new code cutting off every phone holding the old one, private things never
-  sent, check-ins sent sealed so it writes reflections, in turn with no daily share per phone,
+  any borrowing phone, a new code cutting off every phone holding the old one, what each request
+  needs sent, private things included (decision 37), check-ins sent sealed so it writes reflections, in turn with no daily share per phone,
   through Simple (decisions 11, 14, 15, 16, 22, 23 and correction 1;
   [0021](/adr/0021-a-household-mind-for-invited-phones.md)). Specified in [A household
   computer](household-server.md).
@@ -534,7 +534,7 @@ Here they label what a thing is, to help finding and grouping.
 | A lost phone loses a memory | Medium | High | Says so on the first screen of a phone alone; offers a locked copy online from day one; reminds once after 30 days of keeping with no copy |
 | A lost phone takes the key to a memory kept in a household | Medium | High | The key is also locked with a passphrase chosen when joining; a new phone joins and types it |
 | "The person who runs it can't see your memory" is heard as a promise it isn't | Medium | High | The exact words on the joining screen include what Nocturne can't prevent; no softer wording anywhere |
-| An online mind for a phone alone sends far more than Online answers does | High | High | Its own consent with every fact; never photos, recordings themselves, check-ins, reflections or private things; the Sent online list on the phone |
+| An online mind for a phone alone sends far more than Online answers does | High | High | Its own consent with every fact and a calm, plain line on what private does and doesn't do; the limit; the Sent online list on the phone |
 | A household phone's reading slows the owner's own answers | High without a scheduler | High | The owner's asks first, then household asks, then everyone's reading in turn, one thing at a time per connection; the owner can turn lending off or make a new code |
 | A household code passed on, or a lost phone, keeps borrowing | Medium | Low | Anyone with the code can borrow until a new code; the code never opens anyone's memory; New code is one tap on the computer or the owner's phone, and the trade-off is stated in decision 22 |
 | Something of a borrowing phone lingers on the household computer | Medium | High | Recordings and photos are read from memory, never written to disk; no logs, caches or counts per phone; a test proves the host's store and data folder are unchanged after a borrowing phone's requests |
@@ -594,14 +594,14 @@ person's data.
 | 5 | The phone's own device backup (iCloud Backup, Android's backup) | A: leave Nocturne's memory out of it; the locked copy is the one copy. B: let it in | **A**. The locked copy is the online backup; the device backup is out of scope and the memory stays out of it |
 | 6 | The online mind on Android, where no key-free route exists | A: an online service with the person's own key only. B: wait for the phone's own mind. C: A now, the phone's own mind as the default once it ships | **C** |
 | 7 | Apple Intelligence on Apple's servers as a named choice on iPhone | A: add it, amending 0011. B: key route only. C: a trial on iOS 27 first, then decide | **C**, then **A** |
-| 8 | What an online mind does for a phone alone | A: answers only. B: reads the words of what is kept, writes the page and answers; photos and recordings themselves never go. C: B plus photos | **B** |
+| 8 | What an online mind does for a phone alone | A: answers only. B: reads the words of what is kept, writes the page and answers; photos and recordings themselves never go. C: B plus photos | **B**; changed to **C** by decision 37 |
 | 9 | Voice notes on a phone alone | A: kept as recordings, waiting to be read. B: the phone's own speech recogniser turns them into words on the phone, only where it works without a network | **B**, on-phone only |
-| 10 | Check-ins, reflections and recaps with an online mind | A: keep the rule: check-ins never go online, so reflections and recaps wait for a home mind. B: let them go | **A**, the journal's agreed rule ([0015](/adr/0015-journal-privacy-class.md)) |
+| 10 | Check-ins, reflections and recaps with an online mind | A: keep the rule: check-ins never go online, so reflections and recaps wait for a home mind. B: let them go | **A**, the journal's agreed rule ([0015](/adr/0015-journal-privacy-class.md)); changed to **B** by decision 37 |
 | 11 | Which household way ships first | A: a memory kept on someone's computer. B: borrowing its mind. C: both together | **B**, after a phone alone and online. Changed by corrections 2 and 3: a memory reaches a household computer only by pairing, which follows |
 | 12 | What runs a household | A: the desktop app with Household turned on. B: the server image. C: A first, B when 0012's blockers close | **C** |
 | 13 | What "the person who runs it can't see it" means for a memory kept there | A: separate files, not locked, and say the owner could read them. B: locked with a key the phone holds; read and tidied only while the phone is reachable. C: B, and the phone leaves the key in that computer's memory for one night so the tidy runs overnight | **C**, for a memory whose person paired to make that computer their home. A phone that only borrows the mind has no memory there to lock |
 | 14 | How household phones reach the computer | A: through Simple, as today. B: also named other people on Most private. C: the home network with a local certificate | **A**, B later as an advanced choice |
-| 15 | Do things marked private reach a household mind? | A: never. B: yes. C: B for a memory whose home is there, A for a borrowed mind | **C** |
+| 15 | Do things marked private reach a household mind? | A: never. B: yes. C: B for a memory whose home is there, A for a borrowed mind | **C**; changed to **B** by decision 37 |
 | 16 | Sharing the mind fairly | A: the owner always first. B: equal shares. C: the owner's asks, then household asks, then everyone's reading in turn, with a daily limit per phone | **C, in turn, with no daily limit per borrowing phone.** Changed by correction 1: a daily limit needs a count kept per phone. The owner can turn lending off or make a new code instead |
 | 17 | A phone whose memory is kept elsewhere, while that computer is away | A: keeps no copy, as companions today. B: keeps the last page, the last week of pages it opened and its own entries, readable, marked with when | **B** for a memory whose home is a household computer; companions stay **A** |
 | 18 | When the person who runs a household removes someone whose memory is kept there | A: the memory stays, locked, until that person brings it home or deletes it; the owner can delete it only after 30 days' notice shown on that person's phone. B: the owner chooses keep or delete at once | **A** |
@@ -627,4 +627,5 @@ The owner then answered the questions the first pass left open:
 | 33 | How the choice in decision 32 works | Default selection; a way back after "Use this computer’s memory"; which moves it covers | **"Bring the phone’s things in" is selected when the dialog opens. After "Use this computer’s memory", what was put aside on the phone offers "Bring its things to {computer}…" later. The two choices apply to any move into a computer that already holds a memory**, not only from a phone alone (owner) |
 | 34 | ADR 0020, an online mind on a phone | Accept now, or with the rest of step 2 | **Accepted now** (owner, 2026-11-23). Its clause for the key route is in invariant 2; Apple's servers join with their own clause after the trial. Real-provider runs happen only in development once this design merges; tests use a stand-in provider |
 | 35 | Which of step 2 ships first | A: the locked copy. B: the online mind | **B, the online mind, then the copy** (owner, 2026-11-23) |
+| 37 | What an online mind the person chose may get, and what private means | A: as decided (no originals or check-ins online; private never sent). B: what a good answer needs, check-ins, originals and private things included; private decides only what comes up on its own (notifications, reminders, updates) | **B** (owner, 2026-11-23), for the phone's online mind and the computer's Online answers. Replaces decisions 8 (now C), 10 (now B) and 15 (now B). The safeguard is a short, calm explanation of what is sent when the person chooses the provider. It covers a companion phone, which shows private things as the computer does (never on its lock screen or in notifications, reminders or updates), and a borrowed household mind, which gets what an answer needs (owner). No notice for people already using Online answers (owner) |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |

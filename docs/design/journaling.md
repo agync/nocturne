@@ -905,7 +905,9 @@ private, then journal, then normal. A check-in yields no memories at all, only m
 item's own page does not offer "Mark private". The rule above already keeps the journal out of the
 places a private mark protects most. The existing private mark on ordinary things kept is
 unchanged: a quick note kept from the keep bar and later marked private stays off the phone and
-out of online answers as today, and simply does not appear on the phone's timeline.
+out of online answers as today, and simply does not appear on the phone's timeline. Revised
+2026-11-23: a private mark no longer keeps a thing out of online answers or off a paired phone;
+see [What private means](only-marked-private.md).
 
 **Everything is kept on this computer.** Entries, check-ins, good things, reflections and recaps
 are in the same local file as everything else. There is no account to sync it to and no count of
@@ -921,15 +923,22 @@ private" does not hold for them; the Online answers screens say so in as many wo
 not judge what a sentence is about: "Gran’s scan came back clear" may go like any other line
 ([Only what you mark private is held back](only-marked-private.md)).
 
-**What never goes online.** Reflections, recaps and check-ins, including the words, points and
-lines of a check-in and any summary of them. They are written on this computer, even when Online answers is
-on. A computer that cannot write a reflection itself shows "At a glance" instead; recaps need no
+**What never goes online.** Revised 2026-11-23 (owner): this is no longer a rule. An online mind
+the person chose gets what a good answer needs, check-ins included, and a private mark keeps nothing
+out of it ([What private means](only-marked-private.md#revised-2026-11-23-private-is-about-what-comes-up-on-its-own)).
+On the computer nothing changes in practice: Ask does not search reflections, recaps or check-ins,
+so Online answers does not send them, and they are written on this computer, even when Online answers is
+on. A phone with an online mind sends its check-ins so the mind can write reflections and recaps
+([Choosing a mind](phone-first.md#choosing-a-mind)). A computer that cannot write a reflection itself shows "At a glance" instead; recaps need no
 writing (see [Journaling follow-ups](journaling-follow-ups.md)).
 
 **Someone else at the computer.** Nocturne has no lock of its own; the computer's own sign-in is
 the lock. A setting "Hide the journal from the rail" is out of scope for now.
 
 ### Online answers, said openly
+
+Revised 2026-11-23: the "Never sent" words below change with [What private
+means](only-marked-private.md#the-explanation-at-setup), which holds where they differ.
 
 The words below add the journal to Online answers, in the style of its approved copy
 ([Keeping the next step in view](step-flow-actions.md)). New and changed words only; everything

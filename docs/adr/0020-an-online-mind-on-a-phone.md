@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: "0020 An online mind on a phone"
-description: "Accepted: a phone that is its own home can choose an online service with the person's own key to read the words of what it keeps, write its page and answer, Android first; called by the phone's core, opt-in, never originals, check-ins or anything marked private; Apple's servers on iPhone come later, after a trial."
+description: "Accepted: a phone that is its own home can choose an online service with the person's own key to read what it keeps, write its page, reflections and recaps, and answer, Android first; called by the phone's core, opt-in, sending what each task needs, private things, check-ins and originals included; Apple's servers on iPhone come later, after a trial."
 status: stable
 tags: [adr, phone, online, privacy, mind]
 ---
@@ -9,6 +9,8 @@ tags: [adr, phone, online, privacy, mind]
 # 0020 An online mind on a phone
 
 Status: accepted by the owner on 2026-11-23 ("ADR 0020 accepted now"). Proposed 2026-11-22.
+Amended 2026-11-23 (owner): an online mind gets what a good answer needs, check-ins, originals and
+things marked private included; private decides only what comes up on its own.
 
 ## Context
 
@@ -34,11 +36,15 @@ with no key on iOS 27. The design is [Choosing a mind](/design/phone-first.md#ch
 - **The phone's core makes the call.** There is no `lemond` on a phone. The phone's Rust core calls
   the service, with the same typed steps the computer's mind uses (read a thing's words, answer
   from the few lines found, write the page), never a general chat.
-- **What goes.** The words of what is kept (typed, heard by the phone's own speech recogniser, or the
-  text of a shared page), journal entries and good things, each question with at most 12 remembered
-  sentences, and the lines a page is written from. Never photos or recordings themselves, check-ins,
-  reflections or recaps (by [0015](0015-journal-privacy-class.md)), or anything marked private.
-  Nothing else is held back by what it seems to be about.
+- **What goes.** What each task needs to be done well: each thing kept, to be read, with its photo,
+  recording or file when it has one; journal entries, good things and check-ins, so it can write
+  reflections and recaps; each question with the remembered lines that answer it; and the lines a
+  page is written from. Things marked private go like anything else: private decides only what comes
+  up on its own, in notifications, reminders and updates. Only what the person let go or is
+  forgetting never goes. This replaces the earlier list of what never goes (owner, 2026-11-23).
+- **The safeguard is the explanation.** When the person chooses a provider, a short, calm screen
+  says plainly what is sent and what private does and doesn't do
+  ([Choosing a mind](/design/phone-first.md#choosing-a-mind)).
 - **Bounded and recorded.** A monthly limit only if the person sets one; a Sent online list on the
   phone for 90 days, as 0011; every page and answer says where it was written.
 - **0011 amended.** A phone alone's route is called by the phone, also reads and writes the page,
@@ -63,9 +69,7 @@ ships](/design/phone-first.md#checks-before-the-online-mind-ships).
   entered: the check, one look at its list of models, and the reading, page and answer requests. No
   redirect is followed. After turning off, nothing more goes, and the key is gone from the phone's
   safe place.
-- **Never check-ins, private things or originals.** A fixture memory with check-ins, a thing marked
-  private, a photo and a recording, each carrying a marker phrase, is read, written into a page and
-  asked about. No request body the stand-in receives holds a marker phrase or a byte of an original.
+- **Nothing else.** No other host, no other process and no traffic while idle with nothing to read.
   The Sent online list matches what the stand-in received, request for request.
 - **The network rule.** Neither phone lets an app name a host the person types in its built-in
   network rules: Android's network security config and iPhone's App Transport Security are fixed when
@@ -78,7 +82,13 @@ ships](/design/phone-first.md#checks-before-the-online-mind-ships).
 ## Consequences
 
 - A phone alone gets a page and answers on the person's account with a service, at their cost.
-- The phone needs an HTTPS client to one service while this is on; the app's network rule names it.
+- The phone needs an HTTPS client to one service while this is on; that client holds the one-host
+  rule (see the checks above).
+- Photos and recordings make reading heavier on data and on the person's bill with the service; the
+  limit and the Sent online list show it, and the provider must accept images and sound for those
+  to be read (one that doesn't leaves them waiting, as with no mind).
+- With check-ins sent, a phone with an online mind writes reflections and recaps.
+  [0015](0015-journal-privacy-class.md)'s rule that check-ins never go online is amended to match.
 - Removing the health, money and ID hold-back changes the Online answers setup copy on the
   computer, which goes through design with the build.
 - The shadow question of [0016](0016-decision-models-shadow-first.md) about health, money and ID

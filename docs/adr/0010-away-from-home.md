@@ -54,7 +54,10 @@ outside is a risk to that promise, so it has to be off by default, small, and pr
   was shown cited. It cannot change settings, forget, export, pair or browse.
 - **Nothing private reaches a phone.** Asks leave private memories out, the page uses a phone
   edition, originals of private items are refused, and an outbound filter drops any payload naming
-  a private item.
+  a private item. Amended 2026-11-23 (owner), proposed in [What private
+  means](/design/only-marked-private.md#on-a-companion-phone-and-a-households-mind): a paired phone
+  shows private things as the computer does; only its lock screen and notifications, reminders and
+  updates leave them out.
 - **Invariant 2 changes once.** It now allows sealed traffic to the person's own paired phones
   through the connection they chose, plus that connection's own traffic to its company's servers
   and relays to stay connected, only while on.

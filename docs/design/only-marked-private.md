@@ -1,12 +1,102 @@
 ---
 type: Design
-title: Only what you mark private is held back
-description: Nocturne no longer decides that something is about health, money or ID. The switch, its copy, the hint to mark such things private and the questions' skips go; only what the person marks private is held back.
-status: stable
-tags: [approved, privacy, online-answers, journal, memories, copy]
+title: What private means
+description: Nocturne never decides what a person's data is about, and since 2026-11-23 a private mark decides only what comes up on its own, never what an answer the person asks for may use, what a mind the person chose gets, or what their own phone shows; with the calm explanation at setup that is the safeguard and the copy that changes.
+status: draft
+tags: [proposal, privacy, online-answers, journal, memories, copy]
 ---
 
-# Only what you mark private is held back
+# What private means
+
+## Revised 2026-11-23: private is about what comes up on its own
+
+Proposed, from the owner's decision of 2026-11-23. Not built yet. It changes the approved 2026-11-22
+design below, which is built.
+
+An online mind the person chose gets what a good answer needs. A private mark decides only what
+Nocturne brings up without being asked: notifications, reminders and updates. It never keeps
+something out of an answer the person asks for, or out of what goes to the provider they chose. The
+safeguard is a short, calm explanation of what is sent, at the moment the person chooses the
+provider, written for people who are not technical and without alarm.
+
+| A thing marked private | Before | After |
+|---|---|---|
+| Notifications, reminders, reading aloud, the tray, a lock screen | Kept out | Kept out |
+| The morning page's questions (asking about it on its own) | Never asked about | Never asked about |
+| An answer on this computer | Used | Used |
+| Online answers on the computer | Never sent | Sent when it helps answer the question |
+| An online mind on a phone ([0020](/adr/0020-an-online-mind-on-a-phone.md)) | Never sent | Sent, read and used like anything else |
+| A companion phone | Kept out | Shown like on the computer, still never on the lock screen or in notifications, reminders or updates |
+| A household's mind, borrowed | Never sent | Gets what an answer needs, like any mind the person chose |
+
+What still never goes: what the person let go or is forgetting. On the computer, Ask does not search
+check-ins, reflections or recaps, so Online answers does not send them; that is what Ask does, not
+a privacy rule. Online answers still sends words only, since it writes the last step of an answer.
+
+### The explanation at setup
+
+On Online answers step 1 (approved words in [Keeping the next step in
+view](step-flow-actions.md#after-the-approved-words)) the "Never sent" line becomes "Private":
+
+| Part | Before | After |
+|---|---|---|
+| Sent | Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included. | Your question, with a few short lines from what you kept that help answer it, your journal and things you marked private included. |
+| Never sent → Private | Your photos, recordings and documents themselves, your check-ins, reflections and recaps, and anything you marked private. | Marking something private keeps it from coming up on its own, in reminders and notifications. It still helps answer what you ask. |
+
+Behind the expander, "Never sent" becomes "What stays here": "Your photos, recordings and documents
+stay on this computer. A short line read from one can go when it helps. Things you let go never
+go." The journal's added lines about check-ins and about entries that can't be marked private are
+removed.
+
+On step 5 the lead stays ("While this is on, each question and the few lines that answer it leave
+this computer. Everything else you kept stays here."). The "Never sent" list becomes "What stays
+here" with "Photos, recordings and documents themselves" and "Things you let go"; the private and
+check-in lines and the note under the list go, and one line is added: "Marking something private
+keeps it from coming up on its own. It still helps answer what you ask." "Your choices" loses
+"Check-ins, reflections, recaps / Never sent", and "Journal entries and good things" becomes
+"What you kept, your journal included / May be sent".
+
+In Settings, Online answers: the lead becomes step 5's; the "Private things / Never sent" row goes;
+the journal row's hint becomes "A line from an entry or a good thing may go with a question it helps
+answer."; "Always stays here" becomes "Stays here" with "Photos, recordings and documents
+themselves" and "Things you let go", and its notes become the one private line. Step 5's "Your
+choices" loses its "Private things / Never sent" row too.
+
+The Online answers mockups under `journaling/` and `step-flow-actions/` record earlier changes with
+their markers and are left as they were. Renders of step 1, step 5 and Settings as built, light and
+dark, go with the pull request, as for the 2026-11-22 notice below.
+
+### Other copy
+
+| Where | Before | After |
+|---|---|---|
+| An item's private switch, hint | (as today) | "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask." |
+| `ask.leftOut.private`, `ask.leftOut.other` | Some things you marked private were left out… | Removed: nothing is left out for being private |
+
+### On a companion phone and a household's mind
+
+A paired phone shows private things as the computer does: in Ask, on the page, in the journal and
+when an original is opened. They still never show on its lock screen or in a notification,
+reminder or update. Away from home's outbound filter for private items goes; the one for the lock
+screen and notifications stays.
+
+| Where | Before | After |
+|---|---|---|
+| The phone page's foot (`Phone page`) | "Things you marked private stay on your computer." | Removed |
+| Opening a private original on a phone (`phone.original.private`) | "That one stays on your computer." | Removed: it opens |
+| Away from home setup, side column and "Private things" row ([Keeping the next step in view](step-flow-actions.md)) | "Things you marked private stay on this computer." / "Stay on this computer and never reach your phone." | Removed |
+| The private switch's hint | As above | As above: one hint everywhere |
+| Joining a household ([A household computer](household-server.md)) | "Things you marked private never go to {household}." | "Marking something private keeps it from coming up on its own. It still helps answer what you ask." |
+
+### No notice
+
+People already using Online answers are not shown a notice about this change (owner, 2026-11-23).
+The words they see at setup and in Settings change as above.
+
+## 2026-11-22: only what you mark private is held back
+
+The design below is approved and built. Where the revision above differs, the revision holds once
+it is approved.
 
 The owner's rule, 2026-11-22: never judge a person's data, and apply it to what Nocturne already
 does. Nocturne must not decide on the person's behalf that something is health, money, ID, work or
@@ -18,7 +108,7 @@ suggested marking them private, and the morning page never asked about them or a
 allergy or health memory. Each of these was Nocturne judging what the person kept. This page
 removes all of it. If something is private, the person says so by marking it.
 
-## What stays
+### What stays
 
 | Rule | Why it stays |
 |---|---|
@@ -27,7 +117,7 @@ removes all of it. If something is private, the person says so by marking it.
 | A memory being forgotten or let go is never sent | The person let it go |
 | Medication, allergy and health facts are kept forever by default ([decision 0007](../adr/0007-forgetting-by-default.md)) | It keeps something, it never holds anything back, and the person can change it |
 
-## What changes
+### What changes
 
 | Where | Before | After |
 |---|---|---|
@@ -41,7 +131,7 @@ removes all of it. If something is private, the person says so by marking it.
 | The morning page's daily question ("Is this still true?") | Never asked about a safety memory | Asked about like any other memory. A memory kept forever is still not asked about, whatever it says; a safety memory is kept forever by default, so it is asked about once the person turns that off |
 | The overnight tidy | Asked the mind, in shadow, whether each new memory was a health, money or ID detail | Not asked; the other two shadow questions stay ([decision 0016](../adr/0016-decision-models-shadow-first.md)) |
 
-## Copy
+### Copy
 
 Removed: every string that names health, money or ID details, and the hint on a memory.
 
@@ -81,7 +171,7 @@ An answer from an earlier version that says something other than "private" was l
 "Some things were left out. Ask on this computer to include them." (`ask.leftOut.other`). Nothing
 this version writes says so.
 
-## A notice for people who already use Online answers
+### A notice for people who already use Online answers
 
 People who turned Online answers on before this change agreed to words that said health, money and
 ID details stay here. Before their first question goes online after the change, Nocturne tells them
@@ -89,7 +179,7 @@ once what changed, and nothing is sent until they have seen it. They can see it 
 on the computer or on a phone, and in Settings, so a person who mostly uses a phone, or who goes to
 Settings first, can clear it there.
 
-### When it shows
+#### When it shows
 
 | When | What happens |
 |---|---|
@@ -111,7 +201,7 @@ The phone offers no way to Online answers settings: a phone cannot change settin
 ([decision 0010](../adr/0010-away-from-home.md)). Continue only records that the person has seen
 what changed, which is safe from their own paired phone.
 
-### Copy
+#### Copy
 
 The notice, in the Ask column where the answer would be, with the Online answers lock icon:
 
@@ -160,7 +250,7 @@ are to carry on, to keep this question here, or to turn Online answers off.
 Whether the person has seen the new words is kept with Nocturne's other settings on this
 computer. It goes with Delete everything, which also turns Online answers off.
 
-## Behaviour
+### Behaviour
 
 - **Online answers.** A memory may go when it is not marked private in any version, not being
   forgotten and not let go. Nothing about its words, labels or subject keeps it here.
@@ -181,7 +271,7 @@ computer. It goes with Delete everything, which also turns Online answers off.
   neither is the old hint flag on memories. The logged shadow answers about health, money and ID
   are dropped the next time the decision log is written.
 
-## Mockups
+### Mockups
 
 The Online answers mockups in `docs/design/mockups/journaling/` (`online-settings.html`,
 `online-step1.html`, `online-step5.html`) and `docs/design/mockups/step-flow-actions/`
