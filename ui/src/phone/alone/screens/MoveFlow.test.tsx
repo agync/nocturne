@@ -345,10 +345,6 @@ describe("moving the memory to a computer", () => {
       "ranOutOfRoom",
       "Maya’s laptop ran out of room, so nothing changed. Your memory is still on this phone.",
     ],
-    [
-      "notOpened",
-      "Maya’s laptop couldn’t open your memory, so nothing changed. Your memory is still on this phone.",
-    ],
   ] as const)("after %s says so, with Try again and Not now", async (why, line) => {
     const api = fakeApi();
     const { onExit } = open(api);

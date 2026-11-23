@@ -302,7 +302,6 @@ export type MoveEnded =
   | "outdated"
   | "noRoom"
   | "ranOut"
-  | "notOpened"
   | "stoppedThere"
   /** The person here stopped bringing the things in. */
   | "stoppedHere"
@@ -332,7 +331,6 @@ export function MoveFailed({
     outdated: t("moving.phone.outdated", { computer }),
     noRoom: t("moving.phone.noRoom", { computer }),
     ranOut: t("moving.phone.ranOut", { computer }),
-    notOpened: t("moving.phone.notOpened", { computer }),
     stoppedThere: t("moving.phone.stoppedThere", { computer }),
     stoppedHere: t("moving.phone.bringing.stopped", { computer }),
     removed: t("phone.removed.body"),
@@ -374,20 +372,15 @@ export function MoveFailed({
   );
 }
 
-/**
- * "Your memory is on {computer}.", or with `brought` "Your things are on {computer}.", and what
- * becomes of the memory put aside here.
- */
+/** "Your things are on {computer}.", and what becomes of the memory put aside here. */
 export function MoveMoved({
   computer,
-  items,
-  brought = null,
+  brought,
   busy,
   onDone,
 }: {
   computer: string;
-  items: number;
-  brought?: BroughtCounts | null;
+  brought: BroughtCounts;
   busy: boolean;
   onDone(remove: boolean): void;
 }) {
@@ -397,24 +390,15 @@ export function MoveMoved({
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
         <div className="ph-hero" style={{ paddingTop: 40 }} role="status">
-          {brought ? (
-            <>
-              <Hero title={t("moving.phone.brought.title", { computer })} icon="check" />
-              <p className="ph-body">
-                {t("moving.phone.brought.body", {
-                  count: brought.things,
-                  entries: brought.entries,
-                  checkins: brought.checkins,
-                  computer,
-                })}
-              </p>
-            </>
-          ) : (
-            <>
-              <Hero title={t("moving.phone.moved.title", { computer })} icon="check" />
-              <p className="ph-body">{t("moving.phone.moved.body", { count: items, computer })}</p>
-            </>
-          )}
+          <Hero title={t("moving.phone.brought.title", { computer })} icon="check" />
+          <p className="ph-body">
+            {t("moving.phone.brought.body", {
+              count: brought.things,
+              entries: brought.entries,
+              checkins: brought.checkins,
+              computer,
+            })}
+          </p>
         </div>
         <fieldset className="ph-options" aria-label={choice}>
           <legend className="ph-lbl">{choice}</legend>
