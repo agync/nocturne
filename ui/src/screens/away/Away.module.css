@@ -584,6 +584,49 @@
   font-weight: 600;
 }
 
+/* How a phone joins a computer that already holds a memory: rows parted by a rule. */
+.joins {
+  display: flex;
+  flex-direction: column;
+}
+
+.join {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.join input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.join:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.joinText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.joinLabel {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
 .callout {
   padding: var(--s-3) var(--s-4);
   border-left: 3px solid var(--accent);
