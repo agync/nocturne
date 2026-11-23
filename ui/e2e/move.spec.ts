@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { runAxe } from "./axe";
 
-// A phone's memory moving to this computer, on Away from home: each state light and dark, read
+// A phone's things coming to this computer, on Away from home: each state light and dark, read
 // by axe, and whole at a phone's width.
 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
@@ -17,16 +17,17 @@ const axe = async (page: Page) =>
     (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
   );
 
+const CHOOSE = "Maya’s phone has its own memory, and this computer has one too.";
+
 const states: Array<[string, string | RegExp]> = [
-  ["offered", "Maya’s phone has its own memory. Move it here?"],
-  ["here", "Maya’s phone has its own memory. Move it here?"],
-  ["room", "Maya’s phone has its own memory. Move it here?"],
-  ["arriving", "Maya’s phone has its own memory. Move it here?"],
-  ["checking", "Maya’s phone has its own memory. Move it here?"],
-  ["restarting", "Maya’s phone has its own memory. Move it here?"],
-  ["arrived", "The memory from Maya’s phone is here."],
-  ["ranOut", "Maya’s phone has its own memory. Move it here?"],
-  ["notOpened", "Maya’s phone has its own memory. Move it here?"],
+  ["here", CHOOSE],
+  ["room", CHOOSE],
+  ["preparing", "Maya’s phone is getting its things ready…"],
+  ["arriving", /Bringing in Maya’s phone’s things/],
+  ["adding", "Adding them to the memory here…"],
+  ["brought", "Maya’s phone’s things are here."],
+  ["used", "Maya’s phone now works with this computer."],
+  ["ranOut", /There wasn’t room for Maya’s phone’s memory/],
 ];
 
 for (const scheme of ["light", "dark"] as const) {
@@ -47,11 +48,8 @@ test("the choice with a memory here, and its words, at a phone's width", async (
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await open(page, "here");
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("This computer already holds a memory.");
-  await expect(dialog.getByRole("button", { name: "Keep what’s here" })).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: "Put this aside and move it here" }),
-  ).toBeInViewport();
+  await expect(dialog.getByRole("radio", { name: /Bring the phone’s things in/ })).toBeChecked();
+  await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
   const wide = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -59,19 +57,13 @@ test("the choice with a memory here, and its words, at a phone's width", async (
   await page.close();
 });
 
-test("Move it here goes on to arriving, and Open today’s page to today", async ({ page }) => {
-  await open(page, "offered");
-  await page.getByRole("button", { name: "Move it here" }).click();
+test("Continue goes on to the things arriving, and Open today’s page to today", async ({
+  page,
+}) => {
+  await open(page, "here");
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("progressbar")).toBeVisible();
-  await page.goto("/?mockAway=on&mockMove=arrived#/settings/away");
+  await page.goto("/?mockAway=on&mockMove=brought#/settings/away");
   await page.getByRole("button", { name: "Open today’s page" }).click();
   await expect(page).toHaveURL(/#\/today/);
-});
-
-test("after the start that put it in place, it says so over today's page", async ({ page }) => {
-  await page.goto("/?mockMove=arrived#/today");
-  await expect(
-    page.getByRole("alertdialog", { name: "The memory from Maya’s phone is here." }),
-  ).toBeVisible();
-  expect(await axe(page)).toEqual([]);
 });

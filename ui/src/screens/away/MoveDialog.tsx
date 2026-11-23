@@ -3,7 +3,6 @@ import { Children, type ReactNode, useEffect, useId, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
-import { tc } from "../../components/ControlChip/copy";
 import { Progress } from "../../components/Progress/Progress";
 import { formatBytes } from "../../copy/format";
 import { t, tParts } from "../../copy/t";
@@ -44,13 +43,12 @@ export function useMove() {
 }
 
 /**
- * A phone that holds its own memory, offering it to this computer: the question (with a line
- * when there is not room yet), the memory arriving and being checked, which can be stopped, the
- * moment before Nocturne restarts to open it, and how it ended. A computer that already holds a
- * memory asks instead how the phone joins it: its things brought in (arriving, which can be
- * stopped, then added, which cannot) or this computer's memory used. Nothing changes until the
- * person chooses; Escape on a question means "Not now", and on "Stop this move?" means "Keep
- * moving".
+ * A phone that holds its own memory, bringing its things to this computer with no restart. A
+ * computer that already holds a memory first asks how the phone joins it (with a line when there
+ * is not room yet): its things brought in, or this computer's memory used. An empty computer asks
+ * nothing. The things arrive, which can be stopped, then are added, which cannot, and the dialog
+ * says how it ended. Escape on the question means "Not now", and on "Stop bringing them in?"
+ * means "Keep going".
  */
 export function MoveDialog() {
   const view = useMove();
@@ -79,8 +77,7 @@ function MovePanel({ view }: { view: MoveView }) {
       : offered
         ? () => void answer("notNow")
         : null;
-  const stoppable =
-    view.phase === "preparing" || view.phase === "arriving" || view.phase === "checking";
+  const stoppable = view.phase === "preparing" || view.phase === "arriving";
   useEffect(() => {
     if (!stoppable) setStopping(false);
   }, [stoppable]);
@@ -123,7 +120,6 @@ function MovePanel({ view }: { view: MoveView }) {
   }, []);
 
   const name = view.name;
-  const bring = "bring" in view && view.bring === true;
   const finish = (then?: () => void) =>
     void run(() => engine.finishMove()).then((done) => {
       void client.invalidateQueries({ queryKey: MOVE_KEY });
@@ -134,7 +130,7 @@ function MovePanel({ view }: { view: MoveView }) {
       {t("moving.receive.stop")}
     </Button>
   );
-  let title = t("moving.receive.title", { name });
+  let title = "";
   // While a phone's things come in, the line under way is all the dialog says: its question
   // is answered, and the title only names the dialog.
   let quiet = false;
@@ -142,94 +138,27 @@ function MovePanel({ view }: { view: MoveView }) {
   let foot: ReactNode = null;
   switch (view.phase) {
     case "offered": {
-      if (view.here) {
-        const room = join === "bring" ? (view.room ?? null) : null;
-        title = t("moving.choose.title", { name });
-        const options: { value: Join; label: string; hint: string }[] = [
-          {
-            value: "bring",
-            label: t("moving.choose.bring"),
-            hint: t("moving.choose.bring.hint", { name }),
-          },
-          {
-            value: "useHere",
-            label: t("moving.choose.use"),
-            hint: t("moving.choose.use.hint", { name }),
-          },
-        ];
-        body = (
-          <>
-            <p className={styles.muted}>
-              {view.since
-                ? t("moving.choose.counts", {
-                    count: view.items,
-                    name,
-                    date: dayAndMonth(view.since),
-                    size: formatBytes(view.bytes),
-                  })
-                : t("moving.receive.countsUndated", {
-                    count: view.items,
-                    size: formatBytes(view.bytes),
-                  })}
-            </p>
-            <p>{t("moving.choose.lead", { name })}</p>
-            <div
-              className={styles.joins}
-              role="radiogroup"
-              aria-label={t("moving.choose.title", { name })}
-            >
-              {options.map((o) => (
-                <label key={o.value} className={styles.join}>
-                  <input
-                    type="radio"
-                    name="join"
-                    value={o.value}
-                    checked={join === o.value}
-                    onChange={() => setJoin(o.value)}
-                  />
-                  <span className={styles.joinText}>
-                    <span className={styles.joinLabel}>{o.label}</span>
-                    <span>{o.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            {room ? (
-              <p role="status">
-                {Children.toArray(
-                  tParts("moving.receive.room", {
-                    size: formatBytes(room.need),
-                    free: formatBytes(room.free),
-                    moveItHere: <strong>{t("moving.choose.continue")}</strong>,
-                  }) as ReactNode[],
-                )}
-              </p>
-            ) : null}
-          </>
-        );
-        foot = (
-          <>
-            <Button variant="secondary" disabled={busy} onClick={() => void answer("notNow")}>
-              {t("moving.receive.notNow")}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy || room !== null}
-              onClick={() => void answer(join)}
-            >
-              {t("moving.choose.continue")}
-            </Button>
-          </>
-        );
-        break;
-      }
-      const room = view.room ?? null;
+      const room = join === "bring" ? (view.room ?? null) : null;
+      title = t("moving.choose.title", { name });
+      const options: { value: Join; label: string; hint: string }[] = [
+        {
+          value: "bring",
+          label: t("moving.choose.bring"),
+          hint: t("moving.choose.bring.hint", { name }),
+        },
+        {
+          value: "useHere",
+          label: t("moving.choose.use"),
+          hint: t("moving.choose.use.hint", { name }),
+        },
+      ];
       body = (
         <>
           <p className={styles.muted}>
             {view.since
-              ? t("moving.receive.counts", {
+              ? t("moving.choose.counts", {
                   count: view.items,
+                  name,
                   date: dayAndMonth(view.since),
                   size: formatBytes(view.bytes),
                 })
@@ -238,14 +167,35 @@ function MovePanel({ view }: { view: MoveView }) {
                   size: formatBytes(view.bytes),
                 })}
           </p>
-          <p>{t("moving.receive.lead", { name })}</p>
+          <p>{t("moving.choose.lead", { name })}</p>
+          <div
+            className={styles.joins}
+            role="radiogroup"
+            aria-label={t("moving.choose.title", { name })}
+          >
+            {options.map((o) => (
+              <label key={o.value} className={styles.join}>
+                <input
+                  type="radio"
+                  name="join"
+                  value={o.value}
+                  checked={join === o.value}
+                  onChange={() => setJoin(o.value)}
+                />
+                <span className={styles.joinText}>
+                  <span className={styles.joinLabel}>{o.label}</span>
+                  <span>{o.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
           {room ? (
             <p role="status">
               {Children.toArray(
                 tParts("moving.receive.room", {
                   size: formatBytes(room.need),
                   free: formatBytes(room.free),
-                  moveItHere: <strong>{t("moving.receive.move")}</strong>,
+                  moveItHere: <strong>{t("moving.choose.continue")}</strong>,
                 }) as ReactNode[],
               )}
             </p>
@@ -260,48 +210,28 @@ function MovePanel({ view }: { view: MoveView }) {
           <Button
             variant="primary"
             disabled={busy || room !== null}
-            onClick={() => void answer("move")}
+            onClick={() => void answer(join)}
           >
-            {t("moving.receive.move")}
+            {t("moving.choose.continue")}
           </Button>
         </>
       );
       break;
     }
     case "preparing":
-      if (bring) {
-        title = t("moving.bring.preparing", { name });
-        quiet = true;
-      }
-      body = (
-        <Progress
-          value={null}
-          max={1}
-          label={t(bring ? "moving.bring.preparing" : "moving.receive.preparing", { name })}
-        />
-      );
+      title = t("moving.bring.preparing", { name });
+      quiet = true;
+      body = <Progress value={null} max={1} label={title} />;
       foot = stopButton;
       break;
     case "arriving":
-      if (bring) {
-        title = t("moving.bring.arriving", {
-          name,
-          done: formatBytes(view.done),
-          size: formatBytes(view.size),
-        });
-        quiet = true;
-      }
-      body = (
-        <Progress
-          value={view.done}
-          max={view.size}
-          label={t(bring ? "moving.bring.arriving" : "moving.receive.arriving", {
-            name,
-            done: formatBytes(view.done),
-            size: formatBytes(view.size),
-          })}
-        />
-      );
+      title = t("moving.bring.arriving", {
+        name,
+        done: formatBytes(view.done),
+        size: formatBytes(view.size),
+      });
+      quiet = true;
+      body = <Progress value={view.done} max={view.size} label={title} />;
       foot = stopButton;
       break;
     // Stop is no longer offered: what arrived is being added in one step.
@@ -348,46 +278,21 @@ function MovePanel({ view }: { view: MoveView }) {
         </Button>
       );
       break;
-    case "checking":
-      body = <Progress value={1} max={1} label={t("moving.receive.checking", { name })} />;
-      foot = stopButton;
-      break;
-    // The line is the whole of it: the question above it is over.
-    case "restarting":
-      title = t("moving.receive.restarting", { name });
-      break;
     case "failed":
-      title =
-        view.why === "noRoom"
-          ? t("moving.failed.room", { name, size: formatBytes(view.room?.need ?? 0) })
-          : t("moving.failed.notOpened", { name });
+      title = t("moving.failed.room", { name, size: formatBytes(view.room?.need ?? 0) });
       foot = (
         <Button variant="primary" disabled={busy} onClick={() => finish()}>
           {t("moving.failed.ok")}
         </Button>
       );
       break;
-    case "arrived":
-      title = t("moving.arrived.title", { name });
-      body = (
-        <>
-          <p>{t("moving.arrived.body")}</p>
-          {view.online ? null : <p className={styles.muted}>{tc("moving.arrived.online")}</p>}
-        </>
-      );
-      foot = (
-        <Button variant="primary" disabled={busy} onClick={() => finish(() => goTo("/today"))}>
-          {t("moving.arrived.open")}
-        </Button>
-      );
-      break;
   }
   if (stopping && stoppable) {
-    body = <p>{t(bring ? "moving.bring.stopAsk" : "moving.receive.stopAsk", { name })}</p>;
+    body = <p>{t("moving.bring.stopAsk", { name })}</p>;
     foot = (
       <>
         <Button variant="secondary" disabled={busy} onClick={() => setStopping(false)}>
-          {t(bring ? "moving.bring.keepGoing" : "moving.receive.keepMoving")}
+          {t("moving.bring.keepGoing")}
         </Button>
         <Button
           variant="forget"
@@ -400,7 +305,7 @@ function MovePanel({ view }: { view: MoveView }) {
             })
           }
         >
-          {t(bring ? "moving.bring.stop" : "moving.receive.stopMoving")}
+          {t("moving.bring.stop")}
         </Button>
       </>
     );
@@ -414,7 +319,7 @@ function MovePanel({ view }: { view: MoveView }) {
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-busy={stoppable || view.phase === "restarting" || view.phase === "adding"}
+        aria-busy={stoppable || view.phase === "adding"}
         tabIndex={-1}
       >
         <h2 id={titleId} className={quiet ? "sr-only" : styles.statement}>
