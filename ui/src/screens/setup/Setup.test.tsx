@@ -162,13 +162,41 @@ describe("the welcome", () => {
   });
 
   it("asks first whether a phone already holds a memory, and Yes goes to adding a phone", async () => {
-    await open("notStarted");
+    await open("notStarted", "#/setup", fakePlatform(), {
+      remote: { auto: false, scenario: "onAlone" },
+    });
     await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
     await screen.findByRole("heading", { level: 1, name: "Already use Nocturne on your phone?" });
     const names = screen.getAllByRole("button").map((button) => button.textContent);
     expect(names).toEqual(["Yes, bring my memory here", "No, start fresh"]);
     await userEvent.click(screen.getByRole("button", { name: "Yes, bring my memory here" }));
     await waitFor(() => expect(window.location.hash).toBe("#/settings/away/add"));
+  });
+
+  it("turns Away from home on through Simple first when it is off, then adds the phone", async () => {
+    const { engine } = await open("notStarted", "#/setup", fakePlatform(), {
+      remote: { auto: false, scenario: "off" },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Yes, bring my memory here" }),
+    );
+    await waitFor(() => expect(window.location.hash).toBe("#/settings/away/setup?phone=1"));
+    // Straight to Simple's own question, with its download asked about.
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /needs a small extra part from/ }),
+    ).toBeInTheDocument();
+    const start = vi.spyOn(engine, "startRemote");
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    expect(start).toHaveBeenCalledWith("simple", true);
+  });
+
+  it("shows the memory moved here over setup after the restart", async () => {
+    const { engine } = await open("notStarted");
+    engine.setMove({ phase: "arrived", name: "Maya’s phone", online: false });
+    expect(
+      await screen.findByRole("alertdialog", { name: "The memory from Maya’s phone is here." }),
+    ).toBeInTheDocument();
   });
 
   it("puts Get started before Restore from a backup", async () => {

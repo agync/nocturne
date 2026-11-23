@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { goTo } from "../../app/query";
+import { goTo, useQueryParam } from "../../app/query";
 import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
@@ -89,10 +89,14 @@ export function SetupFlow({ view }: { view: RemoteView }) {
   const engine = useEngine();
   const { run, busy } = useBusyAct();
   const [switching, setSwitching] = useState(false);
+  // From the first run's "Yes, bring my memory here": Simple, straight to turning it on.
+  const forMove = useQueryParam("phone") === "1";
   const [choice, setChoice] = useState<RemoteConnection>(
-    view.connection === "mostPrivate" && mostPrivateAvailable() ? "mostPrivate" : "simple",
+    !forMove && view.connection === "mostPrivate" && mostPrivateAvailable()
+      ? "mostPrivate"
+      : "simple",
   );
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState(forMove);
   const [phoneApp, setPhoneApp] = useState(false);
   const handed = useRef(false);
   const state = view.state;
@@ -211,7 +215,7 @@ export function SetupFlow({ view }: { view: RemoteView }) {
           >
             {t(here ? "away.ask.turnOn" : "away.ask.download")}
           </Button>
-          <Button variant="quiet" onClick={() => goTo("/settings/away")}>
+          <Button variant="quiet" onClick={() => goTo(forMove ? "/setup" : "/settings/away")}>
             {t("away.notNow")}
           </Button>
         </ActionBar>

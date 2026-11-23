@@ -10,6 +10,7 @@ import { RestoreFlow } from "../restore";
 import { Checking } from "./Checking";
 import { Choosing } from "./Choosing";
 import { Done } from "./Done";
+import { MoveDialog } from "../away/MoveDialog";
 import { GettingReady } from "./GettingReady";
 import { PhoneQuestion } from "./PhoneQuestion";
 import styles from "./Setup.module.css";
@@ -98,7 +99,17 @@ export default function Setup() {
         if (!begun && step !== "choosing" && asking) {
           body = (
             <PhoneQuestion
-              onYes={() => goTo("/settings/away/add")}
+              onYes={() =>
+                // A phone pairs over Away from home, so it is turned on first (Simple, with its
+                // download asked about as anywhere else), then it hands on to adding the phone.
+                void engine.getRemote().then(
+                  (remote) =>
+                    remote.state.type === "on"
+                      ? goTo("/settings/away/add")
+                      : goTo("/settings/away/setup", { phone: "1" }),
+                  () => goTo("/settings/away/setup", { phone: "1" }),
+                )
+              }
               onNo={() => {
                 setAsking(false);
                 setBegun(true);
@@ -118,6 +129,9 @@ export default function Setup() {
   return (
     <main className={styles.window} aria-label={t("setup.window")}>
       {body}
+      {/* A memory moved here opens after a restart, while this computer may still be setting
+          up: its message shows over setup too. */}
+      <MoveDialog />
     </main>
   );
 }
