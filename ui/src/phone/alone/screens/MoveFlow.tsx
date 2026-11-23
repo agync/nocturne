@@ -134,11 +134,12 @@ type Step =
   | { name: "used"; busy: boolean };
 
 /**
- * Moving this phone's memory to the computer it has just paired with: the question, what moves,
- * moving, and moved. The offer goes to the computer as soon as the question shows, so the person
- * there is asked while this one reads. A computer that already holds a memory asks the person
- * there how this phone joins it, and this one waits: its things are brought in, or the
- * computer's memory is used and nothing goes. `onExit` returns to the phone alone (nothing
+ * Moving this phone's memory to the computer it has just paired with. Its things are brought
+ * into the computer's memory, with no restart there. An empty computer asks nothing: the
+ * question and what moves show here, and "Move my memory" offers it and brings the things in. A
+ * computer that already holds a memory is offered it at once and asks the person there how this
+ * phone joins it, and this one waits: its things are brought in, or the computer's memory is
+ * used and nothing goes. `onExit` returns to the phone alone (nothing
  * changed, the pairing undone); `onDone` follows the computer once it is decided.
  */
 export function MoveFlow({
@@ -163,6 +164,8 @@ export function MoveFlow({
   const leaving = useRef(false);
   // The computer took the offer: a pairing it undoes after this is this phone being removed.
   const agreed = useRef(resumed);
+  // The computer holds nothing: nobody is asked there, and the move brings the things in.
+  const empty = useRef(false);
 
   const exit = (undo: boolean) => {
     if (leaving.current) return;
@@ -177,7 +180,9 @@ export function MoveFlow({
     if (!deciding()) return;
     if (answer.opened) void move(answer.bring === true);
     else if (answer.useHere) setStep({ name: "used", busy: false });
-    else if (answer.bring) void move(true);
+    // Chosen there for a computer that holds a memory; an empty one agrees without anyone
+    // choosing, so the person here still says "Move my memory".
+    else if (answer.bring && (answer.here || step.current.name === "waiting")) void move(true);
     else setStep((s) => (s.name === "waiting" ? { name: "found" } : s));
   };
 
@@ -203,17 +208,24 @@ export function MoveFlow({
     return sent;
   };
 
-  // The pairing just opened the session: the question and the offer go at once. A memory that
-  // already opened there finishes straight away. A computer that holds a memory has this phone
-  // wait for the person there, and its answer carries the move on by itself.
+  // The pairing just opened the session. A computer that holds a memory is offered it at once:
+  // this phone waits for the person there, and the answer carries the move on by itself, or
+  // finishes a move whose things were already added. An empty computer is offered it only once
+  // the person here says "Move my memory".
   useEffect(() => {
     void api.computer().then(setComputer, () => undefined);
     void api.facts().then(setFacts, () => undefined);
     void api.holds().then(
-      (holds) => holds && setStep((s) => (s.name === "found" ? { name: "waiting" } : s)),
-      () => undefined,
+      (holds) => {
+        if (!holds) {
+          empty.current = true;
+          return;
+        }
+        setStep((s) => (s.name === "found" ? { name: "waiting" } : s));
+        ask();
+      },
+      () => void ask(),
     );
-    ask();
   }, []);
 
   /** The computer's answer, asked again while it is out of reach: the move is paused till then. */
@@ -276,7 +288,7 @@ export function MoveFlow({
       return facts ? (
         <MoveSize
           facts={facts}
-          onMove={() => void move(false)}
+          onMove={() => void move(empty.current)}
           onBack={() => setStep({ name: "found" })}
         />
       ) : null;
