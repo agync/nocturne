@@ -34,6 +34,11 @@ const FIND_RULES: &str = "i.kind NOT IN ('checkin', 'reading') \
      AND (i.kind != 'calendar' OR EXISTS \
          (SELECT 1 FROM phone_records r WHERE r.item_id = i.id AND r.removed_at IS NULL))";
 
+/// Every thing the rules allow.
+const ANY: &str = "1";
+/// Only what waits to be read.
+const UNREAD: &str = "i.status IN ('kept', 'reading')";
+
 /// One stretch of an excerpt, and whether a searched word is in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcerptPart {
@@ -75,6 +80,16 @@ impl Engine {
     /// equals, at most `limit` and never more than [`FIND_CAP`]. A query with no words in it
     /// finds nothing.
     pub fn find_items(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {
+        self.find_where(query, limit, ANY)
+    }
+
+    /// [`Engine::find_items`], only the things no mind has read yet: what a search of what
+    /// Nocturne remembers cannot find until then, such as things just brought in from a phone.
+    pub fn find_unread(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {
+        self.find_where(query, limit, UNREAD)
+    }
+
+    fn find_where(&self, query: &str, limit: usize, only: &str) -> Result<Vec<FoundItem>> {
         let limit = limit.min(FIND_CAP);
         let Some(q) = fts_or(query).filter(|_| limit > 0) else {
             return Ok(Vec::new());
@@ -82,44 +97,24 @@ impl Engine {
         // Only the person's own words: a mind's summary of an item is not what was kept.
         let q = format!("{{title text}} : ({q})");
         self.read(|conn| {
-            let mut found = find(conn, &q, limit)?;
+            let mut found = find(conn, &q, limit, only)?;
             if found.len() < limit {
                 let have: Vec<String> = found.iter().map(|f| f.receipt.item_id.clone()).collect();
-                found.extend(by_place(conn, query, limit - found.len(), &have)?);
+                found.extend(by_place(conn, query, limit - found.len(), &have, only)?);
             }
             Ok(found)
         })
     }
-
-    /// [`Engine::find_items`], only the things no mind has read yet: what a search of what
-    /// Nocturne remembers cannot find until then, such as things just brought in from a phone.
-    pub fn find_unread(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {
-        let found = self.find_items(query, FIND_CAP)?;
-        let unread: Vec<bool> = self.read(|conn| {
-            let mut stmt = conn
-                .prepare_cached("SELECT status IN ('kept', 'reading') FROM items WHERE id = ?1")?;
-            found
-                .iter()
-                .map(|f| Ok(stmt.query_row([&f.receipt.item_id], |r| r.get(0))?))
-                .collect()
-        })?;
-        Ok(found
-            .into_iter()
-            .zip(unread)
-            .filter_map(|(f, unread)| unread.then_some(f))
-            .take(limit)
-            .collect())
-    }
 }
 
-fn find(conn: &Connection, q: &str, limit: usize) -> Result<Vec<FoundItem>> {
+fn find(conn: &Connection, q: &str, limit: usize, only: &str) -> Result<Vec<FoundItem>> {
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT i.id, i.kind, i.source, i.title, i.kept_at, i.duration_ms, i.trust, i.private, \
          COALESCE((SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
           ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), json_extract(i.metadata, '$.keptOn')), \
          snippet(items_stem, -1, char({open}), char({close}), '…', {words}) \
          FROM items_stem f JOIN items i ON i.rowid = f.rowid \
-         WHERE items_stem MATCH ?1 AND {FIND_RULES} \
+         WHERE items_stem MATCH ?1 AND {FIND_RULES} AND {only} \
          ORDER BY f.rank, i.kept_at DESC, i.id LIMIT ?2",
         open = MARK_OPEN as u32,
         close = MARK_CLOSE as u32,
@@ -164,6 +159,7 @@ fn by_place(
     query: &str,
     limit: usize,
     have: &[String],
+    only: &str,
 ) -> Result<Vec<FoundItem>> {
     let words = crate::util::fts_terms(query);
     if words.is_empty() {
@@ -175,7 +171,7 @@ fn by_place(
          COALESCE((SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
           ON rd.id = rk.device_id AND rd.connection != 'local' WHERE rk.item_id = i.id), json_extract(i.metadata, '$.keptOn')) \
          FROM items i WHERE i.kind = 'calendar' \
-         AND json_extract(i.metadata, '$.entry.place') IS NOT NULL AND {FIND_RULES} \
+         AND json_extract(i.metadata, '$.entry.place') IS NOT NULL AND {FIND_RULES} AND {only} \
          ORDER BY i.kept_at DESC, i.id"
     ))?;
     let rows = stmt.query_map([], |r| {
