@@ -4,7 +4,7 @@ import type { PhoneCalendar } from "../../../engine/bindings";
 import { BackBar, Bar, Button, Page } from "../../screens/ui";
 import type { CalendarSettings, NativeChannel, ThisPhoneSources } from "../api";
 import { askCalendar, type CalendarAccess, calendarAccess, openAppSettings } from "../sources";
-import { openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
+import { DoneBar, KeptSoFar, openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
 
 type Step = "loading" | "why" | "refused" | "settings";
 
@@ -204,6 +204,8 @@ export function CalendarSettingsScreen({
   };
 
   const lastSent = status?.calendarLastSent;
+  const names = calendars.map((c) => c.name);
+  const shared = new Set(names.filter((n, i) => names.indexOf(n) !== i));
   return (
     <Page bar={<BackBar title={t("phone.calendar.label")} onBack={onBack} />}>
       <main className="ph-main ph-bring">
@@ -223,7 +225,7 @@ export function CalendarSettingsScreen({
           </div>
         )}
         <Switch
-          label={t("phone.calendar.bring")}
+          label={alone ? t("phone.alone.calendar.bring") : t("phone.calendar.bring")}
           hint={t("phone.calendar.bring.hint")}
           on={settings.bring}
           onChange={(bring) => void save({ ...settings, bring })}
@@ -239,6 +241,7 @@ export function CalendarSettingsScreen({
             <Switch
               key={c.id}
               label={c.name}
+              sub={shared.has(c.name) ? c.account : undefined}
               dot={c.colour}
               on={settings.calendars[c.id] ?? true}
               onChange={(on) =>
@@ -247,6 +250,9 @@ export function CalendarSettingsScreen({
             />
           ))}
         </div>
+        <p className="ph-hint">
+          {alone ? t("phone.alone.calendar.note") : t("phone.calendar.note")}
+        </p>
         {status?.calendarTooMany && (
           <p className="ph-hint" role="status">
             {t("phone.calendar.tooMany")}
@@ -266,15 +272,13 @@ export function CalendarSettingsScreen({
             })}
           </p>
         )}
-        <p className="ph-hint">
-          {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
-        </p>
-        {alone && onDeleteKept ? (
-          <button type="button" className="ph-link" onClick={onDeleteKept}>
-            {t("phone.alone.sources.delete")}
-          </button>
-        ) : null}
+        {alone ? (
+          <KeptSoFar onDelete={onDeleteKept} />
+        ) : (
+          <p className="ph-hint">{places("phone.sources.already")}</p>
+        )}
       </main>
+      <DoneBar onDone={onBack} />
     </Page>
   );
 }

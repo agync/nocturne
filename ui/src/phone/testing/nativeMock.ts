@@ -28,7 +28,8 @@ const CALENDARS: PhoneCalendar[] = [
   { id: "1", name: "Family", colour: "#3B7556" },
   { id: "2", name: "Work", colour: "#2C4BCF" },
   { id: "3", name: "School term dates", colour: "#8A6A12" },
-  { id: "4", name: "Holidays in England", colour: "#A8402A" },
+  { id: "4", name: "Holidays in England", colour: "#A8402A", account: "maya.k@example.com" },
+  { id: "5", name: "Holidays in England", colour: "#6A4FA0", account: "Hospital" },
 ];
 
 export type NativeScenario =

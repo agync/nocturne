@@ -12,7 +12,7 @@ import {
   onIphone,
   openHealth,
 } from "../sources";
-import { openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
+import { DoneBar, KeptSoFar, openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
 
 type Step =
   | { name: "loading" }
@@ -380,7 +380,7 @@ export function HealthSettingsScreen({
           </div>
         )}
         <Switch
-          label={t("phone.health.bring")}
+          label={alone ? t("phone.alone.health.bring") : t("phone.health.bring")}
           on={settings.bring}
           onChange={(bring) => void save({ ...settings, bring })}
         />
@@ -414,15 +414,13 @@ export function HealthSettingsScreen({
           </p>
         )}
         <p className="ph-hint">{t("phone.health.fixed")}</p>
-        <p className="ph-hint">
-          {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
-        </p>
-        {alone && onDeleteKept ? (
-          <button type="button" className="ph-link" onClick={onDeleteKept}>
-            {t("phone.alone.sources.delete")}
-          </button>
-        ) : null}
+        {alone ? (
+          <KeptSoFar onDelete={onDeleteKept} />
+        ) : (
+          <p className="ph-hint">{places("phone.sources.already")}</p>
+        )}
       </main>
+      <DoneBar onDone={onBack} />
     </Page>
   );
 }

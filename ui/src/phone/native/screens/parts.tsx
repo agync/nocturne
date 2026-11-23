@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Children, type ReactNode, useEffect, useRef } from "react";
 import { formatTimeOfDay } from "../../../copy/format";
+import { Button } from "../../screens/ui";
 import { type CopyId, type CopyValues, t, tParts } from "../../../copy/t";
 
 /** The privacy policy, in the phone's browser. */
@@ -43,6 +44,7 @@ export function useHeading(step: string) {
 export function Switch({
   label,
   hint,
+  sub,
   on,
   onChange,
   dot,
@@ -50,6 +52,8 @@ export function Switch({
 }: {
   label: string;
   hint?: string;
+  /** A second line that tells apart rows with the same label, such as a calendar's account. */
+  sub?: string;
   on: boolean;
   onChange(next: boolean): void;
   /** A calendar's colour, as the phone shows it. */
@@ -74,10 +78,38 @@ export function Switch({
       )}
       <span className="ph-switch-label">
         <span className="ph-bring-label">{label}</span>
-        {hint && <span className="ph-hint ph-bring-hint">{hint}</span>}
+        {(hint ?? sub) && <span className="ph-hint ph-bring-hint">{hint ?? sub}</span>}
       </span>
       <span className="ph-switch" aria-hidden="true" />
     </button>
+  );
+}
+
+/** "Done", pinned at the bottom of a settings screen, where the thumb is. Choices save as made. */
+export function DoneBar({ onDone }: { onDone(): void }) {
+  return (
+    <footer className="ph-done">
+      <Button kind="primary" onClick={onDone}>
+        {t("phone.done")}
+      </Button>
+    </footer>
+  );
+}
+
+/** A phone alone: what was kept stays until deleted, and the way to delete it. */
+export function KeptSoFar({ onDelete }: { onDelete?(): void }) {
+  return (
+    <section className="ph-kept-so-far" aria-labelledby="ph-kept-so-far">
+      <h2 className="ph-lbl" id="ph-kept-so-far">
+        {t("phone.alone.sources.kept")}
+      </h2>
+      <p className="ph-hint">{t("phone.alone.sources.already")}</p>
+      {onDelete ? (
+        <button type="button" className="ph-link ph-link--careful" onClick={onDelete}>
+          {t("phone.alone.sources.delete")}
+        </button>
+      ) : null}
+    </section>
   );
 }
 

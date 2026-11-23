@@ -243,6 +243,25 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-delete-kept-health-${scheme}`);
     });
 
+    for (const [row, title, switchName] of [
+      ["Your calendar", "Your calendar", "Show my calendar"],
+      ["Health", "Health", "Show health readings"],
+    ] as const) {
+      test(`${title} settings end with Kept so far and Done`, async ({ page }) => {
+        await toThisPhone(page, "kept");
+        await page.getByRole("button", { name: new RegExp(`^${row}`) }).click();
+        await expect(page.getByRole("switch", { name: new RegExp(switchName) })).toBeVisible();
+        const kept = page.getByRole("region", { name: "Kept so far" });
+        await expect(kept).toContainText("What Nocturne already kept stays until you delete it.");
+        await expect(kept.getByRole("button", { name: "Delete what was kept…" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Done" })).toBeVisible();
+        await clean(page);
+        await shot(page, `after-settings-${title === "Health" ? "health" : "calendar"}-${scheme}`);
+        await page.getByRole("button", { name: "Done" }).click();
+        await expect(page.getByRole("region", { name: "Your memory" })).toBeVisible();
+      });
+    }
+
     test("Forget and Delete from an item's page", async ({ page }) => {
       await page.goto("/?m=kept");
       await page.getByRole("button", { name: /Ask about the swap/ }).click();
@@ -343,6 +362,36 @@ test.describe("200 per cent text", () => {
       await expect(page.locator("main")).toBeVisible();
       await fits(page);
       await shot(page, `text-200-${name}`);
+    });
+  }
+
+  for (const [row, name] of [
+    ["Your calendar", "calendar"],
+    ["Health", "health"],
+  ] as const) {
+    test(`${name} settings: Done is reachable and last`, async ({ page }) => {
+      await page.goto("/?m=kept&v=thisPhone");
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      await page.getByRole("button", { name: new RegExp(`^${row}`) }).click();
+      const done = page.getByRole("button", { name: "Done" });
+      await expect(done).toBeVisible();
+      await fits(page);
+      const where = await page.evaluate(() => {
+        const buttons = [...document.querySelectorAll("button")];
+        const last = buttons[buttons.length - 1];
+        const r = last.getBoundingClientRect();
+        return { last: last.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight };
+      });
+      expect(where).toEqual({ last: "Done", inView: true });
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect(page.getByRole("region", { name: "Kept so far" })).toBeVisible();
+      const covered = await page.evaluate(() => {
+        const bar = document.querySelector(".ph-done")?.getBoundingClientRect();
+        const kept = document.querySelector(".ph-kept-so-far button")?.getBoundingClientRect();
+        return !bar || !kept || kept.bottom > bar.top + 1;
+      });
+      expect(covered).toBe(false);
+      await shot(page, `text-200-settings-${name}`);
     });
   }
 
