@@ -16,7 +16,6 @@ export const MOVE_KEY = ["move"] as const;
 
 const FOCUSABLE =
   "button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
-const count = (n: number) => new Intl.NumberFormat("en-GB").format(n);
 
 /** "3 March", for a `YYYY-MM-DD` day. */
 const dayAndMonth = (day: string) =>
@@ -160,13 +159,13 @@ function MovePanel({ view }: { view: MoveView }) {
             <p className={styles.muted}>
               {view.since
                 ? t("moving.choose.counts", {
-                    count: count(view.items),
+                    count: view.items,
                     name,
                     date: dayAndMonth(view.since),
                     size: formatBytes(view.bytes),
                   })
-                : t("moving.receive.counts", {
-                    count: count(view.items),
+                : t("moving.receive.countsUndated", {
+                    count: view.items,
                     size: formatBytes(view.bytes),
                   })}
             </p>
@@ -225,10 +224,16 @@ function MovePanel({ view }: { view: MoveView }) {
       body = (
         <>
           <p className={styles.muted}>
-            {t("moving.receive.counts", {
-              count: count(view.items),
-              size: formatBytes(view.bytes),
-            })}
+            {view.since
+              ? t("moving.receive.counts", {
+                  count: view.items,
+                  date: dayAndMonth(view.since),
+                  size: formatBytes(view.bytes),
+                })
+              : t("moving.receive.countsUndated", {
+                  count: view.items,
+                  size: formatBytes(view.bytes),
+                })}
           </p>
           <p>{t("moving.receive.lead", { name })}</p>
           {room ? (
@@ -296,9 +301,9 @@ function MovePanel({ view }: { view: MoveView }) {
       body = (
         <p>
           {t("moving.brought.body", {
-            count: count(view.added.things),
-            entries: count(view.added.entries),
-            checkins: count(view.added.checkins),
+            count: view.added.things,
+            entries: view.added.entries,
+            checkins: view.added.checkins,
           })}
         </p>
       );

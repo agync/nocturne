@@ -381,6 +381,48 @@ describe("how long is left", () => {
     );
     expect(screen.getByText(/About 10 minutes left/)).toBeInTheDocument();
   });
+
+  it("says one minute, one thing and one journal entry in the singular", async () => {
+    let clock = 0;
+    const now = () => clock;
+    const sending = (done: number): MoveProgress => ({ phase: "sending", done, total: 50_000_000 });
+    const { rerender } = render(
+      <MoveMoving computer="Maya’s laptop" progress={sending(0)} onStop={vi.fn()} now={now} />,
+    );
+    clock = MEASURE_MS;
+    rerender(
+      <MoveMoving
+        computer="Maya’s laptop"
+        progress={sending(10_000_000)}
+        onStop={vi.fn()}
+        now={now}
+      />,
+    );
+    expect(screen.getByText(/About 1 minute left/)).toBeInTheDocument();
+    cleanup();
+    const api = fakeApi();
+    api.facts = vi.fn(async () => ({
+      counts: { ...COUNTS, pages: 1 },
+      things: 1,
+      journal: 1,
+      since: "2026-03-03",
+      bytes: 1_400_000_000,
+    }));
+    open(api);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("1 thing you kept since 3 March")).toBeInTheDocument();
+    expect(screen.getByText("1 journal entry")).toBeInTheDocument();
+    expect(screen.getByText("1 page")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Move my memory" }));
+    api.answerOffer(null);
+    await waitFor(() => expect(api.move).toHaveBeenCalled());
+    api.finishMove({ items: 1, brought: { things: 1, entries: 1, checkins: 1 } });
+    expect(
+      await screen.findByText(
+        "1 thing, 1 journal entry and 1 check-in were added to the memory there. Maya’s laptop reads them over the next while. This phone now works with Maya’s laptop.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("moving to a computer that already holds a memory", () => {

@@ -57,6 +57,26 @@ describe("a phone with its own memory", () => {
     );
   });
 
+  it("says since when, and one thing in the singular", async () => {
+    const engine = manualEngine("onAlone");
+    await openAway("/settings/away", "onAlone", "Away from home", engine);
+    act(() => engine.setMove({ ...offered(false), items: 1, since: "2026-03-03" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Maya’s phone has its own memory. Move it here?",
+    });
+    expect(dialog).toHaveTextContent("1 thing kept since 3 March · about 1.4 GB");
+    act(() =>
+      engine.setMove({
+        phase: "brought",
+        name: "Maya’s phone",
+        added: { things: 1, entries: 1, checkins: 1 },
+      }),
+    );
+    expect(
+      await screen.findByText(/^1 thing, 1 journal entry and 1 check-in were added\./),
+    ).toBeInTheDocument();
+  });
+
   it("takes focus, and Escape means Not now", async () => {
     const { engine, dialog } = await withOffer();
     await waitFor(() => expect(dialog).toHaveFocus());
