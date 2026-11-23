@@ -57,7 +57,7 @@ parity records share one wording.
 | Invariant 2, an online mind on a phone (0020), the key route | **Yes**, since 2026-11-23, when the owner accepted 0020 |
 | Invariant 2, Online answers and the online mind send what a good answer needs, private things, check-ins and originals included | **Yes**, since 2026-11-23 (owner): private decides only what comes up on its own |
 | Invariant 2, Apple's servers as a phone's mind | No: later, with the Apple trial |
-| Invariant 2, a nightly backup to the person's own account (0019) | No: 0019 is proposed. Its clause is below. (The file in a picked folder, which needed none, was dropped on 2026-11-23) |
+| Invariant 2, a nightly backup to the person's own account (0019) | **Yes**, since 2026-11-24, when the owner accepted 0019. (The file in a picked folder, which needed none, was dropped on 2026-11-23) |
 | Invariant 2, a household's mind (0021) | No: 0021 is proposed |
 | First line, invariants 4 and 5, the new invariant | No: they go in with this record |
 

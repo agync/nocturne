@@ -27,7 +27,10 @@ is not built or a build that is not designed.
    servers and relays to stay connected; while the person has turned on Online answers, the
    embedded engine's requests to the one provider they chose for answers, online or on their own
    network (each question with what a good answer to it needs), plus one look at that provider's
-   list of models each time the engine starts; and, while a phone that is its own home has an online
+   list of models each time the engine starts; while a phone that is its own home has backup turned
+   on, that phone's backups of its memory, locked with a phrase only the person holds, to the
+   person's own iCloud or Google Drive account that the phone is signed in to, plus the sign-in,
+   listing and removal that account needs; and, while a phone that is its own home has an online
    mind the person chose, that phone's requests to the one provider they chose, online or on their
    own network (what each reading, page or answer needs to be done well), plus one look at that
    provider's list of models when it is checked. The embedded `lemond` binds loopback with a
