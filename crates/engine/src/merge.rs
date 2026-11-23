@@ -593,7 +593,9 @@ impl Engine {
         // place in the entry: the one here stays, and the entry keeps its block.
         let mut placing: HashSet<usize> = HashSet::new();
         for (n, (p, f)) in arriving.iter().zip(&fates).enumerate() {
-            if matches!(f, Fate::Add(_)) || p.entry_day().is_none() {
+            // As in placing one by hand: only a photo or a voice note, never words.
+            let media = matches!(p.kind.as_str(), "image" | "audio");
+            if matches!(f, Fate::Add(_)) || p.entry_day().is_none() || !media {
                 continue;
             }
             let (role, private): (Option<String>, bool) = tx.query_row(
