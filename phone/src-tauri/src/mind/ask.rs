@@ -58,6 +58,10 @@ impl PhoneMind {
         let Some(on) = lock(&self.on).clone() else {
             return out(delta(&ask_id, AskPhase::Unavailable));
         };
+        // Paused by the month's limit: Ask finds by words until it starts again.
+        if self.paused_until().is_some() {
+            return out(delta(&ask_id, AskPhase::Unavailable));
+        }
         if question.is_empty() {
             return out(delta(&ask_id, AskPhase::Nothing));
         }
@@ -145,7 +149,10 @@ impl PhoneMind {
             }
         });
         let meta = match meta {
-            Ok(meta) => meta,
+            Ok(meta) => {
+                self.count(1);
+                meta
+            }
             Err(x) => {
                 tracing::warn!("the online mind did not answer: {x}");
                 return out(end(AskPhase::Unavailable));

@@ -14,6 +14,7 @@ pub mod events;
 pub mod host;
 pub mod keys;
 pub mod sent;
+pub mod status;
 #[cfg(test)]
 mod tests;
 
@@ -75,6 +76,8 @@ pub enum Pass {
     Off,
     /// The phone is not known to charge: reading and the page wait for the charger.
     NotCharging,
+    /// The month's limit is reached: nothing goes until next month.
+    Paused,
     /// The phone holds no memory now (not alone, or the store will not open).
     NotReady,
     /// How many things were read to an end (understood, or not readable), and whether the
@@ -112,6 +115,8 @@ struct On {
     host: String,
     model: String,
     since: Option<Timestamp>,
+    /// Things read to an end since it was turned on, this run.
+    read: u32,
 }
 
 /// The reader, the tidy and the scheduler over one open store.
@@ -149,6 +154,10 @@ pub struct PhoneMind {
     keys: Box<dyn Keys>,
     clock: Arc<dyn Clock>,
     sent: Arc<SentLog>,
+    /// What the last request's answer said about the service; none while all is well.
+    trouble: Arc<Mutex<Option<status::Trouble>>>,
+    /// Held while this month's count is written.
+    counting: Mutex<()>,
     /// Who hears of things read and pages saved.
     events: Mutex<Arc<dyn nocturne_intelligence::Events>>,
     slot: MindSlot,
@@ -165,6 +174,8 @@ impl PhoneMind {
         let mind = PhoneMind {
             sent: Arc::new(SentLog::new(dir.clone(), clock.clone())),
             events: Mutex::new(Arc::new(NullEvents)),
+            trouble: Arc::default(),
+            counting: Mutex::new(()),
             dir,
             keys,
             clock,
@@ -215,7 +226,12 @@ impl PhoneMind {
         let (host, model) = (provider.host().to_string(), provider.model().to_string());
         let record: nocturne_provider::Record = {
             let (sent, host, model) = (self.sent.clone(), host.clone(), model.clone());
-            Arc::new(move |job, exchange| sent.note(job, &host, &model, exchange))
+            let (trouble, clock) = (self.trouble.clone(), self.clock.clone());
+            Arc::new(move |job, exchange| {
+                sent.note(job, &host, &model, exchange);
+                let mut trouble = lock(&trouble);
+                *trouble = status::Trouble::after(exchange.status, clock.now(), *trouble);
+            })
         };
         let mind = Arc::new(ProviderMind::new(provider).with_record(record));
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
@@ -225,7 +241,9 @@ impl PhoneMind {
             host,
             model,
             since: saved.since.as_deref().and_then(|s| s.parse().ok()),
+            read: 0,
         };
+        lock(&self.trouble).take();
         if let Some(before) = lock(&self.on).replace(on) {
             before.mind.provider().stop();
         }
@@ -290,6 +308,7 @@ impl PhoneMind {
     pub fn erase(&self) {
         self.turn_off();
         self.sent.clear();
+        self.forget_month();
     }
 
     pub fn chosen(&self) -> Chosen {
@@ -340,6 +359,9 @@ impl PhoneMind {
         }
         if !self.host.charging() {
             return Pass::NotCharging;
+        }
+        if self.paused_until().is_some() {
+            return Pass::Paused;
         }
         let Ok((_use, open)) = home.using() else {
             return Pass::NotReady;
@@ -402,13 +424,23 @@ impl PhoneMind {
         let (pass, abandoned) = rt.block_on(async {
             let reading = async {
                 let mut read = 0;
-                while read < FEW && !home.store_wanted() {
+                // Each thing read counts toward the month: the one that reaches a limit is the
+                // last before the pause.
+                while read < FEW && !home.store_wanted() && self.paused_until().is_none() {
                     match t.reader.tick().await {
                         Step::Read {
                             outcome: Outcome::Returned | Outcome::Lost,
                             ..
                         } => break,
-                        Step::Read { .. } => read += 1,
+                        Step::Read { outcome, .. } => {
+                            read += 1;
+                            if outcome != Outcome::Retry {
+                                self.count(1);
+                                if let Some(on) = lock(&self.on).as_mut() {
+                                    on.read += 1;
+                                }
+                            }
+                        }
                         _ => break,
                     }
                 }
