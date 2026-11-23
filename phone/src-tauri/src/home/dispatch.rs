@@ -144,7 +144,8 @@ pub fn answer(open: &Open, call: RemoteCall) -> RemoteAnswer {
             line,
             client_id,
         } => journal_answer(e, me, page_date, choice, line, client_id),
-        // Answers, reflections and recaps need a mind.
+        // Answers, reflections and recaps need a mind: a question goes to it before here
+        // (`PhoneMind::answer_call`).
         RemoteCall::Ask { .. }
         | RemoteCall::CancelAsk { .. }
         | RemoteCall::GetLookBack { .. }

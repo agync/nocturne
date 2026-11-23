@@ -72,6 +72,13 @@ pub async fn start_alone<R: Runtime>(app: AppHandle<R>, name: String) -> Result<
 pub async fn home_call<R: Runtime>(app: AppHandle<R>, call: RemoteCall) -> RemoteAnswer {
     blocking(move || {
         let home = app.state::<Home>();
+        // A question waits for the online mind, without the store held meanwhile.
+        if let RemoteCall::Ask { question, .. } = &call {
+            let rt = tokio::runtime::Handle::current();
+            return app
+                .state::<crate::mind::PhoneMind>()
+                .answer_call(&home, &rt, question);
+        }
         match home.using() {
             Ok((_use, open)) => dispatch::answer(&open, call),
             Err(_) => RemoteAnswer::Error {

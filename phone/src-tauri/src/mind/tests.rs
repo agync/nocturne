@@ -2,7 +2,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nocturne_contract::{CheckOutcome, ItemStatus, RemoteAnswer, RemoteCall};
+use nocturne_contract::{
+    AnsweredBy, AskDelta, AskPhase, CheckOutcome, ItemStatus, RemoteAnswer, RemoteCall,
+};
 use nocturne_engine::ManualClock;
 use nocturne_mind::prompts;
 use nocturne_provider::address::OnlineKey;
@@ -504,4 +506,66 @@ fn deleting_everything_takes_the_key_the_choice_and_the_sent_list() {
     assert!(w.keys.key().is_none());
     assert_eq!(w.mind.chosen(), Chosen::Off);
     assert!(w.mind.sent(10, None).is_empty());
+}
+
+impl World {
+    fn ask(&self, question: &str) -> Vec<AskDelta> {
+        let mut steps = Vec::new();
+        self.mind
+            .ask(&self.home, self.rt.handle(), question, &mut |d| {
+                steps.push(d)
+            });
+        steps
+    }
+}
+
+#[test]
+fn a_question_is_answered_online_with_its_receipts() {
+    let w = world();
+    let id = w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    let asked = w.stand_in.chats().len();
+    w.stand_in.then(Answer::text("Ana lives in **Hull** [m1]."));
+    let steps = w.ask("Where does Ana live?");
+    let last = steps.last().unwrap();
+    assert_eq!(last.phase, AskPhase::Done, "{steps:?}");
+    assert!(last.receipts.iter().all(|r| r.item_id == id));
+    assert!(!last.receipts.is_empty());
+    assert_eq!(last.memory_ids.len(), 1);
+    assert!(matches!(&last.answered_by, Some(AnsweredBy::Online { .. })));
+    let words: String = steps.iter().filter_map(|d| d.text_delta.clone()).collect();
+    assert!(words.contains("Hull"), "{words}");
+    let chats = w.stand_in.chats();
+    assert_eq!(chats.len(), asked + 1);
+    let sent = w.mind.sent(1, None);
+    assert_eq!(sent[0].sent_for, super::SentFor::Answer);
+}
+
+#[test]
+fn an_answer_that_cites_nothing_is_not_sure() {
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    w.mind.turn_on(w.settings()).unwrap();
+    while matches!(w.pass(), Pass::Ran { read: 1.., .. }) {}
+    w.stand_in.then(Answer::text("Ana lives in Leeds."));
+    let steps = w.ask("Where does Ana live?");
+    let last = steps.last().unwrap();
+    assert_eq!(last.phase, AskPhase::NotSure);
+    assert!(!last.near.is_empty());
+}
+
+#[test]
+fn with_the_mind_off_a_question_reaches_nothing() {
+    let w = world();
+    w.keep(prompts::EXAMPLE_NOTE, "c1");
+    assert_eq!(
+        w.ask("Where does Ana live?").last().unwrap().phase,
+        AskPhase::Unavailable
+    );
+    let call = w
+        .mind
+        .answer_call(&w.home, w.rt.handle(), "Where does Ana live?");
+    assert!(matches!(call, RemoteAnswer::Error { .. }));
+    assert!(w.stand_in.seen().is_empty());
 }
