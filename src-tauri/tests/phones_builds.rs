@@ -9,6 +9,7 @@ use std::sync::Arc;
 use common::*;
 use nocturne_app_lib::remote::controller::RemoteHub;
 use nocturne_app_lib::remote::crypto;
+use nocturne_app_lib::remote::moving::MoveView;
 use nocturne_app_lib::remote::protocol::*;
 use nocturne_app_lib::remote::testing::client::{Addr, Mode, Opened, Pairing, PhoneClient};
 use nocturne_app_lib::remote::testing::{self, FakeHelpers, PhonePair};
@@ -297,7 +298,26 @@ fn every_call_of_every_build_spoken_here_is_dispatched() {
                 serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
             for sent in &examples {
                 id += 1;
-                let answer = send_as_sent(&mut s, id, sent);
+                // The test computer holds a memory, so a first offer waits for the person to
+                // choose; one from a phone that already chose is answered from that.
+                let answer = if sent["cmd"] == "offerMemory" {
+                    std::thread::scope(|t| {
+                        let call = t.spawn(|| send_as_sent(&mut s, id, sent));
+                        let mut chosen = false;
+                        wait_for("the offer is answered", || {
+                            if !chosen
+                                && matches!(c.hub.core.moves.view(), Some(MoveView::Offered { .. }))
+                            {
+                                c.h.ok("answer_move", json!({"choice": "useHere"}));
+                                chosen = true;
+                            }
+                            call.is_finished()
+                        });
+                        call.join().unwrap()
+                    })
+                } else {
+                    send_as_sent(&mut s, id, sent)
+                };
                 assert!(
                     !matches!(
                         answer,
