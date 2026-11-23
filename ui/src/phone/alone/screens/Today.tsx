@@ -1,8 +1,15 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { formatLongDay, formatTimeOfDay, isAfterMidnight } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { HomeStats, JournalDay, PageView, TimelineRow } from "../../../engine/bindings";
-import type { PhoneEngine } from "../../engine";
+import type {
+  HomeStats,
+  JournalDay,
+  PageView,
+  Receipt,
+  TimelineRow,
+} from "../../../engine/bindings";
+import type { PhoneEngine, Queue } from "../../engine";
+import { PageArticle } from "../../screens/PageScreen";
 import { CalendarToday, LastNight } from "../../screens/PageSections";
 import { Button, Page } from "../../screens/ui";
 import { KeptLine } from "./kept";
@@ -42,6 +49,22 @@ export interface HomeTodayProps {
   onJournal(): void;
   /** Less than 500 MB is free: the banner shows under the status. */
   nearlyFull: boolean;
+  /**
+   * The chosen online mind's host, null with no mind. With one, the no-mind card goes, and a
+   * page it wrote shows in its place.
+   */
+  mind: string | null;
+  queue: Queue;
+  onQueued(): void;
+  /** A receipt on the page's lines. */
+  onOpen(receipt: Receipt): void;
+  /** The page's question opens the journal, on its day or today's. */
+  onJournalDay(day: string | null): void;
+}
+
+/** A page the mind wrote: one with a title. A phone with no mind has none. */
+export function written(page: PageView | null): page is PageView {
+  return page !== null && page.headline.trim() !== "";
 }
 
 /** Today on a phone alone: the no-mind card where the page would be, then what this phone holds. */
@@ -50,6 +73,7 @@ export function HomeToday(p: HomeTodayProps) {
   const [reminder, setReminder] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const { engine, calendarOn, stats, reminderDue } = p;
+  const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     void attempt;
@@ -100,11 +124,13 @@ export function HomeToday(p: HomeTodayProps) {
     const calendar = page?.calendarToday ?? [];
     body = (
       <>
-        <p className="ph-lbl">
-          {isAfterMidnight(new Date(p.now()))
-            ? t("phone.alone.today.afterMidnight", { day: formatLongDay(day.day) })
-            : formatLongDay(day.day)}
-        </p>
+        {p.mind !== null && written(page) ? null : (
+          <p className="ph-lbl">
+            {isAfterMidnight(new Date(p.now()))
+              ? t("phone.alone.today.afterMidnight", { day: formatLongDay(day.day) })
+              : formatLongDay(day.day)}
+          </p>
+        )}
         {reminder ? (
           <div className="ph-reminder">
             <p>{t("phone.alone.reminder.body")}</p>
@@ -118,17 +144,37 @@ export function HomeToday(p: HomeTodayProps) {
             </div>
           </div>
         ) : null}
-        <section className="ph-nomind" aria-labelledby="ph-nomind-title">
-          <h2 id="ph-nomind-title">{t("phone.alone.noMind.title")}</h2>
-          <p className="ph-body ph-ink2">{t("phone.alone.noMind.body")}</p>
-          <button type="button" className="ph-btn ph-btn--tonal" onClick={p.onMind}>
-            {t("phone.alone.noMind.choose")}
-          </button>
-        </section>
-        {page?.lastNight ? (
+        {p.mind === null ? (
+          <section className="ph-nomind" aria-labelledby="ph-nomind-title">
+            <h2 id="ph-nomind-title">{t("phone.alone.noMind.title")}</h2>
+            <p className="ph-body ph-ink2">{t("phone.alone.noMind.body")}</p>
+            <button type="button" className="ph-btn ph-btn--tonal" onClick={p.onMind}>
+              {t("phone.alone.noMind.choose")}
+            </button>
+          </section>
+        ) : null}
+        {p.mind !== null && written(page) ? (
+          <div className="ph-alone-page">
+            <PageArticle
+              page={page}
+              engine={engine}
+              queue={p.queue}
+              connected
+              earlier={[]}
+              now={p.now}
+              onQueued={p.onQueued}
+              onOpen={p.onOpen}
+              onJournal={p.onJournalDay}
+              heading={heading}
+              phone
+              byline={t("phone.mind.today.written", { host: p.mind })}
+            />
+          </div>
+        ) : null}
+        {written(page) && p.mind !== null ? null : page?.lastNight ? (
           <LastNight night={page.lastNight} onOpen={() => p.onNight(page.lastNight?.to ?? "")} />
         ) : null}
-        {calendar.length > 0 ? (
+        {written(page) && p.mind !== null ? null : calendar.length > 0 ? (
           <CalendarToday lines={calendar} more={0} onOpen={p.onCalendarItem} onMore={p.onJournal} />
         ) : load.calendarOn ? (
           <section className="ph-stack" style={{ gap: 4 }} aria-labelledby="ph-nocal">

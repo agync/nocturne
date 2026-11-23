@@ -123,6 +123,8 @@ interface ArticleProps {
   heading: RefObject<HTMLHeadingElement | null>;
   /** The app: last night and the calendar, which the phone page in a browser leaves out. */
   phone?: boolean;
+  /** Under the title: where the page was written, on a phone alone with an online mind. */
+  byline?: string;
 }
 
 /** The phone edition of a page: the title, last night, the calendar, then the page's sections. */
@@ -138,6 +140,7 @@ export function PageArticle({
   onJournal,
   heading,
   phone = false,
+  byline,
 }: ArticleProps) {
   return (
     <article className="ph-article">
@@ -145,6 +148,7 @@ export function PageArticle({
       <h2 tabIndex={-1} ref={heading}>
         {page.headline}
       </h2>
+      {byline ? <p className="ph-byline">{byline}</p> : null}
       {page.dek && <p className="ph-dek">{page.dek}</p>}
       {phone && page.lastNight ? (
         <LastNight

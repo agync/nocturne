@@ -126,6 +126,8 @@ for (const scheme of ["light", "dark"] as const) {
     test("Give Nocturne a mind", async ({ page }) => {
       await page.goto("/?m=fresh");
       await page.getByRole("button", { name: "Choose a mind" }).click();
+      await page.getByRole("radio", { name: /^A computer of your own/ }).check();
+      await page.getByRole("button", { name: "Continue" }).click();
       await expect(page.getByRole("heading", { name: "Give Nocturne a mind" })).toBeVisible();
       await clean(page);
       await shot(page, `after-mind-${scheme}`);

@@ -169,14 +169,23 @@ describe("Today on a phone alone", () => {
     expect(screen.queryByText(/No backup yet\./)).toBeNull();
   });
 
-  it("opens Give Nocturne a mind from the card", async () => {
+  it("opens Give Nocturne a mind from the card, by a computer of one's own", async () => {
     await app("m=fresh");
     fireEvent.click(await screen.findByRole("button", { name: "Choose a mind" }));
+    expect(
+      await screen.findByRole("heading", { name: "Where should Nocturne’s mind be?" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("radio", { name: /^A computer of your own/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("heading", { name: "Give Nocturne a mind" })).toBeVisible();
     expect(screen.getByText(/there, and scan its code from this phone\./)).toHaveTextContent(
       "Choose Add a phone there, and scan its code from this phone.",
     );
     expect(screen.getByRole("button", { name: "Scan the code" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(
+      await screen.findByRole("heading", { name: "Where should Nocturne’s mind be?" }),
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     expect(await screen.findByText("Your memory is on this phone")).toBeInTheDocument();
   });

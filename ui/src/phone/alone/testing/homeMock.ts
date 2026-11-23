@@ -4,6 +4,7 @@
 
 import { emit } from "@tauri-apps/api/event";
 import type {
+  CheckOutcome,
   FoundItem,
   HomeAnswer,
   HomeCall,
@@ -11,6 +12,7 @@ import type {
   JournalDay,
   KeptCounts,
   KeptHow,
+  PageView,
   PhoneItem,
   PhoneMode,
   PutAsideMemory,
@@ -19,6 +21,7 @@ import type {
   TimelineRow,
 } from "../../../engine/bindings";
 import { emptyDay, itemView } from "../../testing/journalFixtures";
+import type { MindChosen, MindSent, MindWaiting, ProviderForm } from "../mind";
 import { memoryNotes, SHOWN, SINCE } from "../reminder";
 
 export const HOME_DAY = "2026-11-21";
@@ -139,6 +142,136 @@ const phoneItem = (id: string): PhoneItem => ({
   truncated: false,
 });
 
+/** The stand-in service the screens and shots use; no real one is named. */
+export const MIND_HOST = "answers.example";
+export const MIND_MODEL = "reader-small";
+
+/** `&mind=on` or `&mind=needsKey` starts with the online mind chosen. */
+function firstMind(): MindChosen {
+  const m = new URLSearchParams(location.search).get("mind");
+  if (m === "on" || m === "needsKey") return { state: m, host: MIND_HOST, model: MIND_MODEL };
+  return { state: "off" };
+}
+
+/**
+ * The check, as a stand-in service answers it: a key "refused" is refused, a model "missing"
+ * is not known, an address with "offline" in it finds no internet, and plain http:// online is
+ * not allowed. Anything else works.
+ */
+export function scriptedCheck(form: ProviderForm): CheckOutcome {
+  const url = form.url.trim();
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    return { type: "addressNotAllowed" };
+  }
+  if (url.startsWith("http://")) return { type: "notHttps" };
+  if (url.includes("offline")) return { type: "noInternet" };
+  if (form.key.trim() === "refused") return { type: "keyRefused" };
+  if (form.model.trim() === "missing") return { type: "modelMissing" };
+  return { type: "works", host, model: form.model.trim() };
+}
+
+const pageLine = (id: string, text: string, itemId: string, time: string) => ({
+  id,
+  kind: "changed" as const,
+  text,
+  memoryIds: [],
+  receipts: [
+    {
+      itemId,
+      kind: "text" as const,
+      source: "phone" as const,
+      label: "",
+      keptAt: `${HOME_DAY}T${time}:00.000Z`,
+      durationMs: null,
+      span: null,
+      unconfirmed: false,
+      fromDevice: null,
+    },
+  ],
+  choices: [],
+  conflictId: null,
+  subject: null,
+  done: false,
+  forgotten: false,
+  on: null,
+  lastUsed: null,
+});
+
+/** The page the online mind wrote this morning, from what the phone kept. */
+export function writtenPage(): PageView {
+  return {
+    date: HOME_DAY,
+    pageNumber: 1,
+    edition: "phone",
+    variant: "first",
+    headline: "The swap for the 28th is still open.",
+    dek: "One thing to ask about, and a quiet morning.",
+    needsYou: [],
+    changed: [
+      pageLine("l1", "You meant to ask about the swap for the 28th.", "note-swap", "07:05"),
+    ],
+    letGo: [],
+    upcoming: [],
+    learned: [],
+    question: null,
+    moreNeedsYou: 0,
+    moreChanged: 0,
+    keptCount: 3,
+    changesCount: 1,
+    letGoCount: 0,
+    catchUpDays: 0,
+    privateSkipped: 0,
+    pending: 0,
+    tidiedFrom: null,
+    tidiedTo: null,
+    update: null,
+  };
+}
+
+const SENT: MindSent[] = [
+  {
+    id: "s3",
+    at: `${HOME_DAY}T07:12:00.000Z`,
+    kind: "read",
+    host: MIND_HOST,
+    bytes: 1_840,
+    words: "Read this note, kept 7:05 am: Ask about the swap for the 28th",
+  },
+  {
+    id: "s2",
+    at: `${HOME_DAY}T06:30:00.000Z`,
+    kind: "page",
+    host: MIND_HOST,
+    bytes: 3_210,
+    words: "Write the page from these lines: Ask about the swap for the 28th (kept 7:05 am)",
+  },
+  {
+    id: "s1",
+    at: "2026-11-20T21:02:00.000Z",
+    kind: "check",
+    host: MIND_HOST,
+    bytes: 412,
+    words: "Say OK.",
+  },
+];
+
+/**
+ * What the phone does not answer yet, scripted for the screens and shots: 12 of 46 read, 3
+ * things this month under a limit of 200, and three requests sent.
+ */
+export function scriptedWaiting(): MindWaiting {
+  return {
+    ready: true,
+    setLimit: async () => undefined,
+    month: async () => ({ count: 3, limit: { kind: "things", count: 200 } }),
+    reading: async () => ({ done: 12, count: 46 }),
+    sent: async () => SENT,
+  };
+}
+
 /** What the scripted phone holds, and how it answers. */
 export function homeState(scenario: HomeScenario) {
   let mode: PhoneMode | null = scenario === "first" ? null : "alone";
@@ -169,6 +302,7 @@ export function homeState(scenario: HomeScenario) {
       bytes: 401_000_000,
       counts: { things: 120, journalEntries: 42, photosAndRecordings: 37, checkins: 5 },
     });
+  let mind = firstMind();
   let calendarKept = 6;
   let healthKept = 412;
   const how = new Map<string, KeptHow>([["note-swap", "typed"]]);
@@ -191,6 +325,10 @@ export function homeState(scenario: HomeScenario) {
         return { type: "status", status: { readiness: "ready", pageDate: null, needsYou: 0 } };
       case "getJournalDay":
         return { type: "journalDay", day: day() };
+      case "getPage":
+        return mind.state === "on"
+          ? { type: "page", page: writtenPage() }
+          : { type: "error", code: "notFound" };
       case "getItem":
         if (forgotten.has(call.id)) return { type: "error", code: "notFound" };
         return { type: "item", item: { ...phoneItem(call.id), private: privates.has(call.id) } };
@@ -449,6 +587,20 @@ export function homeState(scenario: HomeScenario) {
           modified: at("09:32"),
         };
       case "let_go_backup_file":
+        return null;
+      case "mind_chosen":
+        return mind;
+      case "mind_check":
+        return scriptedCheck(args.form as ProviderForm);
+      case "mind_turn_on": {
+        const outcome = scriptedCheck(args.form as ProviderForm);
+        if (outcome.type === "notHttps") throw "notHttps";
+        if (outcome.type !== "works") throw "invalid";
+        mind = { state: "on", host: outcome.host, model: outcome.model };
+        return null;
+      }
+      case "mind_turn_off":
+        mind = { state: "off" };
         return null;
       default:
         return undefined;
