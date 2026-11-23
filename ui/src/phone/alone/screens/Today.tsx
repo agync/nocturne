@@ -12,7 +12,7 @@ import type { PhoneEngine, Queue } from "../../engine";
 import { PageArticle } from "../../screens/PageScreen";
 import { CalendarToday, LastNight } from "../../screens/PageSections";
 import { Button, Page } from "../../screens/ui";
-import type { MindStatus } from "../mind";
+import type { MindTrouble } from "../mind";
 import { KeptLine } from "./kept";
 import { MindNotice, UnreachableToday } from "./MindNotice";
 import { chips, NearlyFull } from "./parts";
@@ -57,7 +57,7 @@ export interface HomeTodayProps {
    */
   mind: string | null;
   /** How the chosen service is doing; a trouble shows over the page, with the way to fix it. */
-  status?: MindStatus | null;
+  status?: MindTrouble | null;
   /** "Check the key…", "Check again" and "Change limit". */
   onFixMind?(): void;
   queue: Queue;

@@ -1,31 +1,28 @@
 import { formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { MindStatus } from "../mind";
-
-/** Whether the service is not answering, so Ask finds by words. */
-export function troubled(
-  status: MindStatus | null,
-): status is Exclude<MindStatus, { state: "off" } | { state: "fine" }> {
-  return status !== null && status.state !== "off" && status.state !== "fine";
-}
+import type { MindTrouble } from "../mind";
 
 /**
  * What the phone says while the chosen service is not answering: a key it refused, no credit
  * left or the month's limit, each with the way to put it right. An unreachable service is a
- * line of its own, `Unreachable`.
+ * line of its own, `UnreachableToday`.
  */
 export function MindNotice({
   status,
   onFix,
 }: {
-  status: MindStatus;
+  status: MindTrouble;
   /** "Check the key…", "Check again" and "Change limit" all lead to the mind's details. */
   onFix(): void;
 }) {
   let title: string;
   let body: string;
   let action: string;
-  if (status.state === "keyRefused") {
+  if (status.state === "needsKey") {
+    title = t("phone.mind.noKey.title");
+    body = t("phone.mind.noKey.body", { host: status.host });
+    action = t("phone.mind.noKey.action");
+  } else if (status.state === "keyRefused") {
     title = t("phone.mind.trouble.refused.title");
     body = t("phone.mind.trouble.refused.body", { host: status.host });
     action = t("phone.mind.trouble.refused.action");
@@ -56,7 +53,7 @@ export function UnreachableToday({
   status,
   written,
 }: {
-  status: Extract<MindStatus, { state: "unreachable" }>;
+  status: { host: string; since: string };
   /** The page's own date. */
   written: string;
 }) {

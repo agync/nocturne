@@ -59,6 +59,9 @@ export type MindStatus =
   /** The month's limit is reached: nothing goes until `until`, a date. */
   | { state: "paused"; host: string; until: string };
 
+/** What Today and Ask tell of the mind when it is not answering: a status, or a key not held. */
+export type MindTrouble = MindStatus | { state: "needsKey"; host: string };
+
 /** Why turning on did not happen. */
 export type TurnOnProblem = "notHttps" | "addressNotAllowed" | "invalid";
 

@@ -176,6 +176,24 @@ describe("An online service you choose", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps No limit too, so it lifts a limit set before", async () => {
+    history.replaceState(null, "", "/?m=kept");
+    const services = await nativeMockServices();
+    const real = services.mind;
+    if (!real) throw new Error("scripted mind");
+    const setLimit = vi.fn(real.setLimit);
+    services.mind = { ...real, setLimit };
+    render(<NativeRoot services={services} />);
+    await toDetails();
+    fill("https://answers.example/v1", "abc", "reader-small");
+    fireEvent.click(button("Check"));
+    await screen.findByText("answers.example answered. It works.");
+    fireEvent.click(button("Continue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(setLimit).toHaveBeenCalledWith({ kind: "none" }));
+  });
+
   it("drops a check that answers for details since changed", async () => {
     history.replaceState(null, "", "/?m=fresh");
     const services = await nativeMockServices();
@@ -363,6 +381,15 @@ describe("Today and Ask with a mind", () => {
     ).toBeVisible();
     fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
     expect(await screen.findByText("Your provider refused the key")).toBeVisible();
+    fireEvent.click(button("Check the key…"));
+    expect(await screen.findByRole("heading", { name: "Your service’s details" })).toBeVisible();
+  });
+
+  it("tells a key the phone no longer holds on Today and Ask", async () => {
+    await app("m=kept&mind=needsKey");
+    expect(await screen.findByText("Nocturne can’t read the saved key")).toBeVisible();
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("Nocturne can’t read the saved key")).toBeVisible();
     fireEvent.click(button("Check the key…"));
     expect(await screen.findByRole("heading", { name: "Your service’s details" })).toBeVisible();
   });
