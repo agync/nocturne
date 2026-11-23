@@ -292,12 +292,16 @@ export function MoveMoving({
       {asking ? (
         <BottomSheet label={t("moving.phone.moving.stop")} onClose={() => setAsking(false)}>
           <div className="ph-sheet-body ph-stack" style={{ gap: 16 }}>
-            <p className="ph-body">{t("moving.phone.moving.stopAsk", { computer })}</p>
+            <p className="ph-body">
+              {t(bring ? "moving.phone.bringing.stopAsk" : "moving.phone.moving.stopAsk", {
+                computer,
+              })}
+            </p>
             <Button kind="danger" onClick={onStop}>
-              {t("moving.phone.moving.stopMoving")}
+              {t(bring ? "moving.phone.bringing.stop" : "moving.phone.moving.stopMoving")}
             </Button>
             <button type="button" className="ph-textbtn" onClick={() => setAsking(false)}>
-              {t("moving.phone.moving.keepMoving")}
+              {t(bring ? "moving.phone.bringing.keepGoing" : "moving.phone.moving.keepMoving")}
             </button>
           </div>
         </BottomSheet>
@@ -313,20 +317,27 @@ export type MoveEnded =
   | "noRoom"
   | "ranOut"
   | "notOpened"
-  | "stoppedThere";
+  | "stoppedThere"
+  /** The person here stopped bringing the things in. */
+  | "stoppedHere"
+  /** The computer removed this phone part way. */
+  | "removed";
 
 /**
- * A move that ended with nothing changed: why, and "Try again" with "Not now", or "OK" when the
- * person on the computer stopped it.
+ * A move that ended with nothing changed: why, and "Try again" with "Not now", or "OK" when it
+ * was stopped on either side or the computer removed this phone. `bring`: it was bringing this
+ * phone's things in.
  */
 export function MoveFailed({
   computer,
   why,
+  bring = false,
   onTryAgain,
   onBack,
 }: {
   computer: string;
   why: MoveEnded;
+  bring?: boolean;
   onTryAgain(): void;
   onBack(): void;
 }) {
@@ -337,12 +348,20 @@ export function MoveFailed({
     ranOut: t("moving.phone.ranOut", { computer }),
     notOpened: t("moving.phone.notOpened", { computer }),
     stoppedThere: t("moving.phone.stoppedThere", { computer }),
+    stoppedHere: t("moving.phone.bringing.stopped", { computer }),
+    removed: t("phone.removed.body"),
   }[why];
-  const final = why === "stoppedThere";
+  const final = why === "stoppedThere" || why === "stoppedHere" || why === "removed";
+  const title =
+    why === "removed"
+      ? t("phone.removed.title")
+      : bring
+        ? t("moving.phone.bringing.title", { computer })
+        : t("moving.phone.moving.title");
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14, paddingTop: 72 }}>
-        <Hero title={t("moving.phone.moving.title")} />
+        <Hero title={title} />
         <p className="ph-body" role="alert">
           {line}
         </p>
