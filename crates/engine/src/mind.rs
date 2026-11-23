@@ -128,6 +128,10 @@ pub enum MindError {
     /// An online answer did not come.
     #[error("online: {0}")]
     Online(OnlineFailure),
+    /// This mind does not take this kind of thing (an online provider without photos or sound):
+    /// the item waits, uncounted, for a mind that does.
+    #[error("this mind does not take {0}")]
+    NotTaken(String),
 }
 
 pub trait Mind: Send + Sync {

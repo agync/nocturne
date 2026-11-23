@@ -44,6 +44,9 @@ const FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
 const REREAD_COOLDOWN: jiff::SignedDuration = jiff::SignedDuration::from_mins(10);
 /// A re-read that has failed this many times is given up on: its mark is cleared.
 const REREAD_FAILURES: u32 = 3;
+/// How long an item the mind does not take waits before it is offered again, unless the mind
+/// changes first ([`Reader::retry_now`]).
+const NOT_TAKEN_WAIT: jiff::SignedDuration = jiff::SignedDuration::from_hours(6);
 /// How long the run loop sleeps when there is nothing to do.
 const IDLE_POLL: Duration = Duration::from_secs(30);
 /// Known entities offered to the extractor.
@@ -817,7 +820,8 @@ impl Reader {
                     .insert(id.to_string(), now + FAILURE_COOLDOWN);
                 Outcome::Returned
             }
-            // Reading never goes online; an online failure here is treated as the mind away.
+            // An online mind that cannot be reached, or refuses its key or its account: the
+            // mind is away. What an online mind refuses about one thing comes as `Failed`.
             Abort::Mind(MindError::Unavailable | MindError::Busy | MindError::Online(_)) => {
                 self.give_back(id, lease).await;
                 self.back_off(now);
@@ -827,6 +831,14 @@ impl Reader {
                 self.give_back(id, lease).await;
                 self.back_off(now);
                 self.inner.events.out_of_memory();
+                Outcome::Returned
+            }
+            // Not this mind's kind of thing: the item waits, and the rest is read meanwhile.
+            Abort::Mind(MindError::NotTaken(_)) => {
+                self.give_back(id, lease).await;
+                self.state()
+                    .cooldown
+                    .insert(id.to_string(), now + NOT_TAKEN_WAIT);
                 Outcome::Returned
             }
             // A re-read never takes away what an earlier reading understood: whatever goes
