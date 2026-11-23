@@ -35,6 +35,12 @@ class FolderArgs {
     var path: String = ""
 }
 
+@InvokeArg
+class SecretArgs {
+    var name: String = ""
+    var value: String? = null
+}
+
 /**
  * The app draws edge to edge, and the web view reports no safe area for the system bars. This
  * puts the bars, cut-outs and keyboard on the page as CSS variables each time they change. It
@@ -57,6 +63,8 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         const val MAX_FILES = 10
         const val MAX_TOTAL = 4 * MAX_FILE
     }
+
+    private val safe by lazy { Safe(File(activity.noBackupFilesDir, "safe")) }
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -235,6 +243,44 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
             total += n
             if (total > MAX_FILE) return -1
             output.write(buffer, 0, n)
+        }
+    }
+
+    /** Keeps a secret in the phone's safe place, in place of one of the same name. */
+    @Command
+    fun secretKeep(invoke: Invoke) {
+        val args = invoke.parseArgs(SecretArgs::class.java)
+        val value = args.value
+        if (!Safe.validName(args.name) || value == null) return invoke.reject("invalid")
+        try {
+            safe.keep(args.name, value)
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: "failed")
+        }
+    }
+
+    /** A kept secret, or null. */
+    @Command
+    fun secretRead(invoke: Invoke) {
+        val args = invoke.parseArgs(SecretArgs::class.java)
+        if (!Safe.validName(args.name)) return invoke.reject("invalid")
+        try {
+            invoke.resolve(JSObject().put("value", safe.read(args.name)))
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: "failed")
+        }
+    }
+
+    @Command
+    fun secretForget(invoke: Invoke) {
+        val args = invoke.parseArgs(SecretArgs::class.java)
+        if (!Safe.validName(args.name)) return invoke.reject("invalid")
+        try {
+            safe.forget(args.name)
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: "failed")
         }
     }
 
