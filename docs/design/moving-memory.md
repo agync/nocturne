@@ -51,7 +51,7 @@ sequenceDiagram
 | How it travels | Over the sealed channel between the two, using the backup format. The locked copy online is never read by a computer: it is for restoring on a phone |
 | Nothing read again | When both homes find things the same way, nothing is read again. When they don't, the new home gets each thing ready again in the background, and finding by words works meanwhile |
 | Nothing deleted early | The old home's memory is put aside, read only, once the new home has it and every count matches. It is deleted only when the person confirms |
-| Joining a computer's memory | The one exception to one home moving whole. When the computer already holds a memory, it offers two choices ([below](#when-the-computer-already-holds-a-memory)): bring the phone's things in, which adds them to the computer's memory, or use the computer's memory, which brings nothing. Either way there is one home afterwards, and nothing is ever synced both ways. Putting the computer's memory aside for the phone's is not offered in a move; it stays only in restoring a backup file ([Back up and restore](backup-and-restore.md)) |
+| Joining a computer's memory | The one exception to one home moving whole. When any memory moves into a computer that already holds one (from a phone alone, a household computer or another computer), the computer offers two choices ([below](#when-the-computer-already-holds-a-memory)): bring the phone's things in, which adds them to the computer's memory, or use the computer's memory, which brings nothing. Either way there is one home afterwards, and nothing is ever synced both ways. Putting the computer's memory aside for the phone's is not offered in a move; it stays only in restoring a backup file ([Back up and restore](backup-and-restore.md)) |
 | Where a thing was kept | Each thing keeps the name of the device it was kept on. As a memory leaves a home, that home writes its own name into what it kept that has none yet (a phone uses the name it paired with), so the new home can say "Kept on {device}" |
 | After | A phone whose memory left becomes a companion of the new home (or a phone alone again, if the memory came to it) |
 
@@ -188,8 +188,12 @@ the restart; after it, the move finishes or changes nothing.
 
 ### When the computer already holds a memory
 
-The owner's decision: a computer that already holds a memory never puts it aside for a phone's. It
-asks how the phone joins it, and the phone waits for the answer.
+The owner's decision: a computer that already holds a memory never puts it aside for an arriving
+one. It asks how the arriving memory joins it, and the phone waits for the answer. This holds for
+any move into such a computer: from a phone alone, from a household computer that was the person's
+home (the things travel through the phone, as in that move), or from another computer. The screens
+below show a phone alone; for the others, "{name}" names where the memory comes from.
+"Bring the phone’s things in" is selected when the dialog opens (decision 33).
 
 ```mermaid
 flowchart TD
@@ -249,7 +253,7 @@ aside only once the computer says the things were added.
 |---|---|---|
 | What is put aside on the phone | Its whole memory, read only, after its things were added to the computer's | Its whole memory, read only. Nothing of it is on the computer |
 | How long | Removed now, or kept 30 days, as the person chooses | Kept until the person removes it; never removed by itself, since it is the only copy |
-| Later | "Remove…" in This phone | "Bring its things to {computer}…" in This phone, which runs the bringing in from what was put aside, or "Remove…" |
+| Later | "Remove…" in This phone | "Bring its things to {computer}…" in This phone, which runs the bringing in from what was put aside (decision 33), or "Remove…" |
 
 **What travels, and what doesn't, when things are brought in.** Every kept thing with its original,
 how and where it was kept, and its private mark; journal entries and good things; check-ins. Not the
