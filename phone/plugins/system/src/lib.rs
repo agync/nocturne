@@ -3,8 +3,9 @@
 //! camera turned off there, and what the app was opened for from outside (a shortcut on its
 //! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
 //! the room left on the phone, and on an iPhone a folder kept out of its backup. For the core
-//! alone: a secret kept in the phone's safe place (Android's keystore, the iPhone's keychain).
-//! On a computer every command answers a stand-in, and no secret is kept.
+//! alone: a secret kept in the phone's safe place (Android's keystore, the iPhone's keychain),
+//! whether the phone charges, and the background windows the system allows while it does. On a
+//! computer every command answers a stand-in, and no secret is kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -115,6 +116,16 @@ struct Free {
     bytes: Option<u64>,
 }
 
+/// Whether the phone charges, and whether the system has a background window open for the app.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+pub struct Power {
+    /// `None` when the phone does not say.
+    #[serde(default)]
+    pub charging: Option<bool>,
+    #[serde(default)]
+    pub window: bool,
+}
+
 #[derive(Debug, Serialize)]
 struct Secret<'a> {
     name: &'a str,
@@ -126,6 +137,11 @@ struct Secret<'a> {
 struct SecretValue {
     #[serde(default)]
     value: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct BackgroundOn {
+    on: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -240,6 +256,23 @@ impl<R: Runtime> System<R> {
     pub fn forget_secret(&self, name: &str) -> Result<(), Error> {
         let _: Option<serde_json::Value> =
             self.native("secretForget", Secret { name, value: None })?;
+        Ok(())
+    }
+
+    /// Whether the phone charges and a background window is open. Unknown on a computer.
+    pub fn power(&self) -> Result<Power, Error> {
+        Ok(self.native("power", ())?.unwrap_or_default())
+    }
+
+    /// Asks the system for background windows while the phone charges, or for none.
+    pub fn background(&self, on: bool) -> Result<(), Error> {
+        let _: Option<serde_json::Value> = self.native("background", BackgroundOn { on })?;
+        Ok(())
+    }
+
+    /// Ends the open background window: nothing is left to do in it.
+    pub fn background_done(&self) -> Result<(), Error> {
+        let _: Option<serde_json::Value> = self.native("backgroundDone", ())?;
         Ok(())
     }
 
@@ -426,6 +459,23 @@ mod tests {
             undated,
             Sheet::Chosen(Chosen { modified: None, .. })
         ));
+    }
+
+    #[test]
+    fn power_reads_from_the_phone() {
+        let read = |json: &str| serde_json::from_str::<Power>(json).unwrap();
+        assert_eq!(
+            read(r#"{"charging":true,"window":true}"#),
+            Power {
+                charging: Some(true),
+                window: true
+            }
+        );
+        assert_eq!(
+            read(r#"{"charging":null,"window":false}"#),
+            Power::default()
+        );
+        assert_eq!(read("{}"), Power::default());
     }
 
     #[test]

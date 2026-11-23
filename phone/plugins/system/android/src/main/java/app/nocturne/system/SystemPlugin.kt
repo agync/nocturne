@@ -2,6 +2,8 @@ package app.nocturne.system
 
 import android.app.Activity
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.net.Uri
 import android.os.StatFs
 import android.provider.DocumentsContract
@@ -41,6 +43,11 @@ class SecretArgs {
     var value: String? = null
 }
 
+@InvokeArg
+class BackgroundArgs {
+    var on: Boolean = false
+}
+
 /**
  * The app draws edge to edge, and the web view reports no safe area for the system bars. This
  * puts the bars, cut-outs and keyboard on the page as CSS variables each time they change. It
@@ -68,6 +75,7 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
 
     override fun load(webView: WebView) {
         super.load(webView)
+        Window.coreRunning = true
         ViewCompat.setOnApplyWindowInsetsListener(webView) { view, all ->
             val bars = all.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -282,6 +290,39 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         } catch (e: Exception) {
             invoke.reject(e.message ?: "failed")
         }
+    }
+
+    /** Whether the phone charges, and whether a background window is open. */
+    @Command
+    fun power(invoke: Invoke) {
+        val battery = activity.applicationContext
+            .registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val charging = battery?.let {
+            Power.charging(
+                it.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1),
+                it.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            )
+        }
+        invoke.resolve(JSObject().put("charging", charging).put("window", Window.isOpen))
+    }
+
+    /** Background windows while the mind is on; none while it is off. */
+    @Command
+    fun background(invoke: Invoke) {
+        val on = invoke.parseArgs(BackgroundArgs::class.java).on
+        try {
+            Background.schedule(activity.applicationContext, on)
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: "failed")
+        }
+    }
+
+    /** The core has nothing left to do in this background window. */
+    @Command
+    fun backgroundDone(invoke: Invoke) {
+        Window.done()
+        invoke.resolve()
     }
 
     /** Bytes free on the volume that holds the folder, as an app may use them. */

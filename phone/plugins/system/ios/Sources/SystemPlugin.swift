@@ -2,6 +2,7 @@ import Foundation
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
+import WebKit
 
 struct FolderArgs: Decodable {
   var path: String
@@ -15,6 +16,10 @@ struct SaveArgs: Decodable {
 struct SecretArgs: Decodable {
   var name: String
   var value: String?
+}
+
+struct BackgroundArgs: Decodable {
+  var on: Bool
 }
 
 /// Room left over after a copy, so the phone is not filled to the last byte.
@@ -60,6 +65,11 @@ private final class Sheet: NSObject, UIDocumentPickerDelegate, UIAdaptivePresent
 class SystemPlugin: Plugin {
   private var sheet: Sheet?
 
+  override func load(webview: WKWebView) {
+    super.load(webview: webview)
+    Background.shared.register()
+  }
+
   /// Keeps a secret in the keychain, in place of one of the same name.
   @objc public func secretKeep(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(SecretArgs.self)
@@ -79,6 +89,27 @@ class SystemPlugin: Plugin {
     let args = try invoke.parseArgs(SecretArgs.self)
     guard Safe.validName(args.name) else { return invoke.reject("invalid") }
     Safe.forget(args.name) ? invoke.resolve() : invoke.reject("failed")
+  }
+
+  /// Whether the phone charges, and whether a background window is open.
+  @objc public func power(_ invoke: Invoke) throws {
+    DispatchQueue.main.async {
+      let charging: Any = Power.charging().map { NSNumber(value: $0) } ?? NSNull()
+      invoke.resolve(["charging": charging, "window": Background.shared.isOpen])
+    }
+  }
+
+  /// Background windows while the mind is on; none while it is off.
+  @objc public func background(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(BackgroundArgs.self)
+    Background.shared.schedule(args.on)
+    invoke.resolve()
+  }
+
+  /// The core has nothing left to do in this background window.
+  @objc public func backgroundDone(_ invoke: Invoke) throws {
+    Background.shared.done()
+    invoke.resolve()
   }
 
   /// Marks a folder of the app's own so iCloud and computer backups leave it out. The mark is
