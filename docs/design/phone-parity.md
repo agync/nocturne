@@ -479,9 +479,9 @@ Nothing open.
 - **Decided.** One home holds the pen; a memory moves only by pairing; the backup format over the
   sealed channel; nothing deleted until it has arrived and the person confirms; the locked copy stops
   and the person chooses to delete or keep it (decision 19). Specified in [Moving your
-  memory](moving-memory.md). The computer restarts Nocturne to open a moved memory, with its words in
-  the move's screens (decision 31: B, decided by build cost, reopening in place being a large change;
-  for the owner to confirm).
+  memory](moving-memory.md). Nocturne never restarts for a move: a memory moving into an empty
+  computer has its things brought in, as into a computer that already holds one, without the
+  question (decision 31, the owner's decision of 2026-11-23).
 - **Depends on.** A phone alone for the first move (phone to computer); the household home for the
   rest.
 
@@ -617,7 +617,7 @@ The owner then answered the questions the first pass left open:
 | 28 | Managing the household from the owner's phone | A: the computer only. B: the owner's companion phone too | **B**: the lending switch, Show the code and New code (decision 22 leaves nothing per phone to manage) |
 | 29 | Whose computer can be someone's home | A: a desktop with its own owner, and a computer kept for the purpose. B: only one kept for the purpose | **A** |
 | 30 | What labels from decision models are for | A: finding and grouping only. B: also shown on items. C: a hidden ranking signal | **A, then B** with "Remove this label" |
-| 31 | Finishing a move on the computer (question 9) | A: reopen the memory in place. B: restart Nocturne, saying so before and after | **B**, decided by build cost: reopening in place is a large change to how the computer opens its memory. The computer says "Nocturne restarts to open the memory from {name}. It opens again by itself." and the phone "Finishing on {computer}…". For the owner to confirm |
+| 31 | Finishing a move on the computer (question 9) | A: reopen the memory in place. B: restart Nocturne, saying so before and after. C: no restart: an empty computer brings the phone's things in | **C, no restart: an empty computer brings the phone's things in** (owner, 2026-11-23). It runs as bringing things in does (decision 32), without the question, since an empty computer has nothing to choose about: kept things with their originals, how and where they were kept and their private marks, journal entries and check-ins travel; calendar and health are sent again from the phone; the phone becomes a companion and puts its memory aside (removed now or kept 30 days). Pages and reflections stay in what is put aside on the phone. Why: in the end-to-end test the restart (B, chosen earlier by build cost) gave a Simple connection a new address, and the phone, still waiting on "Finishing on {computer}…", could never reach the computer again. Restoring a backup file still restarts (0013) |
 | 32 | A memory moving to a computer that already holds one | A: put the computer's memory aside and take the phone's (0013's replace). B: bring the phone's things into the computer's memory. C: use the computer's memory and bring nothing | **B or C, the person chooses on the computer** (owner). Replace leaves the move; it stays only for restoring a backup file. Bringing things in is the one merge in Nocturne, and still one home afterwards |
 | 33 | How the choice in decision 32 works | Default selection; a way back after "Use this computer’s memory"; which moves it covers | **"Bring the phone’s things in" is selected when the dialog opens. After "Use this computer’s memory", what was put aside on the phone offers "Bring its things to {computer}…" later. The two choices apply to any move into a computer that already holds a memory**, not only from a phone alone (owner) |
 | | A phone alone, and a phone alone with an online mind | | **Approved.** Both are complete end states, never stepping stones; no copy nudges towards a computer or a household |
