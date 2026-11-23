@@ -229,6 +229,12 @@ impl Engine {
                  AND NOT EXISTS (SELECT 1 FROM phone_records WHERE device_id = ?1)",
                 [device_id],
             )?;
+            tx.execute(
+                "DELETE FROM carried_phone WHERE device_id = ?1 \
+                 AND EXISTS (SELECT 1 FROM remote_devices WHERE id = ?1 AND revoked_at IS NOT NULL) \
+                 AND NOT EXISTS (SELECT 1 FROM phone_records WHERE device_id = ?1)",
+                [device_id],
+            )?;
             Ok(())
         })
     }

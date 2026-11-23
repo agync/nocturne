@@ -621,3 +621,178 @@ fn what_bringing_in_leaves_behind_on_the_phone_is_counted() {
     );
     assert!(after.any());
 }
+
+#[test]
+fn the_persons_marks_on_a_memory_hold_once_the_computer_reads_it_again() {
+    use common::EngineExt;
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let (note, memory) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    phone.engine.set_private(&memory, true).unwrap();
+    phone.engine.set_keep_forever(&memory, true).unwrap();
+    phone.engine.mark_done(&memory).unwrap();
+    rusqlite::Connection::open(phone.dir.path().join("nocturne.db"))
+        .unwrap()
+        .execute(
+            "UPDATE memories SET tags = '[\"birds\"]' WHERE id = ?1",
+            [&memory],
+        )
+        .unwrap();
+
+    computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    let e = &computer.engine;
+    assert!(
+        !e.get_item(&note).unwrap().private,
+        "the thing itself was never marked"
+    );
+    let here = e.apply(&note, vec![heron()]).unwrap().created[0].clone();
+    let read = e.get_memory(&here).unwrap();
+    assert!(
+        read.private,
+        "a memory marked private there arrives private"
+    );
+    assert!(read.keep_forever);
+    let dir = computer.dir.path();
+    assert_eq!(
+        sql_count(
+            dir,
+            &format!("SELECT done FROM memories WHERE id = '{here}'")
+        ),
+        1
+    );
+    assert_eq!(
+        sql_count(
+            dir,
+            &format!("SELECT tags = '[\"birds\"]' FROM memories WHERE id = '{here}'")
+        ),
+        1
+    );
+}
+
+#[test]
+fn marks_hold_on_the_computers_own_copy_of_a_thing_kept_on_both() {
+    use common::EngineExt;
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let (here_item, here) =
+        common::learn(&computer.engine, "The heron prefers the feeder.", heron());
+    let (_, there) = common::learn(&phone.engine, "The heron prefers the feeder.", heron());
+    phone.engine.set_private(&there, true).unwrap();
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.same, 1);
+    assert!(computer.engine.get_memory(&here).unwrap().private);
+    // A later reading of the computer's copy keeps it.
+    computer.engine.apply(&here_item, vec![heron()]).unwrap();
+    assert!(computer.engine.get_memory(&here).unwrap().private);
+}
+
+fn dentist(id: &str, title: &str) -> nocturne_contract::CalendarEntry {
+    nocturne_contract::CalendarEntry {
+        phone_id: id.into(),
+        calendar_id: "c1".into(),
+        title: title.into(),
+        start: "2026-11-14T10:00:00Z".into(),
+        end: "2026-11-14T10:30:00Z".into(),
+        time_zone: None,
+        all_day: false,
+        place: None,
+        people: Vec::new(),
+        repeats: false,
+        notes: None,
+        repeat_rule: None,
+    }
+}
+
+fn calendar(
+    sync: &str,
+    entries: Vec<nocturne_contract::CalendarEntry>,
+) -> nocturne_contract::CalendarBatch {
+    nocturne_contract::CalendarBatch {
+        sync_id: sync.into(),
+        seq: 0,
+        last: true,
+        window_from: "2026-11-11".into(),
+        window_to: "2026-11-27".into(),
+        calendars: vec![nocturne_contract::PhoneCalendar {
+            id: "c1".into(),
+            name: "Home".into(),
+            colour: None,
+            account: None,
+        }],
+        changes: entries
+            .into_iter()
+            .map(|entry| nocturne_contract::CalendarChange::Upsert { entry })
+            .collect(),
+    }
+}
+
+/// The memories that came from calendar entries, by their sentences.
+fn appointments(dir: &std::path::Path, like: &str) -> i64 {
+    sql_count(
+        dir,
+        &format!(
+            "SELECT COUNT(DISTINCT m.id) FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
+             JOIN items i ON i.id = s.item_id WHERE i.kind = 'calendar' AND m.forgetting = 0 \
+             AND m.superseded_at IS NULL AND m.sentence LIKE '%{like}%'"
+        ),
+    )
+}
+
+#[test]
+fn a_forgotten_or_private_appointment_stays_so_when_the_phone_sends_it_again() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let local = phone.engine.ensure_local_device("This phone").unwrap();
+    let entries = || vec![dentist("e1", "Dentist"), dentist("e2", "Physio")];
+    phone
+        .engine
+        .take_calendar(&local, calendar("s1", entries()))
+        .unwrap();
+    let memory_of = |like: &str| -> String {
+        rusqlite::Connection::open(phone.dir.path().join("nocturne.db"))
+            .unwrap()
+            .query_row(
+                &format!(
+                    "SELECT m.id FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
+                     JOIN items i ON i.id = s.item_id WHERE i.kind = 'calendar' \
+                     AND m.sentence LIKE '%{like}%'"
+                ),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let dentist_memory = memory_of("Dentist");
+    let physio_memory = memory_of("Physio");
+    let preview = phone
+        .engine
+        .preview_forget(&[dentist_memory], false)
+        .unwrap();
+    phone.engine.forget(&preview.token).unwrap();
+    phone.engine.set_private(&physio_memory, true).unwrap();
+
+    computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    // The phone, now its companion, sends its calendar again.
+    computer
+        .engine
+        .take_calendar(&device, calendar("s2", entries()))
+        .unwrap();
+    let dir = computer.dir.path();
+    assert_eq!(appointments(dir, "Physio"), 1, "the other one came");
+    assert_eq!(
+        appointments(dir, "Dentist"),
+        0,
+        "the one forgotten on the phone stays forgotten"
+    );
+    assert_eq!(
+        sql_count(
+            dir,
+            "SELECT COUNT(*) FROM memories WHERE sentence LIKE '%Physio%' AND private = 1"
+        ),
+        1,
+        "the one marked private there arrives private"
+    );
+}
