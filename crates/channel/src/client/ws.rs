@@ -16,7 +16,12 @@ enum Cmd {
 
 pub(crate) struct WsLink {
     cmds: mpsc::UnboundedSender<Cmd>,
+    tasks: [tokio::task::AbortHandle; 2],
 }
+
+/// How long a closing socket may take to say so before its tasks are stopped: behind a send that
+/// never leaves, the close would never be reached.
+const CLOSE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl WsLink {
     pub(crate) async fn open(route: &Route, inbox: InboxTx) -> Result<WsLink, ()> {
@@ -34,7 +39,7 @@ impl WsLink {
                 .map_err(|_| ())?;
         let (mut sink, mut source) = stream.split();
         let (cmds, mut rx) = mpsc::unbounded_channel::<Cmd>();
-        tokio::spawn(async move {
+        let writer = tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     Cmd::Frame(f, done) => {
@@ -51,7 +56,7 @@ impl WsLink {
                 }
             }
         });
-        tokio::spawn(async move {
+        let reader = tokio::spawn(async move {
             let end = loop {
                 match source.next().await {
                     Some(Ok(Message::Binary(b))) => {
@@ -67,13 +72,20 @@ impl WsLink {
                             code: frame.map_or(1005, |f| u16::from(f.code)),
                         };
                     }
-                    Some(Ok(_)) => {}
+                    Some(Ok(_)) => {
+                        if inbox.send(Incoming::Alive).is_err() {
+                            return;
+                        }
+                    }
                     Some(Err(_)) | None => break LinkEnd::Closed { code: 1006 },
                 }
             };
             let _ = inbox.send(Incoming::End(end));
         });
-        Ok(WsLink { cmds })
+        Ok(WsLink {
+            cmds,
+            tasks: [writer.abort_handle(), reader.abort_handle()],
+        })
     }
 
     pub(crate) async fn send(&self, frame: Vec<u8>) -> Result<(), ()> {
@@ -87,5 +99,16 @@ impl WsLink {
 
     pub(crate) fn close(&self) {
         let _ = self.cmds.send(Cmd::Close);
+        let tasks = self.tasks.clone();
+        // Dropped outside the runtime (it is shutting down), the tasks go with it.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        runtime.spawn(async move {
+            tokio::time::sleep(CLOSE_GRACE).await;
+            for t in tasks {
+                t.abort();
+            }
+        });
     }
 }

@@ -81,6 +81,9 @@ pub(crate) enum Fault {
     Closed,
     /// The computer answered with an error.
     Phone(PhoneError),
+    /// Nothing came for this request in its wait while the session still hears the computer:
+    /// this call alone gives up, and the calls beside it carry on.
+    TimedOut,
 }
 
 pub(crate) struct OpenInit<'a> {
@@ -90,6 +93,18 @@ pub(crate) struct OpenInit<'a> {
     pub prefer_poll: bool,
     pub socket_timeout: Duration,
     pub handshake: Duration,
+    /// How long an open session may hear nothing at all from the computer before it is left.
+    pub quiet: Duration,
+    pub waits: Waits,
+}
+
+/// How long a call on an open session waits before the session is left and the call goes again.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Waits {
+    /// For each answer, or each next part of one.
+    pub answer: Duration,
+    /// For each frame up, a call or a chunk of an upload, to leave.
+    pub chunk: Duration,
 }
 
 /// Called once when an open session ends on its own (the link closed, a frame did not open).
@@ -117,6 +132,7 @@ pub(crate) struct Session {
     shared: Arc<Shared>,
     next_id: AtomicU32,
     pub hello: PhoneHello,
+    pub waits: Waits,
     /// Wall-clock time: a phone asleep for an hour must see its session as lapsed, which the
     /// monotonic clock (paused in sleep on Android) would not.
     pub opened_at: SystemTime,
@@ -154,13 +170,14 @@ impl Session {
         let (frame, opening) = identity
             .session_open()
             .map_err(|_| failed(OpenFailure::Protocol))?;
-        if link.send(frame).await.is_err() {
+        let deadline = Instant::now() + init.handshake;
+        let sent = tokio::time::timeout(init.handshake, link.send(frame)).await;
+        if !matches!(sent, Ok(Ok(()))) {
             return Err(match inbox.next(Some(Duration::ZERO)).await {
                 Got::End(e) => failure_for(e),
                 _ => failed(OpenFailure::Network),
             });
         }
-        let deadline = Instant::now() + init.handshake;
         let left = || deadline.saturating_duration_since(Instant::now());
         let mut channel = loop {
             match inbox.next(Some(left())).await {
@@ -200,7 +217,13 @@ impl Session {
             pending: Arc::new(Mutex::new(HashMap::new())),
         });
         let channel = Arc::new(Mutex::new(channel));
-        let pump = tokio::spawn(pump(inbox, channel.clone(), shared.clone(), on_end));
+        let pump = tokio::spawn(pump(
+            inbox,
+            channel.clone(),
+            shared.clone(),
+            init.quiet,
+            on_end,
+        ));
         Ok(Session {
             link,
             channel,
@@ -208,6 +231,7 @@ impl Session {
             shared,
             next_id: AtomicU32::new(1),
             hello,
+            waits: init.waits,
             opened_at: SystemTime::now(),
             pump,
         })
@@ -255,7 +279,10 @@ impl Session {
             .unwrap()
             .seal(env)
             .ok_or(Fault::Closed)?;
-        if self.link.send(frame).await.is_err() {
+        // A frame that has not left within the wait (a socket nobody reads any more) ends the
+        // session; each frame that leaves starts the wait again.
+        let sent = tokio::time::timeout(self.waits.chunk, self.link.send(frame)).await;
+        if !matches!(sent, Ok(Ok(()))) {
             self.close();
             return Err(Fault::Closed);
         }
@@ -290,6 +317,23 @@ impl Session {
             .await
     }
 
+    /// The next thing down for request `id`, or it is given up when nothing came for it within
+    /// `wait`. A socket that died half way is the pump's to find: it hears nothing at all.
+    pub(crate) async fn next_within(
+        &self,
+        id: u32,
+        rx: &mut mpsc::UnboundedReceiver<Down>,
+        wait: Duration,
+    ) -> Result<Down, Fault> {
+        match tokio::time::timeout(wait, next(rx)).await {
+            Ok(down) => down,
+            Err(_) => {
+                self.finish(id);
+                Err(Fault::TimedOut)
+            }
+        }
+    }
+
     /// The request is answered; nothing more is routed to it.
     pub(crate) fn finish(&self, id: u32) {
         self.shared.pending.lock().unwrap().remove(&id);
@@ -314,9 +358,16 @@ fn unreadable(body: &[u8]) -> Option<(u32, Down)> {
     Some((u32::try_from(id).ok()?, Down::Unreadable))
 }
 
-async fn pump(mut inbox: Inbox, channel: Arc<Mutex<Channel>>, shared: Arc<Shared>, on_end: OnEnd) {
+async fn pump(
+    mut inbox: Inbox,
+    channel: Arc<Mutex<Channel>>,
+    shared: Arc<Shared>,
+    quiet: Duration,
+    on_end: OnEnd,
+) {
     loop {
-        let frame = match inbox.next(None).await {
+        // Silence for this long (no frame, ping or empty poll) is a socket gone half way.
+        let frame = match inbox.next_idle(quiet).await {
             Got::Frame(f) => f,
             Got::End(_) | Got::Timeout => break,
         };

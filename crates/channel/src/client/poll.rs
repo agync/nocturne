@@ -70,6 +70,9 @@ impl Inner {
     }
 
     fn take(&self, frames: Vec<Vec<u8>>) {
+        if frames.is_empty() {
+            let _ = self.inbox.send(Incoming::Alive);
+        }
         for f in frames {
             let _ = self.inbox.send(Incoming::Frame(f));
         }
