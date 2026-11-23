@@ -4,8 +4,9 @@
 
 use jiff::civil::{Date, Weekday};
 
-use super::normalise;
-use super::prompts::NOT_SURE;
+use nocturne_engine::coverage::normalise;
+
+use crate::prompts::NOT_SURE;
 
 /// Words in a row copied out of the instructions that make a reply an echo of them.
 const ECHO_WORDS: usize = 6;

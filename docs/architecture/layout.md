@@ -14,7 +14,8 @@ tags: [architecture, layout, contract]
 | `crates/contract/` | `nocturne-contract` | Types that cross the boundary between engine, app shell and interface; exported to TypeScript |
 | `crates/engine/` | `nocturne-engine` | Store, capture, memories, forgetting policy, the page, retrieval, export; the `Mind` trait |
 | `crates/intelligence/` | `nocturne-intelligence` | Reading what was kept, the overnight tidy and the scheduler that runs them |
-| `crates/lemonade/` | `nocturne-lemonade` | The private `lemond`: supervision, setup downloads, and the `Mind` implementation |
+| `crates/lemonade/` | `nocturne-lemonade` | The private `lemond`: supervision, setup downloads, and the `Mind` implementation over it |
+| `crates/mind/` | `nocturne-mind` | The mind's words and judgement apart from any engine: prompts, reading a reply into memories, the guards, receipts, and the question asked online; builds for the phone |
 | `src-tauri/` | `nocturne-app` | Commands, events, windows and the runtime that wires the engine to the shell |
 | `src-tauri/src/os/` | part of `nocturne-app` | The desktop: tray, quick keep shortcut, quick capture window, notification, start with the computer, watched folder |
 | `src-tauri/src/editions/` | part of `nocturne-app` | The spoken and printed editions of the page |
@@ -28,7 +29,9 @@ flowchart LR
     UI[ui] --> B[bindings]
     APP[src-tauri] --> ENG[engine]
     APP --> LEM[lemonade]
+    LEM --> MIND[mind]
     LEM --> ENG
+    MIND --> ENG
     ENG --> C[contract]
     APP --> C
     APP --> CH[channel]

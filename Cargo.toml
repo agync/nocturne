@@ -13,6 +13,7 @@ rust-version = "1.98"
 nocturne-contract = { path = "crates/contract" }
 nocturne-engine = { path = "crates/engine" }
 nocturne-lemonade = { path = "crates/lemonade" }
+nocturne-mind = { path = "crates/mind" }
 nocturne-helpers = { path = "crates/helpers" }
 nocturne-channel = { path = "crates/channel" }
 serde = { version = "1", features = ["derive"] }

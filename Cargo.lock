@@ -3828,6 +3828,7 @@ dependencies = [
  "nocturne-contract",
  "nocturne-engine",
  "nocturne-lemonade",
+ "nocturne-mind",
  "pdf-extract",
  "process-wrap",
  "quick-xml",
@@ -3844,6 +3845,20 @@ dependencies = [
  "windows",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "nocturne-mind"
+version = "0.7.2"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "nocturne-contract",
+ "nocturne-engine",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

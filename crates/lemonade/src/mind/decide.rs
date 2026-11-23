@@ -1,53 +1,14 @@
 //! Decisions asked of the model that already reads: a fixed list of answers, one reply.
 
 use nocturne_engine::MindError;
-use nocturne_engine::decide::{Answer, Ask, Decision};
+use nocturne_engine::decide::{Answer, Decision};
+use nocturne_mind::decide::{schema, system, user};
+use nocturne_mind::prompts;
 use serde::Deserialize;
-use serde_json::{Value, json};
 
-use super::{LemonadeMind, prompts};
+use super::LemonadeMind;
 use crate::client::{ChatRequest, Message};
 use crate::npu::Work;
-
-pub(super) fn schema(labels: &[String]) -> Value {
-    json!({
-        "type": "object",
-        "properties": {"answer": {"type": "string", "enum": labels}},
-        "required": ["answer"],
-        "additionalProperties": false,
-    })
-}
-
-pub(super) fn system(nonce: &str) -> String {
-    format!(
-        "You answer one question about a short text someone kept. Reply with JSON only: answer, \
-         exactly one of the listed answers. Judge only from the text; never guess beyond it.\n{}",
-        prompts::untrusted("text", nonce)
-    )
-}
-
-pub(super) fn user(decision: &Decision, nonce: &str) -> String {
-    let q = &decision.question;
-    let mut out = format!(
-        "{}\n\nQuestion: {}\n\nAnswers:\n",
-        prompts::fence("text", nonce, &decision.state),
-        q.instructions
-    );
-    match &q.ask {
-        Ask::YesNo => out.push_str("- yes\n- no\n"),
-        Ask::Choice(options) => {
-            for (option, description) in options {
-                out.push_str(&format!("- {option}: {description}\n"));
-            }
-        }
-        Ask::Score(levels) => {
-            for level in levels {
-                out.push_str(&format!("- {level}\n"));
-            }
-        }
-    }
-    out
-}
 
 impl LemonadeMind {
     /// The model that reads answers. In shadow a decision must change nothing, so a failure is
