@@ -1,6 +1,7 @@
 //! A phone that holds its memory itself: one store in the app's own space, the same engine a
 //! computer runs, opened when the phone is alone and the screens first need it. Nothing here
-//! touches the network, and there is no mind: what is kept waits to be read.
+//! touches the network. With no mind what is kept waits to be read; a mind the person chooses
+//! reads it through [`crate::mind`].
 //!
 //! The way in for the sync (calendar entries and health readings into this store) is
 //! [`Home::with_local`]: it runs a closure with the open engine and this phone's own device id,
@@ -63,6 +64,9 @@ struct Damaged {
 /// Marks the system's own backup off for a folder (iCloud on an iPhone).
 pub type ExcludeFromBackup = Box<dyn Fn(&Path) + Send + Sync>;
 
+/// Lets go of what holds the open store, as it is let go.
+pub type OnClose = Box<dyn Fn() + Send + Sync>;
+
 pub struct Home {
     dir: PathBuf,
     clock: Arc<dyn Clock>,
@@ -86,6 +90,8 @@ pub struct Home {
     /// Counts the times the open store was let go, so work begun on one store (a voice note's
     /// lease) knows when what is open now is another.
     generation: AtomicU64,
+    /// Run each time the open store is let go.
+    on_close: Mutex<Vec<OnClose>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -153,7 +159,19 @@ impl Home {
             fading: Mutex::new(()),
             work_factor: None,
             generation: AtomicU64::new(0),
+            on_close: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The clock the store keeps its time by.
+    pub(crate) fn clock(&self) -> Arc<dyn Clock> {
+        self.clock.clone()
+    }
+
+    /// Runs `f` each time the open store is let go, under [`Home::exclusive`], so whatever
+    /// holds it lets go too before the store changes.
+    pub fn on_close(&self, f: OnClose) {
+        lock(&self.on_close).push(f);
     }
 
     pub(crate) fn store_dir(&self) -> PathBuf {
@@ -258,6 +276,9 @@ impl Home {
     pub(crate) fn close(&self) {
         lock(&self.open).take();
         self.generation.fetch_add(1, Ordering::SeqCst);
+        for f in lock(&self.on_close).iter() {
+            f();
+        }
     }
 
     /// Which open store this is: it changes each time the store is let go.

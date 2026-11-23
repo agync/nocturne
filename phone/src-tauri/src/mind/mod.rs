@@ -1,0 +1,376 @@
+//! A phone alone's mind (ADR 0020): an online provider the person chose, reached by this
+//! phone's own core through `nocturne-provider`. While it is off nothing here makes a request,
+//! and nothing reads or writes pages: a phone alone stays as it was. While it is on, each
+//! [`PhoneMind::pass`] reads a few things that were kept and lets the scheduler write the page
+//! and the journal's reflections with it, against the store the home has open now.
+//!
+//! The screens call [`PhoneMind::check`], [`PhoneMind::turn_on`], [`PhoneMind::turn_off`] and
+//! [`PhoneMind::chosen`]. The address and model are kept in a file of the app's; the key is held
+//! by a [`Keys`], in memory ([`MemoryKeys`]) until the phone's keystore-backed safe place is
+//! behind the same trait. With no key held, a chosen provider is not reached.
+
+pub mod host;
+#[cfg(test)]
+mod tests;
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use nocturne_contract::CheckOutcome;
+use nocturne_intelligence::{
+    MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
+};
+use nocturne_provider::address::{OnlineKey, UrlProblem, host_of, validate_url};
+use nocturne_provider::{Provider, ProviderMind};
+use serde::{Deserialize, Serialize};
+
+use crate::home::Home;
+use crate::sync::ledger::write_private;
+use host::PhoneHost;
+
+const FILE: &str = "mind.json";
+/// How long between passes while nothing is left to read.
+const TICK: std::time::Duration = std::time::Duration::from_secs(30);
+/// The most things one pass reads, so a store wanted for a restore or a move is let go soon.
+const FEW: usize = 3;
+/// How often a pass looks whether the store is wanted.
+const WANTED_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// The person's provider, as typed into the form.
+#[derive(Debug, Clone)]
+pub struct ProviderSettings {
+    pub url: String,
+    pub key: String,
+    pub model: String,
+}
+
+/// The provider chosen, as the screens show it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Chosen {
+    Off,
+    On {
+        host: String,
+        model: String,
+    },
+    /// Chosen, but its key is not held on this phone: nothing goes until it is given again.
+    NeedsKey {
+        host: String,
+        model: String,
+    },
+}
+
+/// What one pass did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pass {
+    /// No mind is on: nothing was asked.
+    Off,
+    /// The phone holds no memory now (not alone, or the store will not open).
+    NotReady,
+    /// How many things were read to an end (understood, or not readable), and whether the
+    /// scheduler did anything.
+    Ran { read: usize, scheduled: bool },
+}
+
+/// Where the key is held.
+pub trait Keys: Send + Sync {
+    fn keep(&self, key: OnlineKey);
+    fn key(&self) -> Option<OnlineKey>;
+    fn forget(&self);
+}
+
+/// The key in this process's memory only, wiped when forgotten.
+#[derive(Default)]
+pub struct MemoryKeys(Mutex<Option<OnlineKey>>);
+
+impl Keys for MemoryKeys {
+    fn keep(&self, key: OnlineKey) {
+        *lock(&self.0) = Some(key);
+    }
+
+    fn key(&self) -> Option<OnlineKey> {
+        lock(&self.0).clone()
+    }
+
+    fn forget(&self) {
+        lock(&self.0).take();
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Saved {
+    url: String,
+    model: String,
+}
+
+/// The reader, the tidy and the scheduler over one open store.
+struct Thinking {
+    generation: u64,
+    reader: Reader,
+    scheduler: Scheduler,
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+pub struct PhoneMind {
+    dir: PathBuf,
+    keys: Box<dyn Keys>,
+    slot: MindSlot,
+    host: Arc<PhoneHost>,
+    /// The mind in the slot, with its host and model.
+    on: Mutex<Option<(Arc<ProviderMind>, String, String)>>,
+    thinking: Arc<Mutex<Option<Thinking>>>,
+    /// A new mind is in the slot: the next pass tries again what waited for the last one.
+    retry: AtomicBool,
+}
+
+impl PhoneMind {
+    /// The mind kept in `dir`, on again when its key is held.
+    pub fn new(dir: PathBuf, keys: Box<dyn Keys>) -> PhoneMind {
+        let mind = PhoneMind {
+            dir,
+            keys,
+            slot: new_mind_slot(),
+            host: Arc::new(PhoneHost::default()),
+            on: Mutex::new(None),
+            thinking: Arc::default(),
+            retry: AtomicBool::new(false),
+        };
+        if let (Some(saved), Some(key)) = (mind.saved(), mind.keys.key())
+            && let Err(e) = mind.fill(&saved, key)
+        {
+            tracing::warn!("the chosen provider's address no longer passes: {e:?}");
+        }
+        mind
+    }
+
+    /// Lets go of the reader and the scheduler whenever `home` lets go of its store.
+    pub fn follow(&self, home: &Home) {
+        let thinking = self.thinking.clone();
+        home.on_close(Box::new(move || {
+            lock(&thinking).take();
+        }));
+    }
+
+    /// Where the phone's charging is told.
+    pub fn host(&self) -> &PhoneHost {
+        &self.host
+    }
+
+    fn path(&self) -> PathBuf {
+        self.dir.join(FILE)
+    }
+
+    fn saved(&self) -> Option<Saved> {
+        let bytes = std::fs::read(self.path()).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    fn fill(&self, saved: &Saved, key: OnlineKey) -> Result<(), UrlProblem> {
+        let provider = Provider::new(&saved.url, &saved.model, key)?;
+        let (host, model) = (provider.host().to_string(), provider.model().to_string());
+        let mind = Arc::new(ProviderMind::new(provider));
+        let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
+        *self.slot.write().unwrap_or_else(|e| e.into_inner()) = Some(slotted);
+        if let Some((before, _, _)) = lock(&self.on).replace((mind, host, model)) {
+            before.provider().stop();
+        }
+        self.retry.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// The connection check for `settings`: one look at the provider's list of models and one
+    /// short question, no memories. Nothing is kept.
+    pub async fn check(settings: &ProviderSettings) -> CheckOutcome {
+        let key = OnlineKey::new(settings.key.trim().to_string());
+        match Provider::new(settings.url.trim(), &settings.model, key) {
+            Ok(provider) => provider.check().await.0,
+            Err(UrlProblem::NotHttps) => CheckOutcome::NotHttps,
+            Err(_) => CheckOutcome::AddressNotAllowed,
+        }
+    }
+
+    /// Turns the mind on with `settings`, in place of any chosen before.
+    pub fn turn_on(&self, settings: ProviderSettings) -> Result<(), UrlProblem> {
+        let saved = Saved {
+            url: settings.url.trim().to_string(),
+            model: settings.model.trim().to_string(),
+        };
+        let key = OnlineKey::new(settings.key.trim().to_string());
+        Provider::new(&saved.url, &saved.model, key.clone())?;
+        let bytes = serde_json::to_vec(&saved).expect("the choice serialises");
+        write_private(&self.path(), &bytes).map_err(|e| {
+            tracing::warn!("the chosen provider could not be kept: {e}");
+            UrlProblem::Invalid
+        })?;
+        self.keys.keep(key.clone());
+        self.fill(&saved, key)
+    }
+
+    /// Turns the mind off: the slot is emptied, the key forgotten and the choice removed, so
+    /// nothing more goes, and a request under way is dropped. What was already read stays.
+    pub fn turn_off(&self) {
+        self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some((mind, _, _)) = lock(&self.on).take() {
+            mind.provider().stop();
+        }
+        self.keys.forget();
+        let _ = std::fs::remove_file(self.path());
+    }
+
+    pub fn chosen(&self) -> Chosen {
+        if let Some((_, host, model)) = lock(&self.on).clone() {
+            return Chosen::On { host, model };
+        }
+        match self.saved().and_then(|s| {
+            validate_url(&s.url)
+                .ok()
+                .map(|a| (host_of(&a.url), s.model))
+        }) {
+            Some((host, model)) => Chosen::NeedsKey { host, model },
+            None => Chosen::Off,
+        }
+    }
+
+    pub fn is_on(&self) -> bool {
+        lock(&self.on).is_some()
+    }
+
+    /// One pass: up to a few things read, then one look by the scheduler. Blocks on `rt`: call
+    /// it off the async workers. The store is held for use throughout, so nothing swaps it
+    /// under the reader.
+    pub fn pass(&self, home: &Home, rt: &tokio::runtime::Handle) -> Pass {
+        if !self.is_on() {
+            // Let go of the store too, unless a pass that began while on is ending.
+            if let Ok(mut thinking) = self.thinking.try_lock() {
+                thinking.take();
+            }
+            return Pass::Off;
+        }
+        let Ok((_use, open)) = home.using() else {
+            return Pass::NotReady;
+        };
+        let mut thinking = lock(&self.thinking);
+        if !self.is_on() {
+            thinking.take();
+            return Pass::Off;
+        }
+        let generation = home.generation();
+        if thinking.as_ref().is_none_or(|t| t.generation != generation) {
+            let clock = home.clock();
+            let events: Arc<dyn nocturne_intelligence::Events> = Arc::new(NullEvents);
+            let host: Arc<dyn nocturne_intelligence::Host> = self.host.clone();
+            let reader = Reader::new(
+                open.engine.clone(),
+                self.slot.clone(),
+                host.clone(),
+                clock.clone(),
+                events.clone(),
+            );
+            let tidy = Tidy::new(
+                open.engine.clone(),
+                reader.clone(),
+                self.slot.clone(),
+                host.clone(),
+                clock.clone(),
+                events.clone(),
+            );
+            let scheduler = Scheduler::new(
+                open.engine.clone(),
+                reader.clone(),
+                tidy,
+                host,
+                clock,
+                events,
+            );
+            scheduler.set_reflecting(self.slot.clone(), Arc::new(|| true));
+            *thinking = Some(Thinking {
+                generation,
+                reader,
+                scheduler,
+            });
+        }
+        let t = thinking.as_ref().expect("made above");
+        if self.retry.swap(false, Ordering::SeqCst) {
+            t.reader.retry_now();
+        }
+        let wanted = || async {
+            while !home.store_wanted() {
+                tokio::time::sleep(WANTED_POLL).await;
+            }
+        };
+        let (pass, abandoned) = rt.block_on(async {
+            let reading = async {
+                let mut read = 0;
+                while read < FEW && !home.store_wanted() {
+                    match t.reader.tick().await {
+                        Step::Read {
+                            outcome: Outcome::Returned | Outcome::Lost,
+                            ..
+                        } => break,
+                        Step::Read { .. } => read += 1,
+                        _ => break,
+                    }
+                }
+                read
+            };
+            // A move, a restore or a fresh start waits for the store: the thing being read is
+            // given back at once, uncounted, rather than after its requests end.
+            tokio::pin!(reading);
+            let read = tokio::select! {
+                read = &mut reading => read,
+                () = wanted() => {
+                    let _giving_way = t.reader.ask_begin();
+                    reading.await
+                }
+            };
+            // Turned off meanwhile: nothing more is written.
+            if home.store_wanted() || !self.is_on() {
+                return (
+                    Pass::Ran {
+                        read,
+                        scheduled: false,
+                    },
+                    false,
+                );
+            }
+            // The page or a reflection being written is dropped unsaved for the store, and the
+            // reader, the tidy and the scheduler are made anew at the next pass.
+            tokio::select! {
+                step = t.scheduler.tick() => {
+                    let scheduled = step != nocturne_intelligence::SchedStep::Idle;
+                    (Pass::Ran { read, scheduled }, false)
+                }
+                () = wanted() => (Pass::Ran { read, scheduled: false }, true),
+            }
+        });
+        if abandoned {
+            thinking.take();
+        }
+        pass
+    }
+}
+
+/// Runs a pass every [`TICK`] while the app runs, sooner while things are left to read. While
+/// the mind is off a pass returns at once and asks nothing.
+pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let worker = app.clone();
+            let pass = tauri::async_runtime::spawn_blocking(move || {
+                let rt = tokio::runtime::Handle::current();
+                worker
+                    .state::<PhoneMind>()
+                    .pass(&worker.state::<Home>(), &rt)
+            })
+            .await;
+            if !matches!(pass, Ok(Pass::Ran { read: FEW, .. })) {
+                tokio::time::sleep(TICK).await;
+            }
+        }
+    });
+}
