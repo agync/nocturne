@@ -12,6 +12,7 @@ import { Ask, capQuestion, useAskSession } from "./screens/Ask";
 import { Scan, Welcome } from "./screens/Entry";
 import { browserRecorder, Keep } from "./screens/Keep";
 import { LookBack } from "./screens/LookBack";
+import { Pair } from "./screens/Pair";
 import { Original } from "./screens/Original";
 import { PageScreen } from "./screens/PageScreen";
 import { Which } from "./screens/Which";
@@ -246,6 +247,32 @@ describe("pairing screens", () => {
     ).toBeInTheDocument();
     await userEvent.click(button("Not now, open Nocturne"));
     expect(await screen.findByText("Connected to Home computer")).toBeInTheDocument();
+  });
+
+  it("pair.alone: a phone that holds its memory goes from the words straight on", async () => {
+    const services = await mockServices();
+    const device = { deviceId: new Uint8Array() } as never;
+    const onPaired = vi.fn();
+    render(
+      <Pair
+        services={services}
+        pairing={{
+          spentAlready: false,
+          connect: async (_name, onWords) => {
+            onWords(["harbour", "maple", "lantern"]);
+            return { kind: "allowed", device };
+          },
+        }}
+        onPaired={onPaired}
+        onExit={vi.fn()}
+        alone
+      />,
+    );
+    await screen.findByRole("heading", { name: "Name this phone" });
+    expect(screen.queryByText(/keeps no copy of your memory/)).toBeNull();
+    await userEvent.click(button("Connect"));
+    await waitFor(() => expect(onPaired).toHaveBeenCalledWith(device));
+    expect(screen.queryByRole("heading", { name: /can now use Nocturne/ })).toBeNull();
   });
 
   it("pair.refused_shows_start_again, pair.expired_code and pair.spent_code", async () => {

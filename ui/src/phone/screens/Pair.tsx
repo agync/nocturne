@@ -43,10 +43,15 @@ interface PairProps {
   onPaired(device: PairedDevice | null): void;
   /** Back to the start (a new code is needed). */
   onExit(): void;
+  /**
+   * This phone holds its own memory and pairs to move it: it keeps a copy until then, and the
+   * move's question follows the three words directly.
+   */
+  alone?: boolean;
 }
 
 /** Name this phone, check the words, wait for the computer, and be told the outcome. */
-export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
+export function Pair({ services, pairing, onPaired, onExit, alone = false }: PairProps) {
   const [step, setStep] = useState<Step>({ name: "name" });
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
   const typed = useRef(false);
@@ -92,6 +97,7 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
     if (result.kind === "allowed") {
       device.current = result.device;
       void services.persist();
+      if (alone) return onPaired(result.device);
       setStep({ name: "allowed", label });
     } else {
       setStep({ name: "problem", kind: result.kind });
@@ -143,7 +149,7 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
           <p className="ph-hint">{t("phone.pair.next")}</p>
           {native ? null : <p className="ph-hint">{t("phone.pair.app")}</p>}
           <div className="ph-spacer" />
-          <PrivacyLine id="phone.pair.private" />
+          {alone ? null : <PrivacyLine id="phone.pair.private" />}
         </main>
       </Page>
     );

@@ -75,6 +75,8 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   // A restore says where the memory lives before its own "back on this phone" is read.
   const shown = useRef(screen.name);
   shown.current = screen.name;
+  // The phone holds its own memory: pairing is the way to move it.
+  const [alone, setAlone] = useState(false);
 
   useEffect(() => {
     void services.deviceName?.().then((own) => {
@@ -88,6 +90,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       // A memory moving to a computer says itself where it goes next.
       if (shown.current === "move") return;
       const mode = await services.home.mode();
+      setAlone(mode === "alone");
       // A damaged memory is found when it is first opened: open it before asking.
       if (mode === "alone") await services.home.stats().catch(() => undefined);
       if (await services.home.damaged()) return setScreen({ name: "damaged" });
@@ -342,6 +345,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
         <Pair
           services={services}
           pairing={screen.pairing}
+          alone={alone}
           onExit={() => void home()}
           onPaired={async () => {
             // A phone that holds its own memory offers to move it before it works with the
