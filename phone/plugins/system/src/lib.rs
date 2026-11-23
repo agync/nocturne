@@ -254,7 +254,7 @@ struct Clock {
 /// Whether the phone is set to 24-hour time; `None` where the platform does not say.
 #[command]
 async fn hour_clock<R: Runtime>(app: AppHandle<R>) -> Result<Option<bool>, Error> {
-    let clock: Option<Clock> = app.state::<System<R>>().run("hourClock")?;
+    let clock: Option<Clock> = app.state::<System<R>>().native("hourClock", ())?;
     Ok(clock.and_then(|c| c.is24))
 }
 
