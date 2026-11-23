@@ -15,6 +15,8 @@ export interface MoveFacts {
   journal: number;
   since: string | null;
   bytes: number;
+  /** Of that, what the photos and recordings take. */
+  media: number;
 }
 
 /**
@@ -127,7 +129,7 @@ export function MoveSize({
   onMove(): void;
   onBack(): void;
 }) {
-  const { counts, things, journal, since, bytes } = facts;
+  const { counts, things, journal, since, bytes, media } = facts;
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14, paddingTop: 32 }}>
@@ -147,7 +149,11 @@ export function MoveSize({
           {counts.pages > 0 ? (
             <li>{t("moving.phone.size.pages", { count: counts.pages })}</li>
           ) : null}
-          <li>{t("moving.phone.size.bytes", { size: formatBytes(bytes) })}</li>
+          <li>
+            {t(media * 2 >= bytes ? "moving.phone.size.bytes" : "moving.phone.size.bytesOnly", {
+              size: formatBytes(bytes),
+            })}
+          </li>
         </ul>
         <p className="ph-small">{t("moving.phone.size.open")}</p>
         <p className="ph-body">{t("moving.phone.size.after")}</p>

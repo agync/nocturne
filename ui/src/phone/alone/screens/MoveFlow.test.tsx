@@ -39,6 +39,7 @@ function fakeApi(holds = false): Fake {
       journal: 12,
       since: "2026-03-03",
       bytes: 1_400_000_000,
+      media: 1_300_000_000,
     })),
     offer: vi.fn(
       () =>
@@ -406,13 +407,16 @@ describe("how long is left", () => {
       things: 1,
       journal: 1,
       since: "2026-03-03",
-      bytes: 1_400_000_000,
+      bytes: 488_000,
+      media: 8_500,
     }));
     open(api);
     fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
     expect(await screen.findByText("1 thing you kept since 3 March")).toBeInTheDocument();
     expect(screen.getByText("1 journal entry")).toBeInTheDocument();
     expect(screen.getByText("1 page")).toBeInTheDocument();
+    // A small memory of mostly words does not say it is mostly photos.
+    expect(screen.getByText(/^About 488\skB$/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Move my memory" }));
     api.answerOffer(null);
     await waitFor(() => expect(api.move).toHaveBeenCalled());

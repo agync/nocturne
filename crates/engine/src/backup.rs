@@ -313,16 +313,21 @@ impl Engine {
             let in_use = pragma("page_count")?.saturating_sub(pragma("freelist_count")?);
             Ok(in_use.saturating_mul(pragma("page_size")?))
         })?;
-        if let Ok(entries) = std::fs::read_dir(self.originals_dir()) {
-            for entry in entries.flatten() {
-                if let Ok(meta) = entry.metadata()
-                    && meta.is_file()
-                {
-                    total += meta.len();
-                }
-            }
-        }
+        total += self.originals_bytes();
         Ok(total)
+    }
+
+    /// What the kept photos, recordings and files take on disk, in bytes.
+    pub fn originals_bytes(&self) -> u64 {
+        let Ok(entries) = std::fs::read_dir(self.originals_dir()) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|meta| meta.is_file())
+            .map(|meta| meta.len())
+            .sum()
     }
 
     /// What this store holds now, or `None` when it holds nothing of the person's. `bytes` is
