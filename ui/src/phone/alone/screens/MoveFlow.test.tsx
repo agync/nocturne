@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemoryCounts } from "../../../engine/bindings";
 import {
@@ -7,10 +8,14 @@ import {
   type MoveError,
   MoveFlow,
   type MoveOffered,
+  nativeMoveApi,
 } from "./MoveFlow";
 import { MEASURE_MS, MoveMoving, type MoveProgress } from "./MoveScreens";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  clearMocks();
+});
 
 const COUNTS: MemoryCounts = { items: 1284, memories: 0, pages: 0, originals: 40 };
 
@@ -210,6 +215,18 @@ describe("moving the memory to a computer", () => {
     await waitFor(() => expect(api.move).toHaveBeenCalled());
     expect(onExit).not.toHaveBeenCalled();
   }, 12_000);
+
+  it("names the computer kept from the pairing when it is out of reach", async () => {
+    mockIPC((cmd) => {
+      if (cmd === "connect") throw "unreached";
+      if (cmd === "device") return { computerName: "Maya’s laptop" };
+    });
+    await expect(nativeMoveApi.computer()).resolves.toBe("Maya’s laptop");
+    mockIPC((cmd) => {
+      if (cmd === "connect") return { kind: "connected", hello: { computerName: "Studio" } };
+    });
+    await expect(nativeMoveApi.computer()).resolves.toBe("Studio");
+  });
 
   it("Stop asks first, then stops and changes nothing", async () => {
     const api = fakeApi();
