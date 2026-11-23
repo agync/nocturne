@@ -391,6 +391,44 @@ async fn busy_and_out_of_memory_back_off_too_and_out_of_memory_is_reported() {
 }
 
 #[tokio::test]
+async fn a_thing_the_mind_does_not_take_waits_while_the_rest_is_read() {
+    let w = world(FakeMind::new());
+    let photo = keep(&w, "a photo the mind cannot see");
+    let note = keep(&w, "a note");
+    w.mind
+        .fail_next("extract", MindError::NotTaken("photos".into()));
+    let first = w.reader.tick().await;
+    let waits = match first {
+        Step::Read {
+            item,
+            outcome: Outcome::Returned,
+        } => item,
+        other => panic!("{other:?}"),
+    };
+    let other = if waits == photo { &note } else { &photo };
+    assert_eq!(status(&w, &waits), ItemStatus::Kept);
+    // No back-off: the next one is read at once, and the one waiting is not offered again.
+    assert_eq!(
+        w.reader.tick().await,
+        Step::Read {
+            item: other.clone(),
+            outcome: Outcome::Understood
+        }
+    );
+    assert_eq!(w.reader.tick().await, Step::Idle);
+    assert!(w.reader.unavailable_since().is_none());
+    // A new mind may take it.
+    w.reader.retry_now();
+    assert_eq!(
+        w.reader.tick().await,
+        Step::Read {
+            item: waits.clone(),
+            outcome: Outcome::Understood
+        }
+    );
+}
+
+#[tokio::test]
 async fn no_mind_means_no_reading_and_the_item_waits() {
     let w = text_world("a note");
     *w.slot.write().unwrap() = None;

@@ -121,6 +121,7 @@ fn passing(e: &MindError) -> bool {
             | MindError::Busy
             | MindError::OutOfMemory
             | MindError::Unsupported(_)
+            | MindError::NotTaken(_)
     )
 }
 
