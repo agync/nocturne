@@ -592,6 +592,32 @@ Invariant 2 does not change: the phone's calendar and health travel inside the A
 channel the invariant already allows, and the stores' own update checks are the phone's, not
 Nocturne's.
 
+## App icon
+
+The phone app uses the desktop's mark: the half-lit moon on the night background, nothing added (no
+word, badge or outline). Colours are the desktop icon's: night `#17181C` behind, paper `#ECE8DF` for
+the mark. The sources are in `docs/design/mockups/phone-icon/`; `preview.png` shows them on Android
+launchers in light and dark, as themed icons, on an iPhone home screen and in the stores.
+
+| Where | What | Source |
+|---|---|---|
+| Android, adaptive (8 and later) | Background: the colour `#17181C`. Foreground: the mark, 48dp across, centred on the 108dp canvas, well inside the 66dp safe zone, so every launcher mask (circle, squircle, teardrop) leaves the same margin the desktop icon has | `foreground.svg`, `foreground-432.png` (xxxhdpi), `ic_launcher_background.xml`, `ic_launcher.xml` |
+| Android, themed (13 and later) | Monochrome: the ring and the lit upper half in one colour, the lower half empty, same size and place as the foreground. The system tints it | `monochrome.svg`, `monochrome-432.png` |
+| Android, before 8 | The full-bleed square, as the build tool masks it | `full-bleed.svg`, `ios-1024.png` |
+| iPhone | 1024 by 1024, opaque, full bleed, square corners; iOS applies its own mask. The mark at the desktop's proportion, about 63 per cent of the width | `full-bleed.svg`, `ios-1024.png` |
+| Google Play listing | 512 by 512, opaque, full bleed; Play applies its own mask | `play-512.png` |
+
+The icon is the same in light and dark mode; the night background reads on both. The app's name
+under the icon is "Nocturne".
+
+**For the build.** Generate the iPhone AppIcon set and the legacy Android mipmaps from
+`ios-1024.png` with the build tool, then replace the generated Android foreground with
+`foreground.svg` (as a vector drawable, or PNGs from `foreground-432.png` at 108dp per density), add
+`monochrome.svg` the same way as `ic_launcher_monochrome`, and place `ic_launcher.xml` in
+`mipmap-anydpi-v26` as both `ic_launcher` and `ic_launcher_round`, with `ic_launcher_background.xml`
+in `values`. A generated foreground made from the full square would be clipped by the launcher mask,
+so it must not ship.
+
 ## The stores
 
 What each store asks for, and the screen or words that answer it. Check each rule again at

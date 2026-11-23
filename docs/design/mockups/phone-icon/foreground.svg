@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- Android adaptive icon foreground: the Nocturne mark, 48dp across, centred well inside the 66dp safe zone of the 108dp canvas. Transparent around it. -->
+  <circle cx="54" cy="54" r="22.52" fill="#ECE8DF"/>
+  <path d="M31.48 54a22.52 22.52 0 0 0 45.04 0z" fill="#17181C"/>
+  <circle cx="54" cy="54" r="22.52" fill="none" stroke="#ECE8DF" stroke-width="2.96"/>
+</svg>
