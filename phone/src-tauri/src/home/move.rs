@@ -652,6 +652,15 @@ pub(crate) async fn offer(
         }
     })?;
     match answered {
+        // An empty computer that would take the memory whole and restart is older than this
+        // phone: nothing goes, so there are never two homes.
+        RemoteAnswer::MemoryAccepted {
+            here: None,
+            bring: false,
+        } => {
+            tracing::info!("the computer would take the memory whole: it needs updating");
+            Err(MoveError::ComputerOutdated)
+        }
         RemoteAnswer::MemoryAccepted { here, bring } => {
             tracing::info!(
                 here = here.is_some(),
@@ -1369,7 +1378,7 @@ mod tests {
                 scratch: tempfile::tempdir().unwrap(),
                 offered: Ok(RemoteAnswer::MemoryAccepted {
                     here: None,
-                    bring: false,
+                    bring: true,
                 }),
                 offers: Mutex::default(),
                 sends: Mutex::default(),
@@ -1725,7 +1734,7 @@ mod tests {
             block(offer(&computer, &facts, false)).unwrap(),
             Offered::Accepted {
                 here: None,
-                bring: false
+                bring: true
             }
         );
 
@@ -1848,6 +1857,13 @@ mod tests {
                 MoveError::ComputerOutdated,
             ),
             (Ok(RemoteAnswer::Done), MoveError::Failed),
+            (
+                Ok(RemoteAnswer::MemoryAccepted {
+                    here: None,
+                    bring: false,
+                }),
+                MoveError::ComputerOutdated,
+            ),
         ] {
             let mut computer = Fake::new();
             computer.offered = said;
