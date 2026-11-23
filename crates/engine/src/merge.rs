@@ -587,10 +587,28 @@ impl Engine {
             .map(|(p, f)| (p.id.as_str(), f.here()))
             .collect();
 
+        // A photo or voice note in an entry on the phone that is a plain thing here takes its
+        // place in the entry: the one here stays, and the entry keeps its block.
+        let mut placing: HashSet<usize> = HashSet::new();
+        for (n, (p, f)) in arriving.iter().zip(&fates).enumerate() {
+            if matches!(f, Fate::Add(_)) || p.entry_day().is_none() {
+                continue;
+            }
+            let (role, private): (Option<String>, bool) = tx.query_row(
+                "SELECT json_extract(metadata, '$.journal'), private FROM items WHERE id = ?1",
+                [f.here()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if role.is_none() && !private && !p.private {
+                placing.insert(n);
+            }
+        }
+
         // Entry blocks of days both sides wrote on, in time order.
         let mut days: HashMap<&str, Vec<(u64, &str)>> = HashMap::new();
-        for (p, f) in arriving.iter().zip(&fates) {
-            if let (Fate::Add(_), Some(day)) = (f, p.entry_day()) {
+        for (n, (p, f)) in arriving.iter().zip(&fates).enumerate() {
+            let adds = matches!(f, Fate::Add(_)) || placing.contains(&n);
+            if let (true, Some(day)) = (adds, p.entry_day()) {
                 days.entry(day)
                     .or_default()
                     .push((p.block(), p.kept_at.as_str()));
@@ -608,17 +626,35 @@ impl Engine {
             .collect::<Vec<_>>()
             .join(", ");
         let insert = format!("INSERT INTO items({cols}) VALUES ({marks})");
-        for (p, f) in arriving.iter().zip(&fates) {
+        for (n, (p, f)) in arriving.iter().zip(&fates).enumerate() {
             let id = match f {
                 Fate::Add(id) => id,
-                Fate::Same(here) => {
-                    brought.same += 1;
+                Fate::Same(here) | Fate::Already(here) => {
+                    if matches!(f, Fate::Same(_)) {
+                        brought.same += 1;
+                    } else {
+                        brought.already += 1;
+                    }
                     files.extend(join_same(tx, here, p)?);
-                    continue;
-                }
-                Fate::Already(here) => {
-                    brought.already += 1;
-                    files.extend(join_same(tx, here, p)?);
+                    if placing.contains(&n)
+                        && let Some(day) = p.entry_day()
+                    {
+                        let block = blocks
+                            .get(day)
+                            .and_then(|b| b.get(&p.block()))
+                            .copied()
+                            .unwrap_or_else(|| p.block());
+                        let mut place =
+                            json!({"journal": "entry", "journal_day": day, "block": block});
+                        if let Some(saved) = p.meta.get("saved_at") {
+                            place["saved_at"] = saved.clone();
+                        }
+                        tx.execute(
+                            "UPDATE items SET metadata = json_patch(metadata, ?2) WHERE id = ?1",
+                            params![here, place.to_string()],
+                        )?;
+                        files.extend(crate::memory::mark_journal_tx(tx, here)?);
+                    }
                     continue;
                 }
             };

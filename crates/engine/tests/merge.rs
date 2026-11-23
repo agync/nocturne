@@ -404,6 +404,42 @@ fn a_damaged_original_name_adds_nothing() {
 }
 
 #[test]
+fn a_photo_in_an_entry_on_the_phone_keeps_its_place_when_it_is_a_plain_thing_here() {
+    let phone = fixture();
+    let computer = fixture();
+    let device = pair(&computer.engine);
+    let bytes: &[u8] = b"\x89PNG\r\n\x1a\nthe river at dawn";
+    let here = write_file(computer.dir.path(), "river.png", bytes);
+    let Kept::New { item: here } = computer.engine.keep_file(&here, Source::Drop).unwrap() else {
+        panic!("a new photo here")
+    };
+    let day = date("2026-11-13");
+    let there = write_file(phone.dir.path(), "river.png", bytes);
+    let Kept::New { item: there } = phone.engine.keep_file(&there, Source::Phone).unwrap() else {
+        panic!("a new photo on the phone")
+    };
+    phone
+        .engine
+        .save_entry_text(day, None, 0, "Walked to the river before work.")
+        .unwrap();
+    phone.engine.place_in_entry(&there.id, day, 1).unwrap();
+
+    let brought = computer.engine.bring_in(phone.dir.path(), &device).unwrap();
+    assert_eq!(brought.same, 1, "{brought:?}");
+    let journal = computer.engine.journal_day(day).unwrap();
+    let blocks: Vec<(&str, u32)> = journal
+        .entry
+        .iter()
+        .map(|b| (b.item.id.as_str(), b.block))
+        .collect();
+    assert_eq!(blocks.len(), 2, "{blocks:?}");
+    assert!(
+        blocks.contains(&(here.id.as_str(), 1)),
+        "the photo here takes the phone's place in the entry: {blocks:?}"
+    );
+}
+
+#[test]
 fn a_forget_here_that_is_not_done_never_swallows_the_phones_copy() {
     let phone = fixture();
     let computer = fixture();
