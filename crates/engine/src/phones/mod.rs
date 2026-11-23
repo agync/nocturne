@@ -345,6 +345,7 @@ pub(crate) fn insert_version(
          removed_at = NULL, came_in_at = ?6",
         params![v.device_id, source_str(v.source), v.phone_id, id, version, now],
     )?;
+    crate::carried::take_for_phone(tx, v.device_id, &source_str(v.source), v.phone_id, &id)?;
     Ok(id)
 }
 

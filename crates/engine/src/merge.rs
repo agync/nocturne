@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 
 use crate::Engine;
 use crate::capture::{extension_ok, original_path};
+use crate::carried::{self, Marks};
 use crate::error::{Error, Result};
 use crate::util::{new_id, random_hex};
 
@@ -81,6 +82,16 @@ struct Arriving {
     place: Option<String>,
     /// Claims the person forgot from it on the phone, as hashes.
     forgotten: Vec<String>,
+    /// The person's marks on what the phone's mind read from it, by claim.
+    marks: Vec<(String, Marks)>,
+}
+
+/// A calendar entry the phone sends again, with what was forgotten or marked of it there.
+struct Resent {
+    source: String,
+    phone_id: String,
+    forgotten: Vec<String>,
+    marks: Vec<(String, Marks)>,
 }
 
 impl Arriving {
@@ -164,9 +175,87 @@ fn forgotten(phone: &Connection) -> Result<HashMap<String, Vec<String>>> {
     Ok(out)
 }
 
+/// The person's marks on what the phone's mind worked out, by the item it came from and claim.
+fn marked(phone: &Connection) -> Result<HashMap<String, Vec<(String, Marks)>>> {
+    let mut stmt = phone.prepare(
+        "SELECT s.item_id, m.subject_key, m.moved_from_key, m.predicate, m.object_key, m.private, \
+         m.done, m.keep_forever, m.tags FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
+         WHERE m.forgetting = 0 AND m.superseded_at IS NULL \
+           AND (m.private = 1 OR m.done = 1 OR m.keep_forever = 1 OR m.tags != '[]')",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            carried::claims_of(
+                &r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?.as_deref(),
+                &r.get::<_, String>(3)?,
+                &r.get::<_, String>(4)?,
+            ),
+            Marks {
+                private: r.get(5)?,
+                done: r.get(6)?,
+                keep_forever: r.get(7)?,
+                tags: serde_json::from_str(&r.get::<_, String>(8)?).unwrap_or_default(),
+            },
+        ))
+    })?;
+    let mut out: HashMap<String, Vec<(String, Marks)>> = HashMap::new();
+    for row in rows {
+        let (item, claims, marks) = row?;
+        let list = out.entry(item).or_default();
+        for claim in claims {
+            list.push((claim, marks.clone()));
+        }
+    }
+    Ok(out)
+}
+
+/// The calendar entries the phone sends again that carry something forgotten or marked, by the
+/// phone's own id for each. Every version of an entry names it.
+fn resent(
+    phone: &Connection,
+    claims: &mut HashMap<String, Vec<String>>,
+    marks: &mut HashMap<String, Vec<(String, Marks)>>,
+) -> Result<Vec<Resent>> {
+    let mut stmt = phone.prepare(&format!(
+        "SELECT id, json_extract(metadata, '$.phone.source'), json_extract(metadata, '$.phone.phoneId') \
+         FROM items WHERE kind IN {SENT_AGAIN}"
+    ))?;
+    let rows: Vec<(String, Option<String>, Option<String>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut by_entry: HashMap<(String, String), Resent> = HashMap::new();
+    for (id, source, phone_id) in rows {
+        let forgotten = claims.remove(&id).unwrap_or_default();
+        let marked = marks.remove(&id).unwrap_or_default();
+        let (Some(source), Some(phone_id)) = (source, phone_id) else {
+            continue;
+        };
+        if forgotten.is_empty() && marked.is_empty() {
+            continue;
+        }
+        let entry = by_entry
+            .entry((source.clone(), phone_id.clone()))
+            .or_insert_with(|| Resent {
+                source,
+                phone_id,
+                forgotten: Vec::new(),
+                marks: Vec::new(),
+            });
+        entry.forgotten.extend(forgotten);
+        entry.marks.extend(marked);
+    }
+    Ok(by_entry.into_values().collect())
+}
+
 /// Every thing on the phone that may travel, oldest first, read with the columns both stores
 /// share.
-fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<Arriving>> {
+fn read_phone(
+    phone: &Connection,
+    shared: &[String],
+    name: &str,
+) -> Result<(Vec<Arriving>, Vec<Resent>)> {
     let at = |c: &str| shared.iter().position(|s| s == c);
     let need = |c: &str| at(c).ok_or_else(|| Error::invalid(format!("the phone's items lack {c}")));
     let (id, kind, sha, ext, file, txt, private, kept, meta) = (
@@ -182,6 +271,8 @@ fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<A
     );
     let gone = forgetting(phone)?;
     let mut claims = forgotten(phone)?;
+    let mut marks = marked(phone)?;
+    let again = resent(phone, &mut claims, &mut marks)?;
     // The device each phone keep came through, and the name of any that is not the phone itself.
     let mut keeps: HashMap<String, (String, Option<String>)> = HashMap::new();
     {
@@ -242,8 +333,10 @@ fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<A
             .or(through)
             .or_else(|| Some(name.to_string()));
         let forgotten = claims.remove(&item_id).unwrap_or_default();
+        let marks = marks.remove(&item_id).unwrap_or_default();
         out.push(Arriving {
             forgotten,
+            marks,
             id: item_id,
             kind: text(&row[kind]).unwrap_or_default(),
             sha: sha256,
@@ -258,7 +351,7 @@ fn read_phone(phone: &Connection, shared: &[String], name: &str) -> Result<Vec<A
             row,
         });
     }
-    Ok(out)
+    Ok((out, again))
 }
 
 /// The client id of the keep that made a journal item on the phone, from `$.keep`
@@ -448,6 +541,48 @@ fn carry_forgotten(tx: &Transaction<'_>, here: &str, p: &Arriving, added: bool) 
     Ok(())
 }
 
+/// What was forgotten or marked of calendar entries the phone sends again is kept for each, so
+/// every version that comes takes it; an entry here already (sent while the phone was a
+/// companion) takes it now. Answers cached audio to shred once committed.
+fn carry_resent(tx: &Transaction<'_>, device: &str, again: &[Resent]) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for r in again {
+        for claim in &r.forgotten {
+            carried::keep_for_phone(
+                tx,
+                device,
+                &r.source,
+                &r.phone_id,
+                claim,
+                true,
+                &Marks::default(),
+            )?;
+        }
+        for (claim, marks) in &r.marks {
+            carried::keep_for_phone(tx, device, &r.source, &r.phone_id, claim, false, marks)?;
+        }
+        let here: Option<String> = tx
+            .query_row(
+                "SELECT item_id FROM phone_records WHERE device_id = ?1 AND source = ?2 \
+                 AND phone_id = ?3",
+                params![device, r.source, r.phone_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(item) = here {
+            carried::take_for_phone(tx, device, &r.source, &r.phone_id, &item)?;
+            if !r.forgotten.is_empty() {
+                tx.execute(
+                    "UPDATE items SET forget_epoch = forget_epoch + 1, reread = 0 WHERE id = ?1",
+                    [&item],
+                )?;
+            }
+            files.extend(carried::apply(tx, &item)?);
+        }
+    }
+    Ok(files)
+}
+
 /// The originals the arriving things need that are not here yet, copied beside the others
 /// under passing names. They are put in place under the store's lock, as a keep does, so a keep
 /// or a forget running meanwhile never finds a file that has no row or loses one that has.
@@ -546,7 +681,7 @@ impl Engine {
             .into_iter()
             .filter(|c| here_cols.contains(c))
             .collect();
-        let arriving = read_phone(&phone, &shared, &name)?;
+        let (arriving, again) = read_phone(&phone, &shared, &name)?;
         drop(phone);
 
         // The originals are copied first, outside the transaction, so the store is never held
@@ -563,8 +698,12 @@ impl Engine {
         let originals = self.originals_dir();
         let mut copies = Staged::copy(&staged.join("originals"), &originals, &needed)?;
 
-        let written =
-            self.write(|tx| self.add_arriving(tx, device, &arriving, &shared, &mut copies));
+        let written = self.write(|tx| {
+            let (brought, mut files) =
+                self.add_arriving(tx, device, &arriving, &shared, &mut copies)?;
+            files.extend(carry_resent(tx, device, &again)?);
+            Ok((brought, files))
+        });
         copies.drop_waiting();
         match written {
             Ok((brought, files)) => {
@@ -682,6 +821,10 @@ impl Engine {
                     }
                     files.extend(join_same(tx, here, p)?);
                     carry_forgotten(tx, here, p, false)?;
+                    for (claim, marks) in &p.marks {
+                        carried::keep(tx, here, claim, marks)?;
+                    }
+                    files.extend(carried::apply(tx, here)?);
                     if placing.contains(&n)
                         && let Some(day) = p.entry_day()
                     {
@@ -760,6 +903,9 @@ impl Engine {
             }
             tx.execute(&insert, params_from_iter(row.iter()))?;
             carry_forgotten(tx, id, p, true)?;
+            for (claim, marks) in &p.marks {
+                carried::keep(tx, id, claim, marks)?;
+            }
             if let Some(client) = &p.client {
                 tx.execute(
                     "INSERT OR IGNORE INTO remote_keeps(item_id, device_id, client_id, kept_at) \
@@ -806,6 +952,7 @@ mod tests {
             client: None,
             place: None,
             forgotten: Vec::new(),
+            marks: Vec::new(),
         }
     }
 

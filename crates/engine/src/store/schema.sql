@@ -390,3 +390,21 @@ CREATE INDEX items_replaces ON items(json_extract(metadata, '$.replaces'))
 -- The newest phone build a phone and this computer both spoke when it last introduced itself;
 -- below the oldest this computer speaks, the phone must update before it can connect.
 ALTER TABLE remote_devices ADD COLUMN agreed_build INTEGER;
+
+-- migration 18
+-- What a phone that brought its things in had forgotten or marked of what its mind worked out
+-- (docs/design/moving-memory.md). This computer reads the things again, so each mark is kept by
+-- the claim it was on, and the reading here keeps it: on a thing that came, by its item; on a
+-- calendar entry the phone sends again, by the phone's own id for it, so each new version takes
+-- it. `forgotten` rows are claims forgotten there; the others carry the private, done and
+-- keep-forever marks and the tags.
+CREATE TABLE carried_marks(
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, claim TEXT NOT NULL,
+  private INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0,
+  keep_forever INTEGER NOT NULL DEFAULT 0, tags TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY(item_id, claim));
+CREATE TABLE carried_phone(
+  device_id TEXT NOT NULL, source TEXT NOT NULL, phone_id TEXT NOT NULL, claim TEXT NOT NULL,
+  forgotten INTEGER NOT NULL DEFAULT 0, private INTEGER NOT NULL DEFAULT 0,
+  done INTEGER NOT NULL DEFAULT 0, keep_forever INTEGER NOT NULL DEFAULT 0,
+  tags TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(device_id, source, phone_id, claim));

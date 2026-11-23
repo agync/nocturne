@@ -1231,8 +1231,21 @@ pub(crate) fn apply_structured(
     cands: Vec<Candidate>,
 ) -> Result<(ApplyReport, Vec<PathBuf>)> {
     let item = load_item_info(tx, item_id, today, tz)?;
+    // What the person forgot from this entry, carried from a phone, is never said again.
+    let forgotten: HashSet<String> = {
+        let mut stmt = tx.prepare("SELECT claim FROM forgotten_claims WHERE item_id = ?1")?;
+        stmt.query_map([item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
     let routed: Vec<Routed> = cands
         .into_iter()
+        .filter(|c| {
+            !forgotten.contains(&claim_hash(
+                &key_of(&c.subject),
+                c.predicate.as_str(),
+                &key_of(&c.object),
+            ))
+        })
         .map(|cand| Routed {
             said_as: cand.subject.clone(),
             cand,
@@ -1375,7 +1388,8 @@ fn apply_claims(
     }
     report.conflicts = open_conflicts;
 
-    let files = settle_links(tx, item_id, item)?;
+    let mut files = settle_links(tx, item_id, item)?;
+    files.extend(crate::carried::apply(tx, item_id)?);
     Ok((report, files))
 }
 

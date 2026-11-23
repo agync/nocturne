@@ -708,6 +708,8 @@ impl Engine {
         self.bump_forget();
         let wrote = self.write(|tx| {
             for table in [
+                "carried_phone",
+                "carried_marks",
                 "phone_records",
                 "phone_sources",
                 "online_sends",
