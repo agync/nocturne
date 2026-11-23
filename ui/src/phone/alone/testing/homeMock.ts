@@ -257,15 +257,22 @@ const SENT: MindSent[] = [
 
 /**
  * What a screen test changes while the app runs: how the service is doing (over `&trouble=`),
- * and the questions stopped.
+ * whether the page is written, the reading under way, and the questions stopped. The mock
+ * counts the page's loads.
  */
 export const scriptedMind = {
   trouble: undefined as string | null | undefined,
+  page: true,
+  reading: { done: 12, count: 46 },
+  pageLoads: 0,
   stopped: [] as string[],
 };
 
 export function resetScriptedMind(): void {
   scriptedMind.trouble = undefined;
+  scriptedMind.page = true;
+  scriptedMind.reading = { done: 12, count: 46 };
+  scriptedMind.pageLoads = 0;
   scriptedMind.stopped = [];
   waiting.clear();
 }
@@ -376,7 +383,8 @@ export function homeState(scenario: HomeScenario) {
       case "ask":
         return mind.state === "on" ? answered(mind.host) : { type: "error", code: "notReady" };
       case "getPage":
-        return mind.state === "on"
+        scriptedMind.pageLoads += 1;
+        return mind.state === "on" && scriptedMind.page
           ? { type: "page", page: writtenPage() }
           : { type: "error", code: "notFound" };
       case "getItem":
@@ -699,7 +707,7 @@ export function homeState(scenario: HomeScenario) {
       case "mind_month":
         return { count: 3, limit: { kind: "things", count: 200 } };
       case "mind_reading":
-        return { done: 12, count: 46 };
+        return scriptedMind.reading;
       case "mind_sent":
         return SENT;
       case "mind_status":

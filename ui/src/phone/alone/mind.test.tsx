@@ -487,6 +487,50 @@ describe("The answer screen on a phone alone", () => {
   });
 });
 
+describe("What the mind does in the background", () => {
+  it("looks at the reading again as a thing is read, without reloading the page", async () => {
+    await app("m=kept&mind=on");
+    await screen.findByText("Written by answers.example");
+    fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
+    const group = await screen.findByRole("region", { name: "Nocturne’s mind online" });
+    await within(group).findByText("answers.example, online · Reading · 12 of 46");
+    const loads = scriptedMind.pageLoads;
+    scriptedMind.reading = { done: 13, count: 46 };
+    await emit("item-changed", {});
+    expect(
+      await within(group).findByText("answers.example, online · Reading · 13 of 46"),
+    ).toBeInTheDocument();
+    expect(scriptedMind.pageLoads).toBe(loads);
+  });
+
+  it("shows a page as soon as it is written", async () => {
+    scriptedMind.page = false;
+    await app("m=kept&mind=on");
+    await screen.findByText("Your memory is on this phone");
+    expect(screen.queryByText("Written by answers.example")).toBeNull();
+    scriptedMind.page = true;
+    await emit("page-ready", {});
+    expect(await screen.findByText("Written by answers.example")).toBeInTheDocument();
+  });
+
+  it("takes a burst of readings as one look", async () => {
+    history.replaceState(null, "", "/?m=kept&mind=on");
+    const services = await nativeMockServices();
+    const real = services.mind;
+    if (!real) throw new Error("scripted mind");
+    const status = vi.fn(real.status);
+    services.mind = { ...real, status };
+    render(<NativeRoot services={services} />);
+    await screen.findByText("Written by answers.example");
+    await new Promise((settle) => setTimeout(settle, 50));
+    const before = status.mock.calls.length;
+    await Promise.all(Array.from({ length: 5 }, () => emit("item-changed", {})));
+    await waitFor(() => expect(status.mock.calls.length).toBe(before + 1));
+    await new Promise((settle) => setTimeout(settle, 500));
+    expect(status.mock.calls.length).toBe(before + 1);
+  });
+});
+
 describe("Delete everything with a mind", () => {
   it("erases the mind in the one step, without turning it off first", async () => {
     history.replaceState(null, "", "/?m=kept&s=welcome&mind=on");
