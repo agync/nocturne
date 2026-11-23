@@ -520,10 +520,30 @@ impl AppState {
             .push(hook);
     }
 
+    /// Run the exit hooks once. They block on the async runtime to stop the engine and Away from
+    /// home, which panics on a thread that drives async tasks, so from inside the runtime (the
+    /// restart after a restore or a move) they run on a thread of their own.
     pub fn run_exit_hooks(&self) {
         let hooks = std::mem::take(&mut *self.exit_hooks.lock().unwrap_or_else(|e| e.into_inner()));
-        for hook in hooks {
-            hook();
+        if hooks.is_empty() {
+            return;
+        }
+        let run = move || hooks.iter().for_each(|hook| hook());
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return run();
+        };
+        let apart = move || {
+            std::thread::scope(|s| {
+                if s.spawn(run).join().is_err() {
+                    tracing::warn!("an exit hook panicked");
+                }
+            });
+        };
+        if runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread {
+            // Hand this worker's queued tasks to the others while the hooks wait on them.
+            tokio::task::block_in_place(apart);
+        } else {
+            apart();
         }
     }
 
@@ -720,6 +740,54 @@ mod tests {
     use super::*;
     use nocturne_contract::Tier;
     use nocturne_engine::SystemClock;
+
+    fn counting_hooks(state: &AppState, count: usize) -> Arc<std::sync::atomic::AtomicUsize> {
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..count {
+            let ran = ran.clone();
+            state.on_exit(Box::new(move || {
+                tauri::async_runtime::block_on(tokio::task::yield_now());
+                ran.fetch_add(1, Ordering::SeqCst);
+            }));
+        }
+        ran
+    }
+
+    /// The restart after a restore or a move calls the restarter from an async task, and the
+    /// restarter runs the exit hooks, which block on the runtime.
+    #[test]
+    fn exit_hooks_run_from_an_async_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(AppState::open(dir.path(), Arc::new(SystemClock)));
+        let ran = counting_hooks(&state, 2);
+        let restarting = state.clone();
+        tauri::async_runtime::block_on(tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            restarting.run_exit_hooks();
+        }))
+        .expect("the exit hooks ran without a panic");
+        assert_eq!(ran.load(Ordering::SeqCst), 2);
+        state.run_exit_hooks();
+        assert_eq!(ran.load(Ordering::SeqCst), 2, "the hooks run once");
+    }
+
+    #[tokio::test]
+    async fn exit_hooks_run_inside_a_single_threaded_runtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(dir.path(), Arc::new(SystemClock));
+        let ran = counting_hooks(&state, 1);
+        state.run_exit_hooks();
+        assert_eq!(ran.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn exit_hooks_run_outside_any_runtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(dir.path(), Arc::new(SystemClock));
+        let ran = counting_hooks(&state, 1);
+        state.run_exit_hooks();
+        assert_eq!(ran.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn the_data_dir_override_wins_unless_empty() {
