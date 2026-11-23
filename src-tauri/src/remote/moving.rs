@@ -401,6 +401,16 @@ impl Moves {
         if !matches!(m.phase, Phase::Accepted | Phase::Arriving { .. }) {
             return None;
         }
+        let before = match m.phase {
+            Phase::Arriving { done, .. } => done,
+            _ => 0,
+        };
+        if tenths(before, size) != tenths(done, size) {
+            tracing::info!(
+                device = %m.device,
+                "a phone's memory is arriving: {done} of {size} bytes"
+            );
+        }
         m.phase = Phase::Arriving { done, size };
         let due = done >= size || m.shown.is_none_or(|t| t.elapsed() >= PROGRESS_EVERY);
         due.then(|| {
@@ -716,6 +726,24 @@ fn err(code: PhoneError) -> RemoteAnswer {
     RemoteAnswer::Error { code }
 }
 
+/// An answer to a phone, for the log: never more than its kind, its code or its counts.
+fn said(answer: &RemoteAnswer) -> String {
+    match answer {
+        RemoteAnswer::MemoryArrived { counts } => format!(
+            "opened, {} items, {} memories, {} pages, {} originals",
+            counts.items, counts.memories, counts.pages, counts.originals
+        ),
+        RemoteAnswer::MemoryAccepted { .. } => "agreed".into(),
+        RemoteAnswer::Error { code } => format!("{code:?}"),
+        _ => "another answer".into(),
+    }
+}
+
+/// Whole tenths of `size` that `done` makes, for a progress line each tenth of the way.
+fn tenths(done: u64, size: u64) -> u64 {
+    done.saturating_mul(10) / size.max(1)
+}
+
 /// The room a move of `bytes` needs here: the upload and the unpacked stage, and a margin.
 fn room_needed(bytes: u64) -> u64 {
     bytes.saturating_mul(2).saturating_add(ROOM_MARGIN)
@@ -876,13 +904,28 @@ pub async fn offer<R: Runtime>(
     bytes: f64,
     schema: u32,
 ) -> Option<RemoteAnswer> {
+    let id = device.id.as_str();
+    tracing::info!(
+        device = id,
+        "a phone offers its memory: {} items, about {bytes} bytes, store version {schema}",
+        counts.items
+    );
     if !whole(bytes) || schema == 0 {
+        tracing::info!(device = id, "the offer was not whole");
         return Some(err(PhoneError::Invalid));
     }
     if bytes > MAX_MEMORY_BYTES as f64 {
+        tracing::info!(
+            device = id,
+            "the offered memory is larger than a move takes"
+        );
         return Some(err(PhoneError::TooLarge));
     }
     if schema > nocturne_engine::store::latest_version() {
+        tracing::info!(
+            device = id,
+            "the offered memory is newer than this computer"
+        );
         return Some(err(PhoneError::ComputerOutdated));
     }
     let Some(state) = app.try_state::<AppState>() else {
@@ -890,6 +933,11 @@ pub async fn offer<R: Runtime>(
     };
     let data = state.data_dir.clone();
     if let Some(answer) = already(core, &device.id, &data).await {
+        tracing::info!(
+            device = id,
+            "the offer is answered from a move before: {}",
+            said(&answer)
+        );
         return Some(answer);
     }
     let Ok(e) = state.engine() else {
@@ -909,10 +957,19 @@ pub async fn offer<R: Runtime>(
         if dropped {
             core.incoming.cancel(&device.id);
         }
+        tracing::info!(
+            device = id,
+            dropped,
+            "the move was agreed before: the phone carries on"
+        );
         return Some(RemoteAnswer::MemoryAccepted { here });
     }
     // A restore that waits for the next start is not replaced by a move.
     if restore::marker_path(&data).exists() {
+        tracing::info!(
+            device = id,
+            "a restore waits for the next start: the phone waits"
+        );
         return Some(err(PhoneError::Busy));
     }
     let room = {
@@ -934,21 +991,43 @@ pub async fn offer<R: Runtime>(
     new.phase = Phase::Offered(room.is_none().then_some(tx));
     let owner = new.owner.clone();
     let Some(view) = core.moves.claim(new) else {
+        tracing::info!(device = id, "another move holds the place: the phone waits");
         return Some(err(PhoneError::Busy));
     };
     emit(app, view);
     crate::window::show_main(app);
-    if room.is_some() {
+    if let Some(room) = room {
+        tracing::info!(
+            device = id,
+            "not enough room for the move yet: {} bytes free of {} needed",
+            room.free,
+            room.need
+        );
         return Some(err(PhoneError::TooLarge));
     }
+    tracing::info!(
+        device = id,
+        here = here.is_some(),
+        "the person here is asked about the move"
+    );
     let choice = tokio::select! {
         choice = rx => Some(choice),
         () = out.closed() => None,
         () = tokio::time::sleep(DECIDE_WAIT) => None,
     };
     match choice {
-        Some(Ok(MoveChoice::Move)) => Some(RemoteAnswer::MemoryAccepted { here }),
+        Some(Ok(MoveChoice::Move)) => {
+            tracing::info!(
+                device = id,
+                "the move is agreed: the phone makes its backup"
+            );
+            Some(RemoteAnswer::MemoryAccepted { here })
+        }
         Some(Ok(MoveChoice::NotNow)) => {
+            tracing::info!(
+                device = id,
+                "the person kept what is here: the pairing is undone"
+            );
             // Keep what is here: the phone stays as it was, alone and unpaired. The pairing goes
             // first, then the phone is told, then its sessions end.
             revoke(app, &device.id).await;
@@ -958,9 +1037,16 @@ pub async fn offer<R: Runtime>(
             None
         }
         // A newer offer from the same phone took this one's place.
-        Some(Err(_)) => Some(err(PhoneError::Busy)),
+        Some(Err(_)) => {
+            tracing::info!(
+                device = id,
+                "a newer offer from the phone took this one's place"
+            );
+            Some(err(PhoneError::Busy))
+        }
         // Nobody answered, or the phone went.
         None => {
+            tracing::info!(device = id, "nobody answered the offer, or the phone went");
             emit(app, core.moves.expire(&owner));
             Some(err(PhoneError::TooLate))
         }
@@ -1082,6 +1168,7 @@ pub fn stop<R: Runtime>(app: &AppHandle<R>, core: &Core) -> bool {
     let Some(device) = core.moves.stop() else {
         return false;
     };
+    tracing::info!(device = %device, "the person here stopped the move");
     core.incoming.fail(&device, PhoneError::Paused);
     emit(app, core.moves.view());
     true
@@ -1110,29 +1197,49 @@ pub async fn done<R: Runtime>(
     };
     let data = state.data_dir.clone();
     let (conv, call) = (sent.conv, sent.call);
+    let id = device.id.as_str();
     if core.moves.was_stopped(&device.id) {
+        tracing::info!(
+            device = id,
+            "the phone hears that the person here stopped the move"
+        );
         core.incoming.cancel_call(&device.id, conv, call);
         return Some(err(PhoneError::Paused));
     }
     let Some(upload) = upload else {
-        return Some(status(core, &device.id, &data).await);
+        let answer = status(core, &device.id, &data).await;
+        // A finishing phone asks every few seconds: these stay out of the usual log.
+        tracing::debug!(
+            device = id,
+            "the phone asks where its memory stands: {}",
+            said(&answer)
+        );
+        return Some(answer);
     };
     if !whole(sent.size)
         || !is_digest(&sent.sha256)
         || sent.passphrase.chars().count() < MIN_PASSPHRASE_CHARS
         || sent.passphrase.len() > MAX_PASSPHRASE
     {
+        tracing::info!(device = id, "the memory's call was not whole: refused");
         core.incoming.cancel_call(&device.id, conv, call);
         return Some(err(PhoneError::Invalid));
     }
     let Some((owner, view)) = core.moves.carry(&device.id, conv) else {
+        tracing::info!(device = id, "a memory came with no move agreed: refused");
         core.incoming.cancel_call(&device.id, conv, call);
         return Some(err(PhoneError::NotReady));
     };
+    tracing::info!(
+        device = id,
+        "the phone's memory begins to arrive: {} bytes",
+        sent.size
+    );
     emit(app, view);
     let file = match wait_upload(core, &device.id, conv, call, upload).await {
         Ok(file) => file,
         Err(PhoneError::TooLarge) => {
+            tracing::info!(device = id, "room ran out while the memory arrived");
             emit(app, core.moves.upload_no_room(&owner, conv));
             return Some(err(PhoneError::TooLarge));
         }
@@ -1142,12 +1249,18 @@ pub async fn done<R: Runtime>(
                 true => PhoneError::Paused,
                 false => code,
             };
+            tracing::info!(device = id, "the memory stopped arriving: {code:?}");
             return Some(err(code));
         }
     };
+    tracing::info!(device = id, "the memory arrived whole: it is checked now");
     // Its phone may have gone, or the person stopped it, while the memory came: then nothing is
     // staged for it.
     let Some(view) = core.moves.begin_check(&owner, conv) else {
+        tracing::info!(
+            device = id,
+            "the phone went, or the move was stopped, as it arrived"
+        );
         let _ = std::fs::remove_file(&file);
         return Some(err(match core.moves.stopped(&owner) {
             true => PhoneError::Paused,
@@ -1166,6 +1279,7 @@ pub async fn done<R: Runtime>(
         .conclude(&data, &owner, core.removed(&device.id), checked);
     core.moves.settled.notify_waiters();
     emit(app, view);
+    tracing::info!(device = id, "the memory was checked: {}", said(&answer));
     let arrived = matches!(answer, RemoteAnswer::MemoryArrived { .. });
     out.send(answer);
     if arrived && let Some(restart) = state.restarter() {
@@ -1174,6 +1288,7 @@ pub async fn done<R: Runtime>(
         // took its memory with it, and nothing starts again.
         tokio::time::sleep(ANSWER_WAIT).await;
         if core.moves.arrived_as(&owner) {
+            tracing::info!(device = id, "Nocturne starts again to open the memory");
             restart();
         }
     }

@@ -869,8 +869,14 @@ impl Core {
             (RemoteCall::MemoryDone { size, .. }, _) if self.moves.may_upload(&device.id) => self
                 .incoming
                 .begin_memory(&device.id, conv.id, req.id, *size)
+                .inspect_err(|code| {
+                    tracing::info!(device = %device.id, "a phone's memory was not taken: {code:?}");
+                })
                 .map(Some),
-            (RemoteCall::MemoryDone { .. }, _) => Err(PhoneError::NotReady),
+            (RemoteCall::MemoryDone { .. }, _) => {
+                tracing::info!(device = %device.id, "a phone sent its memory with no move agreed");
+                Err(PhoneError::NotReady)
+            }
             (_, Some(decl)) => self
                 .incoming
                 .begin(self, &device.id, conv.id, req.id, decl)
