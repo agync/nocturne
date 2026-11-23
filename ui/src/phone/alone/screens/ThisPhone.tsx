@@ -49,17 +49,17 @@ export function MindGroup({
   chosen,
   month,
   reading,
-  sentReady,
+  fresh,
   onSent,
   onChange,
   onCheckKey,
   onTurnOff,
 }: {
   chosen: Exclude<MindChosen, { state: "off" }>;
-  month(): Promise<MindMonth>;
+  month(): Promise<MindMonth | null>;
   reading(): Promise<MindReading>;
-  /** Whether the Sent online list can be read on this phone yet. */
-  sentReady: boolean;
+  /** Changes whenever the mind has read or written, so the counts are looked at again. */
+  fresh: number;
   onSent(): void;
   onChange(): void;
   onCheckKey(): void;
@@ -84,7 +84,7 @@ export function MindGroup({
     return () => {
       gone = true;
     };
-  }, [month, reading]);
+  }, [month, reading, fresh]);
 
   const turnOff = async () => {
     if (busy) return;
@@ -126,7 +126,7 @@ export function MindGroup({
           .join(" · ")}
       />
       <Row label={t("phone.mind.row.goes")} hint={t("phone.mind.row.goesValue")} />
-      {sentReady ? <Row label={t("phone.mind.row.sent")} onPress={onSent} /> : null}
+      <Row label={t("phone.mind.row.sent")} onPress={onSent} />
       {counted ? (
         <Row
           label={t("phone.mind.row.month")}
@@ -191,9 +191,9 @@ export function HomeThisPhone({
   /** The mind chosen, and its rows' ways out; none until it is known. */
   mind: {
     chosen: MindChosen | null;
-    month(): Promise<MindMonth>;
+    month(): Promise<MindMonth | null>;
     reading(): Promise<MindReading>;
-    sentReady: boolean;
+    fresh: number;
     onMove(): void;
     onSent(): void;
     onCheckKey(): void;
@@ -300,7 +300,7 @@ export function HomeThisPhone({
             chosen={mind.chosen}
             month={mind.month}
             reading={mind.reading}
-            sentReady={mind.sentReady}
+            fresh={mind.fresh}
             onSent={mind.onSent}
             onChange={onMind}
             onCheckKey={mind.onCheckKey}

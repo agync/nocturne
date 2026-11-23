@@ -21,7 +21,7 @@ import type {
   TimelineRow,
 } from "../../../engine/bindings";
 import { emptyDay, itemView } from "../../testing/journalFixtures";
-import type { MindChosen, MindSent, MindWaiting, ProviderForm } from "../mind";
+import type { MindChosen, MindSent, MindStatus, ProviderForm } from "../mind";
 import { memoryNotes, SHOWN, SINCE } from "../reminder";
 
 export const HOME_DAY = "2026-11-21";
@@ -238,7 +238,6 @@ const SENT: MindSent[] = [
     kind: "read",
     host: MIND_HOST,
     bytes: 1_840,
-    words: "Read this note, kept 7:05 am: Ask about the swap for the 28th",
   },
   {
     id: "s2",
@@ -246,7 +245,6 @@ const SENT: MindSent[] = [
     kind: "page",
     host: MIND_HOST,
     bytes: 3_210,
-    words: "Write the page from these lines: Ask about the swap for the 28th (kept 7:05 am)",
   },
   {
     id: "s1",
@@ -254,22 +252,28 @@ const SENT: MindSent[] = [
     kind: "check",
     host: MIND_HOST,
     bytes: 412,
-    words: "Say OK.",
   },
 ];
 
 /**
- * What the phone does not answer yet, scripted for the screens and shots: 12 of 46 read, 3
- * things this month under a limit of 200, and three requests sent.
+ * `&trouble=` names how the service is doing once the mind is on: `unreachable`, `keyRefused`,
+ * `noCredit` or `paused`. With none it is fine.
  */
-export function scriptedWaiting(): MindWaiting {
-  return {
-    ready: true,
-    setLimit: async () => undefined,
-    month: async () => ({ count: 3, limit: { kind: "things", count: 200 } }),
-    reading: async () => ({ done: 12, count: 46 }),
-    sent: async () => SENT,
-  };
+function mindStatus(mind: MindChosen): MindStatus {
+  if (mind.state !== "on") return { state: "off" };
+  const host = mind.host;
+  switch (new URLSearchParams(location.search).get("trouble")) {
+    case "unreachable":
+      return { state: "unreachable", host, since: `${HOME_DAY}T06:40:00.000Z` };
+    case "keyRefused":
+      return { state: "keyRefused", host };
+    case "noCredit":
+      return { state: "noCredit", host };
+    case "paused":
+      return { state: "paused", host, until: "2026-12-01" };
+    default:
+      return { state: "fine", host };
+  }
 }
 
 /** What the scripted phone holds, and how it answers. */
@@ -462,6 +466,7 @@ export function homeState(scenario: HomeScenario) {
         rows = [];
         aside = [];
         lastBackup = null;
+        mind = { state: "off" };
         mode = null;
         void emit("mode_changed", null);
         return { type: "deleted" };
@@ -602,6 +607,16 @@ export function homeState(scenario: HomeScenario) {
       case "mind_turn_off":
         mind = { state: "off" };
         return null;
+      case "mind_set_limit":
+        return null;
+      case "mind_month":
+        return { count: 3, limit: { kind: "things", count: 200 } };
+      case "mind_reading":
+        return { done: 12, count: 46 };
+      case "mind_sent":
+        return SENT;
+      case "mind_status":
+        return mindStatus(mind);
       default:
         return undefined;
     }

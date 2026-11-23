@@ -410,18 +410,15 @@ export function MindDetails({
 }
 
 /**
- * Step 3: a monthly limit, none unless the person sets one. Until this phone can keep a limit
- * (`limits` false) only "No limit" is offered.
+ * Step 3: a monthly limit, none unless the person sets one.
  */
 export function MindLimitStep({
   draft,
-  limits,
   onDraft,
   onBack,
   onNext,
 }: {
   draft: MindDraft;
-  limits: boolean;
   onDraft(next: MindDraft): void;
   onBack(): void;
   onNext(): void;
@@ -474,40 +471,38 @@ export function MindLimitStep({
         <fieldset className="ph-options">
           <legend className="sr-only">{t("phone.mind.limit.title")}</legend>
           {option("none", "phone.mind.limit.none")}
-          {limits &&
-            option(
-              "things",
-              "phone.mind.limit.things",
-              <div className="ph-field ph-mind-limit-field">
-                <label htmlFor={`${id}-things`}>{t("phone.mind.limit.thingsLabel")}</label>
-                <input
-                  id={`${id}-things`}
-                  className="ph-input ph-input--note"
-                  inputMode="numeric"
-                  value={count}
-                  aria-invalid={things === null}
-                  aria-describedby={things === null ? `${id}-err` : undefined}
-                  onChange={(e) => setCount(e.target.value)}
-                />
-              </div>,
-            )}
-          {limits &&
-            option(
-              "amount",
-              "phone.mind.limit.amount",
-              <div className="ph-field ph-mind-limit-field">
-                <label htmlFor={`${id}-usd`}>{t("phone.mind.limit.amountLabel")}</label>
-                <input
-                  id={`${id}-usd`}
-                  className="ph-input ph-input--note"
-                  inputMode="decimal"
-                  value={usd}
-                  aria-invalid={amount === null}
-                  aria-describedby={amount === null ? `${id}-err` : undefined}
-                  onChange={(e) => setUsd(e.target.value)}
-                />
-              </div>,
-            )}
+          {option(
+            "things",
+            "phone.mind.limit.things",
+            <div className="ph-field ph-mind-limit-field">
+              <label htmlFor={`${id}-things`}>{t("phone.mind.limit.thingsLabel")}</label>
+              <input
+                id={`${id}-things`}
+                className="ph-input ph-input--note"
+                inputMode="numeric"
+                value={count}
+                aria-invalid={things === null}
+                aria-describedby={things === null ? `${id}-err` : undefined}
+                onChange={(e) => setCount(e.target.value)}
+              />
+            </div>,
+          )}
+          {option(
+            "amount",
+            "phone.mind.limit.amount",
+            <div className="ph-field ph-mind-limit-field">
+              <label htmlFor={`${id}-usd`}>{t("phone.mind.limit.amountLabel")}</label>
+              <input
+                id={`${id}-usd`}
+                className="ph-input ph-input--note"
+                inputMode="decimal"
+                value={usd}
+                aria-invalid={amount === null}
+                aria-describedby={amount === null ? `${id}-err` : undefined}
+                onChange={(e) => setUsd(e.target.value)}
+              />
+            </div>,
+          )}
         </fieldset>
         {invalid ? (
           <p id={`${id}-err`} className="ph-error" role="alert">

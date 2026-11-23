@@ -1,11 +1,8 @@
 // A phone alone's mind: an online service the person chose, reached by the phone's own core.
-// The check, turning on and off and what is chosen are the app's commands. The limit, this
-// month's count, the reading under way and the Sent online list are not answered by the phone
-// yet: until they are, `WAITING` refuses each with `notReady` and the screens leave them out.
+// Each call is one of the app's own commands; the key goes in once, with turning on.
 
 import { invoke } from "@tauri-apps/api/core";
 import type { CheckOutcome } from "../../engine/bindings";
-import { HomeRequestError } from "./api";
 
 /** The form's three details, as typed. */
 export interface ProviderForm {
@@ -38,7 +35,10 @@ export interface MindReading {
   count: number;
 }
 
-/** One request to the chosen service, word for word. */
+/**
+ * One request to the chosen service. The phone keeps what left it only as a count of bytes, so
+ * its words are not shown.
+ */
 export interface MindSent {
   id: string;
   at: string;
@@ -46,8 +46,18 @@ export interface MindSent {
   host: string;
   /** Bytes that left this phone. */
   bytes: number;
-  words: string;
 }
+
+/** How the mind is doing, for Today, Ask and This phone. */
+export type MindStatus =
+  | { state: "off" }
+  | { state: "fine"; host: string }
+  /** No answer came from the service since `since`, a time. */
+  | { state: "unreachable"; host: string; since: string }
+  | { state: "keyRefused"; host: string }
+  | { state: "noCredit"; host: string }
+  /** The month's limit is reached: nothing goes until `until`, a date. */
+  | { state: "paused"; host: string; until: string };
 
 /** Why turning on did not happen. */
 export type TurnOnProblem = "notHttps" | "addressNotAllowed" | "invalid";
@@ -61,37 +71,21 @@ export class TurnOnError extends Error {
   }
 }
 
-/** What the phone does not answer yet. */
-export interface MindWaiting {
-  /** Whether these are answered; until they are, the limit and Sent online are not offered. */
-  ready: boolean;
-  setLimit(limit: MindLimit): Promise<void>;
-  month(): Promise<MindMonth>;
-  reading(): Promise<MindReading>;
-  /** Newest first, the last 90 days. */
-  sent(): Promise<MindSent[]>;
-}
-
-export interface MindApi extends MindWaiting {
+export interface MindApi {
   chosen(): Promise<MindChosen>;
   check(form: ProviderForm): Promise<CheckOutcome>;
   turnOn(form: ProviderForm): Promise<void>;
   turnOff(): Promise<void>;
+  setLimit(limit: MindLimit): Promise<void>;
+  month(): Promise<MindMonth | null>;
+  reading(): Promise<MindReading>;
+  /** Newest first, the last 90 days. */
+  sent(): Promise<MindSent[]>;
+  status(): Promise<MindStatus>;
 }
 
-const notYet = () => Promise.reject(new HomeRequestError("notReady"));
-
-export const WAITING: MindWaiting = {
-  ready: false,
-  setLimit: notYet,
-  month: notYet,
-  reading: notYet,
-  sent: notYet,
-};
-
-export function createMindApi(waiting: MindWaiting = WAITING): MindApi {
+export function createMindApi(): MindApi {
   return {
-    ...waiting,
     chosen: () => invoke<MindChosen>("mind_chosen"),
     check: (form) => invoke<CheckOutcome>("mind_check", { form }),
     async turnOn(form) {
@@ -106,6 +100,13 @@ export function createMindApi(waiting: MindWaiting = WAITING): MindApi {
     async turnOff() {
       await invoke("mind_turn_off");
     },
+    async setLimit(limit) {
+      await invoke("mind_set_limit", { limit });
+    },
+    month: () => invoke<MindMonth | null>("mind_month"),
+    reading: () => invoke<MindReading>("mind_reading"),
+    sent: () => invoke<MindSent[]>("mind_sent", { limit: 1000 }),
+    status: () => invoke<MindStatus>("mind_status"),
   };
 }
 

@@ -12,7 +12,6 @@ import {
   type HomeScenario,
   homeState,
   scriptedNotes,
-  scriptedWaiting,
   seedReminder,
 } from "../alone/testing/homeMock";
 import type { CalendarSettings, HealthSettings, ThisPhoneSources } from "../native/api";
@@ -224,7 +223,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
     ...base,
     store,
     home,
-    mind: createMindApi(scriptedWaiting()),
+    mind: createMindApi(),
     engineFor: (address) => {
       if (home.known() === "alone")
         return createLocalEngine({ deviceName: () => "Maya’s phone", version: base.version });

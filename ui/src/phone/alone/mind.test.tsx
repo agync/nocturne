@@ -1,10 +1,10 @@
 import { clearMocks } from "@tauri-apps/api/mocks";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckOutcome } from "../../engine/bindings";
 import { NativeRoot } from "../native/NativeRoot";
 import { nativeMockServices } from "../testing/nativeMock";
-import { createMindApi, hostOf } from "./mind";
+import { hostOf } from "./mind";
 import { scriptedNoteRows } from "./testing/homeMock";
 
 afterEach(async () => {
@@ -15,10 +15,9 @@ afterEach(async () => {
   history.replaceState(null, "", "/");
 });
 
-async function app(query: string, waiting = true) {
+async function app(query: string) {
   history.replaceState(null, "", `/?${query}`);
   const services = await nativeMockServices();
-  if (!waiting) services.mind = createMindApi();
   render(<NativeRoot services={services} />);
   return services;
 }
@@ -177,21 +176,6 @@ describe("An online service you choose", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers only no limit while this phone can't keep one", async () => {
-    await app("m=fresh", false);
-    await toDetails();
-    fill("https://answers.example/v1", "abc", "reader-small");
-    fireEvent.click(button("Check"));
-    await screen.findByText("answers.example answered. It works.");
-    fireEvent.click(button("Continue"));
-    expect(await screen.findByRole("radio", { name: "No limit" })).toBeChecked();
-    expect(screen.getAllByRole("radio")).toHaveLength(1);
-    fireEvent.click(button("Continue"));
-    expect(
-      await screen.findByText("There is no limit on how much is read and answered online."),
-    ).toBeVisible();
-  });
-
   it("drops a check that answers for details since changed", async () => {
     history.replaceState(null, "", "/?m=fresh");
     const services = await nativeMockServices();
@@ -229,7 +213,12 @@ describe("An online service you choose", () => {
   });
 
   it("goes back to Today when the reading can't be shown", async () => {
-    await app("m=fresh", false);
+    history.replaceState(null, "", "/?m=fresh");
+    const services = await nativeMockServices();
+    const real = services.mind;
+    if (!real) throw new Error("scripted mind");
+    services.mind = { ...real, reading: () => Promise.reject(new Error("no")) };
+    render(<NativeRoot services={services} />);
     await toDetails();
     fill("https://answers.example/v1", "abc", "reader-small");
     fireEvent.click(button("Check"));
@@ -272,7 +261,7 @@ describe("The mind in This phone", () => {
     expect(screen.queryByRole("region", { name: "Nocturne’s mind online" })).toBeNull();
   });
 
-  it("opens the Sent online list, each request's words behind a tap", async () => {
+  it("opens the Sent online list: what each was for, when and how much, never its words", async () => {
     await app("m=kept&mind=on");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     fireEvent.click(await screen.findByRole("button", { name: "See what was sent" }));
@@ -284,13 +273,23 @@ describe("The mind in This phone", () => {
     expect(screen.getByText("Connection check")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Saturday 21 November" })).toBeInTheDocument();
     expect(screen.getByText("Older than 90 days are removed by themselves.")).toBeInTheDocument();
+    expect(screen.getByText("1.8 kB", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText("Exactly what was sent")).toBeNull();
+    expect(document.querySelector("details")).toBeNull();
   });
 
-  it("leaves out the Sent online list while the phone can't read it", async () => {
-    await app("m=kept&mind=on", false);
+  it("says so when the Sent online list can't be read", async () => {
+    history.replaceState(null, "", "/?m=kept&mind=on");
+    const services = await nativeMockServices();
+    const real = services.mind;
+    if (!real) throw new Error("scripted mind");
+    services.mind = { ...real, sent: () => Promise.reject(new Error("no")) };
+    render(<NativeRoot services={services} />);
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
-    await screen.findByRole("region", { name: "Nocturne’s mind online" });
-    expect(screen.queryByRole("button", { name: "See what was sent" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "See what was sent" }));
+    expect(
+      await screen.findByText("Nocturne couldn’t read this list. Nothing was changed."),
+    ).toBeInTheDocument();
   });
 
   it("asks for the key again when it isn't held, and Move my memory still scans", async () => {
@@ -322,15 +321,73 @@ describe("Today and Ask with a mind", () => {
     expect(screen.queryByText(/Written by/)).toBeNull();
   });
 
-  it("finds by words without asking for a mind", async () => {
-    await app("m=kept&mind=on");
-    await screen.findByText("Written by answers.example");
+  it("finds by words, saying answers are back when the service is", async () => {
+    await app("m=kept&mind=on&trouble=unreachable");
+    expect(
+      await screen.findByText(/Written Saturday 21 November\. answers\.example hasn’t answered/),
+    ).toBeInTheDocument();
     fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("Answers are back when answers.example is.")).toBeVisible();
     fireEvent.change(await screen.findByRole("textbox", { name: "Find something you kept" }), {
       target: { value: "swap" },
     });
     expect(await screen.findByText("Found by their words.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose a mind" })).toBeNull();
+  });
+
+  it("names a key the service refused, in Today and Ask, and offers the check", async () => {
+    await app("m=kept&mind=on&trouble=keyRefused");
+    expect(await screen.findByText("Your provider refused the key")).toBeVisible();
+    expect(
+      screen.getByText(
+        "answers.example no longer accepts the key Nocturne has. Until you check it, Ask finds by words.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("Your provider refused the key")).toBeVisible();
+    fireEvent.click(button("Check the key…"));
+    expect(await screen.findByRole("heading", { name: "Your service’s details" })).toBeVisible();
+  });
+
+  it("says when there is no credit, and when the limit has paused it", async () => {
+    await app("m=kept&mind=on&trouble=noCredit");
+    expect(await screen.findByText("Your provider says there’s no credit left")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Add credit on your provider’s website, then check again. Until then, Ask finds by words.",
+      ),
+    ).toBeVisible();
+    cleanup();
+    history.replaceState(null, "", "/");
+    await app("m=kept&mind=on&trouble=paused");
+    expect(await screen.findByText("Paused by your limit")).toBeVisible();
+    expect(
+      screen.getByText(
+        "You’ve reached this month’s limit. Ask finds by words until Tuesday 1 December.",
+      ),
+    ).toBeVisible();
+  });
+});
+
+describe("Delete everything with a mind", () => {
+  it("erases the mind in the one step, without turning it off first", async () => {
+    history.replaceState(null, "", "/?m=kept&s=welcome&mind=on");
+    const services = await nativeMockServices();
+    const real = services.mind;
+    if (!real) throw new Error("scripted mind");
+    const off = vi.fn(real.turnOff);
+    services.mind = { ...real, turnOff: off };
+    render(<NativeRoot services={services} />);
+    fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete everything…" }));
+    fireEvent.change(await screen.findByLabelText("Type “delete everything” to go ahead"), {
+      target: { value: "delete everything" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete everything" }));
+    expect(
+      await screen.findByRole("heading", { name: "Nocturne remembers your day" }),
+    ).toBeVisible();
+    expect(off).not.toHaveBeenCalled();
   });
 });
 

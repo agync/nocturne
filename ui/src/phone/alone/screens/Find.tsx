@@ -3,6 +3,8 @@ import { formatLongDay, formatTimeOfDay, journalDay } from "../../../copy/format
 import { t } from "../../../copy/t";
 import type { FoundItem, ItemKind, Receipt } from "../../../engine/bindings";
 import { Icon, type IconName, Page } from "../../screens/ui";
+import type { MindStatus } from "../mind";
+import { MindNotice, UnreachableAsk } from "./MindNotice";
 
 type State =
   | { name: "idle" }
@@ -88,7 +90,8 @@ function Found({
 
 /**
  * Ask on a phone alone: what was kept, found by its words, newest first among equal matches,
- * each with its receipt. Answers need a mind.
+ * each with its receipt. Answers need a mind, or one that is answering: while the chosen
+ * service is not, `status` says why.
  */
 export function HomeFind({
   bar,
@@ -98,6 +101,8 @@ export function HomeFind({
   onOpen,
   onMind,
   mind = false,
+  status = null,
+  onFixMind,
 }: {
   bar: ReactNode;
   /** Nothing has been kept yet. */
@@ -109,6 +114,10 @@ export function HomeFind({
   onMind(): void;
   /** A mind is chosen: nothing says one is needed. */
   mind?: boolean;
+  /** How the chosen service is doing. */
+  status?: MindStatus | null;
+  /** "Check the key…", "Check again" and "Change limit". */
+  onFixMind?(): void;
 }) {
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<State>({ name: "idle" });
@@ -137,6 +146,8 @@ export function HomeFind({
   return (
     <Page bar={bar} className="ph-tabbed">
       <main className="ph-main ph-main--tight" style={{ gap: 16 }}>
+        {status && onFixMind ? <MindNotice status={status} onFix={onFixMind} /> : null}
+        {status?.state === "unreachable" ? <UnreachableAsk host={status.host} /> : null}
         <form onSubmit={submit}>
           <div className="ph-find">
             <input

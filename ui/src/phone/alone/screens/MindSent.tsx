@@ -14,23 +14,17 @@ const KIND: Record<MindSent["kind"], CopyId> = {
 
 type Load = { name: "loading" } | { name: "ready"; rows: MindSent[] } | { name: "failed" };
 
-/** One request, its exact words behind a tap. */
+/** One request: what it was for, when it left and how much. */
 function SentRow({ row }: { row: MindSent }) {
   return (
-    <li>
-      <details className="ph-mind-sent">
-        <summary>
-          <span className="ph-mind-sent-what">{t(KIND[row.kind])}</span>
-          <span className="ph-mind-sent-meta">
-            {t("phone.mind.sent.row", {
-              time: formatTimeOfDay(row.at),
-              size: formatBytes(row.bytes),
-            })}
-          </span>
-        </summary>
-        <p className="ph-lbl">{t("phone.mind.sent.exact")}</p>
-        <pre className="ph-mind-sent-words">{row.words}</pre>
-      </details>
+    <li className="ph-mind-sent">
+      <span className="ph-mind-sent-what">{t(KIND[row.kind])}</span>
+      <span className="ph-mind-sent-meta">
+        {t("phone.mind.sent.row", {
+          time: formatTimeOfDay(row.at),
+          size: formatBytes(row.bytes),
+        })}
+      </span>
     </li>
   );
 }

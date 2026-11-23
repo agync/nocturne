@@ -12,7 +12,9 @@ import type { PhoneEngine, Queue } from "../../engine";
 import { PageArticle } from "../../screens/PageScreen";
 import { CalendarToday, LastNight } from "../../screens/PageSections";
 import { Button, Page } from "../../screens/ui";
+import type { MindStatus } from "../mind";
 import { KeptLine } from "./kept";
+import { MindNotice, UnreachableToday } from "./MindNotice";
 import { chips, NearlyFull } from "./parts";
 
 /** Rows that are things kept, not plans or readings the phone brought. */
@@ -54,6 +56,10 @@ export interface HomeTodayProps {
    * page it wrote shows in its place.
    */
   mind: string | null;
+  /** How the chosen service is doing; a trouble shows over the page, with the way to fix it. */
+  status?: MindStatus | null;
+  /** "Check the key…", "Check again" and "Change limit". */
+  onFixMind?(): void;
   queue: Queue;
   onQueued(): void;
   /** A receipt on the page's lines. */
@@ -144,6 +150,7 @@ export function HomeToday(p: HomeTodayProps) {
             </div>
           </div>
         ) : null}
+        {p.status && p.onFixMind ? <MindNotice status={p.status} onFix={p.onFixMind} /> : null}
         {p.mind === null ? (
           <section className="ph-nomind" aria-labelledby="ph-nomind-title">
             <h2 id="ph-nomind-title">{t("phone.alone.noMind.title")}</h2>
@@ -170,6 +177,9 @@ export function HomeToday(p: HomeTodayProps) {
               byline={t("phone.mind.today.written", { host: p.mind })}
             />
           </div>
+        ) : null}
+        {p.status?.state === "unreachable" && written(page) ? (
+          <UnreachableToday status={p.status} written={page.date} />
         ) : null}
         {written(page) && p.mind !== null ? null : page?.lastNight ? (
           <LastNight night={page.lastNight} onOpen={() => p.onNight(page.lastNight?.to ?? "")} />
