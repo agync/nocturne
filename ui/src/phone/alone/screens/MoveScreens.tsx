@@ -143,9 +143,7 @@ export function MoveSize({
               })}
             </li>
           ) : null}
-          {journal > 0 ? (
-            <li>{t("moving.phone.size.journal", { count: journal })}</li>
-          ) : null}
+          {journal > 0 ? <li>{t("moving.phone.size.journal", { count: journal })}</li> : null}
           {counts.pages > 0 ? (
             <li>{t("moving.phone.size.pages", { count: counts.pages })}</li>
           ) : null}
@@ -426,9 +424,7 @@ export function MoveMoved({
           ) : (
             <>
               <Hero title={t("moving.phone.moved.title", { computer })} icon="check" />
-              <p className="ph-body">
-                {t("moving.phone.moved.body", { count: items, computer })}
-              </p>
+              <p className="ph-body">{t("moving.phone.moved.body", { count: items, computer })}</p>
             </>
           )}
         </div>

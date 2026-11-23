@@ -178,9 +178,7 @@ describe("the welcome", () => {
       remote: { auto: false, scenario: "off" },
     });
     await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Yes, bring my memory here" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, bring my memory here" }));
     await waitFor(() => expect(window.location.hash).toBe("#/settings/away/setup?phone=1"));
     // Straight to Simple's own question, with its download asked about.
     expect(
