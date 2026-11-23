@@ -450,6 +450,32 @@ describe("The answer screen on a phone alone", () => {
     fireEvent.submit(screen.getByRole("form", { name: "Ask" }));
   }
 
+  it("points to this phone's own Sent online list after an answer, and nowhere else", async () => {
+    await ask("What did I mean to ask?");
+    await screen.findByText("Answered online by your provider (answers.example)");
+    const line = screen.getByText(
+      (_, el) =>
+        el?.tagName === "P" &&
+        el.textContent === "What was sent is listed in This phone. Choose See what was sent.",
+    );
+    expect(line.querySelectorAll(".ph-cc")).toHaveLength(2);
+    expect(screen.queryByText(/computer|Correct it/)).toBeNull();
+  });
+
+  it("says when no answer came, without saying it is getting ready", async () => {
+    await ask("no answer for this");
+    expect(
+      await screen.findByText("No answer came this time. Ask again in a moment."),
+    ).toBeVisible();
+    expect(screen.queryByText(/getting ready|computer/)).toBeNull();
+  });
+
+  it("says how to tell which is right when not sure", async () => {
+    await ask("which day is the swap?");
+    expect(await screen.findByText("Open each one to see which is right.")).toBeVisible();
+    expect(screen.queryByText(/computer/)).toBeNull();
+  });
+
   it("stops a question: the request is dropped and nothing is shown", async () => {
     await ask("tell me slowly");
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));

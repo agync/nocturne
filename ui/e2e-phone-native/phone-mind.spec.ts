@@ -162,8 +162,16 @@ for (const scheme of ["light", "dark"] as const) {
         page.getByText("Answered online by your provider (answers.example)"),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Choose a mind" })).toHaveCount(0);
+      await expect(page.getByText(/What was sent is listed in/)).toBeVisible();
       await clean(page);
       await shot(page, `mind-ask-${scheme}`);
+      await page.getByRole("textbox", { name: "Your question" }).fill("no answer for this");
+      await page.getByRole("textbox", { name: "Your question" }).press("Enter");
+      await expect(
+        page.getByText("No answer came this time. Ask again in a moment."),
+      ).toBeVisible();
+      await clean(page);
+      await shot(page, `mind-ask-no-answer-${scheme}`);
     });
 
     test("This phone isn't online", async ({ page }) => {
