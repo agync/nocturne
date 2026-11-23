@@ -3,6 +3,6 @@
 /**
  * What a memory holds, in the columns a phone shows before a restore replaces it: things kept
  * (not the journal, check-ins, the calendar or readings), journal entries and good things as
- * they stand now, and photos and recordings.
+ * they stand now, photos and recordings, and check-ins.
  */
-export type KeptCounts = { things: number, journalEntries: number, photosAndRecordings: number, };
+export type KeptCounts = { things: number, journalEntries: number, photosAndRecordings: number, checkins: number, };

@@ -17,6 +17,7 @@ import { calendarValue, healthValue, offered } from "./Offer";
 import { openPolicy, sentAt, useHeading } from "./parts";
 
 type AsideStep =
+  | { name: "askBring" }
   | { name: "bringing" }
   | { name: "failed"; why: MoveEnded }
   | { name: "brought"; moved: Moved; busy: boolean }
@@ -57,7 +58,13 @@ export function ThisPhone({
   const [put, setPut] = useState<MoveAside | null>(null);
   const [step, setStep] = useState<AsideStep | null>(null);
   const [progress, setProgress] = useState<MoveProgress | null>(null);
-  const heading = useHeading(confirming ? "confirm" : step?.name === "remove" ? "remove" : "phone");
+  const heading = useHeading(
+    confirming
+      ? "confirm"
+      : step?.name === "remove" || step?.name === "askBring"
+        ? "remove"
+        : "phone",
+  );
   const connected = connection.kind === "connected";
 
   const look = useCallback(() => {
@@ -109,6 +116,38 @@ export function ThisPhone({
       });
   };
 
+  if (step?.name === "askBring" && put) {
+    const counts = put.counts ?? null;
+    const day = put.at ? formatLongDay(put.at) : null;
+    return (
+      <Page bar={<BackBar title={t("phone.sheet.title")} onBack={() => setStep(null)} />}>
+        <main className="ph-main">
+          <h2 className="ph-h1" tabIndex={-1} ref={heading}>
+            {day
+              ? t("moving.phone.aside.bringAsk", { day, computer })
+              : t("moving.phone.moved.choice")}
+          </h2>
+          {counts ? (
+            <p className="ph-body">
+              {t("moving.phone.aside.bringBody", {
+                computer,
+                things: counts.things,
+                entries: counts.journalEntries,
+                checkins: counts.checkins,
+              })}
+            </p>
+          ) : null}
+          <div className="ph-spacer" />
+          <div className="ph-stack">
+            <Button onClick={() => void bring()}>{t("moving.phone.aside.bringYes")}</Button>
+            <Button kind="quiet" onClick={() => setStep(null)}>
+              {t("moving.phone.aside.bringNot")}
+            </Button>
+          </div>
+        </main>
+      </Page>
+    );
+  }
   if (step?.name === "bringing")
     return (
       <MoveMoving
@@ -295,7 +334,7 @@ export function ThisPhone({
             {put.onComputer ? null : (
               <Row
                 label={t("moving.phone.aside.bring", { computer })}
-                onPress={() => void bring()}
+                onPress={() => setStep({ name: "askBring" })}
               />
             )}
             <Row

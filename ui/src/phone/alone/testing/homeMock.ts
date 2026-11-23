@@ -158,7 +158,7 @@ export function homeState(scenario: HomeScenario) {
             id: "store-put-aside-2026-11-20-081500",
             at: "2026-11-20T08:15:00.000Z",
             bytes: 388_000_000,
-            counts: { things: 117, journalEntries: 41, photosAndRecordings: 36 },
+            counts: { things: 117, journalEntries: 41, photosAndRecordings: 36, checkins: 5 },
           },
         ]
       : [];
@@ -167,7 +167,7 @@ export function homeState(scenario: HomeScenario) {
       id: "store-put-aside-2026-11-20-171000",
       at: "2026-11-20T17:10:00.000Z",
       bytes: 401_000_000,
-      counts: { things: 120, journalEntries: 42, photosAndRecordings: 37 },
+      counts: { things: 120, journalEntries: 42, photosAndRecordings: 37, checkins: 5 },
     });
   let calendarKept = 6;
   let healthKept = 412;
@@ -295,13 +295,14 @@ export function homeState(scenario: HomeScenario) {
                 : null,
             putAside: aside[0]?.at ?? null,
           },
-          backup: { things: 128, journalEntries: 52, photosAndRecordings: 40 },
+          backup: { things: 128, journalEntries: 52, photosAndRecordings: 40, checkins: 6 },
           here:
             call.passphrase === "already here"
               ? ({
                   things: 2,
                   journalEntries: 0,
                   photosAndRecordings: 1,
+                  checkins: 0,
                 } satisfies KeptCounts)
               : null,
         };
@@ -343,7 +344,7 @@ export function homeState(scenario: HomeScenario) {
             id: "store-put-aside-2026-11-21-093000",
             at: at("09:30"),
             bytes: 412_000_000,
-            counts: { things: rows.length, journalEntries: 0, photosAndRecordings: 1 },
+            counts: { things: rows.length, journalEntries: 0, photosAndRecordings: 1, checkins: 0 },
           },
         ];
         return { type: "restored" };

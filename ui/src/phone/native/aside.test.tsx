@@ -77,6 +77,7 @@ describe("the memory a move put aside, in This phone", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     expect(
       await screen.findByRole("heading", { name: "Bringing your things to Maya’s laptop" }),
     ).toBeInTheDocument();
@@ -93,6 +94,34 @@ describe("the memory a move put aside, in This phone", () => {
     await waitFor(() => expect(aside.putAside).toHaveBeenCalledWith(false));
   });
 
+  it("asks first, with what it holds, and brings nothing in on Not now", async () => {
+    const aside = fakeAside({
+      onComputer: false,
+      keepUntil: null,
+      at: "2026-11-23T08:00:00Z",
+      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
+    });
+    open(aside);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Bring the things put aside Monday 23 November to Maya’s laptop?",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "12 things kept, 1 journal entry and 4 check-ins join the memory on Maya’s laptop, which reads them as new. What is put aside here stays until you remove it.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(aside.bring).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
+    ).toBeInTheDocument();
+  });
+
   it("only offers to remove it once its things are on the computer", async () => {
     const aside = fakeAside({ onComputer: true, keepUntil: "2026-12-23T09:00:00Z" });
     open(aside);
@@ -105,7 +134,7 @@ describe("the memory a move put aside, in This phone", () => {
       onComputer: false,
       keepUntil: null,
       at: "2026-11-23T08:00:00Z",
-      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3 },
+      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
       writing: false,
     });
     open(aside);
@@ -130,7 +159,7 @@ describe("the memory a move put aside, in This phone", () => {
       onComputer: true,
       keepUntil: "2026-12-23T08:00:00Z",
       at: "2026-11-23T08:00:00Z",
-      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3 },
+      counts: { things: 12, journalEntries: 1, photosAndRecordings: 3, checkins: 4 },
       writing: true,
     });
     open(aside);
@@ -156,6 +185,7 @@ describe("the memory a move put aside, in This phone", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
     aside.finish("ranOutOfRoom");
     expect(
@@ -171,6 +201,7 @@ describe("the memory a move put aside, in This phone", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     const sheet = await screen.findByRole("dialog");
@@ -192,6 +223,7 @@ describe("the memory a move put aside, in This phone", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Bring its things to Maya’s laptop…" }),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Bring them in" }));
     await waitFor(() => expect(aside.bring).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     fireEvent.click(

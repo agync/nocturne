@@ -784,10 +784,12 @@ pub(crate) fn kept_counts_in(conn: &Connection) -> Result<KeptCounts> {
         conn,
         "SELECT COUNT(*) FROM items WHERE kind IN ('image', 'audio') AND file_name IS NOT NULL",
     )?;
+    let checkins = count(conn, "SELECT COUNT(*) FROM items WHERE kind = 'checkin'")?;
     Ok(KeptCounts {
         things,
         journal_entries,
         photos_and_recordings,
+        checkins,
     })
 }
 
@@ -1339,6 +1341,7 @@ mod tests {
                 things: 4,
                 journal_entries: 2,
                 photos_and_recordings: 2,
+                checkins: 1,
             }
         );
     }
