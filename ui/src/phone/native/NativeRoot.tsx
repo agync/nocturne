@@ -353,6 +353,8 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       );
     case "move": {
       const leave = () => {
+        // What the phone alone recorded in history means nothing to the app that comes next.
+        history.replaceState(null, "", location.pathname + location.search);
         shown.current = "loading";
         setScreen({ name: "loading" });
         void home();

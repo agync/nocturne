@@ -58,6 +58,30 @@ type View =
 
 const TODAY: View = { name: "tab", tab: "today" };
 
+const OWN: ReadonlySet<string> = new Set<View["name"]>([
+  "tab",
+  "offer",
+  "thisPhone",
+  "calendar",
+  "health",
+  "keep",
+  "checkin",
+  "original",
+  "journal",
+  "lookback",
+  "which",
+  "relinkWords",
+]);
+
+/** A view this app recorded in history, never one the phone alone left there before a move. */
+function ownView(state: unknown): View | null {
+  const view = (state as { view?: { name?: unknown } } | null)?.view;
+  if (!view || typeof view.name !== "string" || !OWN.has(view.name)) return null;
+  if (view.name === "journal" && !(view as { day?: unknown }).day)
+    return { name: "tab", tab: "journal" };
+  return view as View;
+}
+
 /** Which side must update, from the connection, with both versions for the card. */
 export function updateFor(
   conn: Connection,
@@ -79,13 +103,11 @@ function useView(first: View) {
   const [view, setView] = useState<View>(() => {
     // Just paired: the offer comes first, whatever an earlier screen left in history.
     if (first.name === "offer") return first;
-    const kept = history.state?.view as View | { name: "journal"; day: null } | undefined;
-    if (kept?.name === "journal" && !kept.day) return { name: "tab", tab: "journal" };
-    return (kept as View | undefined) ?? first;
+    return ownView(history.state) ?? first;
   });
   useEffect(() => {
     history.replaceState({ view }, "");
-    const onPop = (e: PopStateEvent) => setView((e.state?.view as View | undefined) ?? TODAY);
+    const onPop = (e: PopStateEvent) => setView(ownView(e.state) ?? TODAY);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
     // The first entry is recorded once.
