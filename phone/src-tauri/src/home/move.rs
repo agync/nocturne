@@ -9,8 +9,9 @@
 //! nothing so the computer has them too. The put-aside memory stays for 30 days unless the
 //! person removes it sooner. A computer still checking or adding when the phone comes back is
 //! only asked where the memory stands (a `memoryDone` that sends nothing), so the wait never
-//! starts a new move there. A computer that answers it took the memory whole, to open after a
-//! restart, is not followed: nothing changes here.
+//! starts a new move there. Only `MemoryBrought` finishes a move: a computer old enough to take
+//! the memory whole, to open after a restart, is not followed. Nothing changes here, and the
+//! person hears to update Nocturne there.
 //!
 //! Anything kept while the memory moves waits in the screens' queue and goes to the computer
 //! once the phone is its companion. A move that stops part way changes nothing here.
@@ -119,8 +120,6 @@ pub enum MoveError {
     NoRoom,
     /// The computer ran out of room while it wrote it out; nothing changed.
     RanOutOfRoom,
-    /// The computer could not open it after its restart; nothing changed.
-    NotOpened,
     /// The person on the computer stopped the move; nothing changed.
     StoppedThere,
 }
@@ -129,7 +128,7 @@ pub enum MoveError {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveOffered {
-    /// The memory already opened there, or its things were added: the move only has to finish.
+    /// Its things were added there already: the move only has to finish.
     pub opened: bool,
     /// What the computer already holds.
     pub here: Option<MemoryCounts>,
@@ -140,13 +139,12 @@ pub struct MoveOffered {
     pub use_here: bool,
 }
 
-/// The finished move, for "Your memory is on {computer}.", or with `brought` for "Your things
-/// are on {computer}."
+/// The finished move, for "Your things are on {computer}."
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Moved {
     pub items: u32,
-    pub brought: Option<BroughtCounts>,
+    pub brought: BroughtCounts,
 }
 
 /// The memory put aside after a move, and until when it stays: none when nothing of it is on
@@ -182,28 +180,12 @@ pub struct MoveAside {
     pub writing: bool,
 }
 
-/// How the computer took what was sent.
+/// How the computer took what was sent: its things were checked (these counts) and added to the
+/// memory there.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Arrival {
-    /// The memory opened there, with these counts.
-    Opened(MemoryCounts),
-    /// Its things were checked (these counts) and added to the memory there.
-    Brought(MemoryCounts, BroughtCounts),
-}
-
-impl Arrival {
-    fn counts(&self) -> MemoryCounts {
-        match self {
-            Arrival::Opened(c) | Arrival::Brought(c, _) => *c,
-        }
-    }
-
-    fn brought(&self) -> Option<BroughtCounts> {
-        match self {
-            Arrival::Opened(_) => None,
-            Arrival::Brought(_, added) => Some(*added),
-        }
-    }
+pub(crate) struct Arrival {
+    counts: MemoryCounts,
+    added: BroughtCounts,
 }
 
 /// A backup made for the move, with what the computer must report back.
@@ -351,23 +333,23 @@ impl Home {
         })
     }
 
-    /// The computer has the memory, or added its things: check its counts against what was
-    /// sent, then put the store aside, read only, for 30 days, and become its companion. Call it
-    /// holding [`Home::exclusive`].
+    /// The computer added its things: check its counts against what was sent, then put the
+    /// store aside, read only, for 30 days, and become its companion. Call it holding
+    /// [`Home::exclusive`].
     pub(crate) fn finish_move(
         &self,
         prepared: &Prepared,
         arrival: Arrival,
     ) -> Result<Moved, MoveError> {
-        if !whole(prepared, arrival.counts()) {
+        if !whole(prepared, arrival.counts) {
             return Err(MoveError::NotWhole);
         }
         let keep_until = Some(self.thirty_days()?);
         self.become_companion(keep_until, true)?;
         calls::clear(&self.moving_dir());
         Ok(Moved {
-            items: arrival.counts().items,
-            brought: arrival.brought(),
+            items: arrival.counts.items,
+            brought: arrival.added,
         })
     }
 
@@ -501,9 +483,7 @@ impl Home {
         prepared: &Prepared,
         arrival: Arrival,
     ) -> Result<Moved, MoveError> {
-        let Arrival::Brought(counts, added) = arrival else {
-            return Err(MoveError::Failed);
-        };
+        let Arrival { counts, added } = arrival;
         if !whole(prepared, counts) {
             return Err(MoveError::NotWhole);
         }
@@ -516,7 +496,7 @@ impl Home {
         calls::clear(&self.moving_dir());
         Ok(Moved {
             items: counts.items,
-            brought: Some(added),
+            brought: added,
         })
     }
 
@@ -621,8 +601,9 @@ fn failure(e: CallError) -> MoveError {
 }
 
 /// Offer the memory and wait for the person on the computer. Answers what the computer already
-/// holds and how the phone joins it, or that the memory is already there (a move whose answer
-/// was missed). With `bring`, what a move put aside is brought in: the computer asks nothing.
+/// holds and how the phone joins it, or that its things were added there already (a move whose
+/// answer was missed). With `bring`, what a move put aside is brought in: the computer asks
+/// nothing.
 pub(crate) async fn offer(
     computer: &impl Computer,
     facts: &MoveFacts,
@@ -669,9 +650,9 @@ pub(crate) async fn offer(
             );
             Ok(Offered::Accepted { here, bring })
         }
-        RemoteAnswer::MemoryArrived { counts } => {
-            tracing::info!("the memory already opened on the computer");
-            Ok(Offered::Arrived(counts))
+        RemoteAnswer::MemoryArrived { .. } => {
+            tracing::info!("the computer took the memory whole: it needs updating");
+            Err(MoveError::ComputerOutdated)
         }
         RemoteAnswer::MemoryBrought { counts, added } => {
             tracing::info!("the things were already added on the computer");
@@ -691,8 +672,6 @@ pub(crate) async fn offer(
 /// Where the memory stands on the computer.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Stands {
-    /// It opened there, with these counts.
-    Opened(MemoryCounts),
     /// Its things were added there.
     Brought(MemoryCounts, BroughtCounts),
     /// Not settled yet: being checked or added there.
@@ -704,12 +683,10 @@ pub(crate) enum Stands {
 /// Ask where the memory stands, sending nothing.
 pub(crate) async fn stands(computer: &impl Computer) -> Result<Stands, MoveError> {
     match computer.status().await {
-        Ok(RemoteAnswer::MemoryArrived { counts }) => Ok(Stands::Opened(counts)),
         Ok(RemoteAnswer::MemoryBrought { counts, added }) => Ok(Stands::Brought(counts, added)),
+        // Taken whole, to open after a restart: an older computer, never followed.
+        Ok(RemoteAnswer::MemoryArrived { .. }) => Err(MoveError::ComputerOutdated),
         Ok(_) => Err(MoveError::Failed),
-        Err(CallError::Phone {
-            code: PhoneError::NotFound,
-        }) => Err(MoveError::NotOpened),
         Err(CallError::Phone {
             code: PhoneError::NotReady,
         }) => Ok(Stands::Unknown),
@@ -730,7 +707,6 @@ pub(crate) enum Offered {
         here: Option<MemoryCounts>,
         bring: bool,
     },
-    Arrived(MemoryCounts),
     Brought(MemoryCounts, BroughtCounts),
     /// Nothing goes: the computer's memory is used.
     UseHere,
@@ -765,15 +741,9 @@ pub(crate) async fn send(
             e => failure(e),
         })?;
     match answered {
-        RemoteAnswer::MemoryArrived { counts } => {
-            tracing::info!(
-                "the computer has the memory: {} items, {} memories, {} pages, {} originals",
-                counts.items,
-                counts.memories,
-                counts.pages,
-                counts.originals
-            );
-            Ok(Arrival::Opened(counts))
+        RemoteAnswer::MemoryArrived { .. } => {
+            tracing::info!("the computer took the memory whole: nothing changes here");
+            Err(MoveError::ComputerOutdated)
         }
         RemoteAnswer::MemoryBrought { counts, added } => {
             tracing::info!(
@@ -782,7 +752,7 @@ pub(crate) async fn send(
                 added.entries,
                 added.checkins
             );
-            Ok(Arrival::Brought(counts, added))
+            Ok(Arrival { counts, added })
         }
         _ => {
             tracing::info!("the computer answered the memory with something else");
@@ -888,9 +858,8 @@ pub async fn move_offer<R: Runtime>(app: AppHandle<R>) -> Result<MoveOffered, Mo
     };
     Ok(match offer(&phone(&app)?, &facts, false).await? {
         Offered::Accepted { here, bring } => offered(false, here, bring, false),
-        // Already opened or added there, from a move whose phone went away part way: moving
-        // finishes it without sending anything again.
-        Offered::Arrived(_) => offered(true, None, false, false),
+        // Already added there, from a move whose phone went away part way: moving finishes it
+        // without sending anything again.
         Offered::Brought(..) => offered(true, None, true, false),
         Offered::UseHere => {
             use_computer(&app).await?;
@@ -1016,12 +985,9 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
         ),
         Err(e) => tracing::info!("the move did not finish here: {e:?}"),
     }
-    if let Ok(moved) = &finished {
-        // A memory that moved whole took what was sent with it, so the ledger is kept. Things
-        // brought in left the calendar and health behind: they go again from nothing.
-        if moved.brought.is_some() {
-            app.state::<AppState>().syncer.ledger.forget_sends();
-        }
+    if finished.is_ok() {
+        // Things brought in left the calendar and health behind: they go again from nothing.
+        app.state::<AppState>().syncer.ledger.forget_sends();
         followed(&app);
     }
     finished
@@ -1079,7 +1045,7 @@ pub async fn move_bring_aside<R: Runtime>(app: AppHandle<R>) -> Result<Moved, Mo
                 Offered::Accepted { bring: true, .. } => {
                     carry(&computer, &prepared, &report, RETRY_EVERY, true).await
                 }
-                Offered::Brought(counts, added) => Ok(Arrival::Brought(counts, added)),
+                Offered::Brought(counts, added) => Ok(Arrival { counts, added }),
                 _ => Err(MoveError::Failed),
             }
         } => brought,
@@ -1170,11 +1136,10 @@ pub(crate) async fn carry(
     let first = stands(computer).await;
     tracing::info!("where the memory stands on the computer: {first:?}");
     match first? {
-        Stands::Opened(counts) => return Ok(Arrival::Opened(counts)),
         // Things added from this very memory; one that changed since goes again, and the
         // computer adds only what is new.
         Stands::Brought(counts, added) if whole(prepared, counts) => {
-            return Ok(Arrival::Brought(counts, added));
+            return Ok(Arrival { counts, added });
         }
         Stands::Brought(..) => {}
         Stands::Waiting => {
@@ -1197,8 +1162,7 @@ pub(crate) async fn carry(
         };
         ask = true;
         let out = match again {
-            Ok(Offered::Arrived(counts)) => return Ok(Arrival::Opened(counts)),
-            Ok(Offered::Brought(counts, added)) => return Ok(Arrival::Brought(counts, added)),
+            Ok(Offered::Brought(counts, added)) => return Ok(Arrival { counts, added }),
             // Nothing is sent to a computer whose memory the person chose there.
             Ok(Offered::UseHere) => Err(MoveError::Failed),
             Ok(Offered::Accepted { .. }) => {
@@ -1228,13 +1192,7 @@ pub(crate) async fn carry(
                 report(MovePhase::Paused, 0, size);
                 tokio::time::sleep(pause).await;
             }
-            Ok(brought @ Arrival::Brought(..)) => return Ok(brought),
-            // Taken whole, to open after a restart: no longer how a move ends, so this phone
-            // keeps its memory rather than wait on a computer that may come back elsewhere.
-            Ok(Arrival::Opened(_)) => {
-                tracing::info!("the computer took the memory whole: nothing changes here");
-                return Err(MoveError::Failed);
-            }
+            Ok(arrival) => return Ok(arrival),
             Err(e) => return Err(e),
         }
     }
@@ -1254,8 +1212,7 @@ async fn settled(
         report(MovePhase::Checking, size, size);
         tokio::time::sleep(pause.min(ASK_EVERY)).await;
         match stands(computer).await? {
-            Stands::Opened(counts) => return Ok(Some(Arrival::Opened(counts))),
-            Stands::Brought(counts, added) => return Ok(Some(Arrival::Brought(counts, added))),
+            Stands::Brought(counts, added) => return Ok(Some(Arrival { counts, added })),
             Stands::Unknown => return Ok(None),
             Stands::Waiting => {}
         }
@@ -1367,7 +1324,8 @@ mod tests {
         /// What it took last, as it would answer once opened.
         took: Mutex<Option<MemoryCounts>>,
         skew: u32,
-        /// It adds the things to a memory of its own rather than opening the memory.
+        /// It adds the things to its memory, as every computer does now; an older one opens the
+        /// memory whole instead.
         brings: bool,
         calls: Mutex<Vec<RemoteCall>>,
     }
@@ -1385,7 +1343,7 @@ mod tests {
                 statuses: Mutex::default(),
                 took: Mutex::default(),
                 skew: 0,
-                brings: false,
+                brings: true,
                 calls: Mutex::default(),
             }
         }
@@ -1521,13 +1479,9 @@ mod tests {
             false,
         ))
         .unwrap();
-        assert!(
-            matches!(arrival, Arrival::Brought(..)),
-            "no restart to wait for"
-        );
         let moved = home.finish_move(&prepared, arrival).unwrap();
         drop(only);
-        assert_eq!(moved.brought, Some(added()));
+        assert_eq!(moved.brought, added());
         assert_eq!(home.mode(true), Some(PhoneMode::Companion));
         let aside = home.move_aside().unwrap();
         assert!(aside.on_computer, "only removing is offered");
@@ -1609,7 +1563,7 @@ mod tests {
         );
         assert!(!home.move_aside().unwrap().on_computer, "nothing changed");
         let moved = home.finish_bring(&prepared, arrival).unwrap();
-        assert_eq!(moved.brought, Some(added()));
+        assert_eq!(moved.brought, added());
         let aside = home.move_aside().unwrap();
         assert!(aside.on_computer);
         assert!(aside.keep_until.is_some());
@@ -1639,7 +1593,7 @@ mod tests {
                 added: added(),
             }));
         let (out, _) = carried(&home, &computer);
-        assert!(matches!(out.unwrap(), Arrival::Brought(c, _) if c.items == 2));
+        assert_eq!(out.unwrap().counts.items, 2);
         assert_eq!(sends(&computer), 1, "what was kept since goes too");
     }
 
@@ -1673,7 +1627,7 @@ mod tests {
         .unwrap();
         drop(only);
         home.drop_move();
-        assert!(matches!(arrival, Arrival::Brought(..)));
+        assert_eq!(arrival.added, added());
         let offers: Vec<bool> = computer
             .calls
             .lock()
@@ -1725,7 +1679,7 @@ mod tests {
     }
 
     #[test]
-    fn a_memory_that_arrived_whole_is_put_aside_and_the_phone_follows_its_computer() {
+    fn a_memory_whose_things_were_added_is_put_aside_and_the_phone_follows_its_computer() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
         let computer = Fake::new();
@@ -1873,8 +1827,9 @@ mod tests {
         let counts = facts.counts;
         computer.offered = Ok(RemoteAnswer::MemoryArrived { counts });
         assert_eq!(
-            block(offer(&computer, &facts, false)).unwrap(),
-            Offered::Arrived(counts)
+            block(offer(&computer, &facts, false)).err(),
+            Some(MoveError::ComputerOutdated),
+            "a memory taken whole there is never followed"
         );
     }
 
@@ -1911,12 +1866,13 @@ mod tests {
 
     /// A computer that adds the things, as every computer does now.
     fn bringing() -> Fake {
+        Fake::new()
+    }
+
+    /// An older computer, which takes the memory whole to open after a restart.
+    fn whole_taker() -> Fake {
         let mut computer = Fake::new();
-        computer.brings = true;
-        computer.offered = Ok(RemoteAnswer::MemoryAccepted {
-            here: None,
-            bring: true,
-        });
+        computer.brings = false;
         computer
     }
 
@@ -1934,7 +1890,7 @@ mod tests {
             Err(phone_code(PhoneError::NotReady)),
         ]);
         let (out, phases) = carried(&home, &computer);
-        assert!(matches!(out.unwrap(), Arrival::Brought(c, _) if c.items == 2));
+        assert_eq!(out.unwrap().counts.items, 2);
         assert!(phases.contains(&MovePhase::Checking));
         assert!(
             !phases.contains(&MovePhase::Paused),
@@ -1953,9 +1909,9 @@ mod tests {
     fn a_computer_that_takes_the_memory_whole_is_not_followed() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
-        let computer = Fake::new();
+        let computer = whole_taker();
         let (out, phases) = carried(&home, &computer);
-        assert_eq!(out.err(), Some(MoveError::Failed));
+        assert_eq!(out.err(), Some(MoveError::ComputerOutdated));
         assert_eq!(sends(&computer), 1);
         assert!(
             computer
@@ -1984,7 +1940,7 @@ mod tests {
                 state: Reach::Asleep,
             });
         let (out, phases) = carried(&home, &computer);
-        assert!(matches!(out.unwrap(), Arrival::Brought(..)));
+        assert_eq!(out.unwrap().added, added());
         assert!(phases.contains(&MovePhase::Paused));
         assert_eq!(sends(&computer), 2);
         let offers = computer
@@ -1998,10 +1954,10 @@ mod tests {
     }
 
     #[test]
-    fn a_move_that_already_opened_there_finishes_without_sending() {
+    fn a_memory_an_older_computer_opened_whole_is_not_followed_from_the_first_ask() {
         let dir = tempfile::tempdir().unwrap();
         let (home, _) = alone(dir.path());
-        let computer = Fake::new();
+        let computer = whole_taker();
         let counts = home.move_facts().unwrap().counts;
         computer
             .statuses
@@ -2009,7 +1965,50 @@ mod tests {
             .unwrap()
             .push_back(Ok(RemoteAnswer::MemoryArrived { counts }));
         let (out, _) = carried(&home, &computer);
-        assert_eq!(out.unwrap(), Arrival::Opened(counts));
+        assert_eq!(out.err(), Some(MoveError::ComputerOutdated));
+        assert_eq!(sends(&computer), 0);
+        assert_eq!(
+            home.mode(true),
+            Some(PhoneMode::Alone),
+            "nothing changes here"
+        );
+    }
+
+    #[test]
+    fn a_move_whose_things_were_added_finishes_without_sending() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, _) = alone(dir.path());
+        let computer = bringing();
+        let counts = home.move_facts().unwrap().counts;
+        computer
+            .statuses
+            .lock()
+            .unwrap()
+            .push_back(Ok(RemoteAnswer::MemoryBrought {
+                counts,
+                added: added(),
+            }));
+        let (out, _) = carried(&home, &computer);
+        assert_eq!(out.unwrap().added, added());
+        assert_eq!(sends(&computer), 0);
+    }
+
+    #[test]
+    fn a_memory_opened_whole_while_it_was_waited_for_is_not_followed() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, _) = alone(dir.path());
+        let computer = whole_taker();
+        let counts = home.move_facts().unwrap().counts;
+        computer.statuses.lock().unwrap().extend([
+            Err(phone_code(PhoneError::Busy)),
+            Ok(RemoteAnswer::MemoryArrived { counts }),
+        ]);
+        let (out, _) = carried(&home, &computer);
+        assert_eq!(
+            out.err(),
+            Some(MoveError::ComputerOutdated),
+            "opened whole while it waited: never followed"
+        );
         assert_eq!(sends(&computer), 0);
     }
 
