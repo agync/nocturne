@@ -146,5 +146,10 @@
   "phone.mind.sent.page": "Wrote your page",
   "phone.mind.sent.check": "Connection check",
   "phone.mind.sent.row": "{time} · {size}",
-  "phone.mind.sent.footer": "Older than 90 days are removed by themselves."
+  "phone.mind.sent.footer": "Older than 90 days are removed by themselves.",
+
+  "phone.mind.ask.notSure": "Open each one to see which is right.",
+  "phone.mind.ask.sent": "What was sent is listed in {thisPhone}. Choose {seeWhatWasSent}.",
+  "phone.mind.ask.noAnswer": "No answer came this time. Ask again in a moment.",
+  "phone.mind.ask.failed": "This couldn’t be answered just now. Ask again in a moment."
 }

@@ -6,6 +6,7 @@ import type { AnsweredBy, AskDelta, AskPhase, NearMatch, Receipt } from "../../e
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
 import { receiptMeta } from "../labels";
 import { MAX_QUESTION } from "../protocol";
+import { Chip, chips } from "./chips";
 import { BackBar, Button, Icon, Page } from "./ui";
 
 export type AskFailure = "tooMany" | "notReady" | "paused" | "failed";
@@ -233,7 +234,7 @@ interface AskProps {
   onAskHere(): void;
   /** In the app's Ask tab: its own top bar in place of the back bar. */
   tabBar?: ReactNode;
-  /** A phone alone: no computer to say where it was sent, or to correct an answer on. */
+  /** A phone alone: what was sent is listed on it, and there is no computer to correct on. */
   alone?: boolean;
 }
 
@@ -333,15 +334,19 @@ export function Ask({
               >
                 {model.failure === "tooMany"
                   ? t("phone.ask.tooMany")
-                  : model.failure === "notReady"
-                    ? t("phone.ask.notReady")
-                    : model.failure === "paused"
-                      ? t("phone.ask.paused")
-                      : t("phone.ask.failed")}
+                  : alone && model.failure === "failed"
+                    ? t("phone.mind.ask.failed")
+                    : alone
+                      ? t("phone.mind.ask.noAnswer")
+                      : model.failure === "notReady"
+                        ? t("phone.ask.notReady")
+                        : model.failure === "paused"
+                          ? t("phone.ask.paused")
+                          : t("phone.ask.failed")}
               </p>
             ) : model.phase === "unavailable" ? (
               <p className="ph-answer" role="status">
-                {t("phone.ask.notReady")}
+                {alone ? t("phone.mind.ask.noAnswer") : t("phone.ask.notReady")}
               </p>
             ) : model.phase === "nothing" ? (
               <>
@@ -365,11 +370,9 @@ export function Ask({
                     />
                   ))}
                 </ul>
-                {alone ? null : (
-                  <p className="ph-body" style={{ fontSize: "0.9375rem" }}>
-                    {t("phone.ask.notSure.hint")}
-                  </p>
-                )}
+                <p className="ph-body" style={{ fontSize: "0.9375rem" }}>
+                  {alone ? t("phone.mind.ask.notSure") : t("phone.ask.notSure.hint")}
+                </p>
               </>
             ) : (
               <>
@@ -424,8 +427,14 @@ export function Ask({
                   : t("phone.ask.mark.computer")}
               </p>
             )}
-            {done && !alone && model.answeredBy?.type === "online" && (
-              <p className="ph-hint ph-hint--ink2">{tc("phone.ask.mark.sent")}</p>
+            {done && model.answeredBy?.type === "online" && (
+              <p className="ph-hint ph-hint--ink2">
+                {alone
+                  ? chips("phone.mind.ask.sent", {
+                      seeWhatWasSent: <Chip>{t("phone.mind.row.sent")}</Chip>,
+                    })
+                  : tc("phone.ask.mark.sent")}
+              </p>
             )}
             {done && !alone && <p className="ph-hint ph-hint--ink2">{t("phone.ask.wrong")}</p>}
           </>

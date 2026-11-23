@@ -599,20 +599,34 @@ export function homeState(scenario: HomeScenario) {
   }
 
   /**
-   * A question for the online mind: one that says "slowly" waits until it is stopped. Anything
-   * else is answered.
+   * A question for the online mind: one that says "slowly" waits until it is stopped, "no
+   * answer" gets none, and "which" is not sure. Anything else is answered.
    */
   function asked(question: string, askId: string): RemoteAnswer | Promise<RemoteAnswer> {
     if (mind.state !== "on") return { type: "error", code: "notReady" };
     const reply = answered(mind.host);
     if (reply.type !== "askDelta") return reply;
     const delta = { ...reply.delta, askId };
-    const ended: RemoteAnswer = {
+    const ended = (phase: "unavailable" | "notSure"): RemoteAnswer => ({
       type: "askDelta",
-      delta: { ...delta, phase: "unavailable", textDelta: null, receipts: [] },
-    };
+      delta: {
+        ...delta,
+        phase,
+        textDelta: null,
+        receipts: [],
+        near:
+          phase === "notSure"
+            ? delta.receipts.map((receipt) => ({
+                text: "Ask about the swap for the 28th",
+                receipt,
+              }))
+            : [],
+      },
+    });
     if (question.includes("slowly"))
-      return new Promise((done) => waiting.set(askId, () => done(ended)));
+      return new Promise((done) => waiting.set(askId, () => done(ended("unavailable"))));
+    if (question.includes("no answer")) return ended("unavailable");
+    if (question.includes("which")) return ended("notSure");
     return { type: "askDelta", delta };
   }
 
