@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- iOS App Store and Play store source: the desktop mark on an opaque, full-bleed square. No rounded corners and no transparency; the stores apply their own mask. -->
+  <rect width="256" height="256" fill="#17181C"/>
+  <circle cx="128" cy="128" r="76" fill="#ECE8DF"/>
+  <path d="M52 128a76 76 0 0 0 152 0z" fill="#17181C"/>
+  <circle cx="128" cy="128" r="76" fill="none" stroke="#ECE8DF" stroke-width="10"/>
+</svg>
