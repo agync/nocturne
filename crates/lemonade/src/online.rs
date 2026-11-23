@@ -47,8 +47,7 @@ pub const WAIT_SECONDS: u64 = 6;
 /// After this long without an answer this computer answers instead.
 pub const SWITCH_SECONDS: u64 = 20;
 pub const SENT_KEPT_DAYS: u32 = 90;
-/// The most remembered sentences one question sends.
-pub const MAX_FACTS: usize = 12;
+pub use nocturne_mind::online::MAX_FACTS;
 
 /// A relaunch for Online answers waits at most this long for model requests in flight to end
 /// when turning off, and [`RELAUNCH_IDLE_WAIT_ON`] for a check or turning on.

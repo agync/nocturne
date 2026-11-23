@@ -5,7 +5,9 @@
 
 use std::ops::Range;
 
-use super::{candidate, grounded, normalise};
+use nocturne_engine::coverage::normalise;
+
+use crate::reading::{candidate, grounded};
 
 /// Finds the memories of a reading reply as each one is written whole: the objects at the top
 /// level of the first array in it. Fed the whole reply so far each time, it reads only what is

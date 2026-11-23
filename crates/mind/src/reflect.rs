@@ -3,7 +3,7 @@
 
 use nocturne_engine::{Reflected, WrittenSentence};
 
-use super::guard;
+use crate::guard;
 
 /// Words that end in a full stop without ending a sentence.
 const ABBREVIATIONS: [&str; 9] = ["dr", "mr", "mrs", "ms", "st", "vs", "prof", "e.g", "i.e"];

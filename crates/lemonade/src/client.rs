@@ -1401,14 +1401,7 @@ pub(crate) fn json_schema_format(schema: &Value) -> Value {
 
 /// Models sometimes wrap JSON in a code fence; take what is inside.
 pub(crate) fn parse_json_text<T: DeserializeOwned>(text: &str) -> Result<T, RuntimeError> {
-    let trimmed = text.trim();
-    let inner = trimmed
-        .strip_prefix("```json")
-        .or_else(|| trimmed.strip_prefix("```"))
-        .and_then(|t| t.strip_suffix("```"))
-        .map(str::trim)
-        .unwrap_or(trimmed);
-    serde_json::from_str(inner).map_err(|e| RuntimeError::BadResponse(e.to_string()))
+    nocturne_mind::reading::json_text(text).map_err(|e| RuntimeError::BadResponse(e.to_string()))
 }
 
 /// A piece of a streamed reply: some of its text, or the engine's reason for ending it.

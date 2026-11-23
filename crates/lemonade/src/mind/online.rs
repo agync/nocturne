@@ -3,7 +3,7 @@
 //! `answer` method (and its two halves, [`OnlineMind::prepare`] and [`OnlineMind::send`]),
 //! called only by Ask, so no other job can reach the route.
 //!
-//! The question is written from the full instructions and up to [`MAX_FACTS`] facts, fenced with
+//! The question is written from the full instructions and up to [`MAX_FACTS`](crate::online::MAX_FACTS) facts, fenced with
 //! a fresh nonce like a local answer, and judged by the same guards on this computer: a reply
 //! whose receipts do not map back to a fact sent is "not sure". One request per question, never
 //! retried.
@@ -11,13 +11,14 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use nocturne_contract::{CheckOutcome, SentLine, SentMemory};
-use nocturne_engine::{AnswerMeta, Fact, MindError, NewSend, OnlineFailure, OnlineReceipt};
+use nocturne_contract::{CheckOutcome, SentLine};
+use nocturne_engine::{AnswerMeta, Fact, MindError, OnlineFailure, OnlineReceipt};
+use nocturne_mind::judge::{conclude, judge};
+use nocturne_mind::online::{self, Question};
 use tokio::sync::mpsc;
 
-use super::{conclude, judge, prompts};
 use crate::client::{Client, Message, OnlineRequest};
-use crate::online::{CHECK_QUESTION, MAX_FACTS, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classify};
+use crate::online::{CHECK_QUESTION, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classify};
 
 /// Whether each memory id may still be sent, asked again just before the body is built.
 pub type Sendable = Arc<dyn Fn(&[String]) -> Vec<bool> + Send + Sync>;
@@ -71,59 +72,18 @@ impl OnlineMind {
         meta
     }
 
-    /// The body for `question`: the first [`MAX_FACTS`] facts that may still be sent, numbered
+    /// The body for `question`: the first [`MAX_FACTS`](crate::online::MAX_FACTS) facts that may still be sent, numbered
     /// again from 1 without gaps. `None` when none may be. A section of the Nocturne guide never
     /// goes: help is written on this computer.
     pub fn prepare(&self, question: &str, facts: &[Fact]) -> Option<Prepared> {
-        let first: Vec<Fact> = facts
-            .iter()
-            .filter(|f| !nocturne_engine::is_guide_section(&f.memory.id))
-            .take(MAX_FACTS)
-            .cloned()
-            .collect();
-        let ids: Vec<String> = first.iter().map(|f| f.memory.id.clone()).collect();
-        let ok = (self.sendable)(&ids);
-        let facts: Vec<Fact> = first
-            .into_iter()
-            .zip(ok.iter().chain(std::iter::repeat(&false)))
-            .filter_map(|(f, ok)| ok.then_some(f))
-            .collect();
-        let dropped = ids.len() - facts.len();
-        if facts.is_empty() {
-            return None;
-        }
-        let nonce = prompts::nonce();
-        let tier = prompts::ONLINE_TIER;
-        let system = prompts::answer_system(tier, &nonce);
-        let user = prompts::answer_user(tier, question, &facts, &nonce, None);
-        let (head, tail) = prompts::answer_frame(question, &nonce, None);
-        let mut template = vec![SentLine::Text {
-            text: system.clone(),
-        }];
-        template.extend(head.into_iter().map(|text| SentLine::Text { text }));
-        let mut line_hashes = Vec::new();
-        for (i, (f, (before, after))) in facts
-            .iter()
-            .zip(prompts::fact_lines(tier, &facts))
-            .enumerate()
-        {
-            let sent = format!("{before}{}{after}", f.memory.sentence);
-            line_hashes.push(NewSend::hash_line(&sent));
-            let after = match &f.memory.was {
-                Some(was) => after.replacen(
-                    &format!("before, it was {was}"),
-                    &format!("before, it was {}", NewSend::WAS_SLOT),
-                    1,
-                ),
-                None => after,
-            };
-            template.push(SentLine::Memory {
-                n: i as u32 + 1,
-                text: Some(format!("{before}{}{after}", NewSend::SLOT)),
-                state: SentMemory::Same,
-            });
-        }
-        template.extend(tail.into_iter().map(|text| SentLine::Text { text }));
+        let Question {
+            system,
+            user,
+            facts,
+            dropped,
+            template,
+            line_hashes,
+        } = online::question(question, facts, &*self.sendable)?;
         let request = OnlineRequest {
             model: MODEL_ID.to_string(),
             messages: vec![Message::system(&system), Message::user(&user)],
