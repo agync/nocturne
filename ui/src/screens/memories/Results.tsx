@@ -1,6 +1,7 @@
 import { goTo } from "../../app/query";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { receiptPath } from "../../components/ReceiptChip/receiptPath";
+import { formatLongDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { FoundItem } from "../../engine/bindings";
 import { useStatus } from "../../engine/context";
@@ -58,14 +59,19 @@ export function Results({ query }: { query: string }) {
 
 /**
  * Kept things that match by their words and wait to be read, each with its original. With no
- * mind yet, the line says answers need one; with one, that they are read tonight.
+ * mind yet they wait for one; with one, they are read tonight. Once read, a thing moves up
+ * into the results.
  */
 function Unread({ found }: { found: FoundItem[] }) {
   const mindless = useStatus().data?.state === "gettingReady";
-  const lead = t(mindless ? "phone.alone.find.above" : "item.status.keptTonight");
   return (
-    <section aria-label={lead}>
-      <p className={styles.hint}>{lead}</p>
+    <section aria-labelledby="memories-unread">
+      <h3 id="memories-unread" className="t-page-line">
+        {t("memories.unread.heading")}
+      </h3>
+      <p className={styles.hint}>
+        {t(mindless ? "memories.unread.lead.noMind" : "memories.unread.lead")}
+      </p>
       <ul className={styles.unread}>
         {found.map((f) => (
           <li key={f.receipt.itemId}>
@@ -79,6 +85,11 @@ function Unread({ found }: { found: FoundItem[] }) {
                   <span key={n}>{part.text}</span>
                 ),
               )}
+            </p>
+            <p className={styles.hint}>
+              {t(mindless ? "memories.unread.row.noMind" : "memories.unread.row", {
+                day: formatLongDay(f.receipt.keptAt),
+              })}
             </p>
             <ReceiptChip receipt={f.receipt} onOpen={() => goTo(receiptPath(f.receipt))} />
           </li>
