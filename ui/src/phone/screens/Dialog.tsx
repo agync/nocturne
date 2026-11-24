@@ -70,11 +70,7 @@ interface SheetProps {
   className?: string;
 }
 
-/** A sheet from the bottom edge: a dialog that traps focus and closes on Escape and back. */
-export function BottomSheet({ label, onClose, children, className }: SheetProps) {
-  const box = useRef<HTMLElement>(null);
-  useFocusTrap(box);
-  useBackToClose(true, onClose);
+function useEscape(onClose: () => void) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -82,6 +78,14 @@ export function BottomSheet({ label, onClose, children, className }: SheetProps)
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+}
+
+/** A sheet from the bottom edge: a dialog that traps focus and closes on Escape and back. */
+export function BottomSheet({ label, onClose, children, className }: SheetProps) {
+  const box = useRef<HTMLElement>(null);
+  useFocusTrap(box);
+  useBackToClose(true, onClose);
+  useEscape(onClose);
   return (
     <section
       ref={box}
@@ -94,6 +98,32 @@ export function BottomSheet({ label, onClose, children, className }: SheetProps)
       <span className="ph-grip" aria-hidden="true" />
       {children}
     </section>
+  );
+}
+
+/**
+ * A short question in the middle of the screen over a dimmed one, as the mockups draw "Turn off
+ * backup?": traps focus, and closes on Escape, back, or a tap outside.
+ */
+export function CentreDialog({ label, onClose, children }: Omit<SheetProps, "className">) {
+  const box = useRef<HTMLElement>(null);
+  useFocusTrap(box);
+  useBackToClose(true, onClose);
+  useEscape(onClose);
+  return (
+    <>
+      <div className="ph-scrim ph-scrim--dialog" aria-hidden="true" onClick={onClose} />
+      <section
+        ref={box}
+        className="ph-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+      >
+        {children}
+      </section>
+    </>
   );
 }
 
