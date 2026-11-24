@@ -1436,3 +1436,30 @@ fn the_check_finds_out_whether_look_ups_are_taken_and_it_is_remembered() {
         "the list of models, the word reply and the look-up check"
     );
 }
+
+/// "Check again" on the mind in use: what it finds is known at once, not only after a restart.
+#[test]
+fn check_again_refreshes_what_the_running_mind_knows() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    assert_eq!(w.mind.tools(), nocturne_provider::lookup::Tools::Unknown);
+    w.stand_in.then(Answer::text("ready"));
+    w.stand_in.then(Answer::text("Nothing that I know of."));
+    w.rt.block_on(w.mind.check(&w.settings()));
+    assert_eq!(
+        w.mind.tools(),
+        nocturne_provider::lookup::Tools::Refuses {
+            on: "2026-11-22".into()
+        }
+    );
+    w.stand_in.then(Answer::text("ready"));
+    w.stand_in.then(Answer::look(
+        "calendar",
+        r#"{"from":"2030-01-01","to":"2030-01-01"}"#,
+    ));
+    w.rt.block_on(w.mind.check(&w.settings()));
+    assert!(matches!(
+        w.mind.tools(),
+        nocturne_provider::lookup::Tools::Takes { .. }
+    ));
+}

@@ -178,7 +178,9 @@ pub async fn check(provider: &crate::Provider) -> (Option<bool>, crate::Exchange
             (Some(passed), r.exchange)
         }
         Err(f) if f.refused => (None, f.exchange),
-        Err(f) if matches!(f.exchange.status, Some(400 | 422)) => (Some(false), f.exchange),
+        Err(f) if f.names_tools && matches!(f.exchange.status, Some(400 | 422)) => {
+            (Some(false), f.exchange)
+        }
         Err(f) => (None, f.exchange),
     }
 }

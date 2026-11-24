@@ -87,6 +87,13 @@ impl PhoneMind {
             Some(false) => Tools::Refuses { on: today },
             None => Tools::Unknown,
         };
-        write(&self.dir, url, provider.model(), tools);
+        write(&self.dir, url, provider.model(), tools.clone());
+        // "Check again" on the mind in use: it knows at once, not only from the next start.
+        if let Some(on) = super::lock(&self.on).as_ref()
+            && on.host == provider.host()
+            && on.model == provider.model()
+        {
+            on.mind.know_tools(tools);
+        }
     }
 }

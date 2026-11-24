@@ -120,10 +120,13 @@ fn today_here() -> AskToday {
     }
 }
 
-/// What a reply is: an answer, a set of look-ups, or neither.
+/// What a reply is: an answer, a set of look-ups, look-ups that do not read, or nothing.
 enum Replied {
     Answer(String),
     Looks(Vec<Value>),
+    /// Look-ups asked for in a shape that does not read: no name, or no id.
+    Broken,
+    /// Nothing to show: an empty reply, or one cut off before it said anything.
     Neither,
 }
 
@@ -136,7 +139,7 @@ fn said_of(reply: &Reply, offered: bool) -> Replied {
         return if named {
             Replied::Looks(reply.tool_calls.clone())
         } else {
-            Replied::Neither
+            Replied::Broken
         };
     }
     if reply.text.trim().is_empty() {
@@ -296,6 +299,12 @@ impl ProviderMind {
         self
     }
 
+    /// Takes `known` as what is known of look-ups, as a new check found it.
+    pub fn know_tools(&self, known: Tools) {
+        *self.tools.lock().unwrap_or_else(|e| e.into_inner()) = known;
+        self.broken_in_a_row.store(0, Ordering::Relaxed);
+    }
+
     /// What is known now of whether the provider takes look-ups.
     pub fn tools(&self) -> Tools {
         self.tools.lock().unwrap_or_else(|e| e.into_inner()).clone()
@@ -428,6 +437,7 @@ impl ProviderMind {
         let mut looked = 0usize;
         let mut broken_only = None::<bool>;
         let mut offered = look_ups.is_some();
+        let mut learn_refusal = false;
         loop {
             let n = parts + 1;
             if !(asking.parts.may_send)() {
@@ -467,11 +477,16 @@ impl ProviderMind {
                 Ok(r) => r,
                 // Refused with look-ups offered, the first time: the date step path at once,
                 // with the same lines, and remembered.
-                Err(f) if n == 1 && tools_now && matches!(f.exchange.status, Some(400 | 422)) => {
+                // Refused with look-ups offered, naming them, the first time: the date step path
+                // at once, with the same lines. It is remembered only once that is answered.
+                Err(f)
+                    if n == 1
+                        && tools_now
+                        && f.names_tools
+                        && matches!(f.exchange.status, Some(400 | 422)) =>
+                {
                     tracing::warn!("the provider refused look-ups; answering without them");
-                    self.learn_tools(Tools::Refuses {
-                        on: asking.today.day.to_string(),
-                    });
+                    learn_refusal = true;
                     offered = false;
                     messages = vec![
                         json!({"role": "system", "content": q.system}),
@@ -483,6 +498,12 @@ impl ProviderMind {
             };
             parts += 1;
             (asking.parts.counted)();
+            // The same lines without look-ups were answered: the provider does not take them.
+            if std::mem::take(&mut learn_refusal) {
+                self.learn_tools(Tools::Refuses {
+                    on: asking.today.day.to_string(),
+                });
+            }
             match said_of(&reply, tools_now) {
                 Replied::Answer(text) => {
                     if let Some(only) = broken_only {
@@ -497,18 +518,18 @@ impl ProviderMind {
                         nothing: false,
                     });
                 }
-                Replied::Neither if tools_now && n == 1 && rounds == 0 => {
-                    // Not a well-formed answer or look-up: the date step path at once.
-                    self.learn_tools(Tools::Refuses {
-                        on: asking.today.day.to_string(),
-                    });
+                Replied::Broken | Replied::Neither if tools_now && n == 1 && rounds == 0 => {
+                    // Not a well-formed answer or look-up: the date step path at once. Look-ups
+                    // asked for in a shape that does not read are a refusal, remembered once the
+                    // same lines are answered without them; an empty or cut reply is not.
+                    learn_refusal = matches!(said_of(&reply, tools_now), Replied::Broken);
                     offered = false;
                     messages = vec![
                         json!({"role": "system", "content": q.system}),
                         json!({"role": "user", "content": q.user}),
                     ];
                 }
-                Replied::Neither => {
+                Replied::Broken | Replied::Neither => {
                     return Ok(Answered {
                         meta: AnswerMeta {
                             not_sure: true,
@@ -587,6 +608,7 @@ impl ProviderMind {
                             .await;
                             match found {
                                 Ok(Ok(Some((lines, more)))) => {
+                                    let found_any = !lines.is_empty() || more > 0;
                                     let fresh: Vec<Fact> = lines
                                         .into_iter()
                                         .filter(|f| {
@@ -594,9 +616,16 @@ impl ProviderMind {
                                         })
                                         .take(MAX_LINES - facts.len())
                                         .collect();
-                                    if !fresh.is_empty() {
+                                    if found_any {
                                         all_empty = false;
                                     }
+                                    // Lines found but all handed before are said to be so,
+                                    // never "nothing kept".
+                                    let empty = if found_any {
+                                        look::ALREADY
+                                    } else {
+                                        lookup.nothing()
+                                    };
                                     asked_before.push(Asked::of(&lookup, fresh.len()));
                                     let start = facts.len();
                                     let text = look::lines(
@@ -605,12 +634,14 @@ impl ProviderMind {
                                         start,
                                         more,
                                         &q.nonce,
-                                        lookup.nothing(),
+                                        empty,
                                     );
                                     facts.extend(fresh);
                                     text
                                 }
+                                // Not looked up is not "nothing kept": the question goes on.
                                 _ => {
+                                    all_empty = false;
                                     asked_before.push(Asked::of(&lookup, 0));
                                     look::COULD_NOT.to_string()
                                 }

@@ -350,9 +350,10 @@ async fn a_mind_that_always_asks_for_more_stops_at_four_requests_and_eight_look_
     assert_eq!(tool_lines.len(), 5, "every look-up asked for is answered");
     assert_eq!(tool_lines[4], look::TOO_MANY, "at most 4 in one round");
     assert!(tool_lines[0].contains("And 3 more. Ask for fewer days to see them."));
-    assert!(
-        tool_lines[1].contains(look::NOTHING_DAYS),
-        "a line already handed is not handed again"
+    assert_eq!(
+        tool_lines[1],
+        format!("{}\n{}", look::ALREADY, look::more(3)),
+        "a line already handed is not handed again, and says so"
     );
     // The answer it gives (the standing reply asks again) is not one: not sure.
     assert!(a.meta.not_sure);
@@ -404,10 +405,10 @@ async fn a_provider_that_refuses_look_ups_answers_by_the_date_step_path_and_is_r
 }
 
 #[tokio::test]
-async fn a_reply_that_is_neither_answer_nor_look_up_is_a_refusal_too() {
+async fn look_ups_asked_for_in_a_shape_that_does_not_read_are_a_refusal() {
     let r = rig(Tools::Unknown).await;
     let lookups = r.look_ups();
-    r.stand_in.then(Answer::text("   "));
+    r.stand_in.then(Answer::BrokenTools);
     r.stand_in.then(Answer::text("**The dentist** [m1]."));
     let facts = vec![fact("c1", "Dentist is on Wednesday 25 November.")];
     let a = r
@@ -518,11 +519,169 @@ async fn the_look_up_check_passes_a_mind_that_asks_for_the_calendar() {
         Some(false),
         "not in the expected form"
     );
-    r.stand_in.then(Answer::Status(422, "{}".into()));
+    r.stand_in.then(Answer::Status(
+        422,
+        r#"{"error":"tools are not supported"}"#.into(),
+    ));
     assert_eq!(lookup::check(provider).await.0, Some(false));
+    r.stand_in.then(Answer::Status(422, "{}".into()));
+    assert_eq!(
+        lookup::check(provider).await.0,
+        None,
+        "a refusal that names nothing says nothing of look-ups"
+    );
     r.stand_in.then(Answer::Status(503, "{}".into()));
     assert_eq!(lookup::check(provider).await.0, None, "nothing known yet");
     let body = &r.bodies()[0];
     assert_eq!(body["messages"][0]["content"], lookup::CHECK_QUESTION);
     assert_eq!(body["tools"][0]["function"]["name"], "calendar");
+}
+
+/// Nothing is learned from a reply that says nothing of look-ups: an empty or cut reply, a
+/// refusal that does not name them, one about the length of what was sent, or a refusal naming
+/// them whose retry without them was not answered either.
+#[tokio::test]
+async fn a_refusal_is_learned_only_when_it_names_look_ups_and_the_retry_is_answered() {
+    let facts = vec![fact("c1", "Dentist is on Wednesday 25 November.")];
+    // An empty reply: answered again without look-ups, nothing learned.
+    let r = rig(Tools::Unknown).await;
+    let lookups = r.look_ups();
+    r.stand_in.then(Answer::text("   "));
+    r.stand_in.then(Answer::text("**The dentist** [m1]."));
+    let a = r
+        .ask("When?", &facts, Some(&lookups), Parts::free())
+        .await
+        .unwrap();
+    assert_eq!(ids(&a), ["c1"]);
+    assert_eq!(r.mind.tools(), Tools::Unknown, "an empty reply");
+    // A reply cut off at its length before it said anything.
+    let r = rig(Tools::Unknown).await;
+    r.stand_in.then(Answer::Text(String::new(), "length"));
+    r.stand_in.then(Answer::text("**The dentist** [m1]."));
+    r.ask("When?", &facts, Some(&lookups), Parts::free())
+        .await
+        .unwrap();
+    assert_eq!(r.mind.tools(), Tools::Unknown, "a cut reply");
+    // A 400 that names nothing: today's failure, no retry, nothing learned.
+    let r = rig(Tools::Unknown).await;
+    r.stand_in
+        .then(Answer::Status(400, r#"{"error":"bad request"}"#.into()));
+    assert!(
+        r.ask("When?", &facts, Some(&lookups), Parts::free())
+            .await
+            .is_err()
+    );
+    assert_eq!(r.bodies().len(), 1);
+    assert_eq!(r.mind.tools(), Tools::Unknown, "a refusal naming nothing");
+    // A 400 about the length of what was sent, though it names the tools too.
+    let r = rig(Tools::Unknown).await;
+    r.stand_in.then(Answer::Status(
+        400,
+        r#"{"error":"maximum context length exceeded by messages and tools"}"#.into(),
+    ));
+    assert!(
+        r.ask("When?", &facts, Some(&lookups), Parts::free())
+            .await
+            .is_err()
+    );
+    assert_eq!(r.mind.tools(), Tools::Unknown, "a length refusal");
+    // A refusal naming look-ups whose retry is not answered either.
+    let r = rig(Tools::Unknown).await;
+    r.stand_in.then(Answer::Status(
+        400,
+        r#"{"error":"tools are not supported"}"#.into(),
+    ));
+    r.stand_in.then(Answer::Status(503, "{}".into()));
+    assert!(
+        r.ask("When?", &facts, Some(&lookups), Parts::free())
+            .await
+            .is_err()
+    );
+    assert_eq!(r.bodies().len(), 2);
+    assert_eq!(r.mind.tools(), Tools::Unknown, "a retry not answered");
+}
+
+/// A look-up that takes longer than its 2 seconds is "couldn't be looked up just now", and the
+/// question goes on, never ending as nothing kept.
+#[tokio::test]
+async fn a_slow_look_up_is_cut_off_and_the_question_goes_on() {
+    let r = rig(Tools::Unknown).await;
+    let mut lookups = r.look_ups();
+    lookups.run = Arc::new(|_| {
+        std::thread::sleep(Duration::from_millis(2_300));
+        Some((vec![fact("late", "Too late to be given.")], 0))
+    });
+    r.stand_in
+        .then(Answer::look("search", r#"{"words":"MOT"}"#));
+    r.stand_in.then(Answer::text("NOT_SURE"));
+    let a = r
+        .ask("When is the car's MOT?", &[], Some(&lookups), Parts::free())
+        .await
+        .unwrap();
+    assert!(!a.nothing, "a look-up that did not run is not nothing kept");
+    assert_eq!(a.parts, 2);
+    let back = r.bodies()[1]["messages"][3]["content"].clone();
+    assert_eq!(back, look::COULD_NOT);
+}
+
+/// The whole question has its own time: past it, no more parts go.
+#[tokio::test]
+async fn the_question_stops_at_its_time_limit() {
+    let r = rig(Tools::Unknown).await;
+    let mut lookups = r.look_ups();
+    lookups.limit = Duration::from_millis(1_200);
+    lookups.run = Arc::new(|_| {
+        std::thread::sleep(Duration::from_millis(1_500));
+        Some((Vec::new(), 0))
+    });
+    r.stand_in
+        .always(Answer::look("search", r#"{"words":"MOT"}"#));
+    let facts = vec![fact("c1", "Something kept.")];
+    let ended = r.ask("When?", &facts, Some(&lookups), Parts::free()).await;
+    assert!(
+        matches!(
+            ended,
+            Err(MindError::Online(nocturne_engine::OnlineFailure::Slow))
+        ),
+        "{ended:?}"
+    );
+    assert_eq!(r.bodies().len(), 1, "nothing goes past the time limit");
+}
+
+/// Stop while Nocturne looks: the next part never goes.
+#[tokio::test]
+async fn stop_while_looking_sends_nothing_more() {
+    let r = rig(Tools::Unknown).await;
+    let (stop_tx, stop) = tokio::sync::watch::channel(false);
+    let stop_tx = Arc::new(stop_tx);
+    let mut lookups = r.look_ups();
+    let pressed = stop_tx.clone();
+    lookups.run = Arc::new(move |_| {
+        pressed.send_replace(true);
+        Some((vec![fact("j1", "A line.")], 0))
+    });
+    r.stand_in.then(Answer::look(
+        "journal",
+        r#"{"from":"2026-11-17","to":"2026-11-17"}"#,
+    ));
+    let facts = vec![fact("c1", "Something kept.")];
+    let (tx, _rx) = mpsc::channel(8);
+    let today = today();
+    let ended = r
+        .mind
+        .answer_asked(
+            Asking {
+                ask: "q1",
+                question: "How was it?",
+                facts: &facts,
+                today: &today,
+                look_ups: Some(&lookups),
+                parts: Parts::free(),
+                stop: Some(stop),
+            },
+            tx,
+        )
+        .await;
+    assert!(ended.is_err(), "{ended:?}");
+    assert_eq!(r.bodies().len(), 1, "no part after Stop");
 }
