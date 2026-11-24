@@ -325,13 +325,11 @@ fn read_night_name(name: &str) -> Option<NightName<'_>> {
     if device.len() != 16 || !device.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    let (made, bytes) = match (parts.next(), parts.next(), parts.next()) {
-        (None, None, None) => (None, None),
-        (Some(made), Some(bytes), None) if digits(made) && digits(bytes) => {
-            (Some(made.parse().ok()?), Some(bytes.parse().ok()?))
-        }
-        _ => return None,
-    };
+    // A later Nocturne may name more after these: the night is still counted, so this one
+    // stops at it instead of passing it over.
+    let mut number = || parts.next().filter(|p| digits(p));
+    let made = number().and_then(|p| p.parse().ok());
+    let bytes = number().and_then(|p| p.parse().ok());
     Some(NightName {
         count: count.parse().ok()?,
         device,
@@ -795,11 +793,11 @@ pub fn made_with(place: &dyn BackupPlace, key: &NightKey, count: Option<u64>) ->
 /// The nights in the account as its listing shows them, newest first, before any phrase: their
 /// count, when each was made and what each takes. Empty when the account holds no backup.
 pub fn listed_nights(place: &dyn BackupPlace) -> NightResult<Vec<ListedNight>> {
-    let all = place.list("")?;
-    if !all.iter().any(|e| e.name == KEY_PHRASE) {
+    if !place.list(KEY_PHRASE)?.iter().any(|e| e.name == KEY_PHRASE) {
         return Ok(Vec::new());
     }
-    let mut nights: Vec<ListedNight> = all
+    let mut nights: Vec<ListedNight> = place
+        .list(NIGHT)?
         .iter()
         .filter_map(|e| {
             let n = read_night_name(&e.name)?;
@@ -1280,10 +1278,13 @@ mod tests {
         assert_eq!(n.bytes, Some(4_096));
         let old = read_night_name("night-000000000003-0123456789abcdef").unwrap();
         assert_eq!((old.count, old.made, old.bytes), (3, None, None));
+        let later = read_night_name("night-000000000004-0123456789abcdef-12-34-more").unwrap();
+        assert_eq!(
+            (later.count, later.made, later.bytes),
+            (4, Some(12), Some(34)),
+            "a later Nocturne's name still counts"
+        );
         for bad in [
-            "night-000000000003-0123456789abcdef-12",
-            "night-000000000003-0123456789abcdef-12-x",
-            "night-000000000003-0123456789abcdef-1-2-3",
             "night-3-0123456789abcdef",
             "night-000000000003-0123456789abcdeg",
         ] {
