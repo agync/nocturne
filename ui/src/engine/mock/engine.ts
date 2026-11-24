@@ -379,6 +379,9 @@ const kindFromName = (name: string): ItemKind => {
 const TITLES: Record<string, string> = { "conflict-dentist": "Your dentist appointment" };
 const SUBJECTS: Record<string, string> = { "conflict-dentist": "Dentist" };
 
+
+/** How long a mock question that looks further spends looking. */
+const LOOK_MS = 1500;
 export class MockEngine implements EngineClient {
   private readonly clock: Date;
   private items: ItemView[];
@@ -1091,7 +1094,12 @@ export class MockEngine implements EngineClient {
             next(i + 1);
           }, 30);
         };
-        next(0);
+        // A question about an evening looks through the journal first, as a mind that asks to
+        // look further would (docs/design/ask-with-tools.md).
+        if (/\bevening\b/i.test(question)) {
+          send(delta({ phase: "lookingJournal", found: active.length }));
+          setTimeout(() => next(0), LOOK_MS);
+        } else next(0);
       } else if (unconfirmed.length > 0) {
         send(
           delta({
