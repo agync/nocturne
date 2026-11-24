@@ -18,7 +18,19 @@ journal and check-ins for given days, their health readings, and a search with o
 nothing to set. The mind only reads, and every line it is given is a kept line with its receipt.
 
 Status: approved. The owner decided the flow and answered the five open questions on 2026-11-24
-(see Owner decisions). Nothing here is built yet.
+(see Owner decisions). Built on 2026-11-24, with three parts waiting:
+
+- **Look-ups on the computer.** Online answers on the computer uses the date step path until the
+  pinned `lemond` is confirmed to pass the look-up descriptions to the provider and its look-up
+  requests back ([Checks before it ships](#checks-before-it-ships)); that is not yet tried. The
+  computer's own mind uses the date step path until a size passes the look-up check, which no size
+  has run yet. Sent online on the computer therefore never has more than one part, and its parts
+  view and the "look further" words in its setup wait for the first.
+- **The "Tool calls" row.** It waits for a view to hold it: the phone's mind has no advanced
+  details view, and the computer never checks look-ups while they wait.
+- **The Tiny instructions** do not gain the three new answer rules; Small, Standard, Large and
+  every online answer do. Tiny is kept short on purpose, and the rules join it only once the
+  look-up check has run on it.
 
 ## Mockups
 
