@@ -11,6 +11,7 @@ nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 nocturne-mind.workspace = true
 base64.workspace = true
+jiff.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # The phone's own TLS, as the sealed channel's client: rustls with ring and the public roots,
 # no proxy and no redirects.
@@ -19,7 +20,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 webpki-roots = "1"
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["macros", "net", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 tracing.workspace = true
 url.workspace = true
 zeroize.workspace = true

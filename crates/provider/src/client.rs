@@ -49,6 +49,8 @@ pub struct Carried {
     pub said: Vec<Said>,
     pub items: Vec<String>,
     pub memories: Vec<String>,
+    /// For a question in parts: which part this was, and what the provider asked to look up.
+    pub part: Option<crate::lookup::Part>,
 }
 
 /// A part of what a request carried, as a person reads it: its words as they left, and in place
@@ -92,6 +94,8 @@ pub type Stop = tokio::sync::watch::Receiver<bool>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reply {
     pub text: String,
+    /// The look-ups the provider asked for instead of answering, as it wrote them.
+    pub tool_calls: Vec<Value>,
     /// It was stopped at the most it could write.
     pub cut: bool,
     pub exchange: Exchange,
@@ -327,8 +331,13 @@ impl Provider {
                 .join(""),
             _ => String::new(),
         };
+        let tool_calls = choice["message"]["tool_calls"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         Ok(Reply {
             text,
+            tool_calls,
             cut: choice["finish_reason"] == "length",
             exchange,
         })

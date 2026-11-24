@@ -7,6 +7,7 @@
 pub mod address;
 pub mod client;
 pub mod image;
+pub mod lookup;
 pub mod mind;
 #[cfg(feature = "stand-in")]
 pub mod stand_in;
