@@ -11,6 +11,7 @@
 //! until it is, "Wi-Fi only" waits.
 
 pub mod commands;
+pub mod place_account;
 #[cfg(test)]
 mod tests;
 
