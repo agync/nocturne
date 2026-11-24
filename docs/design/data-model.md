@@ -33,8 +33,9 @@ journal item hashes its text with its own id, so two entries with the same words
 A `checkin` is a feelings check-in from the journal. It holds a part, a point (two numbers from
 -1 to 1), up to three words, and optionally a line and an urge, in `metadata`. A check-in yields
 mentions only, never facts: reading its lines, the urge included, finds names and writes
-[mentions](#mentions), so a check-in never enters the fact graph, never fades, and never reaches
-Ask or goes online.
+[mentions](#mentions), so a check-in never enters the fact graph and never fades. Ask reads it, as
+one line in the person's own words, only through the date step and the `journal` look-up
+([Ask with tools](ask-with-tools.md)), and that line may go with a question online.
 
 ## What phones bring
 

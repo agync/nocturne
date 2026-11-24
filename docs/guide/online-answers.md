@@ -46,8 +46,10 @@ where "Or have answers written online:" is followed by a link that starts with "
 
 For each question you ask, only:
 
-- your question, and
-- up to 12 remembered sentences that Nocturne needs to answer it.
+- your question and today's date, and
+- the lines Nocturne needs to answer it: up to 12 found by your question's words, and up to 12
+  more kept for the days your question names, such as tomorrow's calendar. A line from a journal
+  entry, a check-in, a good thing or a health reading can be among them.
 
 Your photos, recordings, files, pages and everything else stay on this computer. Nocturne reads your
 answer here and still checks that every line it shows leads back to something you kept.
@@ -55,7 +57,7 @@ answer here and still checks that every line it shows leads back to something yo
 ## What is never sent
 
 - Anything marked private.
-- Your check-ins, reflections and recaps. They are written and kept on this computer.
+- Your reflections and recaps. They are written and kept on this computer.
 - Anything while Online answers is off, and nothing at all from reading, the tidy or the page.
 - Questions from a paired phone, unless Away from home is on and **Questions from your phones** is
   on. That switch is on by default when Away from home is on during setup, and you can turn it off
@@ -63,7 +65,7 @@ answer here and still checks that every line it shows leads back to something yo
 
 Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a
 question it helps answer like any other. Mark anything you never want sent as private. Journal
-entries and good things can't be marked private, so while Online answers is on, a line from one can
+entries, check-ins and good things can't be marked private, so while Online answers is on, a line from one can
 go with a question it helps answer.
 
 If you turned Online answers on before it worked this way, Nocturne says so once, in place of the

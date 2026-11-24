@@ -594,6 +594,29 @@ Each part counts towards a number limit, so setup says so where it talks about c
 | `phone.mind.agree.changes` | {host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. … | {host} reads what you keep, writes your page each morning and answers your questions, on your account with them, so it may charge for each. When the lines found aren’t enough to answer, {host} can ask to look a little further, and each look counts as one more thing answered, so one question can count up to 4 times. … (the rest as before) |
 | `phone.mind.agree.limit.things` | At most {count, number} things a month are read and answered online; after that, what you keep waits to be read until the 1st. | At most {count, number} things a month are read and answered online, each look further counted as one; after that, what you keep waits to be read until the 1st. |
 
+### As built: what said check-ins and readings never go
+
+The date step and the look-ups send check-ins and health readings with a question they help
+answer, on every mind the person chose, Online answers on the computer included. These strings said
+otherwise and were made true with the build (2026-11-24); reflections, recaps and anything marked
+private stay as they were.
+
+| Key | Before | After |
+|---|---|---|
+| `online.explain.short.never.body` | Your photos, recordings and documents themselves, your check-ins, reflections and recaps, and anything you marked private. | Your photos, recordings and documents themselves, your reflections and recaps, and anything you marked private. |
+| `online.explain.sent.body` | Your question, and the few things you kept that answer it, as short sentences. A line from a journal entry or a good thing can go too, when it helps answer the question. | Your question and today’s date, and the things you kept that answer it, as short sentences. A line from a journal entry, a check-in, a good thing or a health reading can go too, when it helps answer the question. |
+| `online.explain.never.body` | Photos, recordings and documents stay here. Things you marked private are never sent. Your check-ins, reflections and recaps are never sent: they are written and kept on this computer. Nocturne doesn’t guess what is private, so mark anything you never want sent as private. Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. | Photos, recordings and documents stay here. Things you marked private are never sent. Your reflections and recaps are never sent: they are written and kept on this computer. Nocturne doesn’t guess what is private, so mark anything you never want sent as private. Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. |
+| `journal.online.step5.neverSent` | Your check-ins, reflections and recaps. They are written on this computer and stay here. | Your reflections and recaps. They are written on this computer and stay here. |
+| `journal.online.step5.privateNote` | Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. | Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. |
+| `journal.online.step5.choice.entries` | Journal entries and good things | Journal entries, check-ins and good things |
+| `journal.online.step5.choice.checkins` | Check-ins, reflections, recaps | Reflections and recaps |
+| `journal.online.settings.hint` | A line from an entry or a good thing may go with a question it helps answer. They can’t be marked private. Check-ins, reflections and recaps never go. | A line from an entry, a check-in or a good thing may go with a question it helps answer. They can’t be marked private. Reflections and recaps never go. |
+| `journal.online.settings.value` | Entries and good things, when they help | Entries, check-ins and good things, when they help |
+| `journal.online.settings.staysHere` | Your check-ins, reflections and recaps | Your reflections and recaps |
+| `journal.online.settings.privateNote` | Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. | Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer. |
+| `item.checkin.note` | Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade and Ask never uses them. | Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade. Ask reads them for the days a question names. |
+| `phone.health.why.where` | Only to your computer, in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else. | Only to your computer, in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else. If Online answers is on there, a reading can go with a question it helps answer. |
+
 ### Advanced details
 
 | Key | Words |
