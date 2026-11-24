@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { richText } from "../../components/PageLine/richText";
 import { type CopyId, type CopyValues, t } from "../../copy/t";
+import { followFeet } from "./foot";
 
 const PATHS = {
   ask: ["M7.9 20A9 9 0 1 0 4 16.1L2 22Z"],
@@ -216,8 +217,15 @@ export function Page({
   fixed?: boolean;
   className?: string;
 }) {
+  const screen = useRef<HTMLDivElement>(null);
+  // A screen of fixed layout holds its bar in place itself.
+  useLayoutEffect(
+    () => (fixed || !screen.current ? undefined : followFeet(screen.current)),
+    [fixed],
+  );
   return (
     <div
+      ref={screen}
       className={`ph-screen${fixed ? " ph-screen--fixed" : ""}${className ? ` ${className}` : ""}`}
     >
       {bar}
