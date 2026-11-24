@@ -656,10 +656,15 @@ impl PhoneBackup {
         let mut status = self.status();
         let saved = self.saved();
         let reaches = saved.on || self.kept_off(&saved);
+        // Only what keeps the account out of reach: the line says it waits "until Nocturne can
+        // reach" it.
         let held_up = lock(&self.failed_at).is_some()
             || self.place().is_err()
             || self.waits_for_wifi(&saved)
-            || matches!(&saved.trouble, Some(t) if *t != Trouble::Failed);
+            || matches!(
+                &saved.trouble,
+                Some(Trouble::SignedOut | Trouble::NoPermission | Trouble::Failed)
+            );
         status.forget_waiting = reaches
             && held_up
             && home
