@@ -556,6 +556,12 @@ pub fn recovery_lock(key: &NightKey, work_factor: Option<u8>) -> NightResult<(St
     Ok((text, locked))
 }
 
+/// Write a recovery key's lock made with [`recovery_lock`] once the person has saved the key: it
+/// opens the backup from now on, in place of any made before.
+pub fn keep_recovery_lock(place: &dyn BackupPlace, locked: &[u8]) -> NightResult<()> {
+    Ok(place.put(KEY_RECOVERY, locked)?)
+}
+
 /// The key locked with `phrase`, written nowhere, as [`recovery_lock`].
 pub fn phrase_lock(key: &NightKey, phrase: &str, work_factor: Option<u8>) -> NightResult<Vec<u8>> {
     let phrase = usable_phrase(phrase)?;

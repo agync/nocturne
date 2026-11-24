@@ -136,6 +136,7 @@ pub fn run() {
             backup::commands::backup_new_phrase,
             backup::commands::backup_turn_on,
             backup::commands::backup_recovery_key,
+            backup::commands::backup_keep_recovery_key,
             backup::commands::backup_drop_recovery_key,
             backup::commands::backup_change_phrase,
             backup::commands::backup_set_wifi_only,

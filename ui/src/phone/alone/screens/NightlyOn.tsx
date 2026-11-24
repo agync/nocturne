@@ -577,19 +577,39 @@ export function KeyShown({
   text,
   later = false,
   save,
+  keep,
   onSaved,
   onClose,
 }: {
   text: string;
   later?: boolean;
   save(text: string): Promise<"saved" | "cancelled" | "failed">;
-  /** The key went to the phone's sheet. */
+  /** The key went to the phone's sheet: from now on it opens the backup. */
+  keep(): Promise<void>;
+  /** The key was saved and opens the backup. */
   onSaved(): void;
-  /** `saved`: closed with Done, after the key went to the sheet. */
+  /** `saved`: closed with Done, after the key was saved. Before that, the key opens nothing. */
   onClose(saved: boolean): void;
 }) {
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const heading = useHeading("key");
+  const printOrSave = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      if ((await save(text)) !== "saved") return;
+      await keep();
+      setSaved(true);
+      onSaved();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
@@ -605,6 +625,11 @@ export function KeyShown({
           </p>
         </div>
         <KeyGroups text={text} />
+        {failed ? (
+          <p className="ph-error" role="alert">
+            {t("ask.action.failed")}
+          </p>
+        ) : null}
       </main>
       <footer className="ph-foot">
         {saved ? (
@@ -613,17 +638,7 @@ export function KeyShown({
           </Button>
         ) : (
           <>
-            <Button
-              kind="primary"
-              onClick={() =>
-                void save(text).then((r) => {
-                  if (r === "saved") {
-                    setSaved(true);
-                    onSaved();
-                  }
-                })
-              }
-            >
+            <Button kind="primary" disabled={busy} onClick={() => void printOrSave()}>
               {t("phone.backup.key.print")}
             </Button>
             <button type="button" className="ph-textbtn" onClick={() => onClose(false)}>
@@ -739,7 +754,7 @@ export function AfterTurnOn({
   onKeyMade,
   onDone,
 }: {
-  api: Pick<BackupApi, "recoveryKey" | "dropRecoveryKey" | "saveKey" | "now">;
+  api: Pick<BackupApi, "recoveryKey" | "keepRecoveryKey" | "dropRecoveryKey" | "saveKey" | "now">;
   ios: boolean;
   onKeyMade(): void;
   onDone(): void;
@@ -758,9 +773,10 @@ export function AfterTurnOn({
     <KeyShown
       text={key}
       save={api.saveKey}
+      keep={api.keepRecoveryKey}
       onSaved={onKeyMade}
       onClose={(saved) => {
-        // A key that was never saved must not open the backup.
+        // A key that was never saved opens nothing.
         if (!saved) void api.dropRecoveryKey().catch(() => undefined);
         setKey(null);
         setFirst(true);

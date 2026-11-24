@@ -84,6 +84,8 @@ export function backupState(phone: {
   let status = first();
   let phrase: string | null = status.on || status.last ? SCRIPTED_PHRASE : null;
   let key: string | null = status.last ? SCRIPTED_KEY : null;
+  // A key shown but not yet saved: it opens nothing.
+  let shown: string | null = null;
   let stopRestore: (() => void) | null = null;
   scriptedBackup.calls = [];
 
@@ -131,12 +133,16 @@ export function backupState(phone: {
         status = { ...status, on: true, last: null, state: { state: "waiting" } };
         return null;
       case "backup_recovery_key":
-        key = key === null ? SCRIPTED_KEY : NEW_KEY;
+        shown = key === null ? SCRIPTED_KEY : NEW_KEY;
+        return shown;
+      case "backup_keep_recovery_key":
+        if (shown === null) throw "notReady";
+        key = shown;
+        shown = null;
         scriptedBackup.key = key;
-        return key;
+        return null;
       case "backup_drop_recovery_key":
-        key = null;
-        scriptedBackup.key = null;
+        shown = null;
         return null;
       case "backup_change_phrase":
         phrase = String(args.phrase);

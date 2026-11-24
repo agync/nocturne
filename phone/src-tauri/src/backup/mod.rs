@@ -336,6 +336,9 @@ pub struct PhoneBackup {
     locking: Mutex<()>,
     /// The passphrase work the locked key asks for; `None` is what Nocturne writes.
     work_factor: Option<u8>,
+    /// A recovery key's lock, made and shown but not yet saved by the person: nothing opens
+    /// with it until it is kept, so "Cancel" leaves the earlier key working.
+    new_key: Mutex<Option<Vec<u8>>>,
 }
 
 /// One night at a time, released when dropped.
@@ -360,6 +363,7 @@ impl PhoneBackup {
             saving: Mutex::new(()),
             locking: Mutex::new(()),
             work_factor: None,
+            new_key: Mutex::new(None),
         }
     }
 
@@ -580,59 +584,54 @@ impl PhoneBackup {
         Ok(())
     }
 
-    /// A recovery key that opens the backup too, in place of any made before, to be shown once.
+    /// A new recovery key, to be shown once. Nothing opens with it until
+    /// [`PhoneBackup::keep_recovery_key`]; until then any key made before still works.
     pub fn recovery_key(&self) -> Result<String, BackupProblem> {
-        let place = self.place()?;
+        self.place()?;
         let key = self.key()?;
+        let (text, locked) = nightly::recovery_lock(&key, self.work_factor)?;
+        *lock(&self.new_key) = Some(locked);
+        Ok(text)
+    }
+
+    /// The person saved the recovery key just made: it opens the backup, in place of any made
+    /// before. When the account can't be reached the key stays made, so this can be asked again.
+    pub fn keep_recovery_key(&self) -> Result<(), BackupProblem> {
+        let place = self.place()?;
+        let locked = lock(&self.new_key).take().ok_or(BackupProblem::NotReady)?;
         let _held = lock(&self.locking);
-        if self.saved().fresh {
+        let kept = if self.saved().fresh {
             // Nothing goes to an account the backup is starting afresh on before its first
             // night carries the copy there.
-            let (text, locked) = nightly::recovery_lock(&key, self.work_factor)?;
             let known = self.update(|s| match s.locks.as_mut() {
                 Some(locks) => {
-                    locks.recovery = Some(locked);
+                    locks.recovery = Some(locked.clone());
                     true
                 }
                 None => false,
             });
-            return if known {
-                Ok(text)
+            if known {
+                Ok(())
             } else {
                 Err(BackupProblem::Damaged)
-            };
+            }
+        } else {
+            self.relock(
+                place.as_ref(),
+                || Ok(nightly::keep_recovery_lock(place.as_ref(), &locked)?),
+                |(), locks| locks.recovery = Some(locked.clone()),
+            )
+        };
+        if kept.is_err() {
+            lock(&self.new_key).get_or_insert(locked);
         }
-        let (text, _) = self.relock(
-            place.as_ref(),
-            || {
-                Ok(nightly::add_recovery_key_locked(
-                    place.as_ref(),
-                    &key,
-                    self.work_factor,
-                )?)
-            },
-            |(_, locked), locks| locks.recovery = Some(locked.clone()),
-        )?;
-        Ok(text)
+        kept
     }
 
-    /// The recovery key no longer opens the backup.
-    pub fn drop_recovery_key(&self) -> Result<(), BackupProblem> {
-        let place = self.place()?;
-        let _held = lock(&self.locking);
-        if self.saved().fresh {
-            self.update(|s| {
-                if let Some(locks) = s.locks.as_mut() {
-                    locks.recovery = None;
-                }
-            });
-            return Ok(());
-        }
-        self.relock(
-            place.as_ref(),
-            || Ok(nightly::remove_recovery_key(place.as_ref())?),
-            |(), locks| locks.recovery = None,
-        )
+    /// The recovery key just made was not saved: it never opens the backup, and any made before
+    /// still does.
+    pub fn drop_recovery_key(&self) {
+        lock(&self.new_key).take();
     }
 
     /// "Change the phrase…": the old phrase stops opening the backup.
