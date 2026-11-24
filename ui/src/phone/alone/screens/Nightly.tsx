@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { formatBytes, formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress } from "../../../engine/bindings";
@@ -61,7 +61,6 @@ export function backupHint(
     case "waitingForWifi":
       return t("phone.backup.hint.wifi", { day, time });
     case "noRoom":
-    case "noAccess":
     case "signedOut":
     case "noPermission":
     case "anotherPhone":
@@ -74,7 +73,12 @@ export function backupHint(
 }
 
 /** The account did not answer: the backup is off, and goes from the account once it does. */
-const PENDING: ReadonlySet<string> = new Set(["offline", "unavailable", "noAccess"]);
+const PENDING: ReadonlySet<string> = new Set([
+  "offline",
+  "unavailable",
+  "signedOut",
+  "noPermission",
+]);
 
 type Sheet = "off" | "makeKey" | "change" | "inUse" | null;
 
@@ -126,6 +130,10 @@ export function NightlyBackup({
       ),
     [api],
   );
+  // Back from Settings, an iPhone asks iCloud again, so signing in or turning iCloud on for
+  // Nocturne lets the backup carry on with nothing more to press.
+  const stopped = useRef(false);
+  stopped.current = status?.state.state === "signedOut" || status?.state.state === "noPermission";
   useEffect(() => {
     void look();
     void notes.get(KEY_MADE).then(
@@ -133,11 +141,17 @@ export function NightlyBackup({
       () => undefined,
     );
     const front = () => {
-      if (document.visibilityState === "visible") void look();
+      if (document.visibilityState !== "visible") return;
+      if (ios && stopped.current)
+        void api
+          .connect(false)
+          .catch(() => undefined)
+          .then(() => look());
+      else void look();
     };
     document.addEventListener("visibilitychange", front);
     return () => document.removeEventListener("visibilitychange", front);
-  }, [look, notes]);
+  }, [look, notes, api, ios]);
 
   // A night running in the background says how far it is, and the hint moves on when it ends.
   useEffect(
@@ -275,7 +289,7 @@ export function NightlyBackup({
         action: ios ? t("phone.backup.say.openSettings") : t("phone.backup.say.chooseAccount"),
         onAction: () => (ios ? void openAppSettings() : chooseAccount()),
       };
-    else if (state === "noPermission" || state === "noAccess")
+    else if (state === "noPermission")
       say = {
         line: onPhone(
           ios,

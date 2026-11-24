@@ -1,5 +1,5 @@
 // The nightly backup as the scripted phone answers it. `&b=` names how it stands: `off` (the
-// default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `noAccess`, `another`, `newer`,
+// default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `another`, `newer`,
 // `kept`, `late` or `moved`. `&found=none` finds no backup, `&found=offline` no internet,
 // `&connect=` what asking for the account answers (`refused`, `noAccount`, `turnedOff`,
 // `offline`, `full`), and `&restore=slow` holds a restore part way until it is stopped.
@@ -52,8 +52,6 @@ function first(): BackupStatus {
       return on({ state: "signedOut" }, stopped);
     case "noPermission":
       return on({ state: "noPermission" }, stopped);
-    case "noAccess":
-      return on({ state: "noAccess" }, stopped);
     case "another":
       return on({ state: "anotherPhone", madeAt: at(12, "22:10") }, stopped);
     case "newer":
@@ -119,6 +117,12 @@ export function backupState(phone: {
                 previous: args.choose ? "maya.old@example.com" : null,
                 free: c === "full" ? 300 * MB : 12 * GB,
               };
+        // Signed in again, or allowed again: the stop is over.
+        if (
+          answer.outcome === "connected" &&
+          (status.state.state === "signedOut" || status.state.state === "noPermission")
+        )
+          status = { ...status, state: { state: "upToDate" } };
         return answer;
       }
       case "backup_turn_on":
@@ -169,7 +173,7 @@ export function backupState(phone: {
         const f = params.get("found");
         if (f === "none") return null;
         if (f === "offline") throw "offline";
-        if (f === "icloudOff") throw "noAccess";
+        if (f === "icloudOff") throw "noPermission";
         return { at: NIGHTS[0]?.madeAt ?? null, bytes: 1.4 * GB };
       }
       case "backup_nights":

@@ -38,7 +38,7 @@ type Step =
 
 /** The way to the backup went away; anything else is a plain failure. */
 const lostOr = (p: string): "lost" | "failed" =>
-  ["noAccess", "unavailable", "signedOut", "noPermission"].includes(p) ? "lost" : "failed";
+  ["unavailable", "signedOut", "noPermission"].includes(p) ? "lost" : "failed";
 
 /** Wrong this many times, the line points to the password manager and the recovery key. */
 const WRONG_AGAIN = 3;
@@ -223,7 +223,7 @@ export function NightlyRestore({
     } catch (e) {
       const p = problemOf(e);
       if (p === "offline") return setStep({ name: "none", why: "offline" });
-      if (ios && (p === "noAccess" || p === "noPermission"))
+      if (ios && (p === "signedOut" || p === "noPermission"))
         return setStep({ name: "none", why: "icloudOff" });
       setStep({ name: "none", why: "none" });
     }
