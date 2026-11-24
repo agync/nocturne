@@ -1,5 +1,6 @@
 package app.nocturne.system
 
+import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Intent
 import android.content.IntentFilter
@@ -15,6 +16,7 @@ import android.provider.Settings
 import android.text.format.DateFormat
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.core.content.IntentCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -26,7 +28,10 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import java.io.File
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 @InvokeArg
@@ -49,6 +54,18 @@ class SecretArgs {
 @InvokeArg
 class BackgroundArgs {
     var on: Boolean = false
+}
+
+@InvokeArg
+class PlaceArgs {
+    var name: String = ""
+    var path: String = ""
+    var prefix: String = ""
+}
+
+@InvokeArg
+class ConnectArgs {
+    var choose: Boolean = false
 }
 
 /**
@@ -75,6 +92,11 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     private val safe by lazy { Safe(File(activity.noBackupFilesDir, "safe")) }
+
+    /** The backup's calls to the person's Drive, one at a time and never on the main thread. */
+    private val placeWork = Executors.newSingleThreadExecutor()
+    private val driveAccount by lazy { DriveAccount(activity.applicationContext) }
+    private val drive by lazy { Drive(UrlHttp(), driveAccount) }
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -322,6 +344,197 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) ||
             (Build.VERSION.SDK_INT >= 30 &&
                 caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_TEMPORARILY_NOT_METERED))
+    }
+
+    /**
+     * The phone's account picker, then Google's one-time permission for files the app makes in
+     * the Drive. The picker shows when no account was chosen yet, or with `choose`. Nothing of
+     * Nocturne's shows between these screens.
+     */
+    @Command
+    fun placeConnect(invoke: Invoke) {
+        val choose = invoke.parseArgs(ConnectArgs::class.java).choose
+        val chosen = if (choose) null else driveAccount.chosen()
+        if (chosen != null) return authorizeFor(invoke, chosen)
+        try {
+            val picker = AccountManager.newChooseAccountIntent(
+                null, null, arrayOf(DriveAccount.GOOGLE), null, null, null, null
+            )
+            startActivityForResult(invoke, picker, "placeAccountChosen")
+        } catch (e: Exception) {
+            connectOutcome(invoke, "failed")
+        }
+    }
+
+    @ActivityCallback
+    fun placeAccountChosen(invoke: Invoke, result: ActivityResult) {
+        val email = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+        if (result.resultCode != Activity.RESULT_OK || email.isNullOrEmpty()) {
+            return connectOutcome(invoke, "noAccount")
+        }
+        authorizeFor(invoke, email)
+    }
+
+    /** Google's permission for `email`, shown only when it is not given yet. */
+    private fun authorizeFor(invoke: Invoke, email: String) {
+        placeWork.execute {
+            try {
+                driveAccount.authorize(email)
+                    .addOnSuccessListener { result ->
+                        try {
+                            if (!result.hasResolution()) {
+                                return@addOnSuccessListener connected(invoke, email)
+                            }
+                            val intent = result.pendingIntent
+                                ?: return@addOnSuccessListener connectOutcome(invoke, "failed")
+                            pendingEmail = email
+                            startIntentSenderForResult(
+                                invoke,
+                                IntentSenderRequest.Builder(intent.intentSender).build(),
+                                "placeAuthorized"
+                            )
+                        } catch (e: Exception) {
+                            connectOutcome(invoke, "failed")
+                        }
+                    }
+                    .addOnFailureListener { e -> connectFailed(invoke, e) }
+            } catch (e: Exception) {
+                connectFailed(invoke, e)
+            }
+        }
+    }
+
+    /** The account Google's permission screen is up for. */
+    @Volatile private var pendingEmail: String? = null
+
+    @ActivityCallback
+    fun placeAuthorized(invoke: Invoke, result: ActivityResult) {
+        val email = pendingEmail
+        pendingEmail = null
+        if (result.resultCode != Activity.RESULT_OK || email == null) {
+            return connectOutcome(invoke, "refused")
+        }
+        try {
+            val authorized = driveAccount.resultFrom(result.data)
+            if (authorized.accessToken == null) return connectOutcome(invoke, "refused")
+            connected(invoke, email)
+        } catch (e: Exception) {
+            connectFailed(invoke, e)
+        }
+    }
+
+    private fun connectOutcome(invoke: Invoke, outcome: String) =
+        invoke.resolve(JSObject().put("outcome", outcome))
+
+    private fun connectFailed(invoke: Invoke, e: Exception) {
+        val outcome = when ((e as? ApiException)?.statusCode) {
+            CommonStatusCodes.CANCELED -> "refused"
+            CommonStatusCodes.SIGN_IN_REQUIRED -> "noAccount"
+            CommonStatusCodes.NETWORK_ERROR, CommonStatusCodes.TIMEOUT -> "offline"
+            else -> "failed"
+        }
+        connectOutcome(invoke, outcome)
+    }
+
+    /** The permission is there: the account is kept for the nights, with the Drive's room left. */
+    private fun connected(invoke: Invoke, email: String) {
+        placeWork.execute {
+            try {
+                val previous = driveAccount.chosen()
+                driveAccount.keep(email)
+                val changed = previous != null && !previous.equals(email, ignoreCase = true)
+                if (changed) drive.forget()
+                val free = try {
+                    drive.free()
+                } catch (e: PlaceFailure) {
+                    null
+                }
+                invoke.resolve(
+                    JSObject()
+                        .put("outcome", "connected")
+                        .put("account", email)
+                        .put("previous", if (changed) previous else null)
+                        .put("free", free)
+                )
+            } catch (e: Exception) {
+                connectOutcome(invoke, "failed")
+            }
+        }
+    }
+
+    /** One call to the Drive on the backup's own thread; its outcome is always an answer. */
+    private fun place(invoke: Invoke, work: () -> JSObject) {
+        placeWork.execute {
+            val out = try {
+                work().put("outcome", "ok")
+            } catch (e: PlaceFailure) {
+                JSObject().put("outcome", e.outcome.wire).put("message", e.message)
+            } catch (e: Exception) {
+                JSObject().put("outcome", PlaceOutcome.Failed.wire)
+                    .put("message", e.message ?: e.javaClass.simpleName)
+            }
+            invoke.resolve(out)
+        }
+    }
+
+    private fun named(invoke: Invoke): PlaceArgs? {
+        val args = invoke.parseArgs(PlaceArgs::class.java)
+        if (PlaceNames.valid(args.name)) return args
+        invoke.reject("invalid")
+        return null
+    }
+
+    /** Writes the file at `path` to the backup folder as `name`. */
+    @Command
+    fun placePut(invoke: Invoke) {
+        val args = named(invoke) ?: return
+        place(invoke) {
+            drive.put(args.name, File(args.path).readBytes())
+            JSObject()
+        }
+    }
+
+    /** Reads `name` from the backup folder into the file at `path`, when it is there. */
+    @Command
+    fun placeGet(invoke: Invoke) {
+        val args = named(invoke) ?: return
+        place(invoke) {
+            val bytes = drive.get(args.name)
+            if (bytes != null) {
+                val target = File(args.path)
+                val staged = File(target.parentFile, target.name + ".part")
+                staged.writeBytes(bytes)
+                if (!staged.renameTo(target)) {
+                    staged.delete()
+                    throw java.io.IOException("not written")
+                }
+            }
+            JSObject().put("found", bytes != null)
+        }
+    }
+
+    @Command
+    fun placeList(invoke: Invoke) {
+        val args = invoke.parseArgs(PlaceArgs::class.java)
+        if (!PlaceNames.validPrefix(args.prefix)) return invoke.reject("invalid")
+        place(invoke) {
+            val entries = JSArray()
+            for (e in drive.list(args.prefix)) {
+                entries.put(
+                    JSObject().put("name", e.name).put("size", e.size).put("modified", e.modified)
+                )
+            }
+            JSObject().put("entries", entries)
+        }
+    }
+
+    @Command
+    fun placeDelete(invoke: Invoke) {
+        val args = named(invoke) ?: return
+        place(invoke) {
+            drive.delete(args.name)
+            JSObject()
+        }
     }
 
     /** Background windows while the mind is on; none while it is off. */
