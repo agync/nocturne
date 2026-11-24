@@ -29,7 +29,7 @@ pub(crate) fn parse_hm(s: &str) -> (i8, i8) {
 }
 
 fn local_date(now: Timestamp, tz: &TimeZone) -> Date {
-    now.to_zoned(tz.clone()).date()
+    now.to_zoned_datetime(tz.clone()).date()
 }
 
 /// The first page time strictly after `now`.

@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, Zoned};
+use jiff::{Timestamp, ZonedDateTime};
 use nocturne_contract::{
     EVENT_DEVICE, EVENT_REMOTE, EVENT_STATUS, EngineState, EngineStatus, RemoteState, RemoteView,
 };
@@ -174,14 +174,14 @@ pub fn shortcut_label(spelling: &str) -> String {
     label_for(spelling, this_keyboard())
 }
 
-fn clock_text(at: &Zoned) -> String {
+fn clock_text(at: &ZonedDateTime) -> String {
     format!("{:02}:{:02}", at.hour(), at.minute())
 }
 
 /// "21:30", "tomorrow 01:00" or "Sat 09:00".
 fn until_text(until: Timestamp, now: Timestamp, tz: &TimeZone) -> String {
-    let at = until.to_zoned(tz.clone());
-    let today = now.to_zoned(tz.clone()).date();
+    let at = until.to_zoned_datetime(tz.clone());
+    let today = now.to_zoned_datetime(tz.clone()).date();
     let time = clock_text(&at);
     if at.date() == today {
         time
@@ -317,8 +317,12 @@ pub fn menu_model(
 /// When "Until tonight" ends: the next 01:00 local, when the tidy window opens. A 01:00 that
 /// does not exist (the clocks go forward) is the first moment after it.
 pub fn until_tonight(now: Timestamp, tz: &TimeZone) -> Timestamp {
-    let today: Date = now.to_zoned(tz.clone()).date();
-    let at = |d: Date| d.at(1, 0, 0, 0).to_zoned(tz.clone()).map(|z| z.timestamp());
+    let today: Date = now.to_zoned_datetime(tz.clone()).date();
+    let at = |d: Date| {
+        d.at(1, 0, 0, 0)
+            .to_zoned_datetime(tz.clone())
+            .map(|z| z.timestamp())
+    };
     match at(today) {
         Ok(t) if t > now => t,
         _ => today

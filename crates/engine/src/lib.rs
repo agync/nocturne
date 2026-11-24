@@ -166,7 +166,7 @@ impl Engine {
         self.inner
             .clock
             .now()
-            .to_zoned(self.inner.clock.tz())
+            .to_zoned_datetime(self.inner.clock.tz())
             .date()
             .to_string()
     }

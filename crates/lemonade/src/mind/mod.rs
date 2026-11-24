@@ -93,8 +93,8 @@ impl LemonadeMind {
 
     fn today(&self) -> Date {
         match &self.clock {
-            Some(c) => c.now().to_zoned(c.tz()).date(),
-            None => jiff::Zoned::now().date(),
+            Some(c) => c.now().to_zoned_datetime(c.tz()).date(),
+            None => jiff::ZonedDateTime::now().date(),
         }
     }
 

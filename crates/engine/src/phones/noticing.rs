@@ -68,7 +68,7 @@ pub(crate) struct Topic {
 /// first ten characters are the day wherever the receipt is read.
 pub(crate) fn reading_receipt(s: &Stored, label: &str, tz: &TimeZone) -> Option<Receipt> {
     let day: Date = s.day.parse().ok()?;
-    let noon = day.at(12, 0, 0, 0).to_zoned(tz.clone()).ok()?;
+    let noon = day.at(12, 0, 0, 0).to_zoned_datetime(tz.clone()).ok()?;
     Some(Receipt {
         item_id: s.item_id.clone(),
         kind: ItemKind::Reading,

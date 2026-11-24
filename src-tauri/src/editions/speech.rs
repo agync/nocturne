@@ -195,7 +195,7 @@ pub fn should_prepare(
     if !saved_today || paused || tidying || attempts >= MAX_ATTEMPTS {
         return None;
     }
-    let today = now.to_zoned(tz.clone()).date();
+    let today = now.to_zoned_datetime(tz.clone()).date();
     let used = audio_used?;
     let age = today.since(used).ok()?.get_days();
     if !(0..=USED_WITHIN_DAYS as i32).contains(&age) {
@@ -204,7 +204,7 @@ pub fn should_prepare(
     let (h, m) = page_time.split_once(':')?;
     let start = today
         .at(h.parse().ok()?, m.parse().ok()?, 0, 0)
-        .to_zoned(tz.clone())
+        .to_zoned_datetime(tz.clone())
         .ok()?
         .timestamp();
     (now >= start).then_some(today)
@@ -225,7 +225,7 @@ pub async fn prepare_if_due<R: Runtime>(app: &AppHandle<R>) -> bool {
     let _ = blocking(move || pruner.prune_audio(KEEP_DAYS)).await;
     let now = shell.now();
     let tz = shell.clock.tz();
-    let today = now.to_zoned(tz.clone()).date();
+    let today = now.to_zoned_datetime(tz.clone()).date();
     let status = refresh_status(app).await;
     let tidying = status.state == EngineState::Tidying || status.tidy.is_some();
     let paused = shell.status.is_paused(now);

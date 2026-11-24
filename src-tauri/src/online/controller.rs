@@ -1094,7 +1094,7 @@ impl<R: Runtime> OnlineHub<R> {
                 until: until.clone(),
             })
         });
-        let month = now.to_zoned(tz).strftime("%Y-%m").to_string();
+        let month = now.to_zoned_datetime(tz).strftime("%Y-%m").to_string();
         let first = {
             let mut r = self.routes();
             let first = r.limit_noticed.as_deref() != Some(month.as_str());

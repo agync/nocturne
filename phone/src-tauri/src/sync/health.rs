@@ -151,7 +151,7 @@ pub fn take_full(
     h.token_older = older;
     h.token_distance = granted.distance;
     h.from_day = Some(read.from_day);
-    forget_older_than_a_year(h, &jiff::Zoned::now().date().to_string());
+    forget_older_than_a_year(h, &jiff::ZonedDateTime::now().date().to_string());
 }
 
 /// Daily kinds read again over some days, beside the token: the token stays as it is.

@@ -154,7 +154,7 @@ fn row_kind(item: &JItem) -> RowKind {
 }
 
 fn day_part(ctx: &Ctx, day: Date, at: &str) -> Result<DayPart> {
-    let local = parse_ts(at)?.to_zoned(ctx.tz.clone());
+    let local = parse_ts(at)?.to_zoned_datetime(ctx.tz.clone());
     if local.date() > day {
         return Ok(DayPart::AfterMidnight);
     }
@@ -437,7 +437,7 @@ fn phone_rows(
     for c in crate::phones::read::calendar_entries(conn, day)? {
         let starts_today = crate::phones::calendar::entry_day(&c.entry, &ctx.tz) == Some(day);
         let at = if c.entry.all_day || !starts_today {
-            crate::util::fmt_ts(day.to_zoned(ctx.tz.clone())?.timestamp())
+            crate::util::fmt_ts(day.to_zoned_datetime(ctx.tz.clone())?.timestamp())
         } else {
             crate::util::fmt_ts(parse_ts(&c.entry.start)?)
         };

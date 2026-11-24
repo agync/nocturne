@@ -394,7 +394,7 @@ fn usual_times(
 
 /// Minutes after noon, so a bedtime either side of midnight sorts as the evening it is.
 fn after_noon(t: Timestamp, tz: &TimeZone) -> i64 {
-    let z = t.to_zoned(tz.clone());
+    let z = t.to_zoned_datetime(tz.clone());
     (i64::from(z.hour()) * 60 + i64::from(z.minute()) + 12 * 60) % (24 * 60)
 }
 

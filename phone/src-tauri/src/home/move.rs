@@ -377,7 +377,7 @@ impl Home {
         let Some(note) = self.put_aside_note() else {
             return LeftBehind::default();
         };
-        let today = self.clock.now().to_zoned(self.clock.tz()).date();
+        let today = self.clock.now().to_zoned_datetime(self.clock.tz()).date();
         nocturne_engine::store_left_behind(&self.path(&note.folder), today).unwrap_or_else(|e| {
             tracing::warn!("could not read what stays in the memory put aside: {e}");
             LeftBehind {

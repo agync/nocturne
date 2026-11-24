@@ -69,7 +69,7 @@ fn bold(sentence: &str, object: &str) -> String {
 fn local_date(ts: &str, tz: &TimeZone) -> Option<String> {
     parse_ts(ts)
         .ok()
-        .map(|t| t.to_zoned(tz.clone()).date().to_string())
+        .map(|t| t.to_zoned_datetime(tz.clone()).date().to_string())
 }
 
 fn base_line(kind: LineKind, text: String) -> PageLine {
@@ -1055,7 +1055,7 @@ pub(crate) fn answer_tx(
     choice: QuestionChoice,
 ) -> Result<Option<String>> {
     let now = fmt_ts(clock.now());
-    let today = clock.now().to_zoned(clock.tz()).date().to_string();
+    let today = clock.now().to_zoned_datetime(clock.tz()).date().to_string();
     let date = day.to_string();
     let ctx = Ctx::load(tx, clock)?;
     let row = saved_question(tx, &date)?;

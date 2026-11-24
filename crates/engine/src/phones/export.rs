@@ -217,7 +217,11 @@ fn readings_file(rows: &[Stored], tz: &TimeZone) -> String {
         let time = r
             .start
             .parse::<Timestamp>()
-            .map(|t| t.to_zoned(tz.clone()).strftime("%H:%M").to_string())
+            .map(|t| {
+                t.to_zoned_datetime(tz.clone())
+                    .strftime("%H:%M")
+                    .to_string()
+            })
             .unwrap_or_default();
         let (value, unit) = value_and_unit(&r.value);
         // A phone alone has no name to give: there is only the one.

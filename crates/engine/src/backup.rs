@@ -296,7 +296,7 @@ impl Engine {
         let day = self
             .clock()
             .now()
-            .to_zoned(self.clock().tz())
+            .to_zoned_datetime(self.clock().tz())
             .date()
             .to_string();
         format!("Nocturne backup {day}.{BACKUP_EXT}")

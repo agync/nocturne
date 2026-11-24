@@ -25,7 +25,7 @@ impl Home {
         let today = self
             .clock
             .now()
-            .to_zoned(self.clock.tz())
+            .to_zoned_datetime(self.clock.tz())
             .date()
             .to_string();
         if self.last_faded().as_deref() == Some(today.as_str()) {

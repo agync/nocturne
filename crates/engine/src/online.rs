@@ -207,9 +207,11 @@ fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
 
 /// The first instant of `now`'s calendar month in `tz`, and of the next one.
 fn month_bounds(now: Timestamp, tz: &TimeZone) -> Result<(Timestamp, Timestamp)> {
-    let first = now.to_zoned(tz.clone()).date().first_of_month();
-    let start = first.to_zoned(tz.clone())?;
-    let next = first.checked_add(1.month())?.to_zoned(tz.clone())?;
+    let first = now.to_zoned_datetime(tz.clone()).date().first_of_month();
+    let start = first.to_zoned_datetime(tz.clone())?;
+    let next = first
+        .checked_add(1.month())?
+        .to_zoned_datetime(tz.clone())?;
     Ok((start.timestamp(), next.timestamp()))
 }
 
@@ -614,7 +616,7 @@ impl Engine {
     pub fn online_resets_on(&self, tz: &TimeZone) -> String {
         let first = self
             .clock_now()
-            .to_zoned(tz.clone())
+            .to_zoned_datetime(tz.clone())
             .date()
             .first_of_month();
         first

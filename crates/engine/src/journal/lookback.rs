@@ -60,7 +60,7 @@ fn strip_spans(text: &str) -> String {
 }
 
 pub(crate) fn clock_label(tz: &TimeZone, at: Timestamp) -> String {
-    let z = at.to_zoned(tz.clone());
+    let z = at.to_zoned_datetime(tz.clone());
     let (h, suffix) = match z.hour() {
         0 => (12, "am"),
         h @ 1..=11 => (h, "am"),
@@ -626,12 +626,12 @@ fn appointments(conn: &Connection, ctx: &Ctx, day: Date) -> Result<Vec<(String, 
                 None
             } else {
                 let end = parse_ts(&c.entry.end)?;
-                let z = end.to_zoned(ctx.tz.clone());
+                let z = end.to_zoned_datetime(ctx.tz.clone());
                 let at_midnight = z.hour() == 0 && z.minute() == 0 && z.second() == 0;
                 (z.date() == day && !at_midnight).then(|| clock_label(&ctx.tz, end))
             };
             (
-                fmt_ts(day.to_zoned(ctx.tz.clone())?.timestamp()),
+                fmt_ts(day.to_zoned_datetime(ctx.tz.clone())?.timestamp()),
                 until.map_or_else(|| "all day".to_string(), |t| format!("until {t}")),
             )
         };

@@ -474,7 +474,7 @@ pub fn note_audio_used<R: Runtime>(app: &AppHandle<R>) {
     let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>()) else {
         return;
     };
-    let today = shell.now().to_zoned(shell.clock.tz()).date();
+    let today = shell.now().to_zoned_datetime(shell.clock.tz()).date();
     os.update(|f| f.audio_used = Some(today.to_string()));
 }
 
@@ -489,7 +489,7 @@ pub fn on_main_focused<R: Runtime>(app: &AppHandle<R>) {
             return;
         };
         let Ok(engine) = shell.engine() else { return };
-        let today = shell.now().to_zoned(shell.clock.tz()).date();
+        let today = shell.now().to_zoned_datetime(shell.clock.tz()).date();
         let opened = crate::error::blocking(move || {
             if engine.page(Some(today))?.is_none() {
                 return Ok(false);

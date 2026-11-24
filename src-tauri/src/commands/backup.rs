@@ -61,7 +61,7 @@ fn progress<R: Runtime>(app: AppHandle<R>) -> impl Fn(BackupPhase, u64, u64) + S
 fn stamp(state: &AppState) -> String {
     state
         .now()
-        .to_zoned(state.clock.tz())
+        .to_zoned_datetime(state.clock.tz())
         .strftime("%Y-%m-%d %H%M%S")
         .to_string()
 }

@@ -625,7 +625,12 @@ impl Engine {
     ) -> Result<SameNameAnswered> {
         let now = fmt_ts(self.clock().now());
         let tz = self.clock().tz();
-        let today = self.clock().now().to_zoned(tz.clone()).date().to_string();
+        let today = self
+            .clock()
+            .now()
+            .to_zoned_datetime(tz.clone())
+            .date()
+            .to_string();
         let (answered, files) = self.write(|tx| {
             let row: Option<(String, String, String, Option<String>)> = tx
                 .query_row(
