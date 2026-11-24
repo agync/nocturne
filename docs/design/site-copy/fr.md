@@ -97,6 +97,7 @@ Each term is rendered the same way on every page.
 | `foot.data` | Your data | Vos données |
 | `foot.download` | Download | Télécharger |
 | `foot.install` | Install guide | Guide d’installation |
+| `foot.support` | Support | Aide |
 | `foot.font` | Font licence | Licence des polices |
 
 ## Hero
@@ -199,7 +200,7 @@ Each term is rendered the same way on every page.
 | `req.graphics.term` | A graphics card | Une carte graphique |
 | `req.graphics.detail` | No graphics card needed. Macs with Apple silicon, and computers with AMD or Intel graphics built in, run Nocturne on the chip and share the computer’s memory. An AMD or NVIDIA graphics card works too, best with 6 GB or more. Other computers run it on the processor. | Pas besoin de carte graphique. Les Mac avec puce Apple, et les ordinateurs avec graphismes AMD ou Intel intégrés, font tourner Nocturne sur la puce et partagent la mémoire de l’ordinateur. Une carte graphique AMD ou NVIDIA fonctionne aussi, idéalement avec 6 Go ou plus. Les autres ordinateurs le font tourner sur le processeur. |
 | `req.chip.term` | An AI chip | Une puce d’IA |
-| `req.chip.detail` | Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them. | Utile, jamais nécessaire. Sur certains ordinateurs AMD avec une puce d’IA et 16 Go ou plus, la puce d’IA lit vos notes vocales, pour que les réponses et le rangement quotidien ne les attendent pas. |
+| `req.chip.detail` | Helpful, never needed. On AMD Ryzen AI 300 series computers and newer, with 16 GB or more, the AI chip reads your voice notes. On many with 32 GB or more it also reads what you keep, and on some it answers your questions too, so the rest of the computer has less to do. | Utile, jamais nécessaire. Sur les ordinateurs AMD Ryzen AI série 300 et plus récents, avec 16 Go ou plus, la puce d’IA lit vos notes vocales. Sur beaucoup de ceux qui ont 32 Go ou plus, elle lit aussi ce que vous gardez, et sur certains elle répond aussi à vos questions, si bien que le reste de l’ordinateur a moins à faire. |
 | `req.system.term` | The system | Le système |
 | `req.system.detail` | macOS 26 or later on an Apple chip, Windows 10 or 11 (64-bit), or 64-bit Linux on Intel, AMD or Arm. | macOS 26 ou ultérieur sur une puce Apple, Windows 10 ou 11 (64 bits), ou Linux 64 bits sur Intel, AMD ou Arm. |
 | `tier.large.name` | Large | Grande |
@@ -214,7 +215,7 @@ Each term is rendered the same way on every page.
 | `tier.tiny.name` | Tiny | Mini |
 | `tier.tiny.spec` | 6 GB+ memory · 5.2 GB space | 6 Go de mémoire ou plus · 5,2 Go d’espace |
 | `tier.tiny.text` | Made for 8 GB computers. Simpler answers that may miss details. | Faite pour les ordinateurs de 8 Go. Des réponses plus simples, qui peuvent manquer des détails. |
-| `req.downloads` | Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all. | Les téléchargements de la mise en route vont d’environ 3 Go à 26 Go, selon la configuration. Ensuite, Nocturne fonctionne sans aucune connexion à internet. |
+| `req.downloads` | Downloads at setup are between about 3 GB and 26 GB, depending on the setup, and about 9 GB more where the AI chip reads what you keep. After that, Nocturne works with no internet at all. | Les téléchargements de la mise en route vont d’environ 3 Go à 26 Go, selon la configuration, et d’environ 9 Go de plus là où la puce d’IA lit ce que vous gardez. Ensuite, Nocturne fonctionne sans aucune connexion à internet. |
 
 ## Get Nocturne (end of the landing page)
 
@@ -280,7 +281,7 @@ Each term is rendered the same way on every page.
 | `linux.spec` | 64-bit computer with an Intel, AMD or Arm chip | Ordinateur 64 bits avec puce Intel, AMD ou Arm |
 | `linux.choices.aria` | Ways to install on Linux | Façons d’installer sous Linux |
 | `linux.flatpak.title` | From your software centre | Depuis votre logithèque |
-| `linux.flatpak.text` | The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet. | Le bon choix pour la plupart des gens, sur n’importe quel bureau Linux. Votre logithèque garde Nocturne à jour. Le lancement au démarrage de l’ordinateur n’est pas encore possible de cette façon. |
+| `linux.flatpak.text` | The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. | Le bon choix pour la plupart des gens, sur n’importe quel bureau Linux. Votre logithèque garde Nocturne à jour. |
 | `linux.flatpak.button` | Get the Flatpak | Obtenir le Flatpak |
 | `linux.flatpak.terminal` | Or install it from a terminal | Ou l’installer depuis un terminal |
 | `linux.deb.title` | Ubuntu, Linux Mint or Debian | Ubuntu, Linux Mint ou Debian |
@@ -310,8 +311,8 @@ Each term is rendered the same way on every page.
 | `after.1.text` | It tells you which setup it will use. You can always pick a smaller one, which uses less memory, space and battery. | Il vous dit quelle configuration il va utiliser. Vous pouvez toujours en choisir une plus petite, qui utilise moins de mémoire, d’espace et de batterie. |
 | `after.2.when` | Once, when you agree | Une fois, si vous acceptez |
 | `after.2.title` | It downloads what it needs | Il télécharge ce dont il a besoin |
-| `after.2.text` | It asks first, then downloads what this computer can run: between about 3 GB and 26 GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops. | Il demande d’abord, puis télécharge ce que cet ordinateur peut faire tourner : entre 3 Go et 26 Go environ. C’est le seul moment où Nocturne a besoin d’internet, et il reprend tout seul si la connexion coupe. |
-| `after.3.when` | The next morning | Le lendemain matin |
+| `after.2.text` | It asks first, then downloads what this computer can run: between about 3 GB and 26 GB, and about 9 GB more where the AI chip reads what you keep. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops. | Il demande d’abord, puis télécharge ce que cet ordinateur peut faire tourner : entre 3 Go et 26 Go environ, et environ 9 Go de plus là où la puce d’IA lit ce que vous gardez. C’est le seul moment où Nocturne a besoin d’internet, et il reprend tout seul si la connexion coupe. |
+| `after.3.when` | At the time you choose | À l’heure de votre choix |
 | `after.3.title` | Your first page | Votre première page |
 | `after.3.text` | From then on, Nocturne works with no internet at all. | Ensuite, Nocturne fonctionne sans aucune connexion à internet. |
 
@@ -326,6 +327,39 @@ Each term is rendered the same way on every page.
 | `js.linux` | This looks like a Linux computer, so its choices come first. | On dirait un ordinateur Linux, ses options apparaissent donc en premier. |
 | `js.linuxArm` | This looks like a Linux computer with an Arm chip, so its choices come first, Arm downloads first. | On dirait un ordinateur Linux avec puce Arm, ses options apparaissent donc en premier, les téléchargements Arm d’abord. |
 | `js.other` | Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below. | Nocturne est une application de bureau, pour les ordinateurs Mac, Windows et Linux. Ouvrez cette page sur l’ordinateur où vous voulez l’utiliser, ou choisissez-en un ci-dessous. |
+
+## Support page
+
+Drafted with DeepL on 2026-11-24 (with the glossary's form of address) and reviewed against the glossary and the neighbouring strings the same day. The `req.chip.detail`, `req.downloads`, `linux.flatpak.text`, `after.2.text`, `after.3.when` and `foot.support` rows below and above went through the same pass. Words the app shows are bold, with the English in brackets while the app is English.
+
+| Id | English | Français |
+|---|---|---|
+| `support.title` | Support · Nocturne | Aide · Nocturne |
+| `support.description` | Help with Nocturne on a computer or a phone: answers from its own guide, what to try first, and how to reach the people who make it. | Aide pour Nocturne sur ordinateur ou sur téléphone : les réponses de son propre guide, ce qu’il faut essayer d’abord et comment joindre les personnes qui le font. |
+| `support.heading` | Help with Nocturne. | Aide pour Nocturne. |
+| `support.lede` | Nocturne keeps everything on your own computer or phone, so no help desk can see your memory. Help starts with Nocturne itself and its guide, and the people who make it are a message away. | Nocturne garde tout sur votre propre ordinateur ou téléphone, si bien qu’aucun service d’assistance ne peut voir vos souvenirs. L’aide commence par Nocturne lui-même et son guide, et les personnes qui le font ne sont qu’à un message. |
+| `support.first.title` | Start here. | Commencez ici. |
+| `support.ask.title` | Ask Nocturne | Demander à Nocturne |
+| `support.ask.text` | On a computer, type your question in the ask box, like “how do I add a phone”. Nocturne answers from the guide that comes with it and shows the part it used. | Sur un ordinateur, tapez votre question dans la zone de question, par exemple « comment ajouter un téléphone ». Nocturne répond à partir du guide fourni avec lui et montre le passage qu’il a utilisé. |
+| `support.phone.title` | On your phone | Sur votre téléphone |
+| `support.phone.text` | Open **This phone**, then **Help**: what this phone can do, its permissions with a way to change them, and the privacy policy. | Ouvrez **Ce téléphone** (This phone), puis **Aide** (Help) : ce que ce téléphone sait faire, ses autorisations avec un moyen de les modifier, et la politique de confidentialité. |
+| `support.guide.title` | Read the guide | Lire le guide |
+| `support.guide.text` | [Installing], [your computer’s desktop], [Away from home], [Online answers] and [your data]. | [Installation], [le bureau de votre ordinateur], [En déplacement], [Réponses en ligne] et [vos données]. |
+| `support.qa.title` | Common questions. | Questions fréquentes. |
+| `support.qa.page.term` | My page didn’t come | Ma page n’est pas arrivée |
+| `support.qa.page.detail` | Nocturne writes it in the hours before your page time, while the computer is on, plugged in and not in use. If it was off or asleep, Nocturne catches up when it wakes. [The guide] explains each desktop. | Nocturne l’écrit dans les heures qui précèdent l’heure de votre page, quand l’ordinateur est allumé, branché et inutilisé. S’il était éteint ou en veille, Nocturne rattrape son retard au réveil. [Le guide] explique chaque bureau. |
+| `support.qa.lost.term` | I lost my phone | J’ai perdu mon téléphone |
+| `support.qa.lost.detail` | If it was paired with your computer, your memory is on the computer: open **Away from home** there, choose **See phones**, then **Remove** beside it. If the phone kept your memory on its own, install Nocturne on the new phone and choose **I have a backup**. | S’il était associé à votre ordinateur, vos souvenirs sont sur l’ordinateur : ouvrez-y **En déplacement** (Away from home), choisissez **Voir les téléphones** (See phones), puis **Retirer** (Remove) à côté du sien. Si le téléphone gardait vos souvenirs lui-même, installez Nocturne sur le nouveau téléphone et choisissez **J’ai une sauvegarde** (I have a backup). |
+| `support.qa.passphrase.term` | I forgot my passphrase | J’ai oublié mon mot de passe |
+| `support.qa.passphrase.detail` | No one can open a locked backup without its passphrase or recovery key, not even the people who make Nocturne. Make a new backup with a passphrase you can keep. | Personne ne peut ouvrir une sauvegarde verrouillée sans son mot de passe ou sa clé de récupération, pas même les personnes qui font Nocturne. Faites une nouvelle sauvegarde avec un mot de passe que vous pourrez conserver. |
+| `support.qa.delete.term` | How do I delete everything? | Comment tout supprimer ? |
+| `support.qa.delete.detail` | Choose **Delete everything…** in **Privacy** on a computer, or in **This phone** on a phone that keeps your memory itself. Nocturne’s makers hold nothing of yours, so there is nothing else to ask for. A service you chose for answers keeps what it received under its own rules. | Choisissez **Tout supprimer…** (Delete everything…) dans **Confidentialité** (Privacy) sur un ordinateur, ou dans **Ce téléphone** (This phone) sur un téléphone qui garde lui-même vos souvenirs. Les personnes qui font Nocturne ne détiennent rien de vous, il n’y a donc rien d’autre à demander. Un service que vous avez choisi pour les réponses garde ce qu’il a reçu selon ses propres règles. |
+| `support.qa.collect.term` | What does Nocturne collect? | Que collecte Nocturne ? |
+| `support.qa.collect.detail` | Nothing. No account, no analytics, no crash reports. Only what you turn on can leave your computer or phone. | Rien. Pas de compte, pas de statistiques d’usage, pas de rapports de plantage. Seul ce que vous activez peut quitter votre ordinateur ou votre téléphone. |
+| `support.contact.title` | Write to us. | Écrivez-nous. |
+| `support.contact.email` | Something not working, or a word that reads wrong? Email [hello@nocturne.is]. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key. | Quelque chose ne marche pas, ou un mot sonne faux ? Écrivez à [hello@nocturne.is]. Chaque message est lu par une personne. Dites quel ordinateur ou téléphone vous utilisez et ce que vous avez vu ; n’envoyez jamais ce que vous avez gardé, votre mot de passe ni la clé de votre service en ligne. |
+| `support.contact.github` | Or open an issue on [GitHub]. Issues are public, so leave out anything personal. | Ou ouvrez un ticket sur [GitHub]. Les tickets sont publics : n’y mettez rien de personnel. |
+| `support.contact.security` | To report a security problem, use [GitHub’s private reporting], not a public issue. | Pour signaler un problème de sécurité, utilisez [le signalement privé de GitHub], pas un ticket public. |
 
 ## Decisions
 

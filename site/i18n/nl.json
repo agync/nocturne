@@ -344,8 +344,8 @@
     "from": "An AI chip"
   },
   "req.chip.detail": {
-    "text": "Handig, nooit nodig. Op sommige AMD-computers met een AI-chip en 16 GB of meer leest de AI-chip je spraakmemo’s, zodat antwoorden en het dagelijkse opruimen er niet op hoeven te wachten.",
-    "from": "Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them."
+    "text": "Handig, nooit nodig. Op computers met AMD Ryzen AI 300-serie of nieuwer, met 16 GB of meer, leest de AI-chip je spraakmemo’s. Op veel computers met 32 GB of meer leest hij ook wat je bewaart, en op sommige beantwoordt hij ook je vragen, zodat de rest van de computer minder te doen heeft.",
+    "from": "Helpful, never needed. On AMD Ryzen AI 300 series computers and newer, with 16 GB or more, the AI chip reads your voice notes. On many with 32 GB or more it also reads what you keep, and on some it answers your questions too, so the rest of the computer has less to do."
   },
   "req.system.term": {
     "text": "Het systeem",
@@ -404,8 +404,8 @@
     "from": "Made for 8 GB computers. Simpler answers that may miss details."
   },
   "req.downloads": {
-    "text": "De downloads bij het instellen zijn ongeveer 3 GB tot 26 GB, afhankelijk van de variant. Daarna werkt Nocturne helemaal zonder internet.",
-    "from": "Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all."
+    "text": "De downloads bij het instellen zijn ongeveer 3 GB tot 26 GB, afhankelijk van de variant, en ongeveer 9 GB extra waar de AI-chip leest wat je bewaart. Daarna werkt Nocturne helemaal zonder internet.",
+    "from": "Downloads at setup are between about 3 GB and 26 GB, depending on the setup, and about 9 GB more where the AI chip reads what you keep. After that, Nocturne works with no internet at all."
   },
   "get.title": {
     "text": "Download Nocturne.",
@@ -548,8 +548,8 @@
     "from": "From your software centre"
   },
   "linux.flatpak.text": {
-    "text": "De keuze voor de meeste mensen, op elke Linux-desktop. Je softwarecentrum houdt Nocturne up-to-date. Opstarten met de computer kan op deze manier nog niet.",
-    "from": "The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet."
+    "text": "De keuze voor de meeste mensen, op elke Linux-desktop. Je softwarecentrum houdt Nocturne up-to-date.",
+    "from": "The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date."
   },
   "linux.flatpak.button": {
     "text": "De Flatpak ophalen",
@@ -652,12 +652,12 @@
     "from": "It downloads what it needs"
   },
   "after.2.text": {
-    "text": "Het vraagt het eerst en downloadt dan wat deze computer kan draaien: ongeveer 3 GB tot 26 GB. Dit is de enige keer dat Nocturne internet nodig heeft, en het gaat zelf verder als de verbinding wegvalt.",
-    "from": "It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops."
+    "text": "Het vraagt het eerst en downloadt dan wat deze computer kan draaien: ongeveer 3 GB tot 26 GB, en ongeveer 9 GB extra waar de AI-chip leest wat je bewaart. Dit is de enige keer dat Nocturne internet nodig heeft, en het gaat zelf verder als de verbinding wegvalt.",
+    "from": "It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB, and about 9&nbsp;GB more where the AI chip reads what you keep. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops."
   },
   "after.3.when": {
-    "text": "De volgende ochtend",
-    "from": "The next morning"
+    "text": "Op het tijdstip dat jij kiest",
+    "from": "At the time you choose"
   },
   "after.3.title": {
     "text": "Je eerste pagina",
@@ -670,6 +670,114 @@
   "foot.install": {
     "text": "Installatiehandleiding",
     "from": "Install guide"
+  },
+  "foot.support": {
+    "text": "Hulp",
+    "from": "Support"
+  },
+  "support.title": {
+    "text": "Hulp · Nocturne",
+    "from": "Support · Nocturne"
+  },
+  "support.description": {
+    "text": "Hulp bij Nocturne op een computer of telefoon: antwoorden uit de eigen handleiding, wat je eerst kunt proberen en hoe je de mensen erachter bereikt.",
+    "from": "Help with Nocturne on a computer or a phone: answers from its own guide, what to try first, and how to reach the people who make it."
+  },
+  "support.heading": {
+    "text": "Hulp bij Nocturne.",
+    "from": "Help with Nocturne."
+  },
+  "support.lede": {
+    "text": "Nocturne bewaart alles op je eigen computer of telefoon, dus geen helpdesk kan je herinneringen zien. Hulp begint bij Nocturne zelf en de handleiding, en de mensen erachter zijn één bericht verwijderd.",
+    "from": "Nocturne keeps everything on your own computer or phone, so no help desk can see your memory. Help starts with Nocturne itself and its guide, and the people who make it are a message away."
+  },
+  "support.first.title": {
+    "text": "Begin hier.",
+    "from": "Start here."
+  },
+  "support.ask.title": {
+    "text": "Vraag het aan Nocturne",
+    "from": "Ask Nocturne"
+  },
+  "support.ask.text": {
+    "text": "Typ op een computer je vraag in het vraagvak, bijvoorbeeld <q>hoe voeg ik een telefoon toe</q>. Nocturne antwoordt uit de handleiding die erbij zit en laat het deel zien dat het heeft gebruikt.",
+    "from": "On a computer, type your question in the ask box, like <q>how do I add a phone</q>. Nocturne answers from the guide that comes with it and shows the part it used."
+  },
+  "support.phone.title": {
+    "text": "Op je telefoon",
+    "from": "On your phone"
+  },
+  "support.phone.text": {
+    "text": "Open <b>Deze telefoon</b> (This phone), dan <b>Help</b>: wat deze telefoon kan, de machtigingen met een manier om ze te wijzigen, en het privacybeleid.",
+    "from": "Open <b>This phone</b>, then <b>Help</b>: what this phone can do, its permissions with a way to change them, and the privacy policy."
+  },
+  "support.guide.title": {
+    "text": "Lees de handleiding",
+    "from": "Read the guide"
+  },
+  "support.guide.text": {
+    "text": "<a href=\"/docs/guide/install.html\"{{en_link}}>Installatie{{en_mark}}</a>, <a href=\"/docs/guide/desktops.html\"{{en_link}}>het bureaublad van je computer{{en_mark}}</a>, <a href=\"/docs/guide/away-from-home.html\"{{en_link}}>Onderweg{{en_mark}}</a>, <a href=\"/docs/guide/online-answers.html\"{{en_link}}>Online antwoorden{{en_mark}}</a> en <a href=\"/docs/guide/your-data.html\"{{en_link}}>je gegevens{{en_mark}}</a>.",
+    "from": "<a href=\"/docs/guide/install.html\"{{en_link}}>Installing{{en_mark}}</a>, <a href=\"/docs/guide/desktops.html\"{{en_link}}>your computer’s desktop{{en_mark}}</a>, <a href=\"/docs/guide/away-from-home.html\"{{en_link}}>Away from home{{en_mark}}</a>, <a href=\"/docs/guide/online-answers.html\"{{en_link}}>Online answers{{en_mark}}</a> and <a href=\"/docs/guide/your-data.html\"{{en_link}}>your data{{en_mark}}</a>."
+  },
+  "support.qa.title": {
+    "text": "Veelgestelde vragen.",
+    "from": "Common questions."
+  },
+  "support.qa.page.term": {
+    "text": "Mijn pagina is niet gekomen",
+    "from": "My page didn’t come"
+  },
+  "support.qa.page.detail": {
+    "text": "Nocturne schrijft de pagina in de uren voor het tijdstip van je pagina, terwijl de computer aan staat, aan de stroom hangt en niet gebruikt wordt. Als hij uit stond of sliep, haalt Nocturne het in zodra hij wakker wordt. <a href=\"/docs/guide/desktops.html\"{{en_link}}>De handleiding{{en_mark}}</a> legt elk bureaublad uit.",
+    "from": "Nocturne writes it in the hours before your page time, while the computer is on, plugged in and not in use. If it was off or asleep, Nocturne catches up when it wakes. <a href=\"/docs/guide/desktops.html\"{{en_link}}>The guide{{en_mark}}</a> explains each desktop."
+  },
+  "support.qa.lost.term": {
+    "text": "Ik ben mijn telefoon kwijt",
+    "from": "I lost my phone"
+  },
+  "support.qa.lost.detail": {
+    "text": "Als hij aan je computer was gekoppeld, staan je herinneringen op de computer: open daar <b>Onderweg</b> (Away from home), kies <b>Telefoons bekijken</b> (See phones) en dan <b>Verwijderen</b> (Remove) ernaast. Als de telefoon je herinneringen zelf bewaarde, installeer dan Nocturne op de nieuwe telefoon en kies <b>Ik heb een back-up</b> (I have a backup).",
+    "from": "If it was paired with your computer, your memory is on the computer: open <b>Away from home</b> there, choose <b>See phones</b>, then <b>Remove</b> beside it. If the phone kept your memory on its own, install Nocturne on the new phone and choose <b>I have a backup</b>."
+  },
+  "support.qa.passphrase.term": {
+    "text": "Ik ben mijn wachtwoord vergeten",
+    "from": "I forgot my passphrase"
+  },
+  "support.qa.passphrase.detail": {
+    "text": "Niemand kan een vergrendelde back-up openen zonder het wachtwoord of de herstelsleutel, ook de mensen achter Nocturne niet. Maak een nieuwe back-up met een wachtwoord dat je kunt bewaren.",
+    "from": "No one can open a locked backup without its passphrase or recovery key, not even the people who make Nocturne. Make a new backup with a passphrase you can keep."
+  },
+  "support.qa.delete.term": {
+    "text": "Hoe verwijder ik alles?",
+    "from": "How do I delete everything?"
+  },
+  "support.qa.delete.detail": {
+    "text": "Kies <b>Alles verwijderen…</b> (Delete everything…) bij <b>Privacy</b> op een computer, of bij <b>Deze telefoon</b> (This phone) op een telefoon die je herinneringen zelf bewaart. De makers van Nocturne bewaren niets van jou, dus er is verder niets om te vragen. Een dienst die je voor antwoorden hebt gekozen, bewaart wat hij heeft ontvangen volgens zijn eigen regels.",
+    "from": "Choose <b>Delete everything…</b> in <b>Privacy</b> on a computer, or in <b>This phone</b> on a phone that keeps your memory itself. Nocturne’s makers hold nothing of yours, so there is nothing else to ask for. A service you chose for answers keeps what it received under its own rules."
+  },
+  "support.qa.collect.term": {
+    "text": "Wat verzamelt Nocturne?",
+    "from": "What does Nocturne collect?"
+  },
+  "support.qa.collect.detail": {
+    "text": "Niets. Geen account, geen analyse, geen crashrapporten. Alleen wat je zelf aanzet, kan je computer of telefoon verlaten.",
+    "from": "Nothing. No account, no analytics, no crash reports. Only what you turn on can leave your computer or phone."
+  },
+  "support.contact.title": {
+    "text": "Schrijf ons.",
+    "from": "Write to us."
+  },
+  "support.contact.email": {
+    "text": "Werkt er iets niet, of klinkt een woord verkeerd? Mail naar <a class=\"address\" href=\"mailto:hello@nocturne.is\">hello@nocturne.is</a>. Elk bericht wordt door een mens gelezen. Zeg welke computer of telefoon je gebruikt en wat je zag; stuur nooit wat je hebt bewaard, je wachtwoord of de sleutel van je online dienst.",
+    "from": "Something not working, or a word that reads wrong? Email <a class=\"address\" href=\"mailto:hello@nocturne.is\">hello@nocturne.is</a>. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key."
+  },
+  "support.contact.github": {
+    "text": "Of maak een issue aan op <a href=\"https://github.com/agync/nocturne/issues\">GitHub</a>. Issues zijn openbaar, dus laat alles wat persoonlijk is weg.",
+    "from": "Or open an issue on <a href=\"https://github.com/agync/nocturne/issues\">GitHub</a>. Issues are public, so leave out anything personal."
+  },
+  "support.contact.security": {
+    "text": "Meld een beveiligingsprobleem via <a href=\"https://github.com/agync/nocturne/security\">de privémelding van GitHub</a>, niet via een openbaar issue.",
+    "from": "To report a security problem, use <a href=\"https://github.com/agync/nocturne/security\">GitHub’s private reporting</a>, not a public issue."
   },
   "missing.title": {
     "text": "Niet hier · Nocturne",
