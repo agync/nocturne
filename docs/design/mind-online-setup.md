@@ -19,9 +19,20 @@ computer:
    already takes one look at the service's list of models. People copy a name with a wrong
    capital, a missing date or a stray space, and learn it only when the check fails.
 
-Status: proposed. Nothing here is built. It extends the approved
-[Keeping the next step in view](step-flow-actions.md) to the phone, and changes the details step of
-both setups.
+Status: proposed, with the owner's decisions of 2026-11-24 folded in. Nothing here is built. It
+extends the approved [Keeping the next step in view](step-flow-actions.md) to the phone, and changes
+the details step of both setups.
+
+## The owner's decisions
+
+Settled on 2026-11-24, each as recommended.
+
+| # | Decision | Where it lands |
+|---|---|---|
+| 1 | A typed name that isn't on the service's list is warned about, and the check's one question decides: if an answer comes back, it works | [Behaviour](#behaviour-state-by-state), [The check](#the-check-and-a-name-not-on-the-list) |
+| 2 | The list is fetched only when the person taps "Choose from {host}'s list…", never by itself | [The design](#the-design) |
+| 3 | The list is sorted A to Z, ignoring capitals, numbers in number order | [The list](#the-list) |
+| 4 | Online answers' Connect on the computer changes in the same release | [On the computer](#on-the-computer-same-form-same-change) |
 
 ## Mockups
 
@@ -166,7 +177,7 @@ flowchart TD
   list, which is what invariant 2 allows. Nothing new leaves the phone or the computer, and nothing
   goes anywhere else.
 - **Only when asked.** The list is fetched when the person taps "Choose from {host}'s list…", never
-  by itself while they type (open question 2).
+  by itself while they type (decision 2).
 - **The address and key decide.** Changing either drops the list, as it already drops a passed
   check. The name in the field stays.
 - **Choosing is typing.** Choosing a name puts it in the field exactly as listed, as if typed. The
@@ -186,7 +197,7 @@ flowchart TD
 | No list | The address answered "not found", or with something that is not a list | As above | As above | As above | As above. The check then asks its question, as today |
 | List failed, typing can help | The service was busy or had a problem on its side | Typable | The problem, then "Type the name exactly as its website shows it, or try the list again in a moment." | "Try the list again" | As today |
 | List failed, typing can't help | The key was refused, no credit, nothing answered at the address, this phone or computer is offline, the address is not allowed | Typable | The problem, worded as the check words it, pointing at the URL or the key | "Try the list again" | As today, and it will fail the same way until the URL or key is fixed |
-| Typed name not on the list | A list is known and the typed name is not in it | The typed name | "“{name}” isn't on {host}'s list. Check the spelling, or choose from the list. Capitals and dashes matter." | "Choose from {host}'s list…" | Pressable. Today's check then says "{host} doesn't know a name like “{name}”." (open question 1) |
+| Typed name not on the list | A list is known and the typed name is not in it | The typed name | "“{name}” isn't on {host}'s list. Check the spelling, or choose from the list. Capitals and dashes matter." | "Choose from {host}'s list…" | Pressable. The check asks its question; if an answer comes back, it works (decision 1) |
 | Only the capitals differ | As above, and one listed name matches but for capitals | The typed name | "“{name}” isn't on {host}'s list, but “{listed}” is." with "Use “{listed}”" | As above | As above |
 | Long list | More than 8 names | | | The list opens with a search field, focused | |
 | Checked, then changed | The check passed, then the person chose or typed another name | The new name | As for its state | As for its state | "Check" again; Continue waits, as for any edit today |
@@ -207,7 +218,7 @@ list. The words say both, and the check that follows settles it.
 | Under the title | "{count} names, A to Z" | Same |
 | Search | Shown when there are more than 8 names, focused on opening: "Search the list" | Same |
 | Rows | One per name, exactly as listed, in the monospaced type so `l`, `1`, `O` and `0` differ. A radio button shows the name in the field, if it is listed | Same, 40 pixels tall |
-| Order | A to Z, ignoring capitals, numbers in number order (open question 3) | Same |
+| Order | A to Z, ignoring capitals, numbers in number order (decision 3) | Same |
 | Choosing | One tap chooses and closes the list | One click, or Enter on the focused row. Arrow keys move without closing |
 | Searching | Matches any part of the name, ignoring capitals. The matching part is marked. "{shown} of {count} have “{query}” in them." | Same |
 | Nothing matches | "No name on the list has “{query}” in it." with "Use “{query}” as typed", which puts it in the field and closes the list | Same |
@@ -217,6 +228,15 @@ list. The words say both, and the check that follows settles it.
 No grouping, no labels, no "recommended" and no "best for": a standard service's list holds names
 only, and anything Nocturne added would be a guess. Nocturne still recommends no service and no
 name.
+
+### The check and a name not on the list
+
+Some services list names wrongly: they leave out a name they answer to, such as an older name kept
+for a while, or one that only some accounts can use. Today's check stops those at the list. With
+decision 1 it no longer does: a name not on a non-empty list is warned about under the field, and
+the check still asks its one question. If an answer comes back, it works ("{host} answered. It
+works."), and the name is used as typed. If not, the check's own outcome shows, as today. In
+`check()`, a name missing from the list stops being a reason to return before the question.
 
 ### On the computer: same form, same change
 
@@ -307,54 +327,11 @@ isn’t connected to the internet."
 
 ## What this does not change
 
-- The check, its question and its outcomes, apart from reusing the list from the last look.
+- The check, its question and its outcomes, apart from reusing the list from the last look and
+  letting the question decide for a name not on the list.
 - The words of steps 1, 3 and 4, and of every other screen named above. Only where the bar sits.
 - The labels "API URL", "API key", "Model name" on the phone, and Connect's on the computer.
 - Invariant 2: one look at the chosen service's list when it is checked, on the person's request.
-
-## Open questions for the owner
-
-### 1. A typed name that isn't on the service's list
-
-Some services list names wrongly: they leave out a name they answer to, such as an older name kept
-for a while, or one that only some accounts can use. Today's check stops those at the list.
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. Keep today's check | A name not on a non-empty list fails: "{host} doesn't know a name like “{name}”." | Catches typos before any question goes. A service that lists wrongly cannot be used at all |
-| B. Let the question decide | The not-on-the-list line still shows, but Check asks its one question anyway. If an answer comes back, it works: "{host} answered. It works." | Works with any service that answers. A typo that a service happens to accept would pass, and the answer proves that name works |
-
-**Recommendation: B.** The answer is the real proof; the list only helps choose. The warning line
-already catches typos before the person presses Check. It changes one line of `check()`.
-
-### 2. When the list is fetched
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. On a tap | "Choose from {host}'s list…" fetches it | One more tap. Every request to the service is one the person asked for |
-| B. By itself | Once the URL and key are filled and the person moves on from the key | No tap. Half-pasted keys and mistyped addresses send requests the person never meant |
-
-**Recommendation: A.** It keeps every request to the service a person's action, which is how the
-check already works.
-
-### 3. The order of the list
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. A to Z | Names sort alphabetically, ignoring capitals, numbers in number order | Predictable, and names of one family sit together. It may differ from the service's website |
-| B. The service's order | As the service sends them | May match its website. Often no order at all, and hard to scan |
-
-**Recommendation: A.** Search finds a known name either way; A to Z makes the short lists easy to
-scan.
-
-### 4. The computer in the same release
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. Together | Phone and computer change in one piece of work | One way to fill in one form everywhere. A little more to build at once |
-| B. Phone first | The computer follows later | Smaller first change. The two setups differ for a while |
-
-**Recommendation: A.** It is the same form and the same check; the list and its words are shared.
 
 ## Checks for the build
 
@@ -365,5 +342,6 @@ scan.
   service and no network each give the state above, and the phone's Sent online lists exactly one
   connection check for each look.
 - "Check" right after choosing makes no second look at the list.
+- A name not on a list of names, which the stand-in answers to, passes the check after the warning.
 - Changing the URL or key after a look drops the list.
 - No grouping or description of a name appears anywhere.
