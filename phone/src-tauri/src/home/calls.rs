@@ -133,7 +133,7 @@ impl Home {
         }
         let found = open
             .engine
-            .find_items(query, FIND_CAP)
+            .find_with_days(query, FIND_CAP)
             .map_err(|e| code(&e))?;
         Ok(HomeAnswer::Found {
             items: found.into_iter().map(Into::into).collect(),
