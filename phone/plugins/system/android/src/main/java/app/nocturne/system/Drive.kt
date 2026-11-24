@@ -43,7 +43,7 @@ class Drive(
 
         private val RATE = setOf("rateLimitExceeded", "userRateLimitExceeded")
         private val NO_ROOM = setOf("storageQuotaExceeded")
-        private val NO_ACCESS = setOf(
+        private val NO_PERMISSION = setOf(
             "authError",
             "insufficientPermissions",
             "insufficientFilePermissions",
@@ -70,11 +70,11 @@ class Drive(
         fun outcome(code: Int, body: ByteArray): PlaceOutcome {
             val why = reasons(body)
             return when {
-                code == 401 -> PlaceOutcome.NoAccess
+                code == 401 -> PlaceOutcome.NoPermission
                 why.any { it in NO_ROOM } -> PlaceOutcome.NoRoom
                 retryable(code, body) -> PlaceOutcome.Offline
-                code == 403 && (why.isEmpty() || why.any { it in NO_ACCESS }) ->
-                    PlaceOutcome.NoAccess
+                code == 403 && (why.isEmpty() || why.any { it in NO_PERMISSION }) ->
+                    PlaceOutcome.NoPermission
                 else -> PlaceOutcome.Failed
             }
         }

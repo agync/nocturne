@@ -326,16 +326,18 @@ class DriveTest {
     }
 
     @Test
-    fun aTokenTheAccountStillRefusesIsNoAccess() {
+    fun aTokenTheAccountStillRefusesIsNoPermission() {
         fake.failNext += HttpReply(401, ByteArray(0))
         fake.failNext += HttpReply(401, ByteArray(0))
-        assertEquals(PlaceOutcome.NoAccess, failure { drive.list("") })
+        assertEquals(PlaceOutcome.NoPermission, failure { drive.list("") })
     }
 
     @Test
-    fun noPermissionOrNoAccountIsNoAccess() {
-        tokens.refuse = PlaceOutcome.NoAccess
-        assertEquals(PlaceOutcome.NoAccess, failure { drive.get("key-phrase") })
+    fun noAccountOrNoPermissionIsSaidApart() {
+        tokens.refuse = PlaceOutcome.SignedOut
+        assertEquals(PlaceOutcome.SignedOut, failure { drive.get("key-phrase") })
+        tokens.refuse = PlaceOutcome.NoPermission
+        assertEquals(PlaceOutcome.NoPermission, failure { drive.get("key-phrase") })
     }
 
     @Test
@@ -379,11 +381,15 @@ class DriveTest {
     fun failedAnswersMeanWhatTheBackupShows() {
         fun body(reason: String) =
             """{"error":{"errors":[{"reason":"$reason"}]}}""".toByteArray()
-        assertEquals(PlaceOutcome.NoAccess, Drive.outcome(401, ByteArray(0)))
+        assertEquals(PlaceOutcome.NoPermission, Drive.outcome(401, ByteArray(0)))
         assertEquals(PlaceOutcome.NoRoom, Drive.outcome(403, body("storageQuotaExceeded")))
-        assertEquals(PlaceOutcome.NoAccess, Drive.outcome(403, body("insufficientPermissions")))
-        assertEquals(PlaceOutcome.NoAccess, Drive.outcome(403, body("appNotAuthorizedToFile")))
-        assertEquals(PlaceOutcome.NoAccess, Drive.outcome(403, "not json".toByteArray()))
+        assertEquals(
+            PlaceOutcome.NoPermission, Drive.outcome(403, body("insufficientPermissions"))
+        )
+        assertEquals(
+            PlaceOutcome.NoPermission, Drive.outcome(403, body("appNotAuthorizedToFile"))
+        )
+        assertEquals(PlaceOutcome.NoPermission, Drive.outcome(403, "not json".toByteArray()))
         assertEquals(PlaceOutcome.Offline, Drive.outcome(403, body("userRateLimitExceeded")))
         assertEquals(PlaceOutcome.Offline, Drive.outcome(429, ByteArray(0)))
         assertEquals(PlaceOutcome.Offline, Drive.outcome(502, ByteArray(0)))

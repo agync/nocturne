@@ -348,13 +348,13 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
 
     /**
      * The phone's account picker, then Google's one-time permission for files the app makes in
-     * the Drive. The picker shows when no account was chosen yet, or with `choose`. Nothing of
-     * Nocturne's shows between these screens.
+     * the Drive. The picker shows when no account was chosen yet, when the one chosen left the
+     * phone, or with `choose`. Nothing of Nocturne's shows between these screens.
      */
     @Command
     fun placeConnect(invoke: Invoke) {
         val choose = invoke.parseArgs(ConnectArgs::class.java).choose
-        val chosen = if (choose) null else driveAccount.chosen()
+        val chosen = if (choose) null else driveAccount.chosen()?.takeIf(driveAccount::onPhone)
         if (chosen != null) return authorizeFor(invoke, chosen)
         try {
             val picker = AccountManager.newChooseAccountIntent(

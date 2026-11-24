@@ -3,7 +3,10 @@ import Foundation
 /// Why a call to the person's iCloud did not do what was asked, as the core names it.
 enum PlaceOutcome: String, Error {
   case noRoom
-  case noAccess
+  /// This iPhone is signed out of iCloud.
+  case signedOut
+  /// iCloud is on, but off for Nocturne.
+  case noPermission
   case offline
   case failed
 }
@@ -37,9 +40,10 @@ enum ICloudPlace {
   }
 
   static func folder() throws -> URL {
-    guard FileManager.default.ubiquityIdentityToken != nil,
-      let root = FileManager.default.url(forUbiquityContainerIdentifier: container)
-    else { throw PlaceOutcome.noAccess }
+    guard FileManager.default.ubiquityIdentityToken != nil else { throw PlaceOutcome.signedOut }
+    guard let root = FileManager.default.url(forUbiquityContainerIdentifier: container) else {
+      throw PlaceOutcome.noPermission
+    }
     let dir = root.appendingPathComponent(folderName, isDirectory: true)
     do {
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -57,7 +61,7 @@ enum ICloudPlace {
     switch e.code {
     case NSFileWriteOutOfSpaceError, NSUbiquitousFileNotUploadedDueToQuotaError: return .noRoom
     case NSUbiquitousFileUbiquityServerNotAvailable: return .offline
-    case NSFileWriteNoPermissionError, NSFileReadNoPermissionError: return .noAccess
+    case NSFileWriteNoPermissionError, NSFileReadNoPermissionError: return .noPermission
     default: return .failed
     }
   }

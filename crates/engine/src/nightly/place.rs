@@ -14,9 +14,13 @@ pub enum PlaceError {
     /// The account has no room left.
     #[error("there is no room in the account")]
     NoRoom,
-    /// The account is signed out, turned off, or access was taken back.
-    #[error("the account cannot be reached")]
-    NoAccess,
+    /// The phone is signed out of the account, or the account left the phone.
+    #[error("the phone is signed out of the account")]
+    SignedOut,
+    /// The account is there, but the person took Nocturne's permission back, or turned it off
+    /// for Nocturne.
+    #[error("the account no longer lets Nocturne in")]
+    NoPermission,
     /// The phone is offline, or the account did not answer.
     #[error("the account did not answer")]
     Offline,

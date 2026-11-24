@@ -253,15 +253,29 @@ fn the_account_refusing_shows_and_the_next_night_tries_again() {
     assert!(p.backup.pass(&p.home, true));
     assert_eq!(p.state(), BackupState::UpToDate);
 
-    place.fail_with(Some(PlaceError::NoAccess));
-    p.later(21);
-    assert!(!p.backup.pass(&p.home, true));
-    assert_eq!(p.state(), BackupState::NoAccess);
-    place.fail_with(None);
-    p.later(21);
-    assert!(!p.backup.pass(&p.home, true), "waits for the account again");
-    let saved = p.backup.saved();
-    assert_eq!(saved.trouble, Some(Trouble::NoAccess));
+    for (error, state, trouble) in [
+        (
+            PlaceError::SignedOut,
+            BackupState::SignedOut,
+            Trouble::SignedOut,
+        ),
+        (
+            PlaceError::NoPermission,
+            BackupState::NoPermission,
+            Trouble::NoPermission,
+        ),
+    ] {
+        place.fail_with(Some(error.clone()));
+        p.later(21);
+        assert!(!p.backup.pass(&p.home, true));
+        assert_eq!(p.state(), state, "{error}");
+        place.fail_with(None);
+        p.later(21);
+        assert!(!p.backup.pass(&p.home, true), "waits for the account again");
+        assert_eq!(p.backup.saved().trouble, Some(trouble));
+        p.backup.turn_off(false).unwrap();
+        p.backup.turn_on_again().unwrap();
+    }
 }
 
 #[test]

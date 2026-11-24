@@ -122,7 +122,10 @@ pub struct LastNight {
 #[serde(tag = "trouble", rename_all = "camelCase")]
 pub enum Trouble {
     NoRoom,
-    NoAccess,
+    /// Signed out of the account, or it left the phone: "Choose account" or signing in again.
+    SignedOut,
+    /// Nocturne's permission was taken back, or iCloud is off for Nocturne.
+    NoPermission,
     #[serde(rename_all = "camelCase")]
     AnotherPhone {
         made_at: String,
@@ -163,7 +166,8 @@ pub enum BackupState {
     /// Restored here; waits for "Make this phone the one in use".
     NotInUse,
     NoRoom,
-    NoAccess,
+    SignedOut,
+    NoPermission,
     #[serde(rename_all = "camelCase")]
     AnotherPhone {
         made_at: String,
@@ -206,7 +210,8 @@ pub enum BackupProblem {
     Newer,
     Damaged,
     NoRoom,
-    NoAccess,
+    SignedOut,
+    NoPermission,
     Offline,
     Stopped,
     Busy,
@@ -229,7 +234,8 @@ impl From<NightError> for BackupProblem {
             NightError::Damaged => BackupProblem::Damaged,
             NightError::NoPhrase => BackupProblem::NoPhrase,
             NightError::Place(PlaceError::NoRoom) => BackupProblem::NoRoom,
-            NightError::Place(PlaceError::NoAccess) => BackupProblem::NoAccess,
+            NightError::Place(PlaceError::SignedOut) => BackupProblem::SignedOut,
+            NightError::Place(PlaceError::NoPermission) => BackupProblem::NoPermission,
             NightError::Place(PlaceError::Offline) => BackupProblem::Offline,
             NightError::Place(PlaceError::Failed(_)) => BackupProblem::Failed,
             NightError::Cancelled => BackupProblem::Stopped,
@@ -432,7 +438,8 @@ impl PhoneBackup {
         } else if let Some(trouble) = &saved.trouble {
             match trouble.clone() {
                 Trouble::NoRoom => BackupState::NoRoom,
-                Trouble::NoAccess => BackupState::NoAccess,
+                Trouble::SignedOut => BackupState::SignedOut,
+                Trouble::NoPermission => BackupState::NoPermission,
                 Trouble::AnotherPhone { made_at } => BackupState::AnotherPhone { made_at },
                 Trouble::Newer => BackupState::Newer,
                 Trouble::Damaged => BackupState::Damaged,
@@ -676,7 +683,8 @@ impl PhoneBackup {
             Err(NightError::TooNew) => Some(Trouble::Newer),
             Err(NightError::Damaged) => Some(Trouble::Damaged),
             Err(NightError::Place(PlaceError::NoRoom)) => Some(Trouble::NoRoom),
-            Err(NightError::Place(PlaceError::NoAccess)) => Some(Trouble::NoAccess),
+            Err(NightError::Place(PlaceError::SignedOut)) => Some(Trouble::SignedOut),
+            Err(NightError::Place(PlaceError::NoPermission)) => Some(Trouble::NoPermission),
             Err(NightError::Place(PlaceError::Failed(_)) | NightError::Failed(_)) => {
                 Some(Trouble::Failed)
             }
@@ -830,7 +838,12 @@ impl PhoneBackup {
         }
         let blocked = matches!(
             saved.trouble,
-            Some(Trouble::AnotherPhone { .. } | Trouble::Newer | Trouble::NoAccess)
+            Some(
+                Trouble::AnotherPhone { .. }
+                    | Trouble::Newer
+                    | Trouble::SignedOut
+                    | Trouble::NoPermission
+            )
         );
         if blocked || saved.state.as_ref().is_some_and(|s| !s.in_use) {
             return false;
