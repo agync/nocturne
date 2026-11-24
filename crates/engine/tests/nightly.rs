@@ -560,6 +560,12 @@ fn a_night_that_was_moved_or_forged_does_not_open() {
     let moved = format!("night-000000000009-{}", "ab".repeat(8));
     place.put(&moved, &bytes).unwrap();
     assert_eq!(nightly::newest(&place, &key).unwrap().unwrap().count, 1);
+    // No night is written beside one that doesn't open: what it lists would be pruned.
+    assert!(matches!(
+        night(&f.engine, &place, &key, &mut state),
+        Err(NightError::Damaged)
+    ));
+    place.delete(&moved).unwrap();
     night(&f.engine, &place, &key, &mut state).unwrap();
     assert_eq!(state.count, 2);
 
@@ -1185,4 +1191,113 @@ fn no_night_is_made_while_a_forget_is_finishing() {
     let report = night(&f.engine, &place, &key, &mut state).unwrap();
     assert!(report.carried_forget);
     assert_eq!(report.memories, 0);
+}
+
+#[test]
+fn the_backup_starts_again_in_another_account_with_the_same_phrase_and_recovery_key() {
+    let f = fixture();
+    keep(&f.engine, "The plumber comes on Tuesday.");
+    let old = MemoryPlace::new();
+    let key = nightly::turn_on(&old, PHRASE, WORK).unwrap();
+    let recovery = nightly::add_recovery_key(&old, &key, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &old, &key, &mut state).unwrap();
+    let locks = nightly::key_locks(&old).unwrap();
+    assert!(locks.recovery.is_some());
+
+    let new = MemoryPlace::new();
+    nightly::carry_locks(&new, &key, &locks, &[], &state).unwrap();
+    night(&f.engine, &new, &key, &mut state).unwrap();
+    run_with(true, |run| {
+        nightly::check_newest(&new, &key, run).expect("every piece is in the new account");
+    });
+    assert!(
+        nightly::open_with_phrase(&new, PHRASE)
+            .unwrap()
+            .same_as(&key)
+    );
+    assert!(
+        nightly::open_with_recovery_key(&new, &recovery)
+            .unwrap()
+            .same_as(&key)
+    );
+    let (out, _, _) = restore(&new, &key).unwrap();
+    assert!(out.path().join("stage/store").is_dir());
+
+    // Chosen again, the old account keeps its nights and takes the locks.
+    nightly::carry_locks(&old, &key, &locks, &[], &state).unwrap();
+    assert_eq!(names(&old, "night-").len(), 1);
+
+    // An account holding only this backup's phrase lock takes the rest, and loses a recovery
+    // lock `locks` does not hold.
+    let started = MemoryPlace::new();
+    started.put(KEY_PHRASE, &locks.phrase).unwrap();
+    started.put(KEY_RECOVERY, b"another lock").unwrap();
+    let no_recovery = nightly::KeyLocks {
+        recovery: None,
+        ..locks.clone()
+    };
+    nightly::carry_locks(&started, &key, &no_recovery, &[], &state).unwrap();
+    assert_eq!(names(&started, "key-"), vec![KEY_PHRASE.to_string()]);
+
+    // An account with another backup is never written over.
+    let other = MemoryPlace::new();
+    nightly::turn_on(&other, "another phrase of someone else", WORK).unwrap();
+    assert!(matches!(
+        nightly::carry_locks(&other, &key, &locks, &[], &state),
+        Err(NightError::AlreadyThere)
+    ));
+    assert!(nightly::open_with_phrase(&other, PHRASE).is_err());
+}
+
+#[test]
+fn another_backup_in_the_account_is_never_written_over_or_pruned() {
+    let theirs = fixture();
+    keep(&theirs.engine, "Someone else's thing.");
+    let place = MemoryPlace::new();
+    let their_key = nightly::turn_on(&place, "a phrase of their own", WORK).unwrap();
+    night(&theirs.engine, &place, &their_key, &mut NightState::new()).unwrap();
+    let their_pieces = names(&place, "piece-");
+
+    let mine = fixture();
+    keep(&mine.engine, "My thing.");
+    let key = NightKey::generate();
+    // Even with this backup's phrase lock written over theirs, their nights mark it as theirs.
+    let locks = nightly::KeyLocks {
+        phrase: nightly::phrase_lock(&key, PHRASE, WORK).unwrap(),
+        recovery: None,
+    };
+    place.put(KEY_PHRASE, &locks.phrase).unwrap();
+    let mut state = NightState::new();
+    assert!(matches!(
+        nightly::carry_locks(&place, &key, &locks, &[], &state),
+        Err(NightError::AlreadyThere)
+    ));
+    assert!(matches!(
+        night(&mine.engine, &place, &key, &mut state),
+        Err(NightError::Damaged)
+    ));
+    assert_eq!(names(&place, "piece-"), their_pieces, "their pieces stay");
+}
+
+#[test]
+fn a_newer_night_from_another_phone_stops_the_locks_being_carried() {
+    let f = fixture();
+    keep(&f.engine, "The plumber comes on Tuesday.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut other = NightState::new();
+    night(&f.engine, &place, &key, &mut other).unwrap();
+    let theirs = place.get(KEY_PHRASE).unwrap();
+
+    let locks = nightly::KeyLocks {
+        phrase: nightly::phrase_lock(&key, "an old phrase", WORK).unwrap(),
+        recovery: None,
+    };
+    let mine = NightState::new();
+    assert!(matches!(
+        nightly::carry_locks(&place, &key, &locks, &[], &mine),
+        Err(NightError::AnotherPhone { .. })
+    ));
+    assert_eq!(place.get(KEY_PHRASE).unwrap(), theirs, "their lock stays");
 }
