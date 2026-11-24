@@ -357,6 +357,15 @@ async fn put_mind<R: Runtime>(
     let mind: Arc<dyn Mind> = Arc::new(
         LemonadeMind::new(client, picks, tier)
             .with_clock(state.clock.clone())
+            .with_today({
+                let app = app.clone();
+                Arc::new(move || {
+                    app.state::<crate::state::AppState>()
+                        .engine()
+                        .ok()
+                        .and_then(|e| e.ask_today().ok())
+                })
+            })
             .with_npu(services.npu.clone()),
     );
     state.status.set_mind_bytes(bytes);

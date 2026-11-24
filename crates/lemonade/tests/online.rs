@@ -15,6 +15,16 @@ use nocturne_lemonade::online::{MAX_TOKENS, MODEL_ID};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
+fn today() -> nocturne_engine::AskToday {
+    nocturne_engine::AskToday {
+        day: "2026-11-24".parse().unwrap(),
+        hour: 21,
+        minute: 40,
+        zone: "Europe/London".into(),
+        week_start: jiff::civil::Weekday::Monday,
+    }
+}
+
 const ENGINE_KEY: &str = "per-launch-engine-key";
 
 struct StandIn {
@@ -119,7 +129,7 @@ async fn answer(
     facts: &[Fact],
 ) -> (Result<nocturne_engine::AnswerMeta, MindError>, String) {
     let (tx, mut rx) = mpsc::channel(8);
-    let meta = mind.answer(question, facts, tx).await;
+    let meta = mind.answer(question, facts, &today(), tx).await;
     let mut said = String::new();
     while let Ok(t) = rx.try_recv() {
         said.push_str(&t);
@@ -135,10 +145,11 @@ fn user_message(chat: &Value) -> String {
 }
 
 #[tokio::test]
-async fn online_uses_full_instructions_and_twelve_facts() {
+/// The words' 12 lines and the date step's 12, with today's date, time and zone.
+async fn online_uses_full_instructions_and_twenty_four_facts() {
     let s = StandIn::start();
     let mind = OnlineMind::new(s.client(), all_sendable());
-    let (meta, said) = answer(&mind, "When do the bins go out?", &facts(14)).await;
+    let (meta, said) = answer(&mind, "When do the bins go out?", &facts(26)).await;
     let meta = meta.unwrap();
     assert!(!meta.not_sure);
     assert_eq!(said, "The bins go out on Tuesday.", "markers are taken out");
@@ -154,8 +165,12 @@ async fn online_uses_full_instructions_and_twelve_facts() {
     let system = body["messages"][0]["content"].as_str().unwrap();
     assert!(system.starts_with("You answer a person's question about their own life"));
     let user = user_message(&chats[0]);
-    assert!(user.contains("[m12] Fact number 12"));
-    assert!(!user.contains("[m13]") && !user.contains("Fact number 13"));
+    assert!(user.contains("[m24] Fact number 24"));
+    assert!(!user.contains("[m25]") && !user.contains("Fact number 25"));
+    assert!(user.contains(
+        "Today is Tuesday 24 November 2026, 21:40, in the time zone Europe/London. \
+         The week starts on Monday.\nQuestion: When do the bins go out?"
+    ));
 }
 
 #[tokio::test]
@@ -319,7 +334,7 @@ async fn failures_are_classified_and_carry_no_body() {
     ] {
         s.script(json!({"status": status, "marker": "BODY-MARKER"}))
             .await;
-        let prepared = mind.prepare("When?", &facts(2)).unwrap();
+        let prepared = mind.prepare("When?", &facts(2), &today()).unwrap();
         let (tx, _rx) = mpsc::channel(4);
         let (meta, receipt) = mind.send(&prepared, tx).await;
         assert_eq!(meta, Err(MindError::Online(want)), "{status}");
@@ -373,7 +388,7 @@ async fn template_replaces_sentences_with_ids() {
         .unwrap(),
     );
     let mind = OnlineMind::new(s.client(), all_sendable());
-    let prepared = mind.prepare("When is the dentist?", &f).unwrap();
+    let prepared = mind.prepare("When is the dentist?", &f, &today()).unwrap();
     let receipt = prepared.receipt.clone();
     let (tx, _rx) = mpsc::channel(4);
     let _ = mind.send(&prepared, tx).await;

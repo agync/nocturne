@@ -12,11 +12,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use futures_util::StreamExt;
-use jiff::civil::Date;
 use nocturne_contract::{ComponentRole, PageView, Tier};
 use nocturne_engine::{
-    AnswerMeta, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError, ReflectInput,
-    Reflected, Transcript, Understanding,
+    AnswerMeta, AskToday, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError,
+    ReflectInput, Reflected, Transcript, Understanding,
 };
 use nocturne_mind::judge::{Judged, both_sides, complaints, conclude, judge, one_sided};
 use nocturne_mind::read::{self, Turn};
@@ -39,6 +38,9 @@ struct Seen {
     loaded: HashSet<String>,
 }
 
+/// Where today comes from: the store's own reading of it, `None` while no store is open.
+pub type TodayOf = Arc<dyn Fn() -> Option<AskToday> + Send + Sync>;
+
 pub struct LemonadeMind {
     client: Client,
     picks: Picks,
@@ -47,6 +49,8 @@ pub struct LemonadeMind {
     overrides: Vec<(ComponentRole, String)>,
     seen: Mutex<Seen>,
     clock: Option<Arc<dyn Clock>>,
+    /// Today as the person's journal has it, when the store is open.
+    today_of: Option<TodayOf>,
     /// The engine refused the reading grammar once: reading goes by a JSON schema from then on.
     grammar_refused: AtomicBool,
     /// Requests made to read items, retries and second looks included.
@@ -66,6 +70,7 @@ impl LemonadeMind {
             overrides: Vec::new(),
             seen: Mutex::new(Seen::default()),
             clock: None,
+            today_of: None,
             grammar_refused: AtomicBool::new(false),
             reading_calls: AtomicU64::new(0),
             npu: None,
@@ -91,10 +96,31 @@ impl LemonadeMind {
         self.reading_calls.load(Ordering::Relaxed)
     }
 
-    fn today(&self) -> Date {
-        match &self.clock {
-            Some(c) => c.now().to_zoned_datetime(c.tz()).date(),
-            None => jiff::ZonedDateTime::now().date(),
+    /// Takes today, its time and zone from `today_of` (the engine's, by the journal's day
+    /// boundary) whenever it has them.
+    pub fn with_today(mut self, today_of: TodayOf) -> Self {
+        self.today_of = Some(today_of);
+        self
+    }
+
+    /// The day, time and zone a question is asked in.
+    fn ask_today(&self) -> AskToday {
+        if let Some(today) = self.today_of.as_ref().and_then(|f| f()) {
+            return today;
+        }
+        let now = match &self.clock {
+            Some(c) => c.now().to_zoned_datetime(c.tz()),
+            None => jiff::ZonedDateTime::now(),
+        };
+        AskToday {
+            day: now.date(),
+            hour: now.hour(),
+            minute: now.minute(),
+            zone: now
+                .time_zone()
+                .iana_name()
+                .map_or_else(|| format!("UTC{}", now.offset()), str::to_string),
+            week_start: jiff::civil::Weekday::Monday,
         }
     }
 
@@ -460,7 +486,7 @@ impl LemonadeMind {
                 question,
                 facts,
                 nonce,
-                Some(self.today()),
+                &self.ask_today(),
             )),
         ];
         let mut reply = self.reply_to(model, &messages, "answer").await?;

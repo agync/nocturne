@@ -2,7 +2,9 @@
 
 use jiff::civil::Date;
 use nocturne_contract::{Certainty, EntityKind, ItemKind, MemoryStatus, PageView, Tier};
-use nocturne_engine::{ExtractContext, Fact, ReflectInput, is_guide_section};
+use nocturne_engine::{
+    AskToday, ExtractContext, Fact, ReflectInput, is_guide_section, weekday_name,
+};
 use serde_json::{Value, json};
 
 pub const NOT_SURE: &str = "NOT_SURE";
@@ -343,6 +345,9 @@ and say it is not settled which is right.\n\
 - Asked who someone is: start with how they are related to the person only when a fact says so in words; otherwise say what the facts say about them. Never guess a relationship.\n\
 - In each claim, put exactly one short phrase in bold with **: the words that answer the question, copied from the fact it cites. \
 For example: You meet Alex at **the old station** [m1]. One bold phrase for each fact you cite, in the order you cite them, and no other bold.\n\
+- When you say today, tomorrow or a weekday, also give the date as the fact writes it.\n\
+- Name a feeling only in the words of the check-in or entry that says it.\n\
+- Give a health number as the line writes it, with no comparison to a norm, no judgement and no advice.\n\
 Never add anything the facts do not say.\n{}",
         untrusted("facts", nonce)
     )
@@ -468,20 +473,26 @@ pub fn fact_lines(tier: Tier, facts: &[Fact]) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The day the question is asked, so that "tomorrow" or "this week" in a question or a fact
-/// can be placed.
-fn today_line(today: Date) -> String {
-    format!("Today is {}.", today.strftime("%A %-d %B %Y"))
+/// The day, time and zone the question is asked in, so that "tomorrow", "this evening" or
+/// "this week" in a question or a fact can be placed. Every answer has it, online too.
+pub fn today_line(today: &AskToday) -> String {
+    format!(
+        "Today is {}, {:02}:{:02}, in the time zone {}. The week starts on {}.",
+        today.day.strftime("%A %-d %B %Y"),
+        today.hour,
+        today.minute,
+        today.zone,
+        weekday_name(today.week_start)
+    )
 }
 
-/// The question's message. `today` is given to a mind on this computer only: an online
-/// question sends the question and the facts, and nothing else.
+/// The question's message: the facts, then today's date and time zone, then the question.
 pub fn answer_user(
     tier: Tier,
     question: &str,
     facts: &[Fact],
     nonce: &str,
-    today: Option<Date>,
+    today: &AskToday,
 ) -> String {
     let mut list = String::new();
     for (f, (before, after)) in facts.iter().zip(fact_lines(tier, facts)) {
@@ -500,14 +511,13 @@ pub const ONLINE_TIER: Tier = Tier::Standard;
 
 /// The lines around the facts in an answer prompt, as [`answer_user`] writes them: before the
 /// first fact, and after the last.
-pub fn answer_frame(
-    question: &str,
-    nonce: &str,
-    today: Option<Date>,
-) -> (Vec<String>, Vec<String>) {
-    let mut tail = vec![format!("</facts-{nonce}>"), String::new()];
-    tail.extend(today.map(today_line));
-    tail.push(format!("Question: {question}"));
+pub fn answer_frame(question: &str, nonce: &str, today: &AskToday) -> (Vec<String>, Vec<String>) {
+    let tail = vec![
+        format!("</facts-{nonce}>"),
+        String::new(),
+        today_line(today),
+        format!("Question: {question}"),
+    ];
     (vec!["Facts:".into(), format!("<facts-{nonce}>")], tail)
 }
 
@@ -875,12 +885,22 @@ mod tests {
         Fact::from(serde_json::from_value::<nocturne_contract::MemoryView>(v).unwrap())
     }
 
+    /// Tuesday 24 November 2026, 21:40 in London.
+    fn tuesday() -> AskToday {
+        AskToday {
+            day: "2026-11-24".parse().unwrap(),
+            hour: 21,
+            minute: 40,
+            zone: "Europe/London".into(),
+            week_start: jiff::civil::Weekday::Monday,
+        }
+    }
+
     /// The question's message is the same, byte for byte, as before the online answers shared
-    /// it, but for today's date before the question, added on purpose to local answers only:
-    /// the loop it had is kept here as the reference.
+    /// it, but for the line of today's date, time and time zone before the question, which every
+    /// answer has, local and online: the loop it had is kept here as the reference.
     #[test]
-    fn local_answers_unchanged_but_for_the_date() {
-        let saturday: Date = "2026-11-14".parse().unwrap();
+    fn answers_unchanged_but_for_the_date_time_and_zone() {
         let mut facts = vec![
             fact(
                 "a",
@@ -901,6 +921,7 @@ mod tests {
         ];
         facts[2].disputed_by = vec!["d".into()];
         facts[3].disputed_by = vec!["c".into()];
+        let today = tuesday();
         for tier in [Tier::Tiny, Tier::Small, Tier::Standard, Tier::Large] {
             let number_of = |id: &str| facts.iter().position(|f| f.memory.id == id).map(|i| i + 1);
             let mut list = String::new();
@@ -917,28 +938,52 @@ mod tests {
                 fence("facts", "n", list.trim_end()),
                 "When?"
             );
-            let dated = before.replace(
+            let want = before.replace(
                 "\n\nQuestion: ",
-                "\n\nToday is Saturday 14 November 2026.\nQuestion: ",
+                "\n\nToday is Tuesday 24 November 2026, 21:40, in the time zone Europe/London. \
+                 The week starts on Monday.\nQuestion: ",
             );
-            for (today, want) in [(None, &before), (Some(saturday), &dated)] {
-                assert_eq!(
-                    &answer_user(tier, "When?", &facts, "n", today),
-                    want,
-                    "{tier:?}"
-                );
-                let (head, tail) = answer_frame("When?", "n", today);
-                let lines: Vec<String> = facts
-                    .iter()
-                    .zip(fact_lines(tier, &facts))
-                    .map(|(f, (b, a))| format!("{b}{}{a}", f.memory.sentence))
-                    .collect();
-                assert_eq!(
-                    &[head, lines, tail].concat().join("\n"),
-                    want,
-                    "the frame and the lines make the message"
-                );
-            }
+            assert_eq!(
+                answer_user(tier, "When?", &facts, "n", &today),
+                want,
+                "{tier:?}"
+            );
+            let (head, tail) = answer_frame("When?", "n", &today);
+            let lines: Vec<String> = facts
+                .iter()
+                .zip(fact_lines(tier, &facts))
+                .map(|(f, (b, a))| format!("{b}{}{a}", f.memory.sentence))
+                .collect();
+            assert_eq!(
+                [head, lines, tail].concat().join("\n"),
+                want,
+                "the frame and the lines make the message"
+            );
+        }
+    }
+
+    #[test]
+    fn today_line_says_the_time_with_two_digits_and_the_first_day_of_the_week() {
+        let mut t = tuesday();
+        t.hour = 9;
+        t.minute = 5;
+        t.week_start = jiff::civil::Weekday::Sunday;
+        assert_eq!(
+            today_line(&t),
+            "Today is Tuesday 24 November 2026, 09:05, in the time zone Europe/London. \
+             The week starts on Sunday."
+        );
+    }
+
+    #[test]
+    fn answers_say_dates_beside_relative_words_and_keep_feelings_and_numbers_plain() {
+        let full = answer_system(Tier::Standard, "n");
+        for rule in [
+            "When you say today, tomorrow or a weekday, also give the date as the fact writes it.",
+            "Name a feeling only in the words of the check-in or entry that says it.",
+            "Give a health number as the line writes it, with no comparison to a norm, no judgement and no advice.",
+        ] {
+            assert!(full.contains(rule), "{rule}");
         }
     }
 
@@ -958,7 +1003,7 @@ mod tests {
         let facts = vec![guide, kept];
         assert!(is_help(&facts));
         assert!(!is_help(&facts[1..]));
-        let user = answer_user(Tier::Small, "How?", &facts, "n", None);
+        let user = answer_user(Tier::Small, "How?", &facts, "n", &tuesday());
         assert!(
             user.contains(
                 "[m1] 1. Choose Add a phone. (Nocturne guide: Away from home, Add a phone)"

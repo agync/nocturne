@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use nocturne_contract::{CheckOutcome, SentLine};
-use nocturne_engine::{AnswerMeta, Fact, MindError, OnlineFailure, OnlineReceipt};
+use nocturne_engine::{AnswerMeta, AskToday, Fact, MindError, OnlineFailure, OnlineReceipt};
 use nocturne_mind::judge::{conclude, judge};
 use nocturne_mind::online::{self, Question};
 use tokio::sync::mpsc;
@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 pub use nocturne_provider::client::check_outcome;
 
 use crate::client::{Client, Message, OnlineRequest};
-use crate::online::{CHECK_QUESTION, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classify};
+use crate::online::{CHECK_QUESTION, MAX_FACTS, MAX_TOKENS, MODEL_ID, SWITCH_SECONDS, classify};
 
 /// Whether each memory id may still be sent, asked again just before the body is built.
 pub type Sendable = Arc<dyn Fn(&[String]) -> Vec<bool> + Send + Sync>;
@@ -60,9 +60,10 @@ impl OnlineMind {
         &self,
         question: &str,
         facts: &[Fact],
+        today: &AskToday,
         out: mpsc::Sender<String>,
     ) -> Result<AnswerMeta, MindError> {
-        let Some(prepared) = self.prepare(question, facts) else {
+        let Some(prepared) = self.prepare(question, facts, today) else {
             return Ok(AnswerMeta {
                 not_sure: true,
                 ..AnswerMeta::default()
@@ -75,7 +76,7 @@ impl OnlineMind {
     /// The body for `question`: the first [`MAX_FACTS`](crate::online::MAX_FACTS) facts that may still be sent, numbered
     /// again from 1 without gaps. `None` when none may be. A section of the Nocturne guide never
     /// goes: help is written on this computer.
-    pub fn prepare(&self, question: &str, facts: &[Fact]) -> Option<Prepared> {
+    pub fn prepare(&self, question: &str, facts: &[Fact], today: &AskToday) -> Option<Prepared> {
         let Question {
             system,
             user,
@@ -83,7 +84,15 @@ impl OnlineMind {
             dropped,
             template,
             line_hashes,
-        } = online::question(question, facts, &*self.sendable)?;
+            ..
+        } = online::question_of(
+            question,
+            facts,
+            MAX_FACTS + nocturne_engine::DATE_STEP_LINES,
+            &*self.sendable,
+            today,
+            false,
+        )?;
         let request = OnlineRequest {
             model: MODEL_ID.to_string(),
             messages: vec![Message::system(&system), Message::user(&user)],

@@ -7,6 +7,7 @@ pub mod cite;
 pub mod decide;
 pub mod guard;
 pub mod judge;
+pub mod lookup;
 pub mod online;
 pub mod prompts;
 pub mod read;

@@ -34,7 +34,8 @@ use nocturne_contract::{
     NearMatch, SendResult,
 };
 use nocturne_engine::{
-    AnswerMeta, Engine, Fact, Hit, Mind, MindError, UseKind, is_guide_section, is_source_line,
+    AnswerMeta, AskToday, DATE_STEP_LINES, Engine, Fact, Hit, LookScope, Mind, MindError, UseKind,
+    date_step, is_guide_section, is_kept_line, is_source_line,
 };
 use nocturne_lemonade::mind::online::OnlineMind;
 use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
@@ -58,6 +59,9 @@ const RERANK_LIMIT: Duration = Duration::from_secs(4);
 const MAX_SIDES: usize = 4;
 /// How many near matches an "I'm not sure" shows.
 const NEAR: usize = 2;
+/// On the smallest size, the most lines a question naming a time takes from the words and from
+/// the date step each.
+const TINY_HALF: usize = 6;
 /// Asks in flight at once from the windows; starting another cancels the oldest of them.
 const MAX_ASKS: usize = 2;
 /// Asks in flight at once from one phone.
@@ -577,6 +581,26 @@ async fn answer<R: Runtime>(
     } else {
         hits
     };
+    // The date step: the days the question names, and what was kept for them, beside what the
+    // words found. Its lines come first, so the nearest lines of a "not sure" are theirs.
+    let today = match engine.ask_today() {
+        Ok(t) => t,
+        Err(err) => {
+            tracing::error!("could not read today: {err}");
+            sink.phase(AskPhase::Unavailable);
+            return;
+        }
+    };
+    let (e, q, t, words) = (engine.clone(), question.clone(), today.clone(), hits);
+    let tiny = state.services().and_then(|s| s.tier()) == Some(nocturne_contract::Tier::Tiny);
+    let hits = match blocking(move || dated(&e, &q, &t, words, public_only, tiny)).await {
+        Ok(h) => h,
+        Err(err) => {
+            tracing::error!("the date step failed: {:?}", err.code);
+            sink.phase(AskPhase::Unavailable);
+            return;
+        }
+    };
     if hits.is_empty() && written.is_none() {
         sink.phase(AskPhase::Nothing);
         return;
@@ -622,6 +646,7 @@ async fn answer<R: Runtime>(
             let asked = Asked {
                 engine: &engine,
                 question: &question,
+                today: &today,
                 hits: &hits,
                 found,
                 facts: &facts,
@@ -706,10 +731,47 @@ async fn answer<R: Runtime>(
     conclude(sink, &engine, &hits, found, &meta, &said).await;
 }
 
+/// The date step's lines for `question` on `today`, then the words' `hits`, one copy of each:
+/// up to [`DATE_STEP_LINES`] of them, or, on the smallest size when a time is named, the
+/// words' first 6 and the date step's first 6. A phone's question gets only what may go to it.
+fn dated(
+    engine: &Engine,
+    question: &str,
+    today: &AskToday,
+    hits: Vec<Hit>,
+    public_only: bool,
+    tiny: bool,
+) -> nocturne_engine::Result<Vec<Hit>> {
+    let step = date_step(question, today.day, today.week_start);
+    if !step.names_time() {
+        return Ok(hits);
+    }
+    let scope = if public_only {
+        LookScope::COMPANION
+    } else {
+        LookScope::ALL
+    };
+    let mut days = Vec::new();
+    for h in engine.date_step_lines(&step, today.day, scope, DATE_STEP_LINES)? {
+        if !public_only || phone_safe(engine, &h.memory)? {
+            days.push(h);
+        }
+    }
+    let (mut words, mut days) = (hits, days);
+    if tiny {
+        words.truncate(TINY_HALF);
+        days.truncate(TINY_HALF);
+    }
+    words.retain(|w| !days.iter().any(|d| d.memory.id == w.memory.id));
+    days.extend(words);
+    Ok(days)
+}
+
 /// What one question found, for the online answer.
 struct Asked<'a> {
     engine: &'a Engine,
     question: &'a str,
+    today: &'a AskToday,
     hits: &'a [Hit],
     found: usize,
     facts: &'a [Fact],
@@ -774,8 +836,8 @@ async fn ask_online<R: Runtime>(
             Some(_) => private = true,
         }
     }
-    sendable.truncate(MAX_FACTS);
-    let prepared = mind.prepare(asked.question, &sendable);
+    sendable.truncate(MAX_FACTS + DATE_STEP_LINES);
+    let prepared = mind.prepare(asked.question, &sendable, asked.today);
     if prepared.as_ref().is_some_and(|p| p.dropped > 0) {
         private = true;
     }
@@ -971,11 +1033,12 @@ async fn conclude<R: Runtime>(
         .iter()
         .flat_map(|h| h.memory.receipts.iter().cloned())
         .collect();
-    // A line of an original is no memory: its receipt is the original, and the answer is shown
-    // without bold, which would stand for memories one for one.
+    // A line of an original, or a check-in, an entry or a reading kept as it is, is no memory:
+    // its receipt is what was kept, and the answer is shown without bold, which would stand for
+    // memories one for one.
     let spanned: Vec<String> = cited_ids
         .iter()
-        .filter(|id| !is_source_line(id))
+        .filter(|id| !is_source_line(id) && !is_kept_line(id))
         .cloned()
         .collect();
     // A guide section is no memory: it is never counted as used, corrected or deleted.

@@ -724,3 +724,75 @@ fn removing_a_phone_stops_its_answers() {
     }
     assert!(!stopped.iter().any(|p| is_terminal(*p)), "{stopped:?}");
 }
+
+/// The date step on the computer: "tomorrow" finds no word, but the day it names finds what was
+/// kept for it, for the windows and for a phone alike; a private one never reaches a phone.
+#[test]
+fn a_question_naming_a_day_is_given_what_was_kept_for_it() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    h.clock.set_str("2026-11-13T12:00:00Z");
+    let mut bins = nocturne_engine::Candidate::new(
+        "Bins",
+        nocturne_engine::Predicate::Scheduled,
+        "Saturday",
+        "The bins go out on Saturday 14 November.",
+        0.9,
+    );
+    bins.due = Some("2026-11-14".parse().unwrap());
+    let (_, created) = h.learn_candidate("bins note", bins);
+    let mut secret = nocturne_engine::Candidate::new(
+        "Surprise",
+        nocturne_engine::Predicate::Scheduled,
+        "Saturday",
+        "The surprise party is on Saturday 14 November.",
+        0.9,
+    );
+    secret.due = Some("2026-11-14".parse().unwrap());
+    let (_, hidden) = h.learn_candidate("party note", secret);
+    h.engine().set_private(&hidden[0], true).unwrap();
+
+    let (_, done) = done_delta(&h, "What's on tomorrow?");
+    assert_eq!(done.phase, AskPhase::Done, "{done:?}");
+    let given: Vec<String> = mind
+        .answered_from
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .iter()
+        .map(|f| f.memory.id.clone())
+        .collect();
+    assert!(given.contains(&created[0]), "{given:?}");
+    assert!(
+        given.contains(&hidden[0]),
+        "the windows see everything kept"
+    );
+
+    let (_, mut rx) = phone_ask(&h, "dev1", "What's on tomorrow?");
+    let got = phone_deltas(&mut rx);
+    assert_eq!(got.last().unwrap().phase, AskPhase::Done);
+    let given: Vec<String> = mind
+        .answered_from
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .iter()
+        .map(|f| f.memory.id.clone())
+        .collect();
+    assert!(given.contains(&created[0]));
+    assert!(
+        !given.contains(&hidden[0]),
+        "nothing private reaches a phone"
+    );
+
+    // A question that names no day, and whose words find nothing, still finds nothing.
+    let seen = h.ask_deltas();
+    let id = ask(&h, "xylophone lessons");
+    wait_for("the answer", || finished(&seen, &id));
+    assert_eq!(
+        phases(&seen, &id),
+        vec![AskPhase::Searching, AskPhase::Nothing]
+    );
+}

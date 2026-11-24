@@ -2228,7 +2228,10 @@ async fn the_answer_is_told_today() {
         .unwrap();
     let user = user_turn(&r.seen("/v1/chat/completions").await[0]);
     assert!(
-        user.contains("Today is Monday 16 November 2026.\nQuestion: "),
+        user.contains(
+            "Today is Monday 16 November 2026, 08:30, in the time zone Asia/Tokyo. \
+             The week starts on Monday.\nQuestion: "
+        ),
         "{user}"
     );
 }
