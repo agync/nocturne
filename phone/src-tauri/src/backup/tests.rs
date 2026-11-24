@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use nocturne_contract::{RemoteAnswer, RemoteCall};
 use nocturne_engine::nightly::{BackupPlace, MemoryPlace, PlaceEntry, PlaceError};
@@ -479,14 +479,14 @@ fn choosing_the_account_again_carries_on_and_another_starts_afresh() {
     assert!(!p.backup.pass(&p.home, true));
     assert_eq!(p.state(), BackupState::NoPermission);
     old.fail_with(None);
-    p.backup.reconnected(false);
+    p.backup.reconnected(None, None);
     assert_eq!(p.state(), BackupState::Waiting);
     assert!(p.backup.pass(&p.home, true), "carries on at once");
     assert_eq!(nights(&old), 2);
 
     let new = Arc::new(MemoryPlace::new());
     p.backup.set_place(Some(new.clone()));
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     assert!(p.backup.saved().fresh);
     assert_eq!(p.backup.status().last, None);
     p.now().unwrap();
@@ -516,7 +516,7 @@ fn a_new_account_holding_another_backup_is_not_written_over() {
     someone.now().unwrap();
 
     p.backup.set_place(Some(theirs.clone()));
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     assert!(p.now().is_err());
     assert_eq!(p.state(), BackupState::OtherBackup);
     assert_eq!(nights(&theirs), 1);
@@ -531,7 +531,7 @@ fn a_new_account_holding_another_backup_is_not_written_over() {
     // Choosing an account again lets it try; an empty one takes the backup.
     let empty = Arc::new(MemoryPlace::new());
     p.backup.set_place(Some(empty.clone()));
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     assert_eq!(p.state(), BackupState::Waiting);
     assert!(p.backup.pass(&p.home, true));
     assert_eq!(nights(&empty), 1);
@@ -584,7 +584,7 @@ fn flaky_phone() -> (Phone, Arc<Flaky>) {
 fn new_account(p: &Phone) -> Arc<MemoryPlace> {
     let new = Arc::new(MemoryPlace::new());
     p.backup.set_place(Some(new.clone()));
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     new
 }
 
@@ -719,7 +719,7 @@ fn a_recovery_lock_a_cut_short_start_left_goes_with_the_next_night() {
 
     let new = Arc::new(Flaky::default());
     p.backup.set_place(Some(new.clone()));
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     new.pieces_fail.store(true, Ordering::SeqCst);
     assert!(p.now().is_err());
     assert!(new.inner.names().contains(&"key-recovery".to_string()));
@@ -901,7 +901,7 @@ fn a_recovery_key_made_for_another_backup_is_never_kept() {
     p.keep("Something to keep.");
     p.backup.turn_on(PHRASE).unwrap();
     p.backup.recovery_key().unwrap();
-    p.backup.reconnected(true);
+    p.backup.reconnected(None, Some("before@example.org"));
     assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::NotReady));
 
     p.backup.recovery_key().unwrap();
@@ -924,5 +924,202 @@ fn a_forget_waits_only_on_what_keeps_the_account_out_of_reach() {
     assert!(
         !p.backup.status_with(&p.home).forget_waiting,
         "the account answers; it is full"
+    );
+}
+
+fn connected(account: &str, previous: &str) -> Option<tauri_plugin_nocturne_system::Connected> {
+    Some(tauri_plugin_nocturne_system::Connected::Connected {
+        account: Some(account.into()),
+        previous: Some(previous.into()),
+        free: None,
+    })
+}
+
+#[test]
+fn a_deletion_owed_to_one_account_stays_with_it_across_a_change() {
+    let old = Arc::new(MemoryPlace::new());
+    let p = phone(&old, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    let held = old.names();
+
+    // Delete everything while offline, then another account before the phone is back online.
+    old.fail_with(Some(PlaceError::Offline));
+    p.backup.erase();
+    assert!(p.backup.status().delete_pending);
+    let new = Arc::new(MemoryPlace::new());
+    p.backup.set_place(Some(new.clone()));
+    p.backup
+        .reconnected(Some("b@example.org"), Some("a@example.org"));
+    assert!(p.backup.status().delete_pending, "the change keeps it");
+    assert!(!p.backup.is_on(), "nothing is owed to this account");
+    assert!(!p.backup.pass(&p.home, true));
+
+    // Backup turned on in the new account: its nights run, and it is never deleted.
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    p.later(21);
+    assert!(p.backup.pass(&p.home, true), "the new account's nights run");
+    p.backup.turn_off(false).unwrap();
+    assert!(!p.backup.pass(&p.home, true));
+    let theirs = new.names();
+    assert!(theirs.contains(&nocturne_engine::nightly::KEY_PHRASE.to_string()));
+    old.fail_with(None);
+    assert_eq!(old.names(), held, "the earlier account waits as it was");
+
+    // The earlier account chosen again: the deletion owed to it runs there, and only there.
+    p.backup.set_place(Some(old.clone()));
+    p.backup
+        .reconnected(Some("A@Example.org"), Some("b@example.org"));
+    assert!(p.backup.is_on(), "the deletion asks for time");
+    assert!(!p.backup.pass(&p.home, false));
+    assert!(old.names().is_empty());
+    assert!(!p.backup.status().delete_pending);
+    assert_eq!(new.names(), theirs);
+}
+
+#[test]
+fn a_deletion_owed_to_a_named_account_runs_when_that_account_is_back() {
+    let old = Arc::new(MemoryPlace::new());
+    let p = phone(&old, true);
+    p.backup.reconnected(Some("a@example.org"), None);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    old.fail_with(Some(PlaceError::Offline));
+    p.backup.turn_off(true).unwrap_err();
+
+    let new = Arc::new(MemoryPlace::new());
+    new.put("key-phrase", b"another backup").unwrap();
+    p.backup.set_place(Some(new.clone()));
+    p.backup
+        .reconnected(Some("b@example.org"), Some("a@example.org"));
+    // A second Delete everything, owed to the new account: the first stays owed too.
+    p.backup.erase();
+    assert!(new.names().is_empty(), "the new account's own deletion ran");
+    assert!(p.backup.status().delete_pending);
+
+    old.fail_with(None);
+    p.backup.set_place(Some(old.clone()));
+    p.backup
+        .reconnected(Some("a@example.org"), Some("b@example.org"));
+    assert!(!p.backup.pass(&p.home, false));
+    assert!(old.names().is_empty());
+    assert!(!p.backup.status().delete_pending);
+}
+
+/// An account whose first deletion waits until it is let go.
+#[derive(Default)]
+struct Gated {
+    inner: MemoryPlace,
+    started: AtomicBool,
+    go: AtomicBool,
+    deletes: Mutex<Vec<String>>,
+}
+
+impl BackupPlace for Gated {
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), PlaceError> {
+        self.inner.put(name, bytes)
+    }
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, PlaceError> {
+        self.inner.get(name)
+    }
+    fn list(&self, prefix: &str) -> Result<Vec<PlaceEntry>, PlaceError> {
+        self.inner.list(prefix)
+    }
+    fn delete(&self, name: &str) -> Result<(), PlaceError> {
+        self.started.store(true, Ordering::SeqCst);
+        while !self.go.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        lock(&self.deletes).push(name.to_string());
+        self.inner.delete(name)
+    }
+}
+
+fn wait_for(flag: &AtomicBool) {
+    while !flag.load(Ordering::SeqCst) {
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn a_change_of_account_waits_for_a_deletion_under_way() {
+    let old = Arc::new(Gated::default());
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.backup.set_place(Some(old.clone()));
+    p.keep("Something to keep.");
+    old.go.store(true, Ordering::SeqCst);
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    old.go.store(false, Ordering::SeqCst);
+    old.started.store(false, Ordering::SeqCst);
+
+    let new = Arc::new(Gated::default());
+    new.go.store(true, Ordering::SeqCst);
+    let asked = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        scope.spawn(|| p.backup.erase());
+        wait_for(&old.started);
+        let change = scope.spawn(|| {
+            p.backup.connect(|| {
+                asked.store(true, Ordering::SeqCst);
+                p.backup.set_place(Some(new.clone()));
+                Ok::<_, ()>(connected("b@example.org", "a@example.org"))
+            })
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(
+            !asked.load(Ordering::SeqCst),
+            "the phone is not asked to change while a deletion runs"
+        );
+        old.go.store(true, Ordering::SeqCst);
+        change.join().unwrap().unwrap();
+    });
+    assert!(old.inner.names().is_empty(), "the deletion finished there");
+    assert!(lock(&new.deletes).is_empty(), "nothing was deleted here");
+    assert!(!p.backup.status().delete_pending);
+}
+
+#[test]
+fn a_deletion_waits_for_a_change_of_account_under_way_and_stays_with_the_earlier() {
+    let old = Arc::new(MemoryPlace::new());
+    let p = phone(&old, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    old.fail_with(Some(PlaceError::Offline));
+    p.backup.erase();
+    old.fail_with(None);
+
+    let new = Arc::new(Gated::default());
+    new.go.store(true, Ordering::SeqCst);
+    new.put("key-phrase", b"theirs").unwrap();
+    let looked = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        p.backup
+            .connect(|| {
+                // The phone has moved to the new account; a look starts before it is noted.
+                p.backup.set_place(Some(new.clone()));
+                scope.spawn(|| {
+                    looked.store(true, Ordering::SeqCst);
+                    p.backup.pass(&p.home, false)
+                });
+                wait_for(&looked);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                Ok::<_, ()>(connected("b@example.org", "a@example.org"))
+            })
+            .unwrap();
+    });
+    assert!(
+        lock(&new.deletes).is_empty(),
+        "the new account never gets it"
+    );
+    assert_eq!(new.inner.names(), vec!["key-phrase".to_string()]);
+    assert!(!old.names().is_empty());
+    assert!(
+        p.backup.status().delete_pending,
+        "still owed to the earlier"
     );
 }

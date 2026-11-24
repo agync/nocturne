@@ -330,6 +330,12 @@ account than before, the backup starts afresh there and a line says: "Your earli
 the Drive of {account}. Delete it there if you no longer want it." Nocturne cannot reach it once its
 permission there is gone.
 
+A deletion of the whole backup still owed to the earlier account (Delete everything, or "Turn off"
+with "Also delete the backup", while that account couldn't be reached) stays tied to it. Choosing
+another account never drops it and never sends it there: it runs the next time Nocturne reaches the
+earlier account, when the person chooses it again. The phone notes each account by its address for
+this, and the change of account waits for a deletion already under way.
+
 ### On Today
 
 No system notifications about the backup. On Today, as one card, at most once for each cause:
@@ -598,7 +604,9 @@ on or kept, and the Welcome line after it changes.
 | After, offline | "Everything was deleted from this phone. Your backup in your iCloud goes the next time this phone is online. If you remove Nocturne before then, delete it yourself in {place}." {place} is "iCloud in Settings" or "your Google Drive" |
 
 Until the backup is gone, Welcome keeps that line, and "I have a backup" does not offer the backup
-that is being deleted.
+that is being deleted. When the person chooses another account before the phone is back online,
+the deletion stays with the account the backup was in and runs the next time Nocturne reaches it;
+the account chosen since never receives it ([decision 7](#decisions)).
 
 **Notifications and the lock screen.** The backup sends no notifications of its own. When Android
 needs a running backup to show one (the first backup, "Back up now", or a long night), it is silent
@@ -674,3 +682,4 @@ Settled by the owner on 2026-11-24, each as recommended.
 | 4 | A backup that stops for something only the person can fix shows once on Today, with no system notification | [On Today](#on-today) |
 | 5 | A restore that brought things in has no undo. Nothing on the phone was lost, and anything that came in can be forgotten | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
 | 6 | Two pages for one day are deferred to a later release. When a bring in meets a page or reflection both sides have for the same day, this phone's stays and the backup's doesn't come | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
+| 7 | Delete everything while offline, then another account chosen before the phone is back online: the deletion stays tied to the earlier account and runs when Nocturne next reaches it. The new account never receives it, and the change never drops it | [Delete everything, with a backup](#forgetting-delete-everything-and-private), [States in This phone](#states-in-this-phone) |
