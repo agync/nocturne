@@ -13,7 +13,8 @@ class ClipTest {
     }
 
     @Test
-    fun aCopyTheAppCannotReadIsClearedOnTime() {
-        assertTrue(Clip.stillOurs(null, readable = false))
+    fun aClipboardTheAppCannotReadIsLeftAlone() {
+        assertFalse(Clip.stillOurs(Clip.LABEL, readable = false))
+        assertFalse(Clip.stillOurs(null, readable = false))
     }
 }
