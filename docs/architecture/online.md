@@ -95,8 +95,8 @@ Ask picks the place for each question. A question goes online only when all of t
 - no download window is open and this month's limit is not reached;
 - the person has not chosen "answer on this computer" for this question (the choice resets after
   each question);
-- the person has seen that only what they mark private is held back, if they turned Online answers
-  on before that change; until then the question waits for a one-time notice, in the window or on
+- the person has seen what changed when only what they mark private began to be held back, if they
+  turned Online answers on before that change; until then the question waits for a one-time notice, in the window or on
   the phone that asked;
 - the question came from the desktop, or from a phone while the person has left "Questions from your
   phones" on (a phone asks only while Away from home is on; the switch is offered, and on by default,
@@ -113,16 +113,17 @@ sentences: at most 12 found by the question's words, and at most 12 more from th
 health readings among them, each as one line in the person's own words or the health wording. The
 originals, transcripts, pages and everything else stay here. Before the request is built:
 
-- memories marked private, in any version, memories being forgotten or let go, and any memory the
-  store does not know, are dropped;
-- nothing else drops a memory: its words, labels and subject are not judged ([only what is marked
-  private is held back](/design/only-marked-private.md));
+- memories being forgotten or let go, and any memory the store does not know, are dropped;
+- nothing else drops a memory: a private mark does not (it decides only what comes up on its own,
+  [decision 0011](/adr/0011-online-answers.md), amended 2026-11-23), and its words, labels and
+  subject are not judged ([what private means](/design/only-marked-private.md));
 - the first 24 left are kept, and that exact set is checked again against the store just before the
   request is built; any line that fails is dropped. A check-in, an entry or a reading goes only while
   it, and every earlier version it replaced, is kept: nothing of it forgotten or being forgotten, not
   replaced, not removed in Health.
 
-When something was left out, an answer written online says so, with "Ask on this computer". When
+When a side of an answer that the provider left out is added on this computer from a line of an
+original, which never goes online, an answer written online says so, with "Ask on this computer". When
 nothing is left to send, the question is answered here and the sent log lists it as not sent. Reading, the overnight tidy and the page have no way
 to reach the route: only Ask holds it.
 
@@ -146,7 +147,7 @@ answer that came back not sure is never sent again automatically.
 | The model name is not found | A problem state ("The name to use wasn't accepted") until a passed check; a 404 while a model download holds the window is not counted as this |
 | The monthly limit is reached | Answered here, one notice a month; the pause lifts on the 1st |
 | The reply is "not sure" | The reply is not shown; the closest memories are listed, with "Ask on this computer" |
-| The reply is "not sure" and something stayed here (a private memory, or a line of an original) | This computer answers at once with what stayed here, marked "your provider wasn't sure" (`notSureOnline`), still linked to what was sent |
+| The reply is "not sure" and something stayed here (a line of an original) | This computer answers at once with what stayed here, marked "your provider wasn't sure" (`notSureOnline`), still linked to what was sent |
 
 Local failure never goes online. There is no monthly limit unless the person sets one. A limit can be
 a number of questions (the setup suggests 200) or an amount in US dollars, which holds only while the provider reports a cost on its replies (it

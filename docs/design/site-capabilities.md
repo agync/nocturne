@@ -230,6 +230,11 @@ two extras, off until asked. They match the Online answers setup and settings wo
 journal design ("Journal entries and good things can’t be marked private, so while this is on, a
 line from one can go with a question it helps answer.") without its length.
 
+Revised 2026-11-25: the promise no longer says "Never anything marked private". A private mark keeps
+nothing out of an answer ([What private means](only-marked-private.md)), so the sentence says that
+private things can go and what private does keep out: notifications, reminders and the lock screen.
+The site's five translations follow it.
+
 **Unchanged on purpose.** "One quiet note a day" stays as it is. The evening reminder is off unless
 the person turns it on, and the journal band already says "A reminder comes only if you turn one
 on", so the promise is true of every Nocturne as it ships. "It forgets on purpose" stays: entries

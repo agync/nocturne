@@ -256,6 +256,8 @@ which is right" (also when the answer names both but picks one); for a move as t
 said to have since moved when the answer gave the old day. A side is added only with its
 receipt. This runs on this computer for an online answer too: a side kept back from the provider
 is added here and never sent or logged, and the answer is marked as having kept something here.
+A private side is sent like any other (decision 0011, amended 2026-11-23); only a line of an
+original stays here.
 
 ## Provenance rules
 

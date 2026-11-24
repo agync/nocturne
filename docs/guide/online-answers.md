@@ -56,7 +56,7 @@ answer here and still checks that every line it shows leads back to something yo
 
 ## What is never sent
 
-- Anything marked private.
+- Things you let go, or are forgetting.
 - Your reflections and recaps. They are written and kept on this computer.
 - Anything while Online answers is off, and nothing at all from reading, the tidy or the page.
 - Questions from a paired phone, unless Away from home is on and **Questions from your phones** is
@@ -64,9 +64,10 @@ answer here and still checks that every line it shows leads back to something yo
   later in **Online answers**.
 
 Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a
-question it helps answer like any other. Mark anything you never want sent as private. Journal
-entries, check-ins and good things can't be marked private, so while Online answers is on, a line from one can
-go with a question it helps answer.
+question it helps answer like any other, and so can a line you marked private. Marking something
+private keeps it from coming up on its own, in reminders and notifications. It still helps answer
+what you ask. Journal entries, check-ins and good things go the same way: a line from one can go
+with a question it helps answer.
 
 If you turned Online answers on before it worked this way, Nocturne says so once, in place of the
 answer, before your next question goes online, on this computer or on a paired phone. Continue
@@ -74,8 +75,9 @@ sends it; Answer on this computer keeps that question here and sends nothing; On
 settings is where you can turn it off. The same notice waits at the top of **Online answers** in
 Settings, and Continue there clears it too.
 
-When Nocturne leaves something out, the answer says so, and you can ask again on this computer to
-include it.
+When part of an answer comes from a line of an original, which never goes online, Nocturne adds it
+on this computer and the answer says so. You can ask again on this computer to see it all in one
+place.
 
 ## What your provider sees
 

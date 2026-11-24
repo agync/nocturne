@@ -10,8 +10,11 @@ tags: [proposal, privacy, online-answers, journal, memories, copy]
 
 ## Revised 2026-11-23: private is about what comes up on its own
 
-Proposed, from the owner's decision of 2026-11-23. Not built yet. It changes the approved 2026-11-22
-design below, which is built.
+From the owner's decision of 2026-11-23. Built for Online answers on the computer: Ask sends a
+private memory like any other, and its words, on step 1, step 5 and in Settings, follow this page.
+Not built yet: a companion phone, a household's mind and an online mind on a phone alone (the last
+reads private things already, [0020](/adr/0020-an-online-mind-on-a-phone.md)). It changes the
+approved 2026-11-22 design below, which is built.
 
 An online mind the person chose gets what a good answer needs. A private mark decides only what
 Nocturne brings up without being asked: notifications, reminders and updates. It never keeps
@@ -29,9 +32,10 @@ provider, written for people who are not technical and without alarm.
 | A companion phone | Kept out | Shown like on the computer, still never on the lock screen or in notifications, reminders or updates |
 | A household's mind, borrowed | Never sent | Gets what an answer needs, like any mind the person chose |
 
-What still never goes: what the person let go or is forgetting. On the computer, Ask does not search
-check-ins, reflections or recaps, so Online answers does not send them; that is what Ask does, not
-a privacy rule. Online answers still sends words only, since it writes the last step of an answer.
+What still never goes: what the person let go or is forgetting. Reflections and recaps are written
+on this computer and Ask does not search them, so Online answers does not send them; that is what
+Ask does, not a privacy rule. Check-ins go like any other kept line, since Ask with tools reads them
+(decision 0011). Online answers still sends words only, since it writes the last step of an answer.
 
 ### The explanation at setup
 
@@ -71,7 +75,22 @@ dark, go with the pull request, as for the 2026-11-22 notice below.
 | Where | Before | After |
 |---|---|---|
 | An item's private switch, hint | (as today) | "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask." |
-| `ask.leftOut.private`, `ask.leftOut.other` | Some things you marked private were left out… | Removed: nothing is left out for being private |
+| `ask.leftOut.private` | Some things you marked private were left out. Ask on this computer to include them. | Removed: nothing is left out for being private |
+| `ask.leftOut.other` | Some things were left out. Ask on this computer to include them. | Kept for one case: the provider's answer gave one side and this computer added the other from a line of an original, which never goes online |
+
+### As built on the computer
+
+Where the build differs from the tables above, this is what ships.
+
+| Where | Words |
+|---|---|
+| Settings, the list under the lead (`online.stays.heading`) | "Stays here": photos, recordings and documents themselves; things you let go; your reflections and recaps; keeping, reading and the overnight tidy; your morning page and its voice. The note under it is the one private line |
+| Settings, rows | "Private things / Never sent" is gone; the journal row's hint ends after "helps answer." |
+| Step 3, the private row | Gone: "Private things are never sent" would be untrue |
+| Step 5 | "What stays here" lists photos, recordings and documents themselves, things you let go, your reflections and recaps, and everything else you kept, your pages and your name. Under it: "Marking something private keeps it from coming up on its own. It still helps answer what you ask." "Your choices" has "What you kept, your journal included / May be sent", and no private row; "Reflections and recaps / Never sent" stays |
+| The notice for people who agreed before (`ask.changed.body`, `ask.changed.private`) | Body: "Nocturne no longer keeps back lines that look like health, money or ID details, or things you marked private. Anything you kept can now go with a question it helps answer." Second line: the private sentence. Nobody is shown a new notice for this change |
+| Privacy, "It can’t see" | Photos, recordings and documents; everything else you kept. "Anything you marked private" is gone |
+| A phone that is its own home, the private switch (`phone.alone.private.hint`) | "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask. If your memory moves, it moves too, locked like the rest." |
 
 ### On a companion phone and a household's mind
 
