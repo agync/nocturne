@@ -212,6 +212,40 @@ describe("Backup in This phone", () => {
     expect(await screen.findByText("Backup · step 1 of 3")).toBeInTheDocument();
   });
 
+  it.each([
+    ["notCharged", "Last backup Wednesday, 2:40 am · waits for this phone to charge"],
+    [
+      "deleting",
+      "Off · your backup goes from your Google Drive the next time this phone is online",
+    ],
+  ])("says how it stands (%s)", async (state, hint) => {
+    await app(`m=kept&v=nightly&b=${state}`);
+    expect(await nightly()).toHaveTextContent(hint);
+  });
+
+  it("says a forget waits for the account", async () => {
+    await app("m=kept&v=nightly&b=forgot");
+    expect(
+      await screen.findByText(
+        "Something you forgot is still in your backup until Nocturne can reach your Google Drive.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("deleting while offline says the backup goes once online", async () => {
+    await app("m=kept&v=nightly&b=on&delete=offline");
+    fireEvent.click(await screen.findByRole("button", { name: "Turn off…" }));
+    const sheet = await screen.findByRole("dialog", { name: "Turn off backup?" });
+    fireEvent.click(within(sheet).getByLabelText("Also delete the backup"));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Turn off" }));
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: /Back up every night/ })).toHaveTextContent(
+        "the next time this phone is online",
+      ),
+    );
+    expect(screen.queryByText("Your backup was deleted.")).not.toBeInTheDocument();
+  });
+
   it("makes a new recovery key, shown once", async () => {
     await app("m=kept&v=nightly&b=on");
     fireEvent.click(await screen.findByRole("button", { name: /Make a recovery key…/ }));

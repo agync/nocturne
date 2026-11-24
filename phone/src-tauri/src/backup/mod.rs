@@ -43,6 +43,8 @@ const NIGHT_HOURS: i64 = 20;
 const RETRY_MINUTES: i64 = 60;
 /// After a night that waited for a forget to finish, the next look waits this many minutes.
 const BUSY_MINUTES: i64 = 2;
+/// Charging is noted at most this often, so a pass does not write at every look.
+const CHARGED_NOTE_MINUTES: i64 = 60;
 
 const UNKNOWN: u8 = 0;
 const UNMETERED: u8 = 1;
@@ -165,6 +167,9 @@ struct Saved {
     /// Counts the accounts chosen, so a night that ran across a change notes nothing.
     #[serde(default)]
     account: u64,
+    /// When a look last found the phone charging.
+    #[serde(default)]
+    charged_at: Option<String>,
 }
 
 /// How the backup stands, as This phone shows it.
@@ -177,6 +182,8 @@ pub enum BackupState {
     Running,
     UpToDate,
     Waiting,
+    /// No night is due yet because the phone has not charged since the last one.
+    NotCharged,
     WaitingForWifi,
     /// Restored here; waits for "Make this phone the one in use".
     NotInUse,
@@ -202,6 +209,11 @@ pub struct BackupStatus {
     /// The memory moved to a computer; a backup kept in the account is "Your backup from
     /// {day}", there only to be deleted.
     pub moved: bool,
+    /// The person asked for the backup in the account to go, and it goes once the account
+    /// answers.
+    pub delete_pending: bool,
+    /// Something forgotten for good is still in the backup until the account can be reached.
+    pub forget_waiting: bool,
 }
 
 /// Why a backup call did not do what was asked, as the screens name it.
@@ -339,6 +351,20 @@ pub struct PhoneBackup {
     /// A recovery key's lock, made and shown but not yet saved by the person: nothing opens
     /// with it until it is kept, so "Cancel" leaves the earlier key working.
     new_key: Mutex<Option<Vec<u8>>>,
+}
+
+/// Whether the phone was found charging since the last night finished.
+fn charged_since(saved: &Saved) -> bool {
+    let at = |t: &Option<String>| t.as_ref().and_then(|t| t.parse::<jiff::Timestamp>().ok());
+    match (
+        at(&saved.charged_at),
+        at(&saved.last.as_ref().map(|l| l.at.clone())),
+    ) {
+        (Some(charged), Some(last)) => charged > last,
+        (None, Some(_)) => false,
+        // Before the first night there is nothing to wait for but tonight.
+        (_, None) => true,
+    }
 }
 
 /// One night at a time, released when dropped.
@@ -543,6 +569,8 @@ impl PhoneBackup {
             BackupState::WaitingForWifi
         } else if self.recent(&saved.last) {
             BackupState::UpToDate
+        } else if !charged_since(&saved) {
+            BackupState::NotCharged
         } else {
             BackupState::Waiting
         };
@@ -552,7 +580,41 @@ impl PhoneBackup {
             last: saved.last,
             state,
             moved: saved.moved,
+            delete_pending: saved.delete_pending,
+            forget_waiting: false,
         }
+    }
+
+    /// How the backup stands, with whether a forget for good still waits for the account: it
+    /// is due at once, yet the last look could not run it.
+    pub fn status_with(&self, home: &Home) -> BackupStatus {
+        let mut status = self.status();
+        let saved = self.saved();
+        let reaches = saved.on || self.kept_off(&saved);
+        let held_up = lock(&self.failed_at).is_some()
+            || self.place().is_err()
+            || self.waits_for_wifi(&saved)
+            || matches!(&saved.trouble, Some(t) if *t != Trouble::Failed);
+        status.forget_waiting = reaches
+            && held_up
+            && home
+                .with_local(|open| open.engine.forgot_since_night().unwrap_or(false))
+                .unwrap_or(false);
+        status
+    }
+
+    fn note_charging(&self) {
+        let now = self.clock.now();
+        let noted = self
+            .saved()
+            .charged_at
+            .and_then(|at| at.parse::<jiff::Timestamp>().ok());
+        if noted.is_some_and(|at| {
+            now.duration_since(at) < jiff::SignedDuration::from_mins(CHARGED_NOTE_MINUTES)
+        }) {
+            return;
+        }
+        self.update(|s| s.charged_at = Some(now.to_string()));
     }
 
     /// A new phrase of Nocturne's for step 2.
@@ -1032,7 +1094,20 @@ impl PhoneBackup {
     /// with the backup kept. Returns whether a night was written; after one that was not, the
     /// next look waits.
     pub fn pass(&self, home: &Home, charging: bool) -> bool {
+        self.pass_with(home, charging, &|_, _, _| {})
+    }
+
+    /// [`PhoneBackup::pass`], telling how far a night is as it runs.
+    pub fn pass_with(
+        &self,
+        home: &Home,
+        charging: bool,
+        progress: &dyn Fn(BackupPhase, u64, u64),
+    ) -> bool {
         self.follow(home);
+        if charging {
+            self.note_charging();
+        }
         let saved = self.saved();
         if saved.delete_pending && self.place().is_ok() {
             if let Err(e) = self.delete_pending() {
@@ -1072,7 +1147,7 @@ impl PhoneBackup {
         if !forgot && !due {
             return false;
         }
-        let ran = self.run_night(home, &|_, _, _| {});
+        let ran = self.run_night(home, progress);
         *lock(&self.failed_at) = match &ran {
             Ok(_) => None,
             Err(BackupProblem::Busy) => Some((now, BUSY_MINUTES)),

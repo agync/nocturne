@@ -41,6 +41,12 @@ export function backupHint(
     return s.last ? t("phone.backup.hint.running", values) : t("phone.backup.hint.first", values);
   }
   if (!s.on || s.state.state === "notInUse") {
+    if (s.deletePending)
+      return onPhone(
+        ios,
+        "phone.backup.hint.offDeleting.ios",
+        "phone.backup.hint.offDeleting.android",
+      );
     if (!keptOff(s) || !s.last) return t("phone.backup.hint.off");
     return onPhone(ios, "phone.backup.hint.offKept.ios", "phone.backup.hint.offKept.android", {
       day: backupDay(s.last.at, now),
@@ -60,6 +66,8 @@ export function backupHint(
       });
     case "waitingForWifi":
       return t("phone.backup.hint.wifi", { day, time });
+    case "notCharged":
+      return t("phone.backup.hint.notCharged", { day, time });
     case "noRoom":
     case "signedOut":
     case "noPermission":
@@ -346,7 +354,7 @@ export function NightlyBackup({
                 {t("phone.backup.hint.onAgain")}
               </p>
             ) : null}
-            {deleted && !s.on ? (
+            {deleted && !s.on && !s.deletePending ? (
               <p className="ph-srow-hint ph-nb-under" role="status">
                 {t("phone.backup.hint.deleted")}
               </p>
@@ -359,6 +367,15 @@ export function NightlyBackup({
                   {say.action}
                 </button>
               </div>
+            ) : null}
+            {s.forgetWaiting ? (
+              <p className="ph-nb-say ph-nb-say--calm" role="status">
+                {onPhone(
+                  ios,
+                  "phone.backup.say.forgetWaiting.ios",
+                  "phone.backup.say.forgetWaiting.android",
+                )}
+              </p>
             ) : null}
             {account ? (
               <p className="ph-srow-hint ph-nb-under" role="status">

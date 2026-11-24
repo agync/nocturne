@@ -1,8 +1,9 @@
 // The nightly backup as the scripted phone answers it. `&b=` names how it stands: `off` (the
-// default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `another`, `newer`,
-// `kept`, `late` or `moved`. `&found=none` finds no backup, `&found=offline` no internet,
-// `&connect=` what asking for the account answers (`refused`, `noAccount`, `turnedOff`,
-// `offline`, `full`), and `&restore=slow` holds a restore part way until it is stopped.
+// default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `another`, `newer`, `kept`,
+// `late`, `notCharged`, `forgot`, `deleting` or `moved`. `&found=none` finds no backup,
+// `&found=offline` no internet, `&connect=` what asking for the account answers (`refused`,
+// `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting, and
+// `&restore=slow` holds a restore part way until it is stopped.
 // The phrase "wrong words" and any recovery key but the one below open nothing.
 
 import { emit } from "@tauri-apps/api/event";
@@ -27,16 +28,26 @@ const NIGHTS: NightView[] = [
   { count: 1, madeAt: at(7, "03:30"), bytes: 1.3 * GB },
 ];
 
+/** Off, with nothing kept. */
+const OFF: BackupStatus = {
+  on: false,
+  wifiOnly: false,
+  last: null,
+  state: { state: "off" },
+  moved: false,
+  deletePending: false,
+  forgetWaiting: false,
+};
+
 function first(): BackupStatus {
   const b = new URLSearchParams(location.search).get("b") ?? "off";
   const last = { at: at(13, "03:12"), bytes: 1.4 * GB };
   const stopped = { at: at(9, "03:05"), bytes: 1.3 * GB };
   const on = (state: BackupStatus["state"], l = last): BackupStatus => ({
+    ...OFF,
     on: true,
-    wifiOnly: false,
     last: l,
     state,
-    moved: false,
   });
   switch (b) {
     case "on":
@@ -58,12 +69,18 @@ function first(): BackupStatus {
       return on({ state: "newer" }, stopped);
     case "late":
       return on({ state: "waiting" }, { at: at(4, "03:00"), bytes: 1.3 * GB });
+    case "notCharged":
+      return on({ state: "notCharged" }, { at: at(11, "02:40"), bytes: 1.4 * GB });
+    case "forgot":
+      return { ...on({ state: "waiting" }), forgetWaiting: true };
+    case "deleting":
+      return { ...OFF, deletePending: true };
     case "kept":
-      return { on: false, wifiOnly: false, last: stopped, state: { state: "off" }, moved: false };
+      return { ...OFF, last: stopped };
     case "moved":
-      return { on: false, wifiOnly: false, last: stopped, state: { state: "off" }, moved: true };
+      return { ...OFF, last: stopped, moved: true };
     default:
-      return { on: false, wifiOnly: false, last: null, state: { state: "off" }, moved: false };
+      return OFF;
   }
 }
 
@@ -162,14 +179,9 @@ export function backupState(phone: {
       }
       case "backup_turn_off":
         status = args.alsoDelete
-          ? {
-              on: false,
-              wifiOnly: status.wifiOnly,
-              last: null,
-              state: { state: "off" },
-              moved: false,
-            }
+          ? { ...OFF, wifiOnly: status.wifiOnly, deletePending: params.get("delete") === "offline" }
           : { ...status, on: false, state: { state: "off" } };
+        if (args.alsoDelete && status.deletePending) throw "offline";
         return null;
       case "backup_turn_on_again":
         if (!status.last && !status.moved && status.state.state !== "notInUse") throw "off";
@@ -222,7 +234,7 @@ export function backupState(phone: {
             if (params.has("adding")) progress(1.4 * GB, 1.4 * GB);
             void resolve;
           });
-        status = { on: false, wifiOnly: false, last: null, state: { state: "off" }, moved: false };
+        status = OFF;
         if (done.kind === "replaced") phone.restored();
         return done;
       }

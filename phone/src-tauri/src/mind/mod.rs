@@ -784,7 +784,8 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 }
                 let home = worker.state::<Home>();
                 let more = mind.pass(&home, &rt).more();
-                let more = backup.pass(&home, power.charging == Some(true)) || more;
+                let progress = crate::home::commands::progress(worker.clone());
+                let more = backup.pass_with(&home, power.charging == Some(true), &progress) || more;
                 if mind.status() != was {
                     events::status_changed(&worker);
                 }
