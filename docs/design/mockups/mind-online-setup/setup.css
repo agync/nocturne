@@ -53,3 +53,12 @@ html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
 .sheetNote { color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
 .none { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
 .none p { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
+
+/* Read now, in This phone's mind group */
+.rn { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 16px; }
+.device[data-os="ios"] .rn { padding: 4px 16px 16px; }
+.rn p { margin: 0; color: var(--ink2); font-size: 0.875rem; line-height: 1.5; }
+.rn p.rnSaid { display: flex; align-items: flex-start; gap: 6px; color: var(--ink); font-size: 0.9375rem; }
+.rn .btn { height: 44px; }
+html[data-text="200"] .rn .btn { height: auto; }
+svg.mark { background: none; }
