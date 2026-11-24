@@ -23,6 +23,7 @@ import type {
 import { emptyDay, itemView } from "../../testing/journalFixtures";
 import type { MindChosen, MindSent, MindStatus, ProviderForm } from "../mind";
 import { memoryNotes, SHOWN, SINCE } from "../reminder";
+import { backupState } from "./backupMock";
 
 export const HOME_DAY = "2026-11-21";
 
@@ -376,6 +377,13 @@ export function homeState(scenario: HomeScenario) {
       counts: { things: 120, journalEntries: 42, photosAndRecordings: 37, checkins: 5 },
     });
   let mind = firstMind();
+  const backup = backupState({
+    holds: () => mode === "alone",
+    restored: () => {
+      mode = "alone";
+      rows = keptRows();
+    },
+  });
   let calendarKept = 6;
   let healthKept = 412;
   const how = new Map<string, KeptHow>([["note-swap", "typed"]]);
@@ -732,7 +740,7 @@ export function homeState(scenario: HomeScenario) {
       case "mind_status":
         return mindStatus(mind);
       default:
-        return undefined;
+        return backup.answer(cmd, args);
     }
   }
 

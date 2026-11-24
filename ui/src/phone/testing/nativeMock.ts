@@ -1,6 +1,7 @@
 // The phone app's scripted build for the browser tests: the scripted phone engine, and the app's
 // native side answered in the page. `?s=` picks the connection as on the phone page, `?n=` what
-// the phone's own side says, `?v=` the screen it opens on, and `?m=` what a phone alone holds.
+// the phone's own side says, `?v=` the screen it opens on, `?m=` what a phone alone holds and
+// `?os=ios` an iPhone; `alone/testing/backupMock.ts` reads its own.
 // Nothing here is in the shipped app.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
@@ -195,7 +196,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
     history.replaceState(
       {
         view:
-          view === "offer" || view === "thisPhone" || view === "keep"
+          view === "offer" || view === "thisPhone" || view === "keep" || view === "nightly"
             ? { name: view }
             : { name: "tab", tab: view },
       },
@@ -237,7 +238,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
         },
       };
     },
-    platform: { ios: false, standalone: true, native: true },
+    platform: { ios: params.get("os") === "ios", standalone: true, native: true },
     granted: stillGranted,
     deviceName: async () => (alone ? "Maya’s phone" : "Pixel 8"),
   };
