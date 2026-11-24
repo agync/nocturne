@@ -732,12 +732,14 @@ your journal are}} on the page, not read aloud."
 
 Unchanged in shape. Entries and good things are items like any other, so Ask can answer "When did
 I last see Priya?" or "What did I write about the move?", with receipts. Check-ins are not
-memories and Ask never searches them; how a day or a week felt is looked back on in its
-reflection or recap.
+memories and Ask never searches them by words; since 2026-11-24 (owner) Ask reads them through the
+`journal` look-up and the date step, each as one line in the person's own words: the feeling they
+chose, its part of the field and what they wrote ([Ask with tools](ask-with-tools.md)). An answer
+names a feeling only in those words.
 
-While Online answers is on, a question asked through Ask may send the journal sentences it needs
-to the service the person chose, exactly as it sends any other kept sentence (see
-[Privacy](#privacy)). Check-ins never go, because Ask never uses them.
+While Online answers is on, a question asked through Ask may send the journal lines it needs,
+check-ins included, to the service the person chose, exactly as it sends any other kept line (see
+[Privacy](#privacy)). Reflections and recaps never go: they are Nocturne's writing.
 
 ### 12. The phone
 
