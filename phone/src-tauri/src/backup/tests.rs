@@ -908,3 +908,21 @@ fn a_recovery_key_made_for_another_backup_is_never_kept() {
     p.backup.turn_off(true).unwrap();
     assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::NotReady));
 }
+
+#[test]
+fn a_forget_waits_only_on_what_keeps_the_account_out_of_reach() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    let id = p.keep("Something to forget.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    place.fail_with(Some(PlaceError::NoRoom));
+    p.home.open_store().unwrap().engine.unkeep(&id).unwrap();
+    assert!(!p.backup.pass(&p.home, false));
+    *lock(&p.backup.failed_at) = None;
+    assert_eq!(p.state(), BackupState::NoRoom);
+    assert!(
+        !p.backup.status_with(&p.home).forget_waiting,
+        "the account answers; it is full"
+    );
+}
