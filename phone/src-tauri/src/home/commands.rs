@@ -259,6 +259,16 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
             restored(&app);
         }
     }
+    // The file held no health readings: they are read again from the phone's health app.
+    if let Some(day) = app.state::<Home>().take_health_since()
+        && restores
+        && matches!(answer, HomeAnswer::Restored | HomeAnswer::BroughtIn { .. })
+    {
+        app.state::<AppState>()
+            .syncer
+            .ledger
+            .read_health_back_to(&day);
+    }
     if deletes && matches!(answer, HomeAnswer::Deleted) {
         // Nothing comes back until the person starts again and chooses what the phone brings.
         emit_mode(&app);
