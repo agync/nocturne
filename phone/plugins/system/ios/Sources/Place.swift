@@ -78,6 +78,20 @@ enum ICloudPlace {
     if let error = coordination ?? failure { throw outcome(error) }
   }
 
+  /// Whether `name` is a piece: the bulk of the backup, which the iPhone need not keep a copy
+  /// of once iCloud holds it. The keys and nights are small and read at every night, so they stay.
+  private static func evictable(_ name: String) -> Bool {
+    name.hasPrefix("piece-")
+  }
+
+  /// Lets go of this iPhone's copy of a piece once it has been read, so the backup doesn't take
+  /// its room twice. Each piece a night sends is read back that night from the copy still here,
+  /// so letting go after that read, not after the upload, brings nothing down again.
+  private static func evict(_ name: String, _ url: URL) {
+    guard evictable(name) else { return }
+    try? FileManager.default.evictUbiquitousItem(at: url)
+  }
+
   /// Writes the file at `source` as `name`, whole or not at all, and drops every earlier version
   /// iCloud kept of it. Returns once iCloud holds it: a copy only on this iPhone is no backup.
   static func put(_ name: String, from source: URL) throws {
@@ -192,6 +206,7 @@ enum ICloudPlace {
       if (error as NSError).code == NSFileReadNoSuchFileError { return false }
       throw outcome(error)
     }
+    evict(name, url)
     return true
   }
 
@@ -241,10 +256,16 @@ enum ICloudPlace {
     let local =
       (try? FileManager.default.contentsOfDirectory(
         at: folder(), includingPropertiesForKeys: keys, options: [])) ?? []
-    for url in local where out[url.lastPathComponent] == nil {
+    for url in local {
+      let file = url.lastPathComponent
+      // An older iOS leaves ".{name}.icloud" for a file only in iCloud, such as an evicted piece.
+      let name =
+        file.hasPrefix(".") && file.hasSuffix(".icloud")
+        ? String(file.dropFirst().dropLast(".icloud".count)) : file
+      guard out[name] == nil else { continue }
       let values = try? url.resourceValues(forKeys: Set(keys))
-      guard values?.ubiquitousItemIsUploaded == true else { continue }
-      add(url.lastPathComponent, Int64(values?.fileSize ?? 0), values?.contentModificationDate)
+      guard name != file || values?.ubiquitousItemIsUploaded == true else { continue }
+      add(name, Int64(values?.fileSize ?? 0), values?.contentModificationDate)
     }
     return Array(out.values)
   }
