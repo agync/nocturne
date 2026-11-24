@@ -1013,8 +1013,8 @@ pub fn restore_night(
     })
 }
 
-/// Notes of what was forgotten or declined: they hold nothing of the person's, and a night
-/// carries the phone's own so what it names stays gone.
+/// Notes of what was forgotten or declined. A kept night takes the phone's only for what it
+/// already held, so nothing about what came since goes.
 const NOTES: [&str; 3] = [
     "forgotten_for_good",
     "forgotten_claims",
@@ -1025,10 +1025,13 @@ fn quoted(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-/// Leave in the snapshot only what the night `base` holds: every row of the phone's store that
-/// `base`'s store does not have, by its key, goes. What both have stays as the phone has it now,
-/// so what a forget took out of a page or a memory stays out. The notes of what was forgotten
-/// stay whole.
+/// The night `base` without what the phone has forgotten since, as a store file in `scratch`,
+/// made from `base`'s own rows: a row the phone (its `snapshot`) no longer has, by its key, goes;
+/// every other row stays as `base` has it, so nothing kept or changed since goes. Where a forget
+/// took a line out of a page or a reflection, the line goes here too: a page the forget only
+/// blanked lines in takes the phone's blanked copy, and a page or reflection changed otherwise
+/// since is left out of this night. The phone's notes of what was forgotten come only for what
+/// `base` held. Returns the store file.
 fn keep_only_base(
     place: &dyn BackupPlace,
     key: &NightKey,
@@ -1036,7 +1039,7 @@ fn keep_only_base(
     scratch: &Path,
     snapshot: &Path,
     run: &NightRun,
-) -> NightResult<()> {
+) -> NightResult<std::path::PathBuf> {
     let dir = scratch.join("base");
     crate::private::create_dir_new(&dir)?;
     let db = dir.join(crate::DB_FILE);
@@ -1053,13 +1056,14 @@ fn keep_only_base(
     // Checked and brought up to date as a backup file is, so its tables are the phone's.
     crate::backup::check_unpacked(&dir, false)?;
 
-    let conn = Connection::open(snapshot).map_err(Error::from)?;
-    let filtered = (|| -> rusqlite::Result<()> {
+    let conn = Connection::open(&db).map_err(Error::from)?;
+    let made = (|| -> rusqlite::Result<()> {
         crate::store::lock_down(&conn)?;
+        conn.pragma_update(None, "journal_mode", "DELETE")?;
         conn.pragma_update(None, "secure_delete", "ON")?;
         conn.execute(
-            "ATTACH DATABASE ?1 AS base",
-            [db.to_string_lossy().as_ref()],
+            "ATTACH DATABASE ?1 AS now",
+            [snapshot.to_string_lossy().as_ref()],
         )?;
         let virtuals: Vec<String> = conn
             .prepare(
@@ -1076,6 +1080,17 @@ fn keep_only_base(
             .query_map([], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
+        // The phone's notes of what it forgot, for what this night held only.
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO main.forgotten_for_good(key) \
+               SELECT key FROM now.forgotten_for_good WHERE key IN \
+                 (SELECT 'item:' || id FROM main.items UNION SELECT 'sha:' || sha256 FROM main.items);
+             INSERT OR IGNORE INTO main.forgotten_claims \
+               SELECT * FROM now.forgotten_claims WHERE item_id IN (SELECT id FROM main.items);
+             INSERT OR IGNORE INTO main.reflections_declined \
+               SELECT d.* FROM now.reflections_declined d WHERE EXISTS \
+                 (SELECT 1 FROM main.reflections r WHERE r.kind = d.kind AND r.start = d.start);",
+        )?;
         for table in &tables {
             // A full-text index's own tables follow its triggers.
             if NOTES.contains(&table.as_str())
@@ -1091,40 +1106,52 @@ fn keep_only_base(
                 columns.retain(|(pk, _)| *pk > 0);
                 columns.sort();
             }
-            let there: bool = conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM base.sqlite_schema WHERE type = 'table' AND name = ?1)",
-                [table],
-                |r| r.get(0),
-            )?;
             let t = quoted(table);
-            if !there {
-                conn.execute(&format!("DELETE FROM main.{t}"), [])?;
-                continue;
-            }
             let same = columns
                 .iter()
-                .map(|(_, c)| format!("b.{c} IS {t}.{c}", c = quoted(c)))
+                .map(|(_, c)| format!("n.{c} IS {t}.{c}", c = quoted(c)))
                 .collect::<Vec<_>>()
                 .join(" AND ");
             conn.execute(
                 &format!(
-                    "DELETE FROM main.{t} WHERE NOT EXISTS (SELECT 1 FROM base.{t} b WHERE {same})"
+                    "DELETE FROM main.{t} WHERE NOT EXISTS (SELECT 1 FROM now.{t} n WHERE {same})"
                 ),
                 [],
             )?;
         }
+        // What a forget took out of the pages and reflections this night holds.
+        conn.execute_batch(
+            "UPDATE main.page_lines SET forgotten = 1, text = '' \
+               WHERE id IN (SELECT id FROM now.page_lines WHERE forgotten = 1);
+             UPDATE main.pages SET body = n.body, dek = n.dek FROM now.pages n \
+               WHERE n.date = pages.date AND n.resaves = pages.resaves AND n.body IS NOT pages.body;
+             CREATE TEMP TABLE changed AS SELECT p.date FROM main.pages p JOIN now.pages n \
+               ON n.date = p.date WHERE n.body IS NOT p.body;
+             DELETE FROM main.page_line_memories WHERE line_id IN \
+               (SELECT id FROM main.page_lines WHERE page_date IN (SELECT date FROM changed));
+             DELETE FROM main.page_lines WHERE page_date IN (SELECT date FROM changed);
+             DELETE FROM main.questions WHERE page_date IN (SELECT date FROM changed);
+             DELETE FROM main.pages WHERE date IN (SELECT date FROM changed);
+             DELETE FROM main.questions WHERE EXISTS (SELECT 1 FROM now.questions n \
+               WHERE n.page_date = questions.page_date AND \
+               (n.text IS NOT questions.text OR n.memory_id IS NOT questions.memory_id));
+             CREATE TEMP TABLE rewritten AS SELECT r.id FROM main.reflections r \
+               JOIN now.reflections n ON n.id = r.id WHERE n.body IS NOT r.body;
+             DELETE FROM main.reflection_cites WHERE reflection_id IN (SELECT id FROM rewritten);
+             DELETE FROM main.reflections WHERE id IN (SELECT id FROM rewritten);",
+        )?;
         conn.execute_batch("COMMIT")?;
-        conn.execute_batch("DETACH DATABASE base")?;
+        conn.execute_batch("DETACH DATABASE now")?;
         conn.execute_batch("VACUUM")?;
         Ok(())
     })();
     drop(conn);
-    fsutil::shred_tree(&dir);
-    filtered.map_err(|e| NightError::Failed(format!("the kept night could not be made: {e}")))
+    made.map_err(|e| NightError::Failed(format!("the kept night could not be made: {e}")))?;
+    Ok(db)
 }
 
-/// The snapshot's counts and originals again, once [`keep_only_base`] took rows out: only the
-/// originals `base` lists, which the account holds already.
+/// The counts and originals of the store [`keep_only_base`] made: only the originals `base`
+/// lists that the phone still keeps, which the account holds already.
 fn recount(snapshot: &Path, snap: &mut crate::backup::Snapshot, base: &Night) -> NightResult<()> {
     let conn = Connection::open(snapshot).map_err(Error::from)?;
     let counted = (|| -> rusqlite::Result<_> {
@@ -1235,9 +1262,9 @@ impl Engine {
         let scratch = Scratch::new(&self.inner.dir.join(SCRATCH));
         fsutil::shred_tree(&scratch.dir);
         fsutil::create_private_dir(&scratch.dir)?;
-        let (snapshot, mut snap) = self.take_snapshot(&scratch.dir)?;
+        let (mut snapshot, mut snap) = self.take_snapshot(&scratch.dir)?;
         if let Some(base) = base {
-            keep_only_base(place, key, base, &scratch.dir, &snapshot, run)?;
+            snapshot = keep_only_base(place, key, base, &scratch.dir, &snapshot, run)?;
             recount(&snapshot, &mut snap, base)?;
         }
 

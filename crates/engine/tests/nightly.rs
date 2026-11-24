@@ -616,6 +616,91 @@ fn a_forget_while_backup_is_off_reaches_the_kept_nights_and_sends_nothing_new() 
 }
 
 #[test]
+fn a_forget_while_off_sends_no_change_and_no_note_from_since() {
+    let f = fixture();
+    let (_, memory) = learn(
+        &f.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    let gone = keep(&f.engine, "Forget the plumber.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &place, &key, &mut state).unwrap();
+
+    // Off: a change to what the night holds, and a thing kept and taken back since.
+    f.engine.set_private(&memory, true).unwrap();
+    let since = keep(&f.engine, "Kept and taken back while off.");
+    f.engine.unkeep(&since).unwrap();
+    f.engine.unkeep(&gone).unwrap();
+    run_with(false, |run| {
+        f.engine
+            .forget_in_kept_backup(&place, &key, &mut state, run)
+            .unwrap();
+    });
+
+    let (out, _, _) = restore(&place, &key).unwrap();
+    let again = Engine::open(&out.path().join("stage/store"), f.clock.clone()).unwrap();
+    assert!(
+        !again.get_memory(&memory).unwrap().private,
+        "the night holds the memory as it was"
+    );
+    assert!(again.find_items("plumber", 5).unwrap().is_empty());
+    drop(again);
+    let conn = rusqlite::Connection::open(out.path().join("stage/store/nocturne.db")).unwrap();
+    let notes: Vec<String> = conn
+        .prepare("SELECT key FROM forgotten_for_good")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert!(notes.contains(&format!("item:{gone}")), "{notes:?}");
+    assert!(
+        !notes.iter().any(|n| n.contains(&since)),
+        "nothing about what came since: {notes:?}"
+    );
+}
+
+#[test]
+fn a_forget_while_off_blanks_its_line_in_a_kept_page() {
+    let f = fixture();
+    let (_, memory) = learn(
+        &f.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    keep(&f.engine, "The window needs a new latch.");
+    f.clock.set_str("2026-11-14T07:00:00Z");
+    let day = common::date("2026-11-14");
+    let page = f.engine.compose_page(day, Edition::Screen).unwrap();
+    f.engine.save_page(&page).unwrap();
+    let cites = format!("SELECT COUNT(*) FROM pages WHERE instr(body, '{memory}') > 0");
+    assert!(sql_count(f.dir.path(), &cites) > 0, "the page cites it");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &place, &key, &mut state).unwrap();
+
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&memory), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    run_with(false, |run| {
+        f.engine
+            .forget_in_kept_backup(&place, &key, &mut state, run)
+            .unwrap();
+    });
+    let (out, _, _) = restore(&place, &key).unwrap();
+    let store = out.path().join("stage/store");
+    assert_eq!(sql_count(&store, &cites), 0, "the forgotten line is blank");
+    let again = Engine::open(&store, f.clock.clone()).unwrap();
+    assert!(again.page(Some(day)).unwrap().is_some(), "the page stays");
+}
+
+#[test]
 fn a_forget_with_no_night_kept_sends_nothing_and_clears() {
     let f = fixture();
     let id = keep(&f.engine, "Gone soon.");

@@ -396,8 +396,10 @@ What happens to the copies:
 Forgetting for good, or deleting a thing, a day or a recap, still reaches a kept backup while it
 is off, exactly as when it is on: a new index without it is written, and every older index that
 lists it is removed, with its pieces. Nothing else goes while it is off: the new index holds the
-newest night that was kept, without what was forgotten, and is dated as that night; what was kept
-or changed since stays on the phone. Nocturne keeps its access to the account for that, and for
+newest night that was kept, as it was, without what was forgotten, and is dated as that night;
+what was kept or changed since stays on the phone. A line the forget blanked in a page goes blank
+there too; a page or reflection that changed in other ways since is left out of that night, and
+comes back with the next night once backup is on again. Nocturne keeps its access to the account for that, and for
 nothing else ([below](#forgetting-delete-everything-and-private)).
 
 ### A newer backup from another phone
