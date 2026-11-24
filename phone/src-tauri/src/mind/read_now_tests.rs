@@ -5,8 +5,13 @@ use nocturne_mind::prompts;
 use nocturne_provider::stand_in::Answer;
 
 use super::Pass;
-use super::read_now::{ReadKind, Refused, Stopped};
-use super::tests::{World, world};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
+use tauri_plugin_nocturne_system::{ReadingAnswer, ReadingNote};
+
+use super::read_now::{PhoneSide, ReadKind, Refused, Stopped};
+use super::tests::{World, by_name, world};
 
 /// On battery at `percent`, with battery saving as `saver`.
 fn on_battery(w: &World, percent: u8, saver: bool) {
@@ -264,4 +269,190 @@ fn the_screens_read_read_now_as_mind_ts_says() {
         serde_json::to_value(ReadKind::Anyway).unwrap(),
         serde_json::json!("anyway")
     );
+}
+
+/// The phone's side in a test: its power in turn (the last repeats), the notes it was shown, and
+/// the answers it gives in turn (then none pressed).
+#[derive(Default)]
+struct FakePhone {
+    power: Mutex<VecDeque<u8>>,
+    shown: Mutex<Vec<ReadingNote>>,
+    answers: Mutex<VecDeque<ReadingAnswer>>,
+}
+
+impl FakePhone {
+    fn at(levels: &[u8]) -> Arc<FakePhone> {
+        Arc::new(FakePhone {
+            power: Mutex::new(levels.iter().copied().collect()),
+            ..FakePhone::default()
+        })
+    }
+
+    fn answer(&self, answer: ReadingAnswer) {
+        self.answers.lock().unwrap().push_back(answer);
+    }
+
+    fn last(&self) -> Option<ReadingNote> {
+        self.shown.lock().unwrap().last().cloned()
+    }
+
+    fn ended(&self) -> Vec<String> {
+        self.shown
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|n| match n {
+                ReadingNote::Ended { why, .. } => Some(why.clone()),
+                ReadingNote::Reading { .. } => None,
+            })
+            .collect()
+    }
+}
+
+impl PhoneSide for FakePhone {
+    fn power(&self) -> (Option<bool>, Option<u8>, Option<bool>) {
+        let mut levels = self.power.lock().unwrap();
+        let level = if levels.len() > 1 {
+            levels.pop_front()
+        } else {
+            levels.front().copied()
+        };
+        (Some(false), level, Some(false))
+    }
+
+    fn show(&self, note: &ReadingNote) -> Option<ReadingAnswer> {
+        self.shown.lock().unwrap().push(note.clone());
+        let answer = self.answers.lock().unwrap().pop_front();
+        Some(answer.unwrap_or(ReadingAnswer {
+            notes: true,
+            ..ReadingAnswer::default()
+        }))
+    }
+}
+
+/// `n` waiting, the phone at `levels`, Read now pressed and shown by the phone.
+fn shown(n: usize, levels: &[u8]) -> (World, Arc<FakePhone>) {
+    let (w, _) = waiting(n);
+    let phone = FakePhone::at(levels);
+    w.mind.use_phone(phone.clone());
+    w.mind.feel_power();
+    read_now(&w, ReadKind::Now).unwrap();
+    w.mind.tell_phone_from(&w.home);
+    assert!(matches!(phone.last(), Some(ReadingNote::Reading { .. })));
+    (w, phone)
+}
+
+#[test]
+fn turning_off_tells_the_phone_to_stop_showing_the_reading() {
+    let (w, phone) = shown(4, &[80]);
+    w.mind.turn_off();
+    assert_eq!(phone.ended(), ["off"]);
+    assert_eq!(w.mind.read_now_on(), None);
+    // Nothing more is shown after.
+    w.mind.tell_phone_from(&w.home);
+    assert_eq!(phone.shown.lock().unwrap().len(), 2);
+
+    let (w, phone) = shown(4, &[80]);
+    w.mind.turn_on(w.settings()).unwrap();
+    assert_eq!(phone.ended(), ["off"], "a mind chosen again ends it too");
+
+    let (w, phone) = shown(4, &[80]);
+    w.mind.erase();
+    assert_eq!(phone.ended(), ["off"]);
+}
+
+#[test]
+fn stop_where_the_phone_shows_it_ends_the_pass_before_the_next_thing() {
+    let (w, phone) = shown(6, &[80]);
+    // Before the first thing nothing was pressed; before the second, Stop.
+    phone.answer(ReadingAnswer::default());
+    phone.answer(ReadingAnswer {
+        stop: true,
+        ..ReadingAnswer::default()
+    });
+    assert!(matches!(w.pass(), Pass::Ran { read: 1, .. }));
+    let reading = w.mind.reading(&w.home);
+    assert_eq!(reading.now, None);
+    assert_eq!(reading.stopped.map(|s| s.why), Some(Stopped::Person));
+    assert_eq!(phone.ended(), ["person"]);
+}
+
+#[test]
+fn the_floor_mid_pass_stops_before_the_next_thing() {
+    let (w, phone) = shown(6, &[80, 80, 5]);
+    read_now(&w, ReadKind::Anyway).unwrap();
+    assert!(matches!(w.pass(), Pass::Ran { read: 1, .. }));
+    assert_eq!(
+        w.mind.reading(&w.home).stopped.map(|s| s.why),
+        Some(Stopped::Floor)
+    );
+    assert_eq!(phone.ended(), ["floor"]);
+}
+
+#[test]
+fn the_phones_own_time_limit_is_not_the_persons_stop() {
+    let (w, phone) = shown(4, &[80]);
+    phone.answer(ReadingAnswer {
+        timeout: true,
+        ..ReadingAnswer::default()
+    });
+    w.mind.tell_phone_from(&w.home);
+    assert_eq!(
+        w.mind.reading(&w.home).stopped.map(|s| s.why),
+        Some(Stopped::Timeout)
+    );
+    match phone.last() {
+        Some(ReadingNote::Ended { why, title, .. }) => {
+            assert_eq!(why, "timeout");
+            assert!(title.is_some(), "it says so");
+        }
+        other => panic!("not ended: {other:?}"),
+    }
+}
+
+#[test]
+fn read_now_and_stop_wake_the_passes_at_once() {
+    let (w, _) = waiting(2);
+    let woken = |w: &World| {
+        w.rt.block_on(async {
+            tokio::time::timeout(std::time::Duration::from_millis(20), w.mind.woken())
+                .await
+                .is_ok()
+        })
+    };
+    // Turning on woke them; that is taken, and nothing else has.
+    assert!(woken(&w));
+    assert!(!woken(&w));
+    read_now(&w, ReadKind::Now).unwrap();
+    assert!(woken(&w));
+    w.mind.stop_read_now();
+    assert!(woken(&w));
+}
+
+#[test]
+fn read_now_judges_the_battery_as_the_phone_says_it_now() {
+    let (w, _) = waiting(2);
+    w.mind.use_phone(FakePhone::at(&[15]));
+    w.mind.feel_power();
+    assert_eq!(read_now(&w, ReadKind::Now), Err(Refused::Low));
+}
+
+#[test]
+fn read_now_is_refused_with_the_mind_off_or_this_phone_offline() {
+    let w = world();
+    on_battery(&w, 80, false);
+    assert_eq!(read_now(&w, ReadKind::Now), Err(Refused::Off));
+
+    let w = world();
+    let (online, settings) = by_name(&w, true);
+    online.store(false, std::sync::atomic::Ordering::SeqCst);
+    w.mind.turn_on(settings).unwrap();
+    w.keep("Waiting while offline.", "c9");
+    w.pass();
+    on_battery(&w, 80, false);
+    assert!(matches!(
+        w.mind.status(),
+        super::status::MindStatus::Offline { .. }
+    ));
+    assert_eq!(read_now(&w, ReadKind::Now), Err(Refused::Offline));
 }

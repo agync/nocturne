@@ -44,7 +44,7 @@ use crate::home::Home;
 use crate::sync::ledger::write_private;
 use host::PhoneHost;
 pub use keys::{Keys, MemoryKeys, SafeKeys};
-use read_now::{ReadKind, ReadNow, Refused, Stopped};
+use read_now::{PhoneSide, ReadKind, ReadNow, Refused, Stopped};
 pub use sent::{Sent, SentFor, SentLog};
 
 const FILE: &str = "mind.json";
@@ -280,6 +280,12 @@ pub struct PhoneMind {
     read_now: Mutex<ReadNow>,
     /// The list from the person's last look at step 2.
     looked: Mutex<Option<Looked>>,
+    /// Where the phone shows the reading on battery and says its power; none until the app runs.
+    phone: Mutex<Option<Arc<dyn PhoneSide>>>,
+    /// The phone shows the reading on battery now.
+    shown: AtomicBool,
+    /// Wakes the passes at once: Read now, Stop, a mind turned on or off.
+    wake: tokio::sync::Notify,
     /// Looks names up in place of the phone, and whether the service then counts as online
     /// rather than at home, so a test can take it offline.
     #[cfg(test)]
@@ -308,6 +314,9 @@ impl PhoneMind {
             stopped_early: Mutex::default(),
             read_now: Mutex::default(),
             looked: Mutex::default(),
+            phone: Mutex::default(),
+            shown: AtomicBool::new(false),
+            wake: tokio::sync::Notify::new(),
             #[cfg(test)]
             lookup: Mutex::default(),
         };
@@ -493,6 +502,10 @@ impl PhoneMind {
     /// writes is the next morning's.
     pub fn turn_on(&self, settings: ProviderSettings) -> Result<(), UrlProblem> {
         lock(&self.looked).take();
+        // A Read now of the mind chosen before ends with it, and the phone stops showing it.
+        self.end_read_now(Stopped::Off);
+        self.tell_phone(None);
+        self.poke();
         let saved = Saved {
             url: settings.url.trim().to_string(),
             model: settings.model.trim().to_string(),
@@ -516,7 +529,9 @@ impl PhoneMind {
     /// Turns the mind off: the slot is emptied, the key forgotten and the choice removed, so
     /// nothing more goes, and a request under way is dropped. What was already read stays.
     pub fn turn_off(&self) {
-        *lock(&self.read_now) = ReadNow::default();
+        self.end_read_now(Stopped::Off);
+        self.tell_phone(None);
+        self.poke();
         lock(&self.looked).take();
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(on) = lock(&self.on).take() {
@@ -781,6 +796,16 @@ impl PhoneMind {
                 // Each thing read counts toward the month: the one that reaches a limit is the
                 // last before the pause.
                 while read < FEW && !home.store_wanted() && self.paused_until().is_none() {
+                    // On battery each thing is read only while Read now still holds: the battery
+                    // is looked at again and the phone asked whether the person pressed Stop.
+                    if !charging {
+                        self.feel_power();
+                        self.tell_phone(Some(&open.engine));
+                        if !self.read_now_holds() {
+                            self.tell_phone(Some(&open.engine));
+                            break;
+                        }
+                    }
                     let (from, forgets) = (self.sent.last_id(), open.engine.forget_generation());
                     let step = t.reader.tick().await;
                     if let Step::Read { item, .. } = &step {
@@ -933,12 +958,87 @@ impl PhoneMind {
             None => {}
         }
         lock(&self.read_now).start(kind);
+        self.poke();
         Ok(())
     }
 
     /// The person pressed Stop, in Nocturne or where the phone shows the reading.
     pub fn stop_read_now(&self) {
         self.end_read_now(Stopped::Person);
+        self.poke();
+    }
+
+    /// Wakes the passes at once.
+    fn poke(&self) {
+        self.wake.notify_one();
+    }
+
+    /// Returns once something asked the passes to run at once (Read now, Stop, the mind turned
+    /// on or off), or at once when that came while no pass waited.
+    pub async fn woken(&self) {
+        self.wake.notified().await;
+    }
+
+    /// Where the phone shows the reading on battery and says its power.
+    pub fn use_phone(&self, phone: Arc<dyn PhoneSide>) {
+        *lock(&self.phone) = Some(phone);
+    }
+
+    fn phone(&self) -> Option<Arc<dyn PhoneSide>> {
+        lock(&self.phone).clone()
+    }
+
+    /// Looks at the phone's power now.
+    pub fn feel_power(&self) {
+        if let Some(phone) = self.phone() {
+            let (charging, percent, saver) = phone.power();
+            self.host.set_power(charging, percent, saver);
+        }
+    }
+
+    /// [`PhoneMind::tell_phone`] with what `home` still has to read.
+    pub fn tell_phone_from(&self, home: &Home) {
+        match home.using() {
+            Ok((_use, open)) => self.tell_phone(Some(&open.engine)),
+            Err(_) => self.tell_phone(None),
+        }
+    }
+
+    /// Shows the reading on battery where the phone shows it, with how far it has got from
+    /// `engine`, and takes what the person did there: Stop, the phone's own time limit, iPhone's
+    /// pause. Once it has ended, the phone is told so, once, with the line it leaves.
+    pub fn tell_phone(&self, engine: Option<&Engine>) {
+        let Some(phone) = self.phone() else {
+            return;
+        };
+        let words = lock(&self.read_now).words.clone();
+        if self.read_now_on().is_some() {
+            let Some(engine) = engine else {
+                return;
+            };
+            let waiting = engine.pending_items(10_000).map_or(0, |p| p.len() as u32);
+            let reading = self.reading_with(waiting);
+            let Some(answer) = phone.show(&status::reading_note(&words, &reading)) else {
+                return;
+            };
+            self.shown.store(true, Ordering::SeqCst);
+            self.set_quiet(!answer.notes);
+            if answer.timeout {
+                self.end_read_now(Stopped::Timeout);
+            } else if answer.stop {
+                self.end_read_now(Stopped::Person);
+            } else if answer.paused {
+                self.paused_away();
+            }
+            if self.read_now_on().is_some() {
+                return;
+            }
+        }
+        if self.shown.swap(false, Ordering::SeqCst)
+            && let Some(stop) = self.read_now_stopped()
+        {
+            phone.show(&status::ended_note(&words, stop));
+        }
     }
 
     /// iPhone paused the reading while the person was away. Read now stays theirs, so it carries
@@ -978,9 +1078,10 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     use tauri::Manager;
     use tauri_plugin_nocturne_system::SystemExt;
     let app = app.clone();
+    app.state::<PhoneMind>()
+        .use_phone(Arc::new(SystemPhone(app.clone())));
     tauri::async_runtime::spawn(async move {
         let mut asked: Option<tauri_plugin_nocturne_system::Windows> = None;
-        let mut shown = false;
         loop {
             let worker = app.clone();
             let more = tauri::async_runtime::spawn_blocking(move || {
@@ -1009,7 +1110,7 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let more = mind.pass(&home, &rt).more();
                 let progress = crate::home::commands::progress(worker.clone());
                 let more = backup.pass_with(&home, power.charging == Some(true), &progress) || more;
-                let shown = status::tell_the_phone(&worker, &mind, shown);
+                mind.tell_phone_from(&home);
                 if mind.status() != was {
                     events::status_changed(&worker);
                 }
@@ -1019,20 +1120,46 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 {
                     tracing::warn!("the background window could not be ended: {e:?}");
                 }
-                (more, asked, shown)
+                (more, asked)
             })
             .await;
             let more = match more {
-                Ok((more, now_asked, now_shown)) => {
+                Ok((more, now_asked)) => {
                     asked = now_asked;
-                    shown = now_shown;
                     more
                 }
                 Err(_) => false,
             };
             if !more {
-                tokio::time::sleep(TICK).await;
+                let mind = app.state::<PhoneMind>();
+                tokio::select! {
+                    () = tokio::time::sleep(TICK) => {}
+                    () = mind.woken() => {}
+                }
             }
         }
     });
+}
+
+/// The phone's own side, through the system plugin.
+struct SystemPhone<R: tauri::Runtime>(tauri::AppHandle<R>);
+
+impl<R: tauri::Runtime> PhoneSide for SystemPhone<R> {
+    fn power(&self) -> (Option<bool>, Option<u8>, Option<bool>) {
+        use tauri_plugin_nocturne_system::SystemExt;
+        let power = self.0.system().power().unwrap_or_default();
+        (power.charging, power.percent, power.saver)
+    }
+
+    fn show(
+        &self,
+        note: &tauri_plugin_nocturne_system::ReadingNote,
+    ) -> Option<tauri_plugin_nocturne_system::ReadingAnswer> {
+        use tauri_plugin_nocturne_system::SystemExt;
+        self.0
+            .system()
+            .reading_now(note)
+            .inspect_err(|e| tracing::warn!("the phone could not show the reading: {e:?}"))
+            .ok()
+    }
 }

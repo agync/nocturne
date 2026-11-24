@@ -288,12 +288,17 @@ impl PhoneMind {
 
     /// The reading since the mind was turned on: what has been read, of what was waiting.
     pub fn reading(&self, home: &Home) -> MindReading {
-        let done = lock(&self.on).as_ref().map_or(0, |on| on.read);
         let waiting = home
             .using()
             .ok()
             .and_then(|(_use, open)| open.engine.pending_items(10_000).ok())
             .map_or(0, |p| p.len() as u32);
+        self.reading_with(waiting)
+    }
+
+    /// [`PhoneMind::reading`] with `waiting` things still to read.
+    pub(super) fn reading_with(&self, waiting: u32) -> MindReading {
+        let done = lock(&self.on).as_ref().map_or(0, |on| on.read);
         let read_now = lock(&self.read_now);
         MindReading {
             done,
@@ -431,25 +436,23 @@ pub(super) fn ended_note(
 }
 
 /// Read now or Read anyway, from the person's tap while Nocturne is in front, as Android
-/// requires to start showing it. `words` are what the phone shows it with. The refusal is
-/// named as `read_now::Refused` says.
+/// requires to start showing it. The battery is looked at again first, so the judgement is of
+/// now. `words` are what the phone shows it with. The refusal is named as `read_now::Refused`
+/// says.
 #[tauri::command]
 pub async fn mind_read_now<R: Runtime>(
     app: AppHandle<R>,
     kind: super::read_now::ReadKind,
     words: super::read_now::ReadWords,
 ) -> Result<MindReading, super::read_now::Refused> {
-    use tauri_plugin_nocturne_system::SystemExt;
     blocking(move || {
         let mind = app.state::<PhoneMind>();
-        lock(&mind.read_now).words = words.clone();
+        let home = app.state::<Home>();
+        mind.feel_power();
+        lock(&mind.read_now).words = words;
         mind.read_now(kind, &tokio::runtime::Handle::current())?;
-        let reading = mind.reading(&app.state::<Home>());
-        match app.system().reading_now(&reading_note(&words, &reading)) {
-            Ok(answer) => mind.set_quiet(!answer.notes),
-            Err(e) => tracing::warn!("the reading could not be shown by the phone: {e:?}"),
-        }
-        Ok(mind.reading(&app.state::<Home>()))
+        mind.tell_phone_from(&home);
+        Ok(mind.reading(&home))
     })
     .await
     .unwrap_or(Err(super::read_now::Refused::Off))
@@ -458,54 +461,12 @@ pub async fn mind_read_now<R: Runtime>(
 /// Stop, in Nocturne: the reading on battery ends, and the phone stops showing it.
 #[tauri::command]
 pub async fn mind_read_stop<R: Runtime>(app: AppHandle<R>) -> Option<MindReading> {
-    use tauri_plugin_nocturne_system::SystemExt;
     blocking(move || {
         let mind = app.state::<PhoneMind>();
-        let was = mind.read_now_on().is_some();
+        let home = app.state::<Home>();
         mind.stop_read_now();
-        if was && let Some(stop) = mind.read_now_stopped() {
-            let words = lock(&mind.read_now).words.clone();
-            if let Err(e) = app.system().reading_now(&ended_note(&words, stop)) {
-                tracing::warn!("the phone could not stop showing the reading: {e:?}");
-            }
-        }
-        mind.reading(&app.state::<Home>())
+        mind.tell_phone_from(&home);
+        mind.reading(&home)
     })
     .await
-}
-
-/// Between passes: the reading on battery as the phone shows it, kept up to date, and what the
-/// person did there. `shown` is whether the phone shows it now; the answer is whether it does
-/// after.
-pub(super) fn tell_the_phone<R: Runtime>(
-    app: &AppHandle<R>,
-    mind: &PhoneMind,
-    shown: bool,
-) -> bool {
-    use tauri_plugin_nocturne_system::SystemExt;
-    let words = lock(&mind.read_now).words.clone();
-    if mind.read_now_on().is_some() {
-        let reading = mind.reading(&app.state::<Home>());
-        match app.system().reading_now(&reading_note(&words, &reading)) {
-            Ok(answer) => {
-                mind.set_quiet(!answer.notes);
-                if answer.paused {
-                    mind.paused_away();
-                }
-                if answer.stop {
-                    mind.stop_read_now();
-                    return tell_the_phone(app, mind, true);
-                }
-            }
-            Err(e) => tracing::warn!("the phone could not show the reading: {e:?}"),
-        }
-        return true;
-    }
-    if shown
-        && let Some(stop) = mind.read_now_stopped()
-        && let Err(e) = app.system().reading_now(&ended_note(&words, stop))
-    {
-        tracing::warn!("the phone could not stop showing the reading: {e:?}");
-    }
-    false
 }
