@@ -70,7 +70,7 @@
   "promise.note.term": "One quiet note a day",
   "promise.note.detail": "When the page is ready, one note says so and how many things need you. Never what you kept.",
   "promise.extras.term": "Two extras, off until you ask",
-  "promise.extras.detail": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal and your check-ins, but never your reflections or recaps. Never anything marked private.",
+  "promise.extras.detail": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, your check-ins and things you marked private, but never your reflections or recaps. Marking something private keeps it out of notifications, reminders and the lock screen, but it still helps answer what you ask.",
   "phone.alt": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer.",
   "phone.caption": "Away from home on a paired phone, with demo data.",
   "engine.eyebrow": "The engine",
