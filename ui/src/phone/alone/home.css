@@ -1153,6 +1153,10 @@ html.ph-keyboard .ph-names-sheet {
   outline: none;
 }
 
+.ph-names-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .ph-names-note {
   margin: 0;
   color: var(--ink2);
