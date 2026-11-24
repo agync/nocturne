@@ -1,3 +1,4 @@
+import { emit } from "@tauri-apps/api/event";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -658,6 +659,37 @@ describe("the phone's own memory behind the screens", () => {
     const id = await engine.ask("Again?", () => undefined);
     await engine.cancelAsk(id);
     expect(stopped).toEqual([{ askId: id }]);
+  });
+
+  it("tells where the question is looking while the mind looks further", async () => {
+    const step = (askId: string, phase: string) => ({
+      askId,
+      phase,
+      textDelta: null,
+      receipts: [],
+      memoryIds: [],
+      near: [],
+      found: null,
+      etaSeconds: null,
+      plain: false,
+    });
+    mockIPC(
+      async (cmd, args) => {
+        if (cmd !== "home_ask") return null;
+        const askId = (args as { askId: string }).askId;
+        await emit("home-ask-step", step("another", "lookingJournal"));
+        await emit("home-ask-step", step(askId, "lookingCalendar"));
+        return { type: "askDelta", delta: { ...step("a1", "done"), textDelta: "Tomorrow." } };
+      },
+      { shouldMockEvents: true },
+    );
+    const engine = createLocalEngine({ deviceName: () => "Maya’s phone", version: "1.0.0" });
+    const heard: string[] = [];
+    await engine.ask("What’s on tomorrow?", (d) => heard.push(d.phase));
+    expect(heard).toEqual(["searching", "lookingCalendar", "done"]);
+    // Nothing is heard of a question once it has ended.
+    await emit("home-ask-step", step("a1", "lookingSearch"));
+    expect(heard).toHaveLength(3);
   });
 
   it("keeps a shared voice note under its own name, and a recorded one under none", async () => {

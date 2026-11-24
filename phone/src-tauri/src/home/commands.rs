@@ -115,8 +115,11 @@ pub(crate) fn forgetting<T>(
     done
 }
 
+/// The event that tells the screens where a question is looking, by its `askId`.
+pub const ASK_STEP: &str = "home-ask-step";
+
 /// A question for the online mind, named `ask_id` so `home_cancel_ask` can stop it. Answered
-/// whole, as `home_call`'s `ask`.
+/// whole, as `home_call`'s `ask`, with a `home-ask-step` event for each round of look-ups.
 #[tauri::command]
 pub async fn home_ask<R: Runtime>(
     app: AppHandle<R>,
@@ -125,11 +128,16 @@ pub async fn home_ask<R: Runtime>(
 ) -> RemoteAnswer {
     blocking(move || {
         let rt = tokio::runtime::Handle::current();
-        app.state::<crate::mind::PhoneMind>().answer_call(
+        // Where Nocturne is looking, while it looks, for the line under the question.
+        let tell = app.clone();
+        app.state::<crate::mind::PhoneMind>().answer_call_telling(
             &app.state::<Home>(),
             &rt,
             Some(&ask_id),
             &question,
+            &mut |d| {
+                let _ = tell.emit(ASK_STEP, d);
+            },
         )
     })
     .await
