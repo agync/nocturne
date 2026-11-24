@@ -344,7 +344,7 @@ contact the stores require.
 | How do I delete everything? | Choose **Delete everything…** in **Privacy** on a computer, or in **This phone** on a phone that keeps your memory itself. Nocturne’s makers hold nothing of yours, so there is nothing else to ask for. A service you chose for answers keeps what it received under its own rules. |
 | What does Nocturne collect? | Nothing. No account, no analytics, no crash reports. The [privacy policy] says exactly what can leave your computer or phone, and only when you turn it on. |
 | Band | Write to us. |
-| Email | Something not working, or a word that reads wrong? Email `{SUPPORT_EMAIL}`. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key. |
+| Email | Something not working, or a word that reads wrong? Email `hello@nocturne.is`. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key. |
 | GitHub | Or open an issue on [GitHub]. Issues are public, so leave out anything personal. |
 | Security | To report a security problem, use [GitHub’s private reporting], not a public issue. |
 
@@ -355,7 +355,7 @@ removing a phone, `docs/guide/away-from-home.md:131-135`; the passphrase,
 `docs/guide/your-data.md:51-57`; Delete everything, `docs/guide/your-data.md:107-109` and
 `phone-alone.json:61`; private reporting, `SECURITY.md:3-6`.
 
-`{SUPPORT_EMAIL}` is a placeholder until the owner chooses it (question 8). "I have a backup"
+The address is `hello@nocturne.is` (question 8, settled). "I have a backup"
 restores a backup file today and the nightly backup once it ships, so the answer holds for both.
 
 ### Linked from
@@ -471,7 +471,7 @@ Made with the build, not by this proposal.
 | 5 | Android without Google Play | A: link a signed app file from launch. B: Google Play only at launch, the file once the release pipeline signs and lists it | A keeps the approved decision 5 from day one but needs a signing pipeline that does not exist. B ships on time and adds the file later | **B** |
 | 6 | The policy's and support's addresses | A: `/privacy` and `/support`, like `/install`, with the trailing slash redirecting. B: `/privacy/` and `/support/` | A matches the link already in the app and the site's other pages. B needs an app change or a redirect the other way | **A** |
 | 7 | Languages for the new pages | A: both in English, linked with the EN mark. B: support translated, the policy in English. C: both translated | A is fastest. B helps the people most likely to need help, and keeps the policy's exact words in one language until a reviewed translation exists. C is most welcoming and needs each translation reviewed like the English | **B** |
-| 8 | The support address | A: a mailbox at the site's domain, like `support@` there, forwarded. B: GitHub issues only | A is what both stores ask for and what a non-technical person can use. B needs a GitHub account and is public | **A**; which address? |
+| 8 | The support address | A: a mailbox at the site's domain, like `support@` there, forwarded. B: GitHub issues only | A is what both stores ask for and what a non-technical person can use. B needs a GitHub account and is public | **A**, settled: `hello@nocturne.is` |
 | 9 | A reply time on the support page | A: none, "A person reads every message." B: "We answer within a week." | A promises only what is true. B sets an expectation the project must keep | **A** |
 | 10 | "Offline after setup" in the hero | A: keep. B: "Works offline" | A stays true on a computer, and a phone alone needs no setup download. B claims more of a phone with an online mind | **A** |
 | 11 | "Checked, not just claimed" and the phone | A: scope it to the computer (proposed). B: add a network check of the phone app to each release, then drop "on a computer" | A is true now. B is the stronger promise and needs a phone check that does not exist yet | **A** now, **B** as a follow-up |
