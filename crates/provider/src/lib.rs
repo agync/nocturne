@@ -12,5 +12,5 @@ pub mod mind;
 #[cfg(feature = "stand-in")]
 pub mod stand_in;
 
-pub use client::{Exchange, Provider, Said};
+pub use client::{Exchange, Look, Provider, Said};
 pub use mind::{Decode, Job, ProviderMind, Record, Unsent};

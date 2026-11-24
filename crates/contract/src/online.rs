@@ -227,6 +227,27 @@ pub enum CheckOutcome {
     Cancelled,
 }
 
+/// One look at the service's list of models, at the person's request: the names to choose
+/// from, none, or why the look failed, worded as the check words it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum ModelList {
+    /// The names exactly as listed, in the service's order.
+    Listed {
+        names: Vec<String>,
+    },
+    /// The look worked and listed no names, or the address has no list.
+    None,
+    Failed {
+        problem: CheckOutcome,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

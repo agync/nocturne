@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use nocturne_contract::CheckOutcome;
+use nocturne_contract::{CheckOutcome, ModelList};
 use nocturne_engine::OnlineFailure;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use serde_json::{Value, json};
@@ -89,6 +89,13 @@ fn said_of(body: &Value) -> Vec<Said> {
 
 /// Stops one request when it turns true ([`Provider::chat_until`]).
 pub type Stop = tokio::sync::watch::Receiver<bool>;
+
+/// What one look at the list of models found, and the request, when one left.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Look {
+    pub list: ModelList,
+    pub exchange: Option<Exchange>,
+}
 
 /// A reply the provider wrote.
 #[derive(Debug, Clone, PartialEq)]
@@ -369,23 +376,67 @@ impl Provider {
         Ok((ids, exchange))
     }
 
+    /// One look at the list of models, at the person's request: the names to choose from, none
+    /// (an empty list, or an address with no list), or why it failed, as the check says it. The
+    /// exchange is there when the request left.
+    pub async fn list(&self) -> Look {
+        match self.models().await {
+            Ok((names, exchange)) if names.is_empty() => Look {
+                list: ModelList::None,
+                exchange: Some(exchange),
+            },
+            Ok((names, exchange)) => Look {
+                list: ModelList::Listed { names },
+                exchange: Some(exchange),
+            },
+            Err(f) if f.refused => Look {
+                list: ModelList::Failed {
+                    problem: refused_outcome(f.failure),
+                },
+                exchange: None,
+            },
+            // Answered with something that is not a list, or "not found": some services have none.
+            Err(f)
+                if matches!(
+                    f.failure,
+                    OnlineFailure::ModelMissing | OnlineFailure::Other(200..300)
+                ) =>
+            {
+                Look {
+                    list: ModelList::None,
+                    exchange: Some(f.exchange),
+                }
+            }
+            Err(f) => Look {
+                list: ModelList::Failed {
+                    problem: check_outcome(f.failure),
+                },
+                exchange: Some(f.exchange),
+            },
+        }
+    }
+
     /// The connection check: one look at the list of models, then the one question, a few
     /// words back at most, no memories. Each request's exchange is in the order made.
     pub async fn check(&self) -> (CheckOutcome, Vec<Exchange>) {
+        self.check_with(None).await
+    }
+
+    /// [`Provider::check`], with the list from the person's own look just before in place of
+    /// another look, when that look found names or none. A name not on the list stops nothing:
+    /// the question decides, since some services answer to names they leave off.
+    pub async fn check_with(&self, looked: Option<&ModelList>) -> (CheckOutcome, Vec<Exchange>) {
         let mut made = Vec::new();
-        match self.models().await {
-            Ok((listed, exchange)) => {
-                made.push(exchange);
-                if !listed.is_empty() && !listed.iter().any(|m| m == &self.model) {
-                    return (CheckOutcome::ModelMissing, made);
+        if !matches!(looked, Some(ModelList::Listed { .. } | ModelList::None)) {
+            match self.models().await {
+                Ok((_, exchange)) => made.push(exchange),
+                Err(f) if f.refused => return (refused_outcome(f.failure), made),
+                // A provider with no list still answers questions.
+                Err(f) if f.failure == OnlineFailure::ModelMissing => made.push(f.exchange),
+                Err(f) => {
+                    made.push(f.exchange);
+                    return (check_outcome(f.failure), made);
                 }
-            }
-            Err(f) if f.refused => return (refused_outcome(f.failure), made),
-            // A provider with no list still answers questions.
-            Err(f) if f.failure == OnlineFailure::ModelMissing => made.push(f.exchange),
-            Err(f) => {
-                made.push(f.exchange);
-                return (check_outcome(f.failure), made);
             }
         }
         let body = json!({
