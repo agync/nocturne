@@ -3,7 +3,10 @@ package app.nocturne.system
 /** Why a call to the person's account did not do what was asked, as the core names it. */
 enum class PlaceOutcome(val wire: String) {
     NoRoom("noRoom"),
-    NoAccess("noAccess"),
+    /** The account the backup uses left the phone, or none was chosen. */
+    SignedOut("signedOut"),
+    /** The account is on the phone, but the person took Nocturne's permission back. */
+    NoPermission("noPermission"),
     Offline("offline"),
     Failed("failed"),
 }

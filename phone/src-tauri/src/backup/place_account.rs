@@ -94,7 +94,8 @@ fn answered(answer: Result<PlaceAnswer, String>) -> Result<PlaceAnswer, PlaceErr
     match answer.outcome {
         PlaceOutcome::Ok => Ok(answer),
         PlaceOutcome::NoRoom => Err(PlaceError::NoRoom),
-        PlaceOutcome::NoAccess => Err(PlaceError::NoAccess),
+        PlaceOutcome::SignedOut => Err(PlaceError::SignedOut),
+        PlaceOutcome::NoPermission => Err(PlaceError::NoPermission),
         PlaceOutcome::Offline => Err(PlaceError::Offline),
         PlaceOutcome::Failed => Err(PlaceError::Failed(why())),
     }
@@ -455,8 +456,10 @@ mod tests {
         };
         failing(PlaceOutcome::NoRoom, None);
         assert_eq!(place.put("piece-aa", b"x"), Err(PlaceError::NoRoom));
-        failing(PlaceOutcome::NoAccess, None);
-        assert_eq!(place.get("key-phrase"), Err(PlaceError::NoAccess));
+        failing(PlaceOutcome::SignedOut, None);
+        assert_eq!(place.get("key-phrase"), Err(PlaceError::SignedOut));
+        failing(PlaceOutcome::NoPermission, None);
+        assert_eq!(place.list("piece-"), Err(PlaceError::NoPermission));
         failing(PlaceOutcome::Offline, None);
         assert_eq!(place.list("night-"), Err(PlaceError::Offline));
         failing(PlaceOutcome::Failed, Some("refused"));

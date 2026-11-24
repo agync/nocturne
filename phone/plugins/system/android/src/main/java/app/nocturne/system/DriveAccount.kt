@@ -1,6 +1,7 @@
 package app.nocturne.system
 
 import android.accounts.Account
+import android.accounts.AccountManager
 import android.content.Context
 import com.google.android.gms.auth.api.identity.AuthorizationClient
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -33,8 +34,9 @@ class DriveAccount(private val context: Context) : Tokens {
         /** What a failed call to Google's services means for the backup. */
         fun outcome(status: Int): PlaceOutcome = when (status) {
             CommonStatusCodes.NETWORK_ERROR, CommonStatusCodes.TIMEOUT -> PlaceOutcome.Offline
+            // Whether the account left the phone is checked before asking; here it is there.
             CommonStatusCodes.SIGN_IN_REQUIRED, CommonStatusCodes.RESOLUTION_REQUIRED ->
-                PlaceOutcome.NoAccess
+                PlaceOutcome.NoPermission
             else -> PlaceOutcome.Failed
         }
     }
@@ -80,12 +82,26 @@ class DriveAccount(private val context: Context) : Tokens {
         throw PlaceFailure(PlaceOutcome.Offline, "authorization timed out")
     }
 
-    /** A token for the chosen account without a screen; no access when one would be needed. */
+    /**
+     * Whether the account `email` is still on the phone. The account picker made it visible to
+     * the app, so it is listed for as long as it stays.
+     */
+    fun onPhone(email: String): Boolean =
+        AccountManager.get(context).getAccountsByType(GOOGLE)
+            .any { it.name.equals(email, ignoreCase = true) }
+
+    /**
+     * A token for the chosen account without a screen. Signed out when the account left the
+     * phone; no permission when Google's screen would be needed again.
+     */
     override fun token(): String {
-        val email = chosen() ?: throw PlaceFailure(PlaceOutcome.NoAccess, "no account chosen")
+        val email = chosen() ?: throw PlaceFailure(PlaceOutcome.SignedOut, "no account chosen")
+        if (!onPhone(email)) throw PlaceFailure(PlaceOutcome.SignedOut, "account not on phone")
         val result = await(authorize(email))
-        if (result.hasResolution()) throw PlaceFailure(PlaceOutcome.NoAccess, "permission needed")
-        return result.accessToken ?: throw PlaceFailure(PlaceOutcome.NoAccess, "no token")
+        if (result.hasResolution()) {
+            throw PlaceFailure(PlaceOutcome.NoPermission, "permission needed")
+        }
+        return result.accessToken ?: throw PlaceFailure(PlaceOutcome.NoPermission, "no token")
     }
 
     override fun renew(stale: String): String {

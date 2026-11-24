@@ -138,7 +138,10 @@ pub struct Power {
 pub enum PlaceOutcome {
     Ok,
     NoRoom,
-    NoAccess,
+    /// Signed out of the account, or the account left the phone.
+    SignedOut,
+    /// The account is there, but Nocturne's permission was taken back or turned off.
+    NoPermission,
     Offline,
     #[serde(other)]
     Failed,
@@ -626,8 +629,12 @@ mod tests {
             PlaceOutcome::NoRoom
         );
         assert_eq!(
-            read(r#"{"outcome":"noAccess","message":"x"}"#).outcome,
-            PlaceOutcome::NoAccess
+            read(r#"{"outcome":"signedOut","message":"x"}"#).outcome,
+            PlaceOutcome::SignedOut
+        );
+        assert_eq!(
+            read(r#"{"outcome":"noPermission"}"#).outcome,
+            PlaceOutcome::NoPermission
         );
         assert_eq!(
             read(r#"{"outcome":"offline"}"#).outcome,
