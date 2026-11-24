@@ -189,6 +189,19 @@ describe("bringing back a backup onto an empty phone", () => {
     ).toBeInTheDocument();
   });
 
+  it("back online, carries on over mobile data once the person said so", async () => {
+    await fromWelcome("&restore=offline&net=mobile");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    fireEvent.click(await screen.findByRole("button", { name: "Go on" }));
+    expect(await screen.findByText(/Waiting for the internet/)).toBeInTheDocument();
+    window.dispatchEvent(new Event("online"));
+    await waitFor(() =>
+      expect(scriptedBackup.calls.filter((c) => c === "backup_restore")).toHaveLength(2),
+    );
+    expect(screen.queryByRole("button", { name: "Go on" })).toBeNull();
+  });
+
   it("names both versions when a newer Nocturne made it", async () => {
     await fromWelcome("&restore=newer");
     await screen.findByRole("heading", { name: "Bring back your memory" });
