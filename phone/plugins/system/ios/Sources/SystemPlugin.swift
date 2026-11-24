@@ -18,7 +18,8 @@ struct SecretArgs: Decodable {
 }
 
 struct BackgroundArgs: Decodable {
-  var on: Bool
+  var mind: Bool
+  var backup: Bool
 }
 
 struct PlaceArgs: Decodable {
@@ -168,10 +169,11 @@ class SystemPlugin: Plugin {
     }
   }
 
-  /// Background windows while the mind is on; none while it is off.
+  /// Background windows while the mind or the backup is on; none while both are off. iOS has no
+  /// window that waits for Wi-Fi: a night that would wait for it doesn't run in the window.
   @objc public func background(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(BackgroundArgs.self)
-    Background.shared.schedule(args.on)
+    Background.shared.schedule(args.mind || args.backup)
     invoke.resolve()
   }
 

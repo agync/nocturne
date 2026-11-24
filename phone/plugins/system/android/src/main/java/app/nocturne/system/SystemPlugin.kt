@@ -53,7 +53,9 @@ class SecretArgs {
 
 @InvokeArg
 class BackgroundArgs {
-    var on: Boolean = false
+    var mind: Boolean = false
+    var backup: Boolean = false
+    var wifiOnly: Boolean = false
 }
 
 @InvokeArg
@@ -537,12 +539,12 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Background windows while the mind is on; none while it is off. */
+    /** Background windows for the mind and for the backup while each is on. */
     @Command
     fun background(invoke: Invoke) {
-        val on = invoke.parseArgs(BackgroundArgs::class.java).on
+        val args = invoke.parseArgs(BackgroundArgs::class.java)
         try {
-            Background.schedule(activity.applicationContext, on)
+            Background.schedule(activity.applicationContext, args.mind, args.backup, args.wifiOnly)
             invoke.resolve()
         } catch (e: Exception) {
             invoke.reject(e.message ?: "failed")

@@ -749,7 +749,8 @@ impl PhoneMind {
 
 /// Runs a pass every [`TICK`] while the app runs, sooner while there is more to do. Before each,
 /// the phone says whether it charges. While the mind or the nightly backup is on the system is
-/// asked for background windows while the phone charges, and for none while both are off; an
+/// asked for background windows while the phone charges, the backup's on Wi-Fi alone while
+/// "Wi-Fi only" is on, and for none while both are off; an
 /// open window is ended once a pass finds nothing more to do. Each pass also gives the nightly
 /// backup its look ([`crate::backup::PhoneBackup::pass`]).
 pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
@@ -757,7 +758,7 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     use tauri_plugin_nocturne_system::SystemExt;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut asked: Option<bool> = None;
+        let mut asked: Option<tauri_plugin_nocturne_system::Windows> = None;
         loop {
             let worker = app.clone();
             let more = tauri::async_runtime::spawn_blocking(move || {
@@ -768,12 +769,16 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let power = system.power().unwrap_or_default();
                 mind.host().set_charging(power.charging);
                 backup.set_unmetered(power.unmetered);
-                let on = mind.is_on() || backup.is_on();
+                let windows = tauri_plugin_nocturne_system::Windows {
+                    mind: mind.is_on(),
+                    backup: backup.is_on(),
+                    wifi_only: backup.wifi_only(),
+                };
                 let was = mind.status();
                 mind.look_again(&rt);
-                if asked != Some(on) {
-                    match system.background(on) {
-                        Ok(()) => asked = Some(on),
+                if asked != Some(windows) {
+                    match system.background(windows) {
+                        Ok(()) => asked = Some(windows),
                         Err(e) => tracing::warn!("background work could not be arranged: {e:?}"),
                     }
                 }
