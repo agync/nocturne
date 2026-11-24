@@ -8,6 +8,11 @@ tags: [adr, online, privacy, engine]
 
 # 0011 Online answers, opt-in and through the engine
 
+Amended 2026-11-24 (owner): every answer sends today's date, time and time zone, and lines for the
+days a question names; a mind may look further with read-only look-ups, up to 4 requests per
+question, each counted towards the monthly limit
+([0022 Ask looks things up](0022-ask-looks-things-up.md)).
+
 Amended 2026-11-22: memories about health, money or ID are no longer kept back. The owner's rule is
 that Nocturne never judges a person's data, so only what the person marks private is held back
 ([Only what you mark private is held back](/design/only-marked-private.md)).
