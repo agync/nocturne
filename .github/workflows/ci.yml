@@ -25,6 +25,8 @@
 #
 # `android` builds the phone app's debug APK for arm64 and runs its plugins' JVM tests and lint.
 # It runs no emulator; the phone app's Rust side is linted and tested on the host in `rust`.
+# `ios` builds the iPhone app for the Simulator, unsigned, and runs its plugins' Swift tests in
+# one, on the macOS runner.
 # `android-engine` only checks that the engine, the mind, the provider and the reader build for the
 # phone, and runs on its own paths.
 #
@@ -114,6 +116,7 @@ jobs:
       package: ${{ steps.paths.outputs.package }}
       package-linux: ${{ steps.paths.outputs.package-linux }}
       android: ${{ steps.paths.outputs.android }}
+      ios: ${{ steps.paths.outputs.ios }}
       phone-engine: ${{ steps.paths.outputs.phone-engine }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -752,6 +755,64 @@ jobs:
           path: phone/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 7
 
+  # The iPhone app for the Simulator on Apple silicon, unsigned, and the plugins' Swift tests in a
+  # Simulator (`make phone/ios-test`). Signing and TestFlight are release.yml's. The runner's
+  # default Xcode is used, as release.yml's macOS job does, and the Simulator is whichever iPhone
+  # the image holds, found at run time because the names change with each Xcode. The Rust cache is
+  # saved on main only, like the other phone jobs.
+  ios:
+    name: ios
+    needs: changes
+    if: needs.changes.outputs.ios != 'false'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # The Tauri CLI installs xcodegen and its tools with Homebrew; skip the update and the clean-up.
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: ./.github/actions/rust-toolchain
+      - name: iOS Rust target
+        run: rustup target add aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ios
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The newest iOS runtime's last available iPhone, by name: the Makefile's default names a
+      # device only a newer Xcode has.
+      - name: Pick a Simulator
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available
+          name=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["devices"]
+          def version(key):
+              tail = key.rsplit(".", 1)[-1]
+              return [int(p) for p in tail.removeprefix("iOS-").split("-") if p.isdigit()]
+          for key in sorted((k for k in runtimes if ".iOS-" in k), key=version, reverse=True):
+              phones = [d["name"] for d in runtimes[key] if d["isAvailable"] and d["name"].startswith("iPhone")]
+              if phones:
+                  print(phones[-1])
+                  break
+          ')
+          [ -n "$name" ] || { echo "no iPhone Simulator on this image" >&2; exit 1; }
+          echo "Simulator: $name"
+          echo "IOS_SIMULATOR=$name" >> "$GITHUB_ENV"
+      - name: Simulator build and plugin tests
+        run: |
+          set -euo pipefail
+          make ui/install
+          make phone/ios-test
+
   # The engine, the mind, the provider and the reader alone on the phone target, so a change to
   # them does not wait for the whole APK build above. The bundled SQLite is compiled by the NDK's
   # clang, at the API level the app's minSdk names.
@@ -804,6 +865,7 @@ jobs:
       - package-macos
       - package-windows
       - android
+      - ios
       - android-engine
     # The gate only reads its needs, so the 1 vCPU runner is enough.
     runs-on: ubuntu-slim
