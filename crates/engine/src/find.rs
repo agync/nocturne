@@ -83,6 +83,49 @@ impl Engine {
         self.find_where(query, limit, ANY)
     }
 
+    /// [`Engine::find_items`] for Ask with no mind: the things kept for the days the question
+    /// names come first, each with the line that says it, then what its words find, one copy
+    /// of each thing. A check-in or a reading is never found, here as there.
+    pub fn find_with_days(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {
+        let limit = limit.min(FIND_CAP);
+        let today = self.ask_today()?;
+        let step = crate::date_step(query, today.day, today.week_start);
+        let mut out: Vec<FoundItem> = Vec::new();
+        let has = |out: &[FoundItem], id: &str| out.iter().any(|f| f.receipt.item_id == id);
+        if step.names_time() {
+            for h in self.date_step_lines(
+                &step,
+                today.day,
+                crate::LookScope::ALL,
+                crate::DATE_STEP_LINES,
+            )? {
+                let Some(receipt) = h.memory.receipts.first().cloned() else {
+                    continue;
+                };
+                if matches!(receipt.kind, ItemKind::Checkin | ItemKind::Reading)
+                    || has(&out, &receipt.item_id)
+                {
+                    continue;
+                }
+                out.push(FoundItem {
+                    receipt,
+                    excerpt: vec![ExcerptPart {
+                        text: h.memory.sentence,
+                        matched: false,
+                    }],
+                    private: h.memory.private,
+                });
+            }
+        }
+        for f in self.find_items(query, limit)? {
+            if !has(&out, &f.receipt.item_id) {
+                out.push(f);
+            }
+        }
+        out.truncate(limit);
+        Ok(out)
+    }
+
     /// [`Engine::find_items`], only the things no mind has read yet: what a search of what
     /// Nocturne remembers cannot find until then, such as things just brought in from a phone.
     pub fn find_unread(&self, query: &str, limit: usize) -> Result<Vec<FoundItem>> {

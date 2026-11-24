@@ -581,3 +581,29 @@ fn a_kept_line_goes_only_while_its_item_is_kept() {
     assert!(!f.engine.mind_may_read(&[gone.clone()]).unwrap()[0]);
     assert!(f.engine.online_verdicts(&[gone]).unwrap()[0].is_some());
 }
+
+/// Ask with no mind on a phone alone still runs the date step: tomorrow's appointments are found
+/// though no word of the question is in them.
+#[test]
+fn finding_with_no_mind_lists_the_days_a_question_names() {
+    let f = fx();
+    week(&f);
+    let found = f.engine.find_with_days("What's on tomorrow?", 30).unwrap();
+    let words: Vec<String> = found
+        .iter()
+        .map(|i| i.excerpt.iter().map(|p| p.text.as_str()).collect())
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            "Dentist is on Wednesday 25 November at 10:30, at Smile Dental.",
+            "Leo's swimming is on Wednesday 25 November at 17:00, at the leisure centre.",
+        ]
+    );
+    assert!(
+        found
+            .iter()
+            .all(|i| i.receipt.calendar.as_deref() == Some("Home"))
+    );
+    assert!(f.engine.find_with_days("xylophone", 30).unwrap().is_empty());
+}
