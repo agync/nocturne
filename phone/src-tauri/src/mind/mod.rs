@@ -19,6 +19,7 @@ pub mod sound;
 pub mod status;
 #[cfg(test)]
 mod tests;
+mod tools;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -356,7 +357,11 @@ impl PhoneMind {
             ProviderMind::new(provider)
                 .with_record(record)
                 .with_unsent(unsent)
-                .with_decoder(decode),
+                .with_decoder(decode)
+                .with_tools(
+                    tools::read(&self.dir, &saved.url, &saved.model),
+                    tools::keeper(self.dir.clone(), saved.url.clone(), saved.model.clone()),
+                ),
         );
         let slotted: Arc<dyn nocturne_engine::Mind> = mind.clone();
         *self.slot.write().unwrap_or_else(|e| e.into_inner()) = Some(slotted);
@@ -388,6 +393,9 @@ impl PhoneMind {
                 for exchange in &made {
                     self.sent
                         .note(Job::Check, provider.host(), provider.model(), exchange);
+                }
+                if matches!(outcome, CheckOutcome::Works { .. }) {
+                    self.check_tools(&provider, settings.url.trim()).await;
                 }
                 outcome
             }

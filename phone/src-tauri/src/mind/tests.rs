@@ -203,7 +203,11 @@ fn an_address_off_the_rules_is_never_reached_or_kept() {
             model: MODEL.into()
         }
     );
-    assert_eq!(w.stand_in.seen().len(), 2);
+    assert_eq!(
+        w.stand_in.seen().len(),
+        3,
+        "the list of models, the word reply and the look-up check"
+    );
 }
 
 #[test]
@@ -492,7 +496,11 @@ fn the_sent_list_matches_what_the_provider_received() {
     let host = format!("127.0.0.1:{}", w.stand_in.addr.port());
     assert!(sent.iter().all(|s| s.host == host && s.status == Some(200)));
     let checks = sent.iter().filter(|s| s.sent_for == super::SentFor::Check);
-    assert_eq!(checks.count(), 2);
+    assert_eq!(
+        checks.count(),
+        3,
+        "the look-up check is listed with the check"
+    );
     assert_eq!(sent.last().unwrap().sent_for, super::SentFor::Check);
 }
 
@@ -643,7 +651,9 @@ fn a_memory_being_forgotten_never_reaches_the_provider() {
         matches!(phase, AskPhase::NotSure | AskPhase::Nothing),
         "{steps:?}"
     );
-    assert_eq!(w.stand_in.chats().len(), asked);
+    // With nothing left to answer from, the question may still go, to look further; what is
+    // being forgotten never goes with it.
+    assert!(w.stand_in.chats().len() <= asked + 1);
     assert!(!reached(&w, asked, "has lived in Hull"));
 }
 
@@ -773,7 +783,15 @@ fn the_screens_read_the_sent_list_and_the_month_as_mind_ts_says() {
         .collect();
     let json = serde_json::to_value(&sent[0]).unwrap();
     assert_eq!(json["kind"], "check");
-    assert_eq!(json["id"], "2");
+    assert_eq!(
+        json["id"], "3",
+        "the look-up check is the last of the check's requests"
+    );
+    assert_eq!(json["nothing"], false);
+    assert!(
+        json.get("part").is_none(),
+        "only a question's parts are named"
+    );
     assert!(json["bytes"].as_u64().unwrap() > 0);
     assert!(json["said"].is_array());
     assert_eq!(json["forgotten"], false);
@@ -1192,4 +1210,229 @@ fn what_goes_missing_without_a_forget_keeps_its_words() {
         )
     });
     assert!(w.mind.sent(1000, None).iter().all(|r| !r.forgotten));
+}
+
+/// The phone's own calendar: the dentist and swimming tomorrow, Monday 23 November 2026, as the
+/// clock of `world()` is Sunday 22 November.
+fn tomorrow_s_calendar(w: &World) {
+    let entry =
+        |id: &str, title: &str, start: &str, end: &str| nocturne_contract::CalendarChange::Upsert {
+            entry: nocturne_contract::CalendarEntry {
+                phone_id: id.into(),
+                calendar_id: "c1".into(),
+                title: title.into(),
+                start: start.into(),
+                end: end.into(),
+                time_zone: Some("Europe/London".into()),
+                all_day: false,
+                place: None,
+                people: vec![],
+                repeats: false,
+                notes: None,
+                repeat_rule: None,
+            },
+        };
+    w.home
+        .with_local(|o| {
+            o.engine.take_calendar(
+                &o.device,
+                nocturne_contract::CalendarBatch {
+                    sync_id: "s".into(),
+                    seq: 0,
+                    last: true,
+                    window_from: "2026-11-20".into(),
+                    window_to: "2026-12-06".into(),
+                    calendars: vec![],
+                    changes: vec![
+                        entry(
+                            "a",
+                            "Dentist",
+                            "2026-11-23T10:30:00Z",
+                            "2026-11-23T11:00:00Z",
+                        ),
+                        entry(
+                            "b",
+                            "Leo's swimming",
+                            "2026-11-23T17:00:00Z",
+                            "2026-11-23T18:00:00Z",
+                        ),
+                    ],
+                },
+            )
+        })
+        .unwrap()
+        .unwrap();
+}
+
+/// The verified root cause: "What's on tomorrow?" finds no word, so the phone answered
+/// "Nothing" without asking. Now the date step gives tomorrow's calendar, and the question goes
+/// with today's date, in one request that counts once.
+#[test]
+fn whats_on_tomorrow_is_asked_with_tomorrow_s_calendar() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    tomorrow_s_calendar(&w);
+    let asked = w.stand_in.chats().len();
+    let month = w.mind.this_month();
+    w.stand_in.then(Answer::text(
+        "Tomorrow, Monday 23 November, you have **the dentist at 10:30** [m1] and **Leo's \
+         swimming at 17:00** [m2].",
+    ));
+    let steps = w.ask("What's on tomorrow?");
+    let last = steps.last().unwrap();
+    assert_eq!(last.phase, AskPhase::Done, "{steps:?}");
+    assert_eq!(last.receipts.len(), 2, "each claim cites a line handed");
+    let chats = w.stand_in.chats();
+    assert_eq!(chats.len(), asked + 1, "one request");
+    assert_eq!(w.mind.this_month(), month + 1, "counted once");
+    let body = &chats[asked].body;
+    let user = body["messages"][1]["content"].as_str().unwrap();
+    assert!(
+        user.contains("Dentist is on Monday 23 November at 10:30."),
+        "{user}"
+    );
+    assert!(
+        user.contains("Today is Sunday 22 November 2026, 09:00, in the time zone Europe/London.")
+    );
+    assert!(
+        body["tools"].is_array(),
+        "a question naming a time may look further"
+    );
+}
+
+/// The mind looks once: the line while it looks names the place, the question is sent in two
+/// parts, each counted, and Sent online names each part and what was asked.
+#[test]
+fn a_question_that_looks_once_counts_twice_and_lists_two_parts() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    tomorrow_s_calendar(&w);
+    let month = w.mind.this_month();
+    w.stand_in.then(Answer::look(
+        "calendar",
+        r#"{"from":"2026-11-23","to":"2026-11-23"}"#,
+    ));
+    w.stand_in
+        .then(Answer::text("You have **the dentist at 10:30** [m1]."));
+    let steps = w.ask("Is the dentist soon?");
+    let phases: Vec<AskPhase> = steps.iter().map(|d| d.phase).collect();
+    assert!(phases.contains(&AskPhase::LookingCalendar), "{phases:?}");
+    assert_eq!(*phases.last().unwrap(), AskPhase::Done, "{steps:?}");
+    assert_eq!(w.mind.this_month(), month + 2, "each part counts once");
+    let sent = w.mind.sent(10, None);
+    let parts: Vec<_> = sent.iter().filter_map(|s| s.part.clone()).collect();
+    assert_eq!(parts.len(), 2, "{sent:?}");
+    // Newest first.
+    assert_eq!(parts[0].n, 2);
+    assert_eq!(parts[0].asked[0].look, "calendar");
+    assert_eq!(
+        parts[0].asked[0].lines, 1,
+        "the dentist, already handed, is not handed again; swimming is"
+    );
+    assert_eq!(parts[1].n, 1);
+    assert_eq!(parts[0].ask, parts[1].ask);
+}
+
+/// "When is the car's MOT?" with nothing kept: the mind looks for other words, nothing comes
+/// back, and the question ends there, in one part, listed with nothing found.
+#[test]
+fn a_question_with_nothing_kept_ends_after_one_look() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    let asked = w.stand_in.chats().len();
+    w.stand_in.then(Answer::look(
+        "search",
+        r#"{"words":"MOT garage car service"}"#,
+    ));
+    let steps = w.ask("When is the car's MOT?");
+    assert_eq!(steps.last().unwrap().phase, AskPhase::Nothing, "{steps:?}");
+    assert_eq!(w.stand_in.chats().len(), asked + 1);
+    let sent = w.mind.sent(1, None);
+    assert!(sent[0].nothing, "{sent:?}");
+}
+
+/// A provider that refuses look-ups answers by the date step path at once, and is not offered
+/// them again until the next check.
+#[test]
+fn a_provider_that_refuses_look_ups_is_answered_without_them() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    tomorrow_s_calendar(&w);
+    let asked = w.stand_in.chats().len();
+    w.stand_in.then(Answer::Status(
+        400,
+        r#"{"error":"tools not supported"}"#.into(),
+    ));
+    w.stand_in
+        .then(Answer::text("You have **the dentist at 10:30** [m1]."));
+    let steps = w.ask("What's on tomorrow?");
+    assert_eq!(steps.last().unwrap().phase, AskPhase::Done, "{steps:?}");
+    let chats = w.stand_in.chats();
+    assert_eq!(chats.len(), asked + 2);
+    assert!(chats[asked + 1].body.get("tools").is_none());
+    assert!(matches!(
+        w.mind.tools(),
+        nocturne_provider::lookup::Tools::Refuses { .. }
+    ));
+}
+
+/// With a limit of things answered reached between parts, no more parts go.
+#[test]
+fn the_month_s_limit_is_looked_at_before_each_part() {
+    let w = world();
+    w.mind.turn_on(w.settings()).unwrap();
+    tomorrow_s_calendar(&w);
+    let month = w.mind.this_month();
+    assert!(
+        w.mind
+            .set_limit(super::status::MindLimit::Things { count: month + 1 })
+    );
+    let asked = w.stand_in.chats().len();
+    w.stand_in.then(Answer::look(
+        "journal",
+        r#"{"from":"2026-11-22","to":"2026-11-22"}"#,
+    ));
+    let steps = w.ask("Is the dentist soon?");
+    assert_eq!(
+        steps.last().unwrap().phase,
+        AskPhase::Unavailable,
+        "{steps:?}"
+    );
+    assert_eq!(
+        w.stand_in.chats().len(),
+        asked + 1,
+        "stopped after its first part"
+    );
+    assert_eq!(w.mind.this_month(), month + 1);
+}
+
+/// Look-ups are remembered with the address and the name to use: the check finds out, and a
+/// mind made again knows.
+#[test]
+fn the_check_finds_out_whether_look_ups_are_taken_and_it_is_remembered() {
+    let w = world();
+    w.stand_in.then(Answer::text("ready"));
+    w.stand_in.then(Answer::look(
+        "calendar",
+        r#"{"from":"2030-01-01","to":"2030-01-01"}"#,
+    ));
+    let outcome = w.rt.block_on(w.mind.check(&w.settings()));
+    assert!(matches!(outcome, CheckOutcome::Works { .. }), "{outcome:?}");
+    w.mind.turn_on(w.settings()).unwrap();
+    assert_eq!(
+        w.mind.tools(),
+        nocturne_provider::lookup::Tools::Takes {
+            on: "2026-11-22".into()
+        }
+    );
+    let checks = w
+        .mind
+        .sent(10, None)
+        .into_iter()
+        .filter(|s| s.sent_for == super::SentFor::Check)
+        .count();
+    assert_eq!(
+        checks, 3,
+        "the list of models, the word reply and the look-up check"
+    );
 }

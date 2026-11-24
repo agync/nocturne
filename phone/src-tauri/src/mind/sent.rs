@@ -80,6 +80,12 @@ pub struct Sent {
     /// Its words were removed when something it carried was forgotten.
     #[serde(default)]
     pub forgotten: bool,
+    /// For a question sent in parts: which part, and what the provider asked to look up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<nocturne_provider::lookup::Part>,
+    /// The question this request was the last part of ended with nothing found.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nothing: bool,
 }
 
 /// A row's words, in their own file.
@@ -152,6 +158,8 @@ impl SentLog {
             items: exchange.carried.items.clone(),
             memories: exchange.carried.memories.clone(),
             forgotten: false,
+            part: exchange.carried.part.clone(),
+            nothing: false,
         };
         let cutoff = self.cutoff();
         let words = Words {
@@ -229,6 +237,23 @@ impl SentLog {
         let mut line = serde_json::to_string(row).expect("a row serialises");
         line.push('\n');
         options.open(&self.path)?.write_all(line.as_bytes())
+    }
+
+    /// Marks the last part of the question `ask` as ending with nothing found.
+    pub fn ended_with_nothing(&self, ask: &str) {
+        let _last = lock(&self.last);
+        let mut rows = self.rows();
+        let Some(row) = rows
+            .iter_mut()
+            .rev()
+            .find(|r| r.part.as_ref().is_some_and(|p| p.ask == ask))
+        else {
+            return;
+        };
+        row.nothing = true;
+        if let Err(e) = self.write_rows(rows.iter()) {
+            tracing::warn!("the sent list could not be marked: {e}");
+        }
     }
 
     /// The id of the newest row, 0 when there is none.

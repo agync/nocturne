@@ -23,6 +23,14 @@ pub enum AskPhase {
     WaitingOnline,
     /// The online answer did not come; this computer is answering instead.
     SwitchingToComputer,
+    /// The mind asked to look further, and Nocturne is looking through the calendar, the
+    /// journal, other words, the health readings, or more than one of these. The phase lasts
+    /// until the next reply begins; it is never terminal.
+    LookingCalendar,
+    LookingJournal,
+    LookingSearch,
+    LookingHealth,
+    LookingSeveral,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
