@@ -20,8 +20,11 @@ async fn blocking<R: Runtime, T: Send + 'static>(
 
 /// How the backup stands, for This phone.
 #[tauri::command]
-pub fn backup_status(backup: State<'_, PhoneBackup>) -> BackupStatus {
-    backup.status()
+pub async fn backup_status<R: Runtime>(app: AppHandle<R>) -> Result<BackupStatus, BackupProblem> {
+    blocking(app, |app| {
+        Ok(app.state::<PhoneBackup>().status_with(&app.state::<Home>()))
+    })
+    .await
 }
 
 /// A phrase of six words made up by Nocturne: step 2, and "Another phrase".

@@ -197,9 +197,49 @@ fn a_night_runs_while_charging_once_a_day() {
     assert!(p.backup.pass(&p.home, true));
     assert!(!p.backup.pass(&p.home, true), "one a night");
     p.later(21);
-    assert_eq!(p.state(), BackupState::Waiting);
+    assert_eq!(
+        p.state(),
+        BackupState::NotCharged,
+        "not charged since the last night"
+    );
     assert!(p.backup.pass(&p.home, true));
     assert_eq!(nights(&place), 2);
+    p.later(21);
+    place.fail_with(Some(PlaceError::Offline));
+    assert!(!p.backup.pass(&p.home, true));
+    assert_eq!(
+        p.state(),
+        BackupState::Waiting,
+        "charged, and waits for tonight"
+    );
+}
+
+#[test]
+fn the_status_says_what_still_waits_for_the_account() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    let id = p.keep("Something to forget.");
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    assert!(!p.backup.status_with(&p.home).forget_waiting);
+
+    place.fail_with(Some(PlaceError::Offline));
+    p.home.open_store().unwrap().engine.unkeep(&id).unwrap();
+    assert!(!p.backup.pass(&p.home, false));
+    assert!(p.backup.status_with(&p.home).forget_waiting);
+    place.fail_with(None);
+    p.later(2);
+    assert!(p.backup.pass(&p.home, false));
+    assert!(!p.backup.status_with(&p.home).forget_waiting);
+
+    place.fail_with(Some(PlaceError::Offline));
+    assert_eq!(p.backup.turn_off(true), Err(BackupProblem::Offline));
+    assert!(p.backup.status().delete_pending);
+    place.fail_with(None);
+    assert!(!p.backup.pass(&p.home, false));
+    assert!(!p.backup.status().delete_pending);
+    assert_eq!(nights(&place), 0);
 }
 
 #[test]

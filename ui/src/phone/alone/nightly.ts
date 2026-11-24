@@ -20,6 +20,7 @@ export type BackupState =
   | { state: "running" }
   | { state: "upToDate" }
   | { state: "waiting" }
+  | { state: "notCharged" }
   | { state: "waitingForWifi" }
   | { state: "notInUse" }
   | { state: "noRoom" }
@@ -37,6 +38,10 @@ export interface BackupStatus {
   state: BackupState;
   /** The memory moved to a computer; a kept backup is there only to be deleted. */
   moved: boolean;
+  /** The backup in the account goes once the account answers. */
+  deletePending: boolean;
+  /** Something forgotten for good is still in the backup until the account can be reached. */
+  forgetWaiting: boolean;
 }
 
 export type BackupProblem =
