@@ -21,6 +21,12 @@ struct BackgroundArgs: Decodable {
   var on: Bool
 }
 
+struct PlaceArgs: Decodable {
+  var name: String?
+  var path: String?
+  var prefix: String?
+}
+
 /// Room left over after a copy, so the phone is not filled to the last byte.
 private let spare: Int64 = 16 * 1024 * 1024
 
@@ -63,6 +69,72 @@ private final class Sheet: NSObject, UIDocumentPickerDelegate, UIAdaptivePresent
 /// phone's own sheets to save a file and to choose one. Every other command answers its stand-in.
 class SystemPlugin: Plugin {
   private var sheet: Sheet?
+
+  /// The backup's calls to iCloud, one at a time and never on the main thread.
+  private let placeQueue = DispatchQueue(label: "app.nocturne.place")
+
+  /// One call to iCloud on the backup's own queue; its outcome is always an answer.
+  private func place(_ invoke: Invoke, _ work: @escaping () throws -> [String: Any]) {
+    placeQueue.async {
+      do {
+        var out = try work()
+        out["outcome"] = "ok"
+        invoke.resolve(out)
+      } catch {
+        let outcome = ICloudPlace.outcome(error)
+        invoke.resolve(["outcome": outcome.rawValue, "message": error.localizedDescription])
+      }
+    }
+  }
+
+  /// Whether the app's iCloud space can be reached. There is no permission screen on an iPhone:
+  /// the backup goes to the iCloud it is signed in to.
+  @objc public func placeConnect(_ invoke: Invoke) throws {
+    placeQueue.async {
+      invoke.resolve(["outcome": ICloudPlace.state()])
+    }
+  }
+
+  @objc public func placePut(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PlaceArgs.self)
+    guard let name = args.name, ICloudPlace.validName(name), let path = args.path else {
+      return invoke.reject("invalid")
+    }
+    place(invoke) {
+      try ICloudPlace.put(name, from: URL(fileURLWithPath: path))
+      return [:]
+    }
+  }
+
+  @objc public func placeGet(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PlaceArgs.self)
+    guard let name = args.name, ICloudPlace.validName(name), let path = args.path else {
+      return invoke.reject("invalid")
+    }
+    place(invoke) {
+      let found = try ICloudPlace.get(name, to: URL(fileURLWithPath: path))
+      return ["found": found]
+    }
+  }
+
+  @objc public func placeList(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PlaceArgs.self)
+    let prefix = args.prefix ?? ""
+    guard ICloudPlace.validPrefix(prefix) else { return invoke.reject("invalid") }
+    place(invoke) {
+      let entries = try ICloudPlace.list(prefix)
+      return ["entries": entries]
+    }
+  }
+
+  @objc public func placeDelete(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PlaceArgs.self)
+    guard let name = args.name, ICloudPlace.validName(name) else { return invoke.reject("invalid") }
+    place(invoke) {
+      try ICloudPlace.delete(name)
+      return [:]
+    }
+  }
 
   /// Keeps a secret in the keychain, in place of one of the same name.
   @objc public func secretKeep(_ invoke: Invoke) throws {
