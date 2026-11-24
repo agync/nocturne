@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
+import type { BackupApi } from "../../alone/nightly";
 import { type AsideApi, endedFor, type MoveAside, type Moved } from "../../alone/screens/MoveFlow";
 import {
   type MoveEnded,
@@ -10,6 +11,7 @@ import {
   type MoveProgress,
   staysLine,
 } from "../../alone/screens/MoveScreens";
+import { MovedBackup } from "../../alone/screens/Nightly";
 import type { Connection, PairedDevice } from "../../engine";
 import { BackBar, Button, Page } from "../../screens/ui";
 import type { NativeChannel, ThisPhoneSources } from "../api";
@@ -35,6 +37,7 @@ export function ThisPhone({
   version,
   waiting,
   aside,
+  backup,
   onBack,
   onCalendar,
   onHealth,
@@ -48,6 +51,8 @@ export function ThisPhone({
   waiting: number;
   /** The memory a move put aside here, when the app can reach it. */
   aside?: AsideApi;
+  /** A nightly backup kept from before the move, there only to be deleted. */
+  backup?: { api: BackupApi; ios: boolean };
   onBack(): void;
   onCalendar(): void;
   onHealth(): void;
@@ -344,6 +349,7 @@ export function ThisPhone({
             />
           </Group>
         ) : null}
+        {backup ? <MovedBackup api={backup.api} ios={backup.ios} /> : null}
         <Group title={t("phone.app.settings.help")}>
           <Row label={t("phone.sources.privacy")} onPress={openPolicy} />
           <Row label={t("phone.app.settings.can")} hint={t("phone.sheet.can")} />

@@ -1,0 +1,273 @@
+import { clearMocks } from "@tauri-apps/api/mocks";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { NativeRoot } from "../../native/NativeRoot";
+import { nativeMockServices } from "../../testing/nativeMock";
+import { SCRIPTED_KEY, SCRIPTED_PHRASE, scriptedBackup } from "../testing/backupMock";
+import { scriptedNoteRows } from "../testing/homeMock";
+
+afterEach(async () => {
+  await new Promise((settle) => setTimeout(settle, 50));
+  cleanup();
+  clearMocks();
+  scriptedNoteRows.clear();
+  history.replaceState(null, "", "/");
+});
+
+async function app(query: string) {
+  history.replaceState(null, "", `/?${query}`);
+  render(<NativeRoot services={await nativeMockServices()} />);
+}
+
+/** From Welcome, "I have a backup", then the backup online. */
+async function fromWelcome(query = "") {
+  await app(`m=first&s=welcome${query}`);
+  fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+  expect(await screen.findByRole("heading", { name: "Where is your backup?" })).toBeVisible();
+  expect(screen.getByRole("radio", { name: /Your backup in Google Drive/ })).toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+
+function type(text: string) {
+  fireEvent.change(screen.getByLabelText(/Your phrase|Recovery key/), { target: { value: text } });
+  fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+}
+
+describe("bringing back a backup onto an empty phone", () => {
+  it("finds it, opens it with the phrase, brings it back and asks who makes the backups", async () => {
+    await fromWelcome();
+    expect(
+      await screen.findByRole("heading", { name: "Bring back your memory" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Type the phrase for your backup.")).toBeInTheDocument();
+    expect(screen.getByText(/Backup from today, 3:12 am · 1.4\sGB/)).toBeInTheDocument();
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2,140 things, every page and your journal.")).toBeInTheDocument();
+    expect(screen.getByText(/Its mind stays off until you choose it again in/)).toHaveTextContent(
+      "Its mind stays off until you choose it again in This phone.",
+    );
+    expect(
+      screen.getByText(
+        "Your calendar and Health on this phone stay off until you turn them on again.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByRole("heading", { name: "Make the backups from this phone?" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back up from this phone" }));
+    await waitFor(() => expect(scriptedBackup.calls).toContain("backup_make_in_use"));
+    expect(await screen.findByText("Your memory is on this phone")).toBeInTheDocument();
+  });
+
+  it("says a wrong phrase, and after three tries points to the password manager", async () => {
+    await fromWelcome();
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type("wrong words");
+    expect(
+      await screen.findByText(
+        "That phrase doesn’t open this backup. Check each word, and try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Your phrase")).toHaveAttribute("aria-invalid", "true");
+    const tries = () => scriptedBackup.calls.filter((c) => c === "backup_nights").length;
+    for (const n of [2, 3]) {
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Bring it back" })).not.toHaveAttribute(
+          "aria-disabled",
+        ),
+      );
+      type("wrong words");
+      await waitFor(() => expect(tries()).toBe(n));
+    }
+    expect(
+      await screen.findByText(/If you saved it in a password manager, copy it from there/),
+    ).toBeInTheDocument();
+  });
+
+  it("opens with the recovery key, and asks for a new phrase first", async () => {
+    await fromWelcome();
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    fireEvent.click(screen.getByRole("button", { name: "Use the recovery key instead" }));
+    expect(screen.getByText("Type the recovery key for your backup.")).toBeInTheDocument();
+    type("K7QM-2XWD-9HRT-P4NC-B8LZ-6VFI");
+    expect(
+      await screen.findByText(
+        "That recovery key doesn’t open this backup. Check each group of letters and numbers, and try again.",
+      ),
+    ).toBeInTheDocument();
+    type(SCRIPTED_KEY.toLowerCase());
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("heading", { name: "Make a new phrase" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "You opened your backup with the recovery key. Make a new phrase now, so you have one.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByLabelText("word 1, harbour");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Your phrase"), {
+      target: { value: SCRIPTED_PHRASE },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByRole("heading", { name: "Make the backups from this phone?" }),
+    ).toBeInTheDocument();
+    expect(scriptedBackup.calls).toContain("backup_change_phrase");
+  });
+
+  it("picks an earlier night, newest marked", async () => {
+    await fromWelcome();
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    fireEvent.change(screen.getByLabelText("Your phrase"), { target: { value: SCRIPTED_PHRASE } });
+    fireEvent.click(screen.getByRole("button", { name: "An earlier night…" }));
+    expect(
+      await screen.findByText("The newest is chosen unless you pick another."),
+    ).toBeInTheDocument();
+    const nights = screen.getAllByRole("radio");
+    expect(nights).toHaveLength(7);
+    expect(nights[0]).toBeChecked();
+    expect(screen.getByText("Newest")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /Wednesday, 2:40 am/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText(/Backup from Wednesday, 2:40 am/)).toBeInTheDocument();
+  });
+
+  it("says when part of the newest night is missing, and offers an earlier one", async () => {
+    await fromWelcome("&restore=missing");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByRole("heading", { name: "Part of this backup is missing" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose an earlier night" }));
+    expect(screen.getByRole("radio", { name: /Thursday, 2:58 am/ })).toBeChecked();
+  });
+
+  it("says when there is no backup in the account, or no internet", async () => {
+    await fromWelcome("&found=none");
+    expect(
+      await screen.findByRole("heading", {
+        name: "No backup found in this Google account’s Drive.",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try another account" })).toBeInTheDocument();
+    cleanup();
+    clearMocks();
+    await fromWelcome("&found=offline");
+    expect(
+      await screen.findByRole("heading", {
+        name: "This phone isn’t online. Finding your backup needs the internet.",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("on an iPhone, says to sign in with the old phone's Apple Account", async () => {
+    await app("m=first&s=welcome&os=ios&found=none");
+    fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    expect(await screen.findByRole("radio", { name: /Your backup in iCloud/ })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Sign in with the Apple Account your old phone used."),
+    ).toBeInTheDocument();
+  });
+
+  it("says when Google didn't allow it, with Try again", async () => {
+    await fromWelcome("&connect=refused");
+    expect(
+      await screen.findByText("Google didn’t allow it, so Nocturne can’t look for your backup."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("can be stopped while it comes down, and nothing changed", async () => {
+    await fromWelcome("&restore=slow");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(await screen.findByText("Getting your backup")).toBeInTheDocument();
+    expect(await screen.findByText(/650\sMB of 1.4\sGB/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(await screen.findByRole("heading", { name: "Stopped." })).toBeInTheDocument();
+    expect(screen.getByText("Nothing on this phone changed.")).toBeInTheDocument();
+  });
+});
+
+describe("bringing a backup into a phone that has a memory", () => {
+  async function toMerge(query = "") {
+    await app(`m=kept&v=thisPhone${query}`);
+    fireEvent.click(await screen.findByRole("button", { name: /Restore a backup…/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Your backup has its own memory, and this phone has one too.",
+      }),
+    ).toBeInTheDocument();
+  }
+
+  it("says both sides, then brings its things in", async () => {
+    await toMerge();
+    const inBackup = screen.getByText("In the backup").parentElement as HTMLElement;
+    expect(within(inBackup).getByText(/about 1.4\sGB/)).toBeInTheDocument();
+    const here = screen.getByText("On this phone").parentElement as HTMLElement;
+    expect(await within(here).findByText(/\d+ things?/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "A phone holds one person’s memory, so the backup’s things join the one here.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bring them in" }));
+    expect(
+      await screen.findByRole("heading", { name: "Your backup’s things are here." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "1,900 things, 240 journal entries and 118 check-ins were added to the memory on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("12 were already here, so they were kept once.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByRole("heading", { name: "Make the backups from this phone?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before stopping, and stops only until adding begins", async () => {
+    await toMerge("&restore=slow");
+    fireEvent.click(screen.getByRole("button", { name: "Bring them in" }));
+    expect(await screen.findByText("Getting your things ready…")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    const ask = await screen.findByRole("dialog", {
+      name: "Stop bringing your backup in? Nothing changes on this phone.",
+    });
+    fireEvent.click(within(ask).getByRole("button", { name: "Keep going" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Stop" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Stopped. Nothing changed on this phone." }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Stop once its things are being added", async () => {
+    await toMerge("&restore=slow&adding");
+    fireEvent.click(screen.getByRole("button", { name: "Bring them in" }));
+    expect(await screen.findByText("Adding them to the memory on this phone…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.getByText("Keep Nocturne open until this finishes.")).toBeInTheDocument();
+  });
+
+  it("Not now leaves the phone as it was", async () => {
+    await toMerge();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(await screen.findByRole("button", { name: /Restore a backup…/ })).toBeInTheDocument();
+    expect(scriptedBackup.calls).not.toContain("backup_restore");
+  });
+});

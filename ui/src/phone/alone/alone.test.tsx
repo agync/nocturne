@@ -12,6 +12,12 @@ import { createLocalEngine } from "./engine";
 import { memoryNotes, REMINDER_DAYS, reminderDone, reminderDue } from "./reminder";
 import { scriptedNoteRows } from "./testing/homeMock";
 
+/** "Where is your backup?": a backup file. */
+async function toFile() {
+  fireEvent.click(await screen.findByRole("radio", { name: /A backup file/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+
 afterEach(async () => {
   // A step back the screens asked for lands before the next test starts.
   await new Promise((settle) => setTimeout(settle, 50));
@@ -53,8 +59,8 @@ describe("Welcome and starting on this phone", () => {
         "A mind can come from Nocturne on your own computer. Your memory then moves there.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Save a backup now and then in/)).toHaveTextContent(
-      "If this phone is lost, what you kept goes with it. Save a backup now and then in This phone.",
+    expect(screen.getByText(/Turn on backup in/)).toHaveTextContent(
+      "If this phone is lost, what you kept goes with it. Turn on backup in This phone.",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
@@ -390,6 +396,8 @@ describe("a memory that can't be opened, and bringing back a backup", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Get help" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "I have a backup" }));
+    expect(await screen.findByRole("heading", { name: "Where is your backup?" })).toBeVisible();
+    await toFile();
     expect(await screen.findByRole("heading", { name: "Bring back your memory" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Choose the file" }));
     expect(await screen.findByText("nocturne-backup-2026-11-21.nocturne")).toBeInTheDocument();
@@ -419,6 +427,7 @@ describe("a backup over a memory that is already here", () => {
   it("never replaces what is here without asking", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     fireEvent.change(await screen.findByLabelText("Passphrase for this backup"), {
       target: { value: "already here" },
@@ -452,9 +461,12 @@ describe("a backup over a memory that is already here", () => {
     await app("m=kept");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     expect(
-      await screen.findByText("What’s on this phone now is put aside first, never deleted."),
+      await screen.findByText(
+        "A backup’s things join what’s on this phone. Nothing here is deleted.",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Restore a backup/ }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     fireEvent.change(await screen.findByLabelText("Passphrase for this backup"), {
       target: { value: "correct horse battery" },
@@ -468,6 +480,7 @@ describe("a backup over a memory that is already here", () => {
   it("keeps what is here when the person says so", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     expect(await screen.findByText("412 MB")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Passphrase for this backup"), {
@@ -483,6 +496,7 @@ describe("a backup over a memory that is already here", () => {
   it("says a backup is from a newer Nocturne, or damaged, in 0013's words", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     const field = await screen.findByLabelText("Passphrase for this backup");
     fireEvent.change(field, { target: { value: "from the future" } });

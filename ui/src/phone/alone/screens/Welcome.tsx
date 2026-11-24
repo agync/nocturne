@@ -23,6 +23,7 @@ function whatKey({ calendar, health, microphone }: StillGranted): CopyId | null 
 
 export function AloneWelcome({
   deleted = false,
+  deletedLine,
   granted = null,
   onPermissions,
   onStart,
@@ -31,6 +32,8 @@ export function AloneWelcome({
 }: {
   /** Just after Delete everything: one line above the buttons says so. */
   deleted?: boolean;
+  /** That line, when a backup in the account went too or waits to go. */
+  deletedLine?: string;
   /** What the phone still lets Nocturne use; the line and its link show only for what is left. */
   granted?: StillGranted | null;
   /** "How to take that back": the phone's permissions. */
@@ -56,7 +59,7 @@ export function AloneWelcome({
           {deleted ? (
             <div className="ph-stack ph-center" style={{ gap: 6 }}>
               <p className="ph-body" role="status">
-                {t("phone.alone.welcome.deleted")}
+                {deletedLine ?? t("phone.alone.welcome.deleted")}
               </p>
               {what ? (
                 <p className="ph-small">

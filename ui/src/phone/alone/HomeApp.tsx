@@ -44,6 +44,7 @@ import {
   type MindStatus,
   type MindTrouble,
 } from "./mind";
+import { CARD_SHOWN, createBackupApi, KEY_MADE, onPhone } from "./nightly";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { Restore, SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
@@ -61,10 +62,21 @@ import {
   NEW_DRAFT,
 } from "./screens/Mind";
 import { MindSentList } from "./screens/MindSent";
+import { NightlyBackup, todayCard } from "./screens/Nightly";
+import {
+  AfterTurnOn,
+  BackupWhy,
+  CheckStep,
+  NEW_PHRASE,
+  type PhraseDraft,
+  PhraseStep,
+  phraseOf,
+} from "./screens/NightlyOn";
+import { NightlyRestore } from "./screens/NightlyRestore";
 import { Permissions } from "./screens/Permissions";
 import { PutAside } from "./screens/PutAside";
 import { HomeThisPhone } from "./screens/ThisPhone";
-import { HomeToday } from "./screens/Today";
+import { type BackupCard, HomeToday } from "./screens/Today";
 import { VoiceAsk } from "./screens/VoiceAsk";
 import { GiveMind } from "./screens/Welcome";
 
@@ -82,6 +94,11 @@ type View =
   | { name: "mindSent" }
   | { name: "backup" }
   | { name: "restore" }
+  | { name: "nightly" }
+  /** `change`: steps 2 and 3 with "Save", for "Change the phrase…". */
+  | { name: "nightlyOn"; step: 1 | 2 | 3; depth: number; change?: boolean }
+  | { name: "nightlyAfter"; depth: number }
+  | { name: "nightlyRestore" }
   | { name: "delete" }
   | { name: "putAside"; memory: PutAsideMemory; withTime: boolean }
   | { name: "deleteKept"; source: PhoneSource; choose: boolean }
@@ -108,6 +125,10 @@ const OWN: ReadonlySet<string> = new Set([
   "mindSent",
   "backup",
   "restore",
+  "nightly",
+  "nightlyOn",
+  "nightlyAfter",
+  "nightlyRestore",
   "delete",
   "putAside",
   "deleteKept",
@@ -200,8 +221,8 @@ export function HomeApp({
   name: string;
   /** The memory could not be opened: where it stands is asked again. */
   onLost(): void;
-  /** Everything was deleted: Welcome comes next, saying so. */
-  onDeleted(): void;
+  /** Everything was deleted: Welcome comes next, saying so, and what became of the backup. */
+  onDeleted(line?: string): void;
   /** "Scan the code" in Give Nocturne a mind: pairing a computer starts the move. */
   onScan(): void;
 }) {
@@ -211,6 +232,12 @@ export function HomeApp({
   const conn = engine.connection();
   const { view, go, back, replace, unwind, leave } = useView(offer ? { name: "offer" } : TODAY);
   const mind = useMemo(() => services.mind ?? createMindApi(), [services]);
+  const nightly = useMemo(() => services.backup ?? createBackupApi(), [services]);
+  // The phrase being made lives here and never in the history entries.
+  const phrase = useRef<PhraseDraft>(NEW_PHRASE);
+  const [card, setCard] = useState<(BackupCard & { cause: string }) | null>(null);
+  // A backup is on or kept, so Delete everything reaches it too.
+  const [withBackup, setWithBackup] = useState(false);
   const [mindChosen, setMindChosen] = useState<MindChosen | null>(null);
   const [mindStatus, setMindStatus] = useState<MindStatus | null>(null);
   // Changes whenever the mind has read or written, for what looks at its counts again.
@@ -256,6 +283,20 @@ export function HomeApp({
   }, [lookMind]);
   // Today and Ask say how the service is doing as they open.
   const onTab = view.name === "tab" ? view.tab : null;
+  // Today's backup card: once for each cause, never as a notification.
+  useEffect(() => {
+    if (onTab !== "today") return;
+    let gone = false;
+    void (async () => {
+      const s = await nightly.status().catch(() => null);
+      const next = s ? todayCard(s, services.platform.ios, new Date(services.now())) : null;
+      const shown = next ? await home.notes.get(CARD_SHOWN).catch(() => null) : null;
+      if (!gone) setCard(next && shown !== next.cause ? next : null);
+    })();
+    return () => {
+      gone = true;
+    };
+  }, [onTab, nightly, home, services]);
   useEffect(() => {
     if (onTab === "today" || onTab === "ask") void lookMind();
   }, [onTab, lookMind]);
@@ -271,11 +312,13 @@ export function HomeApp({
   // Shown once: once it is due and on screen, it does not come back.
   const due = useCallback(
     async (s: HomeStats) => {
+      const b = await nightly.status().catch(() => null);
+      if (b && (b.on || b.last)) return false;
       const show = await reminderDue(s, services.now(), home.notes);
       if (show) await reminderDone(home.notes);
       return show;
     },
-    [services, home],
+    [services, home, nightly],
   );
   const calendarOn = useCallback(
     async () => (await channel.sources()).calendar === "on",
@@ -475,6 +518,33 @@ export function HomeApp({
     <TabBar tab={forTab} action={action} onThisPhone={thisPhone} />
   );
   const toKeep = () => go({ name: "keep" });
+  const thisPhoneBackup = useMemo(
+    () => ({
+      status: nightly.status,
+      ios: services.platform.ios,
+      now: services.now,
+      onOpen: () => go({ name: "nightly" }),
+    }),
+    [nightly, services, go],
+  );
+  // The memory's size today, for "room for about…" and the first backup's mobile data.
+  const [memorySize, setMemorySize] = useState<number | null>(null);
+  const deleting = view.name === "delete";
+  useEffect(() => {
+    if (!deleting) return;
+    void nightly.status().then(
+      (s) => setWithBackup(s.on || s.last !== null),
+      () => setWithBackup(false),
+    );
+  }, [deleting, nightly]);
+  const turningOn = view.name === "nightlyOn";
+  useEffect(() => {
+    if (!turningOn) return;
+    void home.stats().then(
+      (s) => setMemorySize(s.bytes),
+      () => undefined,
+    );
+  }, [turningOn, home]);
   const toMind = () => go({ name: "mind" });
   // The details are asked again: a key refused, credit added or a new limit all start there.
   const fixMind = () => {
@@ -511,6 +581,11 @@ export function HomeApp({
     if (shown.current.name !== "mindOnline") return;
     if (first && first.count > 0) replace({ name: "mindReading", depth, first });
     else leave(depth);
+  };
+
+  const leavePhrase = (depth: number) => {
+    phrase.current = NEW_PHRASE;
+    leave(depth);
   };
 
   let screen: ReactNode = null;
@@ -617,7 +692,8 @@ export function HomeApp({
           onCalendar={() => go({ name: "calendar" })}
           onHealth={() => go({ name: "health" })}
           onBackup={() => go({ name: "backup" })}
-          onRestore={() => go({ name: "restore" })}
+          onRestore={() => go({ name: "nightlyRestore" })}
+          backup={thisPhoneBackup}
           onDelete={() => go({ name: "delete" })}
           putAside={home.putAside}
           onPutAside={(memory, withTime) => go({ name: "putAside", memory, withTime })}
@@ -718,6 +794,102 @@ export function HomeApp({
         />
       );
       break;
+    case "nightly":
+      screen = (
+        <NightlyBackup
+          api={nightly}
+          ios={ios}
+          notes={home.notes}
+          now={services.now}
+          onBack={back}
+          onTurnOn={() => go({ name: "nightlyOn", step: 1, depth: 1 })}
+          onChangePhrase={() => go({ name: "nightlyOn", step: 2, depth: 1, change: true })}
+        />
+      );
+      break;
+    case "nightlyOn": {
+      const { depth, change } = view;
+      // Opened again with the phrase gone (the app was closed): it is made again.
+      const step = view.step === 3 && phraseOf(phrase.current) === "" ? 2 : view.step;
+      const setDraft = (d: PhraseDraft) => {
+        phrase.current = d;
+      };
+      if (step === 1)
+        screen = (
+          <BackupWhy
+            ios={ios}
+            size={memorySize}
+            connect={() => nightly.connect(false)}
+            onBack={back}
+            onNext={() => go({ name: "nightlyOn", step: 2, depth: depth + 1 })}
+            onNotNow={() => leavePhrase(depth)}
+          />
+        );
+      else if (step === 2)
+        screen = (
+          <PhraseStep
+            key={`phrase-${depth}`}
+            draft={phrase.current}
+            onDraft={setDraft}
+            newPhrase={nightly.newPhrase}
+            onBack={back}
+            onNext={() => go({ name: "nightlyOn", step: 3, depth: depth + 1, change })}
+          />
+        );
+      else
+        screen = (
+          <CheckStep
+            draft={phrase.current}
+            onDraft={setDraft}
+            size={memorySize}
+            save={change}
+            onBack={back}
+            onDone={async (text, wifiOnly) => {
+              if (change) {
+                await nightly.changePhrase(text);
+                return leavePhrase(depth);
+              }
+              await nightly.setWifiOnly(wifiOnly);
+              await nightly.turnOn(text);
+              phrase.current = NEW_PHRASE;
+              replace({ name: "nightlyAfter", depth });
+            }}
+          />
+        );
+      break;
+    }
+    case "nightlyAfter":
+      screen = (
+        <AfterTurnOn
+          api={nightly}
+          ios={ios}
+          onKeyMade={() =>
+            void home.notes
+              .set(KEY_MADE, new Date(services.now()).toISOString())
+              .catch(() => undefined)
+          }
+          onDone={() => leave(view.depth)}
+        />
+      );
+      break;
+    case "nightlyRestore":
+      screen = (
+        <NightlyRestore
+          api={nightly}
+          ios={ios}
+          holds
+          things={async () => (await home.stats()).counts.items}
+          freeSpace={home.freeSpace}
+          onFile={() => replace({ name: "restore" })}
+          now={services.now}
+          onBack={back}
+          onDone={() => {
+            refresh();
+            unwind();
+          }}
+        />
+      );
+      break;
     case "restore":
       screen = (
         <Restore
@@ -739,6 +911,7 @@ export function HomeApp({
       screen = (
         <DeleteEverything
           onKeep={back}
+          backup={withBackup ? { ios } : null}
           onDelete={async (phrase) => {
             await home.deleteEverything(phrase);
             await services.queue.clear().catch(() => undefined);
@@ -747,7 +920,17 @@ export function HomeApp({
             setMindStatus({ state: "off" });
             // Welcome is a new start: the back gesture does not walk into the screens before.
             unwind();
-            onDeleted();
+            if (!withBackup) return onDeleted();
+            // The phone cannot say yet whether the account answered; offline, it goes later.
+            onDeleted(
+              navigator.onLine
+                ? onPhone(ios, "phone.backup.delete.after.ios", "phone.backup.delete.after.android")
+                : onPhone(
+                    ios,
+                    "phone.backup.delete.offline.ios",
+                    "phone.backup.delete.offline.android",
+                  ),
+            );
           }}
         />
       );
@@ -845,8 +1028,13 @@ export function HomeApp({
             calendarOn={calendarOn}
             stats={stats}
             reminderDue={due}
-            onReminder={(save) => {
-              if (save) go({ name: "backup" });
+            onReminder={(turnOn) => {
+              if (turnOn) go({ name: "nightlyOn", step: 1, depth: 1 });
+            }}
+            backupCard={card}
+            onBackupCard={(open) => {
+              if (card) void home.notes.set(CARD_SHOWN, card.cause).catch(() => undefined);
+              if (open) go({ name: "nightly" });
             }}
             onMind={toMind}
             onCheckIn={() => go({ name: "checkin" })}

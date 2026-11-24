@@ -5,6 +5,12 @@ import { NativeRoot } from "../native/NativeRoot";
 import { nativeMockServices } from "../testing/nativeMock";
 import { scriptedNoteRows } from "./testing/homeMock";
 
+/** "Where is your backup?": a backup file. */
+async function toFile() {
+  fireEvent.click(await screen.findByRole("radio", { name: /A backup file/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+
 afterEach(async () => {
   await new Promise((settle) => setTimeout(settle, 50));
   cleanup();
@@ -57,6 +63,7 @@ describe("bringing back a backup file", () => {
       .spyOn(services.home, "chooseBackupFile")
       .mockResolvedValueOnce({ path: "/cache/a", name: "a.nocturne", bytes: 2_000_000 });
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     expect(await screen.findByText("a.nocturne")).toBeInTheDocument();
     expect(screen.getByText("2 MB")).toBeInTheDocument();
@@ -80,6 +87,7 @@ describe("bringing back a backup file", () => {
       new HomeRequestError("notABackup"),
     );
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
+    await toFile();
     fireEvent.click(await screen.findByRole("button", { name: "Choose the file" }));
     expect(await screen.findByText("This file can’t be restored")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Choose the file" })).toBeVisible();

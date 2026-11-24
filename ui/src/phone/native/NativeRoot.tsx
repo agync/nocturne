@@ -2,8 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
+import { createBackupApi } from "../alone/nightly";
 import { Restore } from "../alone/screens/Backup";
 import { MoveFlow, nativeMoveApi } from "../alone/screens/MoveFlow";
+import { NightlyRestore } from "../alone/screens/NightlyRestore";
 import { Permissions } from "../alone/screens/Permissions";
 import { AloneWelcome, Damaged, Start } from "../alone/screens/Welcome";
 import { cleanDeviceName } from "../crypto";
@@ -31,6 +33,7 @@ type Screen =
   | { name: "permissions" }
   | { name: "start"; busy: boolean; failed: boolean }
   | { name: "restore" }
+  | { name: "restoreFile" }
   | { name: "damaged" }
   | { name: "alone"; offer: boolean }
   | { name: "welcome"; unreached: boolean; wrongCode?: boolean }
@@ -71,6 +74,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
   // Just after Delete everything, Welcome says so until the person goes on.
   const [deleted, setDeleted] = useState(false);
+  const [deletedLine, setDeletedLine] = useState<string | undefined>(undefined);
   // And what the phone still lets Nocturne use, which is all that line may name.
   const [granted, setGranted] = useState<StillGranted | null>(null);
   // A restore says where the memory lives before its own "back on this phone" is read.
@@ -120,7 +124,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
     void home();
     const stopStore = services.store.subscribe(() => void home());
     const stopMode = services.home.onMode(() => {
-      if (shown.current !== "restore") void home();
+      if (shown.current !== "restore" && shown.current !== "restoreFile") void home();
     });
     return () => {
       stopStore();
@@ -198,6 +202,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       return (
         <AloneWelcome
           deleted={deleted}
+          deletedLine={deletedLine}
           granted={granted}
           onPermissions={() => setScreen({ name: "permissions" })}
           onStart={() => {
@@ -241,6 +246,19 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       );
     case "restore":
       return (
+        <NightlyRestore
+          api={services.backup ?? createBackupApi()}
+          ios={services.platform.ios}
+          holds={false}
+          freeSpace={services.home.freeSpace}
+          onFile={() => setScreen({ name: "restoreFile" })}
+          now={services.now}
+          onBack={() => void home()}
+          onDone={() => void home()}
+        />
+      );
+    case "restoreFile":
+      return (
         <Restore
           pickFile={services.home.chooseBackupFile}
           check={services.home.checkBackup}
@@ -262,9 +280,10 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           offer={screen.offer}
           name={name}
           onLost={() => void home()}
-          onDeleted={() => {
+          onDeleted={(line) => {
             void services.granted().then((now) => {
               setGranted(now);
+              setDeletedLine(line);
               setDeleted(true);
               void home();
             });

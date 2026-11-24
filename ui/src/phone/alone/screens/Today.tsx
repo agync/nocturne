@@ -42,6 +42,10 @@ export interface HomeTodayProps {
   /** Whether the lost-phone reminder is due, from the memory's numbers. */
   reminderDue(stats: HomeStats): Promise<boolean>;
   onReminder(save: boolean): void;
+  /** The backup's own card: stopped, or no backup for seven nights. Shown once for each cause. */
+  backupCard?: BackupCard | null;
+  /** "Open backup" (true) or "Not now". */
+  onBackupCard?(open: boolean): void;
   onMind(): void;
   onCheckIn(): void;
   onItem(id: string): void;
@@ -68,6 +72,12 @@ export interface HomeTodayProps {
   onJournalDay(day: string | null): void;
 }
 
+export interface BackupCard {
+  /** "Your backup has stopped.", for a stop only the person can fix. */
+  stopped: boolean;
+  line: string;
+}
+
 /** A page the mind wrote: one with a title. A phone with no mind has none. */
 export function written(page: PageView | null): page is PageView {
   return page !== null && page.headline.trim() !== "";
@@ -77,6 +87,7 @@ export function written(page: PageView | null): page is PageView {
 export function HomeToday(p: HomeTodayProps) {
   const [load, setLoad] = useState<Load>({ name: "loading" });
   const [reminder, setReminder] = useState(false);
+  const [cardGone, setCardGone] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const { engine, calendarOn, stats, reminderDue } = p;
   const heading = useRef<HTMLHeadingElement>(null);
@@ -137,12 +148,45 @@ export function HomeToday(p: HomeTodayProps) {
               : formatLongDay(day.day)}
           </p>
         )}
+        {p.backupCard && !cardGone ? (
+          <section className="ph-reminder" aria-label={t("phone.backup.row")}>
+            {p.backupCard.stopped ? (
+              <>
+                <strong className="ph-nb-cardtitle">{t("phone.backup.card.stopped")}</strong>
+                <p>{p.backupCard.line}</p>
+              </>
+            ) : (
+              <p>{p.backupCard.line}</p>
+            )}
+            <div className="ph-reminder-actions">
+              <Button
+                kind="primary"
+                onClick={() => {
+                  setCardGone(true);
+                  p.onBackupCard?.(true);
+                }}
+              >
+                {t("phone.backup.card.open")}
+              </Button>
+              <button
+                type="button"
+                className="ph-textbtn"
+                onClick={() => {
+                  setCardGone(true);
+                  p.onBackupCard?.(false);
+                }}
+              >
+                {t("phone.backup.notNow")}
+              </button>
+            </div>
+          </section>
+        ) : null}
         {reminder ? (
           <div className="ph-reminder">
-            <p>{t("phone.alone.reminder.body")}</p>
+            <p>{t("phone.backup.card.none")}</p>
             <div className="ph-reminder-actions">
               <Button kind="primary" onClick={() => answer(true)}>
-                {t("phone.alone.reminder.save")}
+                {t("phone.backup.card.turnOn")}
               </Button>
               <button type="button" className="ph-textbtn" onClick={() => answer(false)}>
                 {t("phone.alone.reminder.notNow")}
