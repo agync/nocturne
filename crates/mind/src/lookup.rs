@@ -74,6 +74,8 @@ pub const NO_MORE: &str = "No more lines for this question. Answer from what you
 pub const COULD_NOT: &str = "That couldn't be looked up just now.";
 pub const NOTHING_DAYS: &str = "Nothing kept for these days.";
 pub const NOTHING_WORDS: &str = "Nothing kept with these words.";
+/// What a look-up says when every line it found was handed before in this question.
+pub const ALREADY: &str = "Those lines are already above.";
 pub const NO_SUCH: &str = "There is no such look-up. Use calendar, journal, search or health.";
 const CALENDAR_WRONG: &str = "Give days as YYYY-MM-DD, at most 62 days apart.";
 const JOURNAL_WRONG: &str = "Give days as YYYY-MM-DD, at most 14 days apart, none after today.";
@@ -192,7 +194,7 @@ pub fn parse(name: &str, arguments: &str, today: Date) -> Result<LookUp, Wrong> 
             .until(to)
             .map(|s| i64::from(s.get_days()))
             .unwrap_or(-1);
-        if apart < 0 || apart >= limit || (no_future && to > today) {
+        if apart < 0 || apart > limit || (no_future && to > today) {
             return Err(wrong(line));
         }
         Ok((from, to))
@@ -241,7 +243,10 @@ pub fn lines(
     empty: &str,
 ) -> String {
     if facts.is_empty() {
-        return empty.to_string();
+        return match more_of {
+            0 => empty.to_string(),
+            n => format!("{empty}\n{}", more(n)),
+        };
     }
     let body: Vec<String> = facts
         .iter()
@@ -363,6 +368,24 @@ mod tests {
             CALENDAR_WRONG,
             "Give days as YYYY-MM-DD, at most 62 days apart."
         );
+    }
+
+    /// "At most N days apart" takes N apart, both ends included, and not one more.
+    #[test]
+    fn each_limit_takes_its_own_number_of_days_apart() {
+        let today = d(TUE);
+        let ok = |name: &str, args: &str| parse(name, args, today).is_ok();
+        assert!(ok("calendar", r#"{"from":"2026-11-01","to":"2027-01-02"}"#));
+        assert!(!ok(
+            "calendar",
+            r#"{"from":"2026-11-01","to":"2027-01-03"}"#
+        ));
+        assert!(ok("journal", r#"{"from":"2026-11-10","to":"2026-11-24"}"#));
+        assert!(!ok("journal", r#"{"from":"2026-11-09","to":"2026-11-24"}"#));
+        let health =
+            |from: &str| format!(r#"{{"kind":"sleep","from":"{from}","to":"2026-11-24"}}"#);
+        assert!(ok("health", &health("2026-10-24")));
+        assert!(!ok("health", &health("2026-10-23")));
     }
 
     #[test]

@@ -607,3 +607,238 @@ fn finding_with_no_mind_lists_the_days_a_question_names() {
     );
     assert!(f.engine.find_with_days("xylophone", 30).unwrap().is_empty());
 }
+
+/// A check-in that changed an earlier one is not given while that earlier one is being
+/// forgotten: the chain rule holds for every line a look-up gives, not only what goes online.
+#[test]
+fn a_look_up_never_gives_a_line_whose_earlier_version_is_being_forgotten() {
+    let f = fx();
+    checkin(
+        &f,
+        "2026-11-23T21:10:00Z",
+        &["drained"],
+        FeelingPart::Low,
+        None,
+    );
+    f.clock.set_str("2026-11-24T21:40:00Z");
+    let first = f
+        .engine
+        .look_up_journal(d("2026-11-23"), d("2026-11-23"), LookScope::ALL, 20)
+        .unwrap()
+        .hits[0]
+        .memory
+        .receipts[0]
+        .item_id
+        .clone();
+    f.engine
+        .keep_checkin(
+            CheckInInput {
+                feeling: Feeling {
+                    part: FeelingPart::Low,
+                    point: FeelingPoint {
+                        pleasant: -0.5,
+                        energy: -0.5,
+                    },
+                    words: vec!["tired".into()],
+                },
+                line: None,
+                urge: None,
+                replaces: Some(first.clone()),
+            },
+            Source::QuickCapture,
+        )
+        .unwrap();
+    let said = |f: &Fx| {
+        sentences(
+            &f.engine
+                .look_up_journal(d("2026-11-23"), d("2026-11-23"), LookScope::ALL, 20)
+                .unwrap()
+                .hits,
+        )
+    };
+    assert_eq!(
+        said(&f),
+        vec!["Check-in, Monday 23 November at 21:40: tired (Low)."]
+    );
+    let old = first.clone();
+    f.engine
+        .write(move |tx| {
+            tx.execute("UPDATE items SET forget_epoch = 1 WHERE id = ?1", [&old])?;
+            Ok(())
+        })
+        .unwrap();
+    assert!(said(&f).is_empty(), "{:?}", said(&f));
+}
+
+/// A memory let go or being forgotten is never among what the journal gives for its day.
+#[test]
+fn the_journal_never_gives_a_memory_let_go_or_being_forgotten() {
+    let f = fx();
+    let item = match f
+        .engine
+        .keep_text("Lunch with Priya at the Swan.", Source::QuickCapture)
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let lease = f
+        .engine
+        .lease_item(&item, std::time::Duration::from_secs(60))
+        .unwrap();
+    let report = f
+        .engine
+        .apply_candidates(
+            &item,
+            &lease.lease,
+            vec![crate::Candidate::new(
+                "Priya",
+                crate::Predicate::Prefers,
+                "the Swan",
+                "Lunch with Priya was at the Swan.",
+                0.9,
+            )],
+        )
+        .unwrap();
+    let memory = report.created[0].clone();
+    let day = d("2026-11-24");
+    let given = |f: &Fx| {
+        f.engine
+            .look_up_journal(day, day, LookScope::ALL, 20)
+            .unwrap()
+            .hits
+            .iter()
+            .any(|h| h.memory.id == memory)
+    };
+    assert!(given(&f));
+    for (gone, back) in [
+        (
+            "UPDATE memories SET status = 'letGo', let_go_at = '2026-11-24T08:00:00Z' WHERE id = ?1",
+            "UPDATE memories SET status = 'active', let_go_at = NULL WHERE id = ?1",
+        ),
+        (
+            "UPDATE memories SET forgetting = 1 WHERE id = ?1",
+            "UPDATE memories SET forgetting = 0 WHERE id = ?1",
+        ),
+    ] {
+        let (m, sql) = (memory.clone(), gone.to_string());
+        f.engine
+            .write(move |tx| {
+                tx.execute(&sql, [&m])?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(!given(&f), "{gone}");
+        let (m, sql) = (memory.clone(), back.to_string());
+        f.engine
+            .write(move |tx| {
+                tx.execute(&sql, [&m])?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(given(&f), "{back}");
+    }
+}
+
+/// A companion phone's question gets no reading marked private; the phone alone gets it.
+#[test]
+fn a_companion_phone_gets_no_private_reading() {
+    let f = fx();
+    health(
+        &f,
+        "h1",
+        vec![night(
+            "n1",
+            "2026-11-23",
+            "2026-11-22T23:50:00Z",
+            "2026-11-23T06:30:00Z",
+        )],
+    );
+    let (a, b) = (d("2026-11-23"), d("2026-11-23"));
+    let look = |f: &Fx, scope| {
+        f.engine
+            .look_up_health(ReadingKind::Sleep, a, b, scope, 31)
+            .unwrap()
+            .hits
+            .len()
+    };
+    assert_eq!(look(&f, LookScope::COMPANION), 1);
+    f.engine
+        .write(|tx| {
+            tx.execute("UPDATE items SET private = 1 WHERE kind = 'reading'", [])?;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(look(&f, LookScope::COMPANION), 0);
+    assert_eq!(look(&f, LookScope::ALL), 1);
+}
+
+/// Forgetting a check-in that went online as it is leaves none of its words, id or hash in the
+/// sent log.
+#[test]
+fn forgetting_a_kept_line_scrubs_it_from_what_was_sent() {
+    use nocturne_contract::{SendKind, SendResult, SentLine, SentMemory};
+    let f = fx();
+    checkin(
+        &f,
+        "2026-11-23T21:10:00Z",
+        &["drained"],
+        FeelingPart::Low,
+        Some("Leo up twice again."),
+    );
+    let hit = f
+        .engine
+        .look_up_journal(d("2026-11-23"), d("2026-11-23"), LookScope::ALL, 20)
+        .unwrap()
+        .hits
+        .remove(0);
+    let line = format!("[m1] {} (learned Monday 23 November)", hit.memory.sentence);
+    f.engine
+        .log_online_send(crate::NewSend {
+            at: f.engine.clock_now(),
+            kind: SendKind::Question,
+            host: "api.example.com".into(),
+            model: "m".into(),
+            question: "How was I?".into(),
+            instructions: "i".into(),
+            template: vec![SentLine::Memory {
+                n: 1,
+                text: Some(format!(
+                    "[m1] {} (learned Monday 23 November)",
+                    crate::NewSend::SLOT
+                )),
+                state: SentMemory::Same,
+            }],
+            memory_lines: vec![(hit.memory.id.clone(), crate::NewSend::hash_line(&line))],
+            bytes_up: 1,
+            bytes_down: 1,
+            cost_usd: None,
+            status: Some(200),
+            seconds: Some(1.0),
+            result: SendResult::Answered { receipts: 1 },
+            counted: true,
+            reached: true,
+        })
+        .unwrap();
+    let sent = &f.engine.online_sends(10, None).unwrap()[0];
+    assert!(matches!(
+        &sent.lines[0],
+        SentLine::Memory { state: SentMemory::Same, text: Some(t), .. } if t.contains("drained")
+    ));
+    let item = hit.memory.receipts[0].item_id.clone();
+    f.engine.unkeep(&item).unwrap();
+    let stored: String = rusqlite::Connection::open(f.dir.path().join("nocturne.db"))
+        .unwrap()
+        .query_row(
+            "SELECT template || memory_lines FROM online_sends",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!stored.contains(&item), "{stored}");
+    assert!(
+        !stored.contains("drained") && !stored.contains("learned"),
+        "{stored}"
+    );
+}

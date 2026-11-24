@@ -282,6 +282,10 @@ pub(crate) fn scrub_items(tx: &Transaction<'_>, items: &[String]) -> Result<u32>
         return Ok(0);
     }
     crate::nightly::note_forgot(tx)?;
+    // A check-in, an entry or a reading that went online as it is leaves no words behind.
+    for item in items {
+        crate::online::scrub_memory(tx, &format!("{}{item}", crate::lookup::KEPT_LINE))?;
+    }
     scrub_cites(tx, items)
 }
 
