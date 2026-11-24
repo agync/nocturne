@@ -92,6 +92,9 @@ pub struct Home {
     generation: AtomicU64,
     /// Run each time the open store is let go.
     on_close: Mutex<Vec<OnClose>>,
+    /// The first day of the health readings a backup file just restored left out, until the
+    /// caller has Health read again back to it.
+    health_since: Mutex<Option<String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -159,8 +162,14 @@ impl Home {
             fading: Mutex::new(()),
             work_factor: None,
             generation: AtomicU64::new(0),
+            health_since: Mutex::new(None),
             on_close: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The first day of the health readings the backup file restored last left out, once.
+    pub(crate) fn take_health_since(&self) -> Option<String> {
+        lock(&self.health_since).take()
     }
 
     /// The clock the store keeps its time by.

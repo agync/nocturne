@@ -1479,3 +1479,72 @@ fn a_phones_own_row_travels_and_is_no_one_elses_data() {
         .unwrap();
     assert_eq!(kept, 1);
 }
+
+#[test]
+fn a_phones_own_backup_file_leaves_its_health_readings_out() {
+    use nocturne_contract::{Reading, ReadingBatch, ReadingChange, ReadingValue};
+    let f = fixture();
+    keep(&f.engine, "Something to keep.");
+    let me = f.engine.ensure_local_device("Pixel").unwrap();
+    let reading = Reading {
+        phone_id: "w1".into(),
+        day: "2026-10-02".into(),
+        start: "2026-10-02T08:00:00Z".into(),
+        end: None,
+        source_device: None,
+        value: ReadingValue::Weight {
+            value: 70.5,
+            unit: "kg".into(),
+        },
+    };
+    f.engine
+        .take_readings(
+            &me,
+            ReadingBatch {
+                sync_id: "s1".into(),
+                seq: 0,
+                last: true,
+                changes: vec![ReadingChange::Upsert { reading }],
+            },
+        )
+        .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let dest = out.path().join(format!("Nocturne backup.{BACKUP_EXT}"));
+    let cancel = no_cancel();
+    let run = BackupRun {
+        extras: &[],
+        progress: &noop,
+        cancel: &cancel,
+        started: &|_| {},
+        work_factor: Some(TEST_WORK),
+    };
+    f.engine
+        .backup_to_leaving_out_health(&dest, PASS, &run)
+        .unwrap();
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE kind = 'reading'"
+        ),
+        1,
+        "the phone keeps its reading"
+    );
+
+    let stage = out.path().join("stage");
+    let summary = unpack_backup(&dest, PASS, &stage, &noop, &no_cancel()).unwrap();
+    assert_eq!(summary.items, 1, "the kept thing only");
+    let store = stage.join("store");
+    assert_eq!(
+        sql_count(&store, "SELECT COUNT(*) FROM items WHERE kind = 'reading'"),
+        0
+    );
+    let since: String = rusqlite::Connection::open(store.join("nocturne.db"))
+        .unwrap()
+        .query_row(
+            "SELECT value FROM settings WHERE key = '_healthSince'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(since, "2026-10-02");
+}

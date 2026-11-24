@@ -923,11 +923,11 @@ pub struct Unpacked {
 }
 
 /// Leave the raw health readings out of the store file `db`, noting the first day they began on
-/// ([`HEALTH_SINCE`]). A backup in the person's iCloud or Google Drive holds none (App Store
-/// guideline 5.1.3, and Android alike); pages, reflections and day lines that speak of them
+/// ([`HEALTH_SINCE`]). A phone's backup, in the person's iCloud or Google Drive or in a file,
+/// holds none (App Store guideline 5.1.3, and Android alike); pages, reflections and day lines that speak of them
 /// stay. Taking them out notes nothing as forgotten, since they come back from the phone's
 /// health app. Returns the day noted.
-fn leave_out_health(db: &Path) -> NightResult<Option<String>> {
+pub fn leave_out_health(db: &Path) -> NightResult<Option<String>> {
     const NOTE: &str = "items_forgotten_for_good";
     let conn = Connection::open(db).map_err(Error::from)?;
     let since = (|| -> rusqlite::Result<Option<String>> {
@@ -1265,6 +1265,11 @@ fn keep_only_base(
 /// The counts and originals of a night's store once rows went out of it; with `base`
 /// ([`keep_only_base`]), only the originals it lists that the phone still keeps, which the
 /// account holds already.
+/// [`recount`] for a backup file's store, which no night stands behind.
+pub(crate) fn recount_file(snapshot: &Path, snap: &mut crate::backup::Snapshot) -> NightResult<()> {
+    recount(snapshot, snap, None)
+}
+
 fn recount(
     snapshot: &Path,
     snap: &mut crate::backup::Snapshot,

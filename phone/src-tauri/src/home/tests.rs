@@ -1757,3 +1757,76 @@ fn a_move_or_a_restore_never_waits_behind_a_voice_note_being_read() {
     });
     assert_eq!(reader.reads.load(Ordering::SeqCst), 2);
 }
+
+#[test]
+fn a_backup_file_leaves_health_out_and_its_restore_names_the_day_to_read_back_to() {
+    use nocturne_contract::{Reading, ReadingBatch, ReadingChange, ReadingValue};
+    let one = tempfile::tempdir().unwrap();
+    let (home, _) = alone(one.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    {
+        let open = home.open_store().unwrap();
+        let me = open.engine.ensure_local_device("Pixel").unwrap();
+        let reading = Reading {
+            phone_id: "w1".into(),
+            day: "2026-10-02".into(),
+            start: "2026-10-02T08:00:00Z".into(),
+            end: None,
+            source_device: None,
+            value: ReadingValue::Weight {
+                value: 70.5,
+                unit: "kg".into(),
+            },
+        };
+        open.engine
+            .take_readings(
+                &me,
+                ReadingBatch {
+                    sync_id: "s1".into(),
+                    seq: 0,
+                    last: true,
+                    changes: vec![ReadingChange::Upsert { reading }],
+                },
+            )
+            .unwrap();
+    }
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("Nocturne backup.nocturne");
+    assert!(matches!(
+        local(
+            &home,
+            HomeCall::SaveBackup {
+                dest: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+            },
+        ),
+        HomeAnswer::BackupSaved { .. }
+    ));
+
+    let two = tempfile::tempdir().unwrap();
+    let other = home_at(two.path(), clock());
+    assert_eq!(
+        local(
+            &other,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                bring_in: false,
+            }
+        ),
+        HomeAnswer::Restored
+    );
+    assert_eq!(other.take_health_since().as_deref(), Some("2026-10-02"));
+    assert_eq!(other.take_health_since(), None, "once");
+    let open = other.open_store().unwrap();
+    assert!(
+        open.engine
+            .readings(
+                nocturne_contract::ReadingKind::Weight,
+                "2026-10-01".parse().unwrap(),
+                "2026-10-03".parse().unwrap()
+            )
+            .unwrap()
+            .is_empty()
+    );
+}

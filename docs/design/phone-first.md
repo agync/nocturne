@@ -145,6 +145,13 @@ should Nocturne's mind be?](#where-should-nocturnes-mind-be) with this as its la
 | Checking and restoring | The same bar: "Checking the backup", then "Restoring", each "{done} of {total} · about {eta} left"; body "Keep Nocturne open until this finishes. If it closes, nothing on this phone changes and you can start again."; "Stop" until the last step, then "Almost done. This last step can't be stopped." (0013) |
 | Restore done | "Your memory is back on this phone." / "{count} things, every page and your journal." / "Continue" |
 
+**Health readings.** As in the nightly backup, a phone's backup file holds no raw health readings,
+only the first day it held them for; pages, reflections and day lines about them stay. Restoring a
+file, also one made before this rule or by a computer, leaves any readings in it out and reads them
+again from Health or Health Connect back to that day, as after a nightly restore ([Health readings
+after a restore](phone-backup.md#health-readings-after-a-restore)). A computer's own backup file
+keeps its readings.
+
 A restore runs 0013's checks before anything shows. On a phone that already holds a memory, 0013's
 choice, worded for the phone:
 

@@ -160,8 +160,9 @@ impl Home {
             started: &|_| {},
             work_factor: self.work_factor,
         };
+        // As from the nightly backup, the raw health readings stay out of the file.
         open.engine
-            .backup_to(dest, passphrase, &run)
+            .backup_to_leaving_out_health(dest, passphrase, &run)
             .map_err(|e| code(&e))
     }
 
@@ -268,6 +269,17 @@ impl Home {
         {
             clear(&stage);
             return Err(code(&e));
+        }
+        // A file from before readings were left out, or from a computer, still holds them: they
+        // are read again from the phone's health app instead, as after a nightly restore.
+        let db = stage.join("store").join("nocturne.db");
+        match nocturne_engine::nightly::leave_out_health(&db) {
+            Ok(since) => *self.health_since.lock().unwrap_or_else(|e| e.into_inner()) = since,
+            Err(e) => {
+                tracing::warn!("the backup's health readings could not be left out: {e}");
+                clear(&stage);
+                return Err(HomeError::Failed);
+            }
         }
         if !holds {
             return self.put_in_place(&stage);

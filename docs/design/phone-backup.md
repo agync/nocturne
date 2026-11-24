@@ -582,8 +582,9 @@ backup's settings: this phone's stay.
 
 ### Health readings after a restore
 
-Health readings never go into the backup (App Store guideline 5.1.3 bars health data in iCloud,
-and Android follows the same rule so the two behave alike). After a restore of either kind, the
+Health readings never go into the backup, nor into a phone's [backup file](phone-first.md#backups-to-a-file)
+(App Store guideline 5.1.3 bars health data in iCloud, and Android follows the same rule so the two
+behave alike). After a restore of either kind, the
 phone reads them again from its own health app, as far back as the first day the backup's phone
 held readings for, once Health is on in Nocturne.
 
@@ -602,8 +603,10 @@ that first day, written with its year ("14 March 2025"); {from} is the day 30 da
 | Android, older readings offered | "Health readings aren’t kept in your backup. With Health on in {thisPhone}, Nocturne reads them again from Health Connect, back to {day}, once you allow older readings there." |
 | Android, only the last 30 days, and {day} is older | "Health readings aren’t kept in your backup. Health Connect on this phone lets Nocturne read only the last 30 days, so readings from before {from} don’t come back. Pages and reflections that mention them stay." |
 
-A night written before this rule may still hold readings; it ages out with the seven nights, and a
-restore from it leaves them out too.
+A reading read again gets the id it had, made from the health app's own id for it and its
+contents, so the pages and reflections that cite it find it again. A night written before this
+rule may still hold readings; it ages out with the seven nights, and a restore from it leaves them
+out too.
 
 ### Make the backups from this phone?
 

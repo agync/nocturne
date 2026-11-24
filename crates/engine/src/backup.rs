@@ -89,6 +89,14 @@ pub(crate) struct Written {
     pub manifest: Vec<u8>,
 }
 
+/// A night's error as a backup file's.
+fn night_error(e: crate::nightly::NightError) -> Error {
+    match e {
+        crate::nightly::NightError::Cancelled => Error::Cancelled,
+        e => Error::invalid(e.to_string()),
+    }
+}
+
 /// One original to stream into the archive.
 pub(crate) struct Original {
     pub sha: String,
@@ -391,6 +399,28 @@ impl Engine {
         passphrase: &str,
         run: &BackupRun,
     ) -> Result<BackupReport> {
+        self.write_backup(dest, passphrase, run, false)
+    }
+
+    /// [`Engine::backup_to`] for a phone's own backup file: its raw health readings stay out, as
+    /// they do from its nightly backup, and the first day they began on is noted so a restore
+    /// reads them again from the phone's health app (`docs/design/phone-backup.md`).
+    pub fn backup_to_leaving_out_health(
+        &self,
+        dest: &Path,
+        passphrase: &str,
+        run: &BackupRun,
+    ) -> Result<BackupReport> {
+        self.write_backup(dest, passphrase, run, true)
+    }
+
+    fn write_backup(
+        &self,
+        dest: &Path,
+        passphrase: &str,
+        run: &BackupRun,
+        leave_out_health: bool,
+    ) -> Result<BackupReport> {
         if passphrase.chars().count() < MIN_PASSPHRASE_CHARS {
             return Err(Error::invalid(format!(
                 "a backup passphrase needs at least {MIN_PASSPHRASE_CHARS} characters"
@@ -421,7 +451,11 @@ impl Engine {
             committed: false,
         };
 
-        let (snapshot, snap) = self.take_snapshot(&guard.scratch)?;
+        let (snapshot, mut snap) = self.take_snapshot(&guard.scratch)?;
+        if leave_out_health {
+            crate::nightly::leave_out_health(&snapshot).map_err(night_error)?;
+            crate::nightly::recount_file(&snapshot, &mut snap).map_err(night_error)?;
+        }
 
         let mut extra_files: Vec<(&str, PathBuf, u64)> = Vec::new();
         for &(name, path) in run.extras {
