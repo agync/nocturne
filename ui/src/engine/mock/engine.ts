@@ -379,7 +379,6 @@ const kindFromName = (name: string): ItemKind => {
 const TITLES: Record<string, string> = { "conflict-dentist": "Your dentist appointment" };
 const SUBJECTS: Record<string, string> = { "conflict-dentist": "Dentist" };
 
-
 /** How long a mock question that looks further spends looking. */
 const LOOK_MS = 1500;
 export class MockEngine implements EngineClient {
