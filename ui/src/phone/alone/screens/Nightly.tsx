@@ -262,7 +262,14 @@ export function NightlyBackup({
   const day = s?.last ? backupDay(s.last.at, new Date(now())) : "";
   const madeAt = s?.state.state === "anotherPhone" ? formatLongDay(s.state.madeAt) : "";
 
-  let say: { line: string; action: string; onAction(): void; calm?: boolean } | null = null;
+  let say: {
+    line: string;
+    action: string;
+    onAction(): void;
+    calm?: boolean;
+    /** Where to go in Settings, which opens on Nocturne's own page. */
+    way?: string;
+  } | null = null;
   if (s?.on) {
     if (state === "waitingForWifi")
       say = {
@@ -282,12 +289,14 @@ export function NightlyBackup({
           "phone.backup.say.noRoom.action.android",
         ),
         onAction: () => (ios ? void openAppSettings() : open(DRIVE)),
+        way: ios ? t("phone.backup.say.settingsWay.icloud") : undefined,
       };
     else if (state === "signedOut")
       say = {
         line: onPhone(ios, "phone.backup.say.signedOut.ios", "phone.backup.say.signedOut.android"),
         action: ios ? t("phone.backup.say.openSettings") : t("phone.backup.say.chooseAccount"),
         onAction: () => (ios ? void openAppSettings() : chooseAccount()),
+        way: ios ? t("phone.backup.say.settingsWay.signIn") : undefined,
       };
     else if (state === "noPermission")
       say = {
@@ -298,6 +307,7 @@ export function NightlyBackup({
         ),
         action: ios ? t("phone.backup.say.openSettings") : t("phone.backup.say.chooseAccount"),
         onAction: () => (ios ? void openAppSettings() : chooseAccount()),
+        way: ios ? t("phone.backup.say.settingsWay.icloud") : undefined,
       };
     else if (state === "anotherPhone")
       say = {
@@ -348,6 +358,7 @@ export function NightlyBackup({
             {say ? (
               <div className={say.calm ? "ph-nb-say ph-nb-say--calm" : "ph-nb-say"} role="status">
                 <span>{say.line}</span>
+                {say.way ? <span className="ph-small">{say.way}</span> : null}
                 <button type="button" className="ph-link" onClick={say.onAction}>
                   {say.action}
                 </button>

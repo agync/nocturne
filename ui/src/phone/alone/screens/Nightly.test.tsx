@@ -122,6 +122,16 @@ describe("Backup in This phone", () => {
     expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
   });
 
+  it("on an iPhone, says where to go once Settings opens on Nocturne's page", async () => {
+    await app("m=kept&v=nightly&b=noRoom&os=ios");
+    expect(
+      await screen.findByText(
+        "Settings opens on Nocturne’s page. Go back to the first page of Settings, then tap your name, then iCloud.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open iCloud settings" })).toBeInTheDocument();
+  });
+
   it("on an iPhone, asks iCloud again on coming back from Settings", async () => {
     await app("m=kept&v=nightly&b=signedOut&os=ios");
     expect(await screen.findByRole("button", { name: "Open Settings" })).toBeInTheDocument();

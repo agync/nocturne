@@ -129,6 +129,8 @@
   "phone.backup.say.noPermission.ios": "iCloud is turned off for Nocturne, so the backup has stopped. Turn it on in Settings, under iCloud.",
   "phone.backup.say.noPermission.android": "Google no longer lets Nocturne back up. Choose the account again.",
   "phone.backup.say.openSettings": "Open Settings",
+  "phone.backup.say.settingsWay.icloud": "Settings opens on Nocturne’s page. Go back to the first page of Settings, then tap your name, then iCloud.",
+  "phone.backup.say.settingsWay.signIn": "Settings opens on Nocturne’s page. Go back to the first page of Settings to sign in.",
   "phone.backup.say.chooseAccount": "Choose account",
   "phone.backup.say.anotherAccount": "Your earlier backup stays in the Drive of {account}. Delete it there if you no longer want it.",
   "phone.backup.say.another": "Another phone made a newer backup on {day}. This phone has stopped backing up, so nothing is overwritten.",
