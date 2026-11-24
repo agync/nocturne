@@ -41,7 +41,11 @@ export type ReadStopped =
   | "floor"
   | "limit"
   | "trouble"
-  | "person";
+  | "person"
+  /** The phone's own time limit for such work ran out. */
+  | "timeout"
+  /** The mind was turned off or replaced. */
+  | "off";
 
 /** Why Read now or Read anyway did not start. */
 export type ReadRefused =

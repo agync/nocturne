@@ -146,6 +146,16 @@ export function readBlock(
       lines: [t("phone.mind.readNow.floorNeeds")],
     };
   }
+  if (stopped?.why === "timeout") {
+    return {
+      said: t("phone.notify.readNow.stopped.title"),
+      lines: [
+        t("phone.mind.readNow.why"),
+        t(pick(ios, "phone.mind.readNow.cost.android", "phone.mind.readNow.cost.iphone")),
+      ],
+      button: readNow,
+    };
+  }
   if (stopped?.why === "low") {
     return {
       said: t("phone.mind.readNow.low", { done: stopped.done }),

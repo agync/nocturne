@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { MindReading, MindStatus } from "./mind";
 import { readBlock, readWords, rowState } from "./readNow";
 
+/** The row's words as shown: a count never parts from its words, nor a "·" from what it follows. */
+const nb = (words: string) =>
+  words
+    .replace(/ · /g, "\u00a0· ")
+    .replace(/(\d+) to read/g, "$1\u00a0to\u00a0read")
+    .replace(/(\d+) of (\d+)/g, "$1\u00a0of\u00a0$2");
+
 const fine: MindStatus = { state: "fine", host: "answers.example" };
 const battery = (r: Partial<MindReading> = {}): MindReading => ({
   done: 0,
@@ -16,7 +23,7 @@ const battery = (r: Partial<MindReading> = {}): MindReading => ({
 
 describe("reading on battery", () => {
   it("says it waits to charge, why, and offers Read now", () => {
-    expect(rowState(fine, battery())).toBe("Waiting to charge · 89 to read");
+    expect(rowState(fine, battery())).toBe(nb("Waiting to charge · 89 to read"));
     const android = readBlock(fine, battery(), false);
     expect(android?.lines).toEqual([
       "Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down.",
@@ -30,7 +37,7 @@ describe("reading on battery", () => {
 
   it("keeps today's words on the charger and says nothing more", () => {
     const charging = battery({ charging: true, done: 12 });
-    expect(rowState(fine, charging)).toBe("Reading · 12 of 89");
+    expect(rowState(fine, charging)).toBe(nb("Reading · 12 of 89"));
     expect(readBlock(fine, charging, false)).toBeNull();
     expect(
       readBlock(fine, { ...charging, stopped: { why: "charging", done: 12 } }, false)?.said,
@@ -39,7 +46,7 @@ describe("reading on battery", () => {
 
   it("shows reading now with its progress and Stop", () => {
     const now = battery({ now: "now", done: 12 });
-    expect(rowState(fine, now)).toBe("Reading now · 12 of 89");
+    expect(rowState(fine, now)).toBe(nb("Reading now · 12 of 89"));
     const block = readBlock(fine, now, false);
     expect(block?.progress).toEqual({ done: 12, count: 89 });
     expect(block?.button).toEqual({ action: "stop", label: "Stop" });
@@ -59,7 +66,7 @@ describe("reading on battery", () => {
 
   it("stops at 20 per cent and with battery saving, and offers Read anyway", () => {
     const low = battery({ done: 31, percent: 20, stopped: { why: "low", done: 31 } });
-    expect(rowState(fine, low)).toBe("Waiting to charge · 58 to read");
+    expect(rowState(fine, low)).toBe(nb("Waiting to charge · 58 to read"));
     expect(readBlock(fine, low, false)).toEqual({
       said: "Read now stopped at 20% battery, after 31. The rest is read while this phone charges.",
       lines: ["Read anyway reads until everything is read or you stop it, down to 5% battery."],
@@ -96,14 +103,14 @@ describe("reading on battery", () => {
 
   it("says the limit, the service and the network in their own words", () => {
     const paused: MindStatus = { state: "paused", host: "answers.example", until: "2026-12-01" };
-    expect(rowState(paused, battery({ done: 12 }))).toBe("Paused by your limit · 77 to read");
+    expect(rowState(paused, battery({ done: 12 }))).toBe(nb("Paused by your limit · 77 to read"));
     expect(readBlock(paused, battery(), false)?.button?.action).toBe("changeLimit");
     const away: MindStatus = {
       state: "unreachable",
       host: "answers.example",
       since: "2026-11-24T09:12:00Z",
     };
-    expect(rowState(away, battery({ done: 12 }))).toBe("Not answering · 77 to read");
+    expect(rowState(away, battery({ done: 12 }))).toBe(nb("Not answering · 77 to read"));
     expect(readBlock(away, battery(), false)?.lines).toEqual([
       "Read now looks once more, then reads straight away, and uses some battery.",
     ]);
@@ -111,12 +118,27 @@ describe("reading on battery", () => {
       "answers.example still isn’t answering. Nocturne looks again on its own.",
     );
     const offline: MindStatus = { state: "offline", host: "answers.example" };
-    expect(rowState(offline, battery())).toBe("Not online · 89 to read");
+    expect(rowState(offline, battery())).toBe(nb("Not online · 89 to read"));
     expect(readBlock(offline, battery(), false)?.button?.needs).toBe(
       "Read now works once this phone is online.",
     );
     expect(rowState({ state: "keyRefused", host: "answers.example" }, battery())).toBe(
-      "Stopped · 89 to read",
+      nb("Stopped · 89 to read"),
+    );
+  });
+
+  it("never breaks a count from its words", () => {
+    const row = rowState(fine, battery()) ?? "";
+    expect(row).toBe("Waiting to charge\u00a0· 89\u00a0to\u00a0read");
+    expect(rowState(fine, battery({ now: "now", done: 12 }))).toContain("12\u00a0of\u00a089");
+  });
+
+  it("tells the phone's own time limit as a stop, and nothing after the mind is turned off", () => {
+    expect(readBlock(fine, battery({ stopped: { why: "timeout", done: 4 } }), false)?.said).toBe(
+      "Read now stopped",
+    );
+    expect(readBlock(fine, battery({ stopped: { why: "off", done: 4 } }), false)?.said).toBe(
+      undefined,
     );
   });
 
