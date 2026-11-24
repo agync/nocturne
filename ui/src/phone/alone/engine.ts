@@ -3,6 +3,7 @@
 // reaches a network; there is no computer to be away from, so the connection is always open.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   AskDelta,
   PhoneHello,
@@ -59,6 +60,9 @@ async function noted(kept: PhoneKept, marks: KeepMarks | undefined): Promise<Pho
     }).catch(() => undefined);
   return kept;
 }
+
+/** Where a question on this phone is looking, while it looks (`home-ask-step`). */
+const ASK_STEP = "home-ask-step";
 
 /** The first step of a question on this phone, before anything is found. */
 function searching(askId: string): AskDelta {
@@ -209,15 +213,26 @@ export function createLocalEngine(options: {
       await once({ cmd: "unkeep", id }, "done");
     },
     // The phone's own mind answers whole: a first step naming the question, so Stop can end
-    // it, then the last, with every word of the answer.
+    // it, each round of looking further as it begins, then the last, with every word of the
+    // answer.
     async ask(question, onDelta) {
       const askId = crypto.randomUUID();
       onDelta(searching(askId));
-      const { delta } = expect(
-        await run<RemoteAnswer>("home_ask", { question, askId }),
-        "askDelta",
-      );
-      onDelta({ ...delta, askId });
+      let ended = false;
+      const unlisten = await listen<AskDelta>(ASK_STEP, (e) => {
+        if (!ended && e.payload.askId === askId) onDelta(e.payload);
+      }).catch(() => () => undefined);
+      try {
+        const { delta } = expect(
+          await run<RemoteAnswer>("home_ask", { question, askId }),
+          "askDelta",
+        );
+        ended = true;
+        onDelta({ ...delta, askId });
+      } finally {
+        ended = true;
+        unlisten();
+      }
       return askId;
     },
     async cancelAsk(askId) {

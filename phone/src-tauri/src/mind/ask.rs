@@ -409,6 +409,19 @@ impl PhoneMind {
         ask_id: Option<&str>,
         question: &str,
     ) -> nocturne_contract::RemoteAnswer {
+        self.answer_call_telling(home, rt, ask_id, question, &mut |_| {})
+    }
+
+    /// [`PhoneMind::answer_call`], telling `looking` of each round of look-ups as it begins, so
+    /// the screen can say where Nocturne is looking.
+    pub fn answer_call_telling(
+        &self,
+        home: &Home,
+        rt: &tokio::runtime::Handle,
+        ask_id: Option<&str>,
+        question: &str,
+        looking: &mut dyn FnMut(AskDelta),
+    ) -> nocturne_contract::RemoteAnswer {
         use nocturne_contract::{PhoneError, RemoteAnswer};
         if !self.is_on() {
             return RemoteAnswer::Error {
@@ -419,6 +432,11 @@ impl PhoneMind {
         let mut last = None;
         self.ask(home, rt, ask_id, question, &mut |d| match d.phase {
             AskPhase::Streaming => said.push_str(d.text_delta.as_deref().unwrap_or_default()),
+            AskPhase::LookingCalendar
+            | AskPhase::LookingJournal
+            | AskPhase::LookingSearch
+            | AskPhase::LookingHealth
+            | AskPhase::LookingSeveral => looking(d),
             _ => last = Some(d),
         });
         match last {
