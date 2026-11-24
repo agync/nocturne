@@ -231,6 +231,81 @@ fn a_new_phrase_replaces_the_old_and_the_recovery_key_still_opens() {
     ));
 }
 
+/// A place that keeps every earlier version of a file until told to drop them, as an account
+/// with file versions does.
+#[derive(Default)]
+struct VersionedPlace {
+    now: MemoryPlace,
+    earlier: std::sync::Mutex<Vec<(String, Vec<u8>)>>,
+}
+
+impl VersionedPlace {
+    fn drop_earlier(&self) {
+        self.earlier.lock().unwrap().clear();
+    }
+
+    /// Whether `phrase` opens the key in any version of the phrase lock someone with the account
+    /// could still read.
+    fn phrase_opens_a_version(&self, phrase: &str) -> bool {
+        let mut versions: Vec<Vec<u8>> = self
+            .earlier
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(n, _)| n == KEY_PHRASE)
+            .map(|(_, b)| b.clone())
+            .collect();
+        versions.extend(self.now.get(KEY_PHRASE).unwrap());
+        versions.into_iter().any(|bytes| {
+            let one = MemoryPlace::new();
+            one.put(KEY_PHRASE, &bytes).unwrap();
+            nightly::open_with_phrase(&one, phrase).is_ok()
+        })
+    }
+}
+
+impl BackupPlace for VersionedPlace {
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), PlaceError> {
+        if let Some(old) = self.now.get(name)? {
+            self.earlier.lock().unwrap().push((name.to_string(), old));
+        }
+        self.now.put(name, bytes)
+    }
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, PlaceError> {
+        self.now.get(name)
+    }
+    fn list(&self, prefix: &str) -> Result<Vec<nightly::PlaceEntry>, PlaceError> {
+        self.now.list(prefix)
+    }
+    fn delete(&self, name: &str) -> Result<(), PlaceError> {
+        self.earlier.lock().unwrap().retain(|(n, _)| n != name);
+        self.now.delete(name)
+    }
+}
+
+/// "Change the phrase" locks the same key again, so the old phrase stops opening the backup only
+/// once no earlier version of the phrase lock can be read: `BackupPlace::put` promises that.
+#[test]
+fn the_old_phrase_stops_opening_only_once_the_place_drops_earlier_versions() {
+    let f = fixture();
+    keep(&f.engine, "Something to keep.");
+    let place = VersionedPlace::default();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&f.engine, &place, &key, &mut NightState::new()).unwrap();
+    nightly::change_phrase(&place, &key, "lantern copper meadow", WORK).unwrap();
+    assert!(matches!(
+        nightly::open_with_phrase(&place, PHRASE),
+        Err(NightError::WrongPhrase)
+    ));
+    assert!(
+        place.phrase_opens_a_version(PHRASE),
+        "a kept earlier version still opens with the old phrase"
+    );
+    place.drop_earlier();
+    assert!(!place.phrase_opens_a_version(PHRASE));
+    assert!(place.phrase_opens_a_version("lantern copper meadow"));
+}
+
 #[test]
 fn another_key_cannot_take_over_the_phrase() {
     let f = fixture();

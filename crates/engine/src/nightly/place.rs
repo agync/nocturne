@@ -38,6 +38,14 @@ pub struct PlaceEntry {
 pub trait BackupPlace: Send + Sync {
     /// Write `bytes` under `name`, in place of any file there. A file shows under its name only
     /// once it is whole, and no earlier version of it stays in the account.
+    ///
+    /// This matters most for [`KEY_PHRASE`](super::KEY_PHRASE) and
+    /// [`KEY_RECOVERY`](super::KEY_RECOVERY): "Change the phrase" and a new recovery key lock the
+    /// same key again, so an earlier version left readable would keep opening every night with
+    /// the old phrase or recovery key. A place answers `Ok` only once no earlier version of the
+    /// file can be read: on Google Drive, after deleting every revision but the new one; in
+    /// iCloud, after removing the file's other versions. If that fails, it answers an error, and
+    /// the caller writes the file again.
     fn put(&self, name: &str, bytes: &[u8]) -> Result<(), PlaceError>;
     /// The file's bytes, or `None` when there is no such file.
     fn get(&self, name: &str) -> Result<Option<Vec<u8>>, PlaceError>;
