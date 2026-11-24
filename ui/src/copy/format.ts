@@ -207,6 +207,13 @@ export function isAfterMidnight(input: string | Date): boolean {
   return valid(d) && d.getHours() < DAY_STARTS_AT;
 }
 
+/** "12 October 2025": a day far enough back to need its year. */
+export function formatDayMonthYear(input: string | Date): string {
+  return safely(input, (d) =>
+    clean(fmt({ day: "numeric", month: "long", year: "numeric" }).format(d)),
+  );
+}
+
 /** Shifts a `YYYY-MM-DD` day by whole days. */
 export function addDays(day: string, delta: number): string {
   const d = toDate(day);

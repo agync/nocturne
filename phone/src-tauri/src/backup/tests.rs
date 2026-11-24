@@ -1148,3 +1148,68 @@ fn a_deletion_waits_for_a_change_of_account_under_way_and_stays_with_the_earlier
         "still owed to the earlier"
     );
 }
+
+#[test]
+fn a_restore_names_the_health_readings_to_read_again() {
+    use nocturne_contract::{Reading, ReadingBatch, ReadingChange, ReadingValue};
+    let place = Arc::new(MemoryPlace::new());
+    let old = phone(&place, true);
+    old.keep("Something to keep.");
+    {
+        let open = old.home.open_store().unwrap();
+        let me = open.engine.ensure_local_device("Pixel").unwrap();
+        let reading = Reading {
+            phone_id: "w1".into(),
+            day: "2026-10-02".into(),
+            start: "2026-10-02T08:00:00Z".into(),
+            end: None,
+            source_device: None,
+            value: ReadingValue::Weight {
+                value: 70.5,
+                unit: "kg".into(),
+            },
+        };
+        open.engine
+            .take_readings(
+                &me,
+                ReadingBatch {
+                    sync_id: "s1".into(),
+                    seq: 0,
+                    last: true,
+                    changes: vec![ReadingChange::Upsert { reading }],
+                },
+            )
+            .unwrap();
+    }
+    old.backup.turn_on(PHRASE).unwrap();
+    old.now().unwrap();
+
+    let new = phone(&place, false);
+    let mut restored = new
+        .backup
+        .restore(
+            &new.home,
+            false,
+            &Opening::Phrase(PHRASE.into()),
+            None,
+            &|_, _, _| {},
+        )
+        .unwrap();
+    let health = restored
+        .health_mut()
+        .clone()
+        .expect("readings to read again");
+    assert_eq!(health.since, "2026-10-02");
+    let open = new.home.open_store().unwrap();
+    assert!(
+        open.engine
+            .readings(
+                nocturne_contract::ReadingKind::Weight,
+                "2026-10-01".parse().unwrap(),
+                "2026-10-03".parse().unwrap()
+            )
+            .unwrap()
+            .is_empty(),
+        "no reading came back from the backup"
+    );
+}

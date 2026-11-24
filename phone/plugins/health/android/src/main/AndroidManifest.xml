@@ -9,7 +9,8 @@
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
-    <!-- Asked for only when "Also bring older readings" is on. -->
+    <!-- Asked for with the others wherever Health Connect offers it, so a restored phone can
+         read its readings again as far back as the backup's phone held them. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <!-- Android 13 and older: Health Connect is an app of its own. -->

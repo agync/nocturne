@@ -335,6 +335,18 @@ impl From<HomeError> for BackupProblem {
     }
 }
 
+/// The health readings a backup leaves out, which the phone reads again from its own health app
+/// once Health is on in Nocturne.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthAgain {
+    /// The first day the phone that made the backup held readings for.
+    pub since: String,
+    /// Whether this phone's health app gives readings that far back. False on an Android whose
+    /// Health Connect gives only the last 30 days.
+    pub reaches: bool,
+}
+
 /// What a restore did.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -345,6 +357,7 @@ pub enum Restored {
         summary: BackupSummary,
         kept: KeptCounts,
         own: bool,
+        health: Option<HealthAgain>,
     },
     /// A phone that held a memory: the backup's things joined it.
     #[serde(rename_all = "camelCase")]
@@ -357,7 +370,17 @@ pub enum Restored {
         same: u32,
         already: u32,
         own: bool,
+        health: Option<HealthAgain>,
     },
+}
+
+impl Restored {
+    /// The health readings the backup left out, to be read again.
+    pub fn health_mut(&mut self) -> &mut Option<HealthAgain> {
+        match self {
+            Restored::Replaced { health, .. } | Restored::BroughtIn { health, .. } => health,
+        }
+    }
 }
 
 /// What the account shows before the phrase.
@@ -1224,6 +1247,10 @@ impl PhoneBackup {
                 .saved()
                 .state
                 .is_some_and(|s| s.device == unpacked.night.device);
+        let health = unpacked.health_since.clone().map(|since| HealthAgain {
+            since,
+            reaches: true,
+        });
         let restored = if holds {
             let brought = home
                 .using()
@@ -1246,6 +1273,7 @@ impl PhoneBackup {
                 same: brought.same,
                 already: brought.already,
                 own,
+                health,
             }
         } else {
             home.put_in_place(&stage)?;
@@ -1253,6 +1281,7 @@ impl PhoneBackup {
                 summary: unpacked.summary,
                 kept: unpacked.kept,
                 own,
+                health,
             }
         };
         if !own {

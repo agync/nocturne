@@ -120,9 +120,21 @@ export interface Here {
 
 export type Opening = { with: "phrase"; text: string } | { with: "recoveryKey"; text: string };
 
+/**
+ * The health readings a backup leaves out, read again from the phone's health app: back to
+ * `since`, where `reaches`; Health Connect may give only the last 30 days.
+ */
+export type HealthAgain = { since: string; reaches: boolean };
+
 /** What a restore did. `own`: the backup was this phone's own. */
 export type Restored =
-  | { kind: "replaced"; summary: BackupSummary; kept: KeptCounts; own: boolean }
+  | {
+      kind: "replaced";
+      summary: BackupSummary;
+      kept: KeptCounts;
+      own: boolean;
+      health: HealthAgain | null;
+    }
   | {
       kind: "broughtIn";
       summary: BackupSummary;
@@ -132,6 +144,7 @@ export type Restored =
       same: number;
       already: number;
       own: boolean;
+      health: HealthAgain | null;
     };
 
 export type KeySaved = "saved" | "cancelled" | "failed";

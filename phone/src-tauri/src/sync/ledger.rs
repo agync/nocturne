@@ -123,6 +123,10 @@ pub struct CalendarLedger {
     pub last_sent: Option<SourceSent>,
     /// The computer asked for all of it again; the next send starts from nothing.
     pub again: bool,
+    /// A restore left the readings out from this day on: the next full read the phone may make
+    /// that far back reads them again from the phone's health app.
+    #[serde(default)]
+    pub back_to: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +156,10 @@ pub struct HealthLedger {
     pub last_sent: Option<SourceSent>,
     /// The computer asked for all of it again; the next send starts from nothing.
     pub again: bool,
+    /// A restore left the readings out from this day on: the next full read the phone may make
+    /// that far back reads them again from the phone's health app.
+    #[serde(default)]
+    pub back_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -282,6 +290,19 @@ impl LedgerFile {
     /// True once after the computer asked for a source again, clearing the flag.
     pub fn take_again(&self, flag: impl Fn(&mut Ledger) -> &mut bool) -> bool {
         self.update(|l| std::mem::take(flag(l)))
+    }
+
+    /// A restore left the health readings out from `day` on: Health is read again in full,
+    /// back to that day where the phone's health app allows it.
+    pub fn read_health_back_to(&self, day: &str) {
+        self.update(|l| {
+            let h = &mut l.health;
+            h.back_to = Some(match h.back_to.take() {
+                Some(before) if before.as_str() < day => before,
+                _ => day.to_string(),
+            });
+            h.token = None;
+        });
     }
 
     /// The phone was disconnected or removed: what was sent belongs to that pairing.

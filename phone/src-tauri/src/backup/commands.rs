@@ -219,7 +219,7 @@ pub async fn backup_restore<R: Runtime>(
     opening: Opening,
     night: Option<u64>,
 ) -> Result<Restored, BackupProblem> {
-    let restored = blocking(app.clone(), move |app| {
+    let mut restored = blocking(app.clone(), move |app| {
         let paired = app.state::<AppState>().store.identity().is_some();
         let progress = crate::home::commands::progress(app.clone());
         app.state::<PhoneBackup>()
@@ -230,7 +230,36 @@ pub async fn backup_restore<R: Runtime>(
     if matches!(restored, Restored::Replaced { .. }) {
         crate::home::commands::restored(&app);
     }
+    // The backup holds no health readings: they are read again from the phone's health app.
+    if let Some(health) = restored.health_mut() {
+        app.state::<AppState>()
+            .syncer
+            .ledger
+            .read_health_back_to(&health.since);
+        health.reaches = reaches_back(&app, &health.since).await;
+    }
     Ok(restored)
+}
+
+/// Whether this phone's health app gives readings back to `since`: Health on an iPhone keeps them
+/// all; Health Connect gives the last 30 days, and older ones only where it offers them.
+async fn reaches_back<R: Runtime>(app: &AppHandle<R>, since: &str) -> bool {
+    if cfg!(target_os = "ios") {
+        return true;
+    }
+    let today = jiff::ZonedDateTime::now().date().to_string();
+    let within = crate::sync::health::days_back_to(since, &today)
+        .is_some_and(|days| days <= crate::sync::HEALTH_DAYS);
+    if within {
+        return true;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_nocturne_health::HealthExt;
+        app.health().older_available()
+    })
+    .await
+    .unwrap_or(false)
 }
 
 /// "Make this phone the one in use".
