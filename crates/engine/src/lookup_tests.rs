@@ -488,3 +488,96 @@ fn look_ups_only_read() {
         .unwrap();
     assert!(before == (bytes("nocturne.db"), bytes("nocturne.db-wal")));
 }
+
+/// The gate before a kept line goes online, or to the phone's own mind: only a line whose item
+/// a look-up would give now. Each way of being gone fails closed.
+#[test]
+fn a_kept_line_goes_only_while_its_item_is_kept() {
+    let f = fx();
+    checkin(
+        &f,
+        "2026-11-23T21:10:00Z",
+        &["drained"],
+        FeelingPart::Low,
+        None,
+    );
+    f.clock.set_str("2026-11-24T21:40:00Z");
+    let found = f
+        .engine
+        .look_up_journal(d("2026-11-23"), d("2026-11-23"), LookScope::ALL, 20)
+        .unwrap();
+    let id = found.hits[0].memory.id.clone();
+    let item = super::kept_line_item(&id).unwrap().to_string();
+    let goes = |f: &Fx| {
+        let verdict = f.engine.online_verdicts(std::slice::from_ref(&id)).unwrap()[0];
+        let may = f.engine.mind_may_read(std::slice::from_ref(&id)).unwrap()[0];
+        assert_eq!(verdict.is_none(), may, "both gates agree");
+        may
+    };
+    assert!(goes(&f), "a kept line goes");
+    let sql = |f: &Fx, sql: &str| {
+        let item = item.clone();
+        let sql = sql.to_string();
+        f.engine
+            .write(move |tx| {
+                tx.execute(&sql, [&item])?;
+                Ok(())
+            })
+            .unwrap();
+    };
+    for (break_it, mend) in [
+        (
+            "UPDATE items SET forget_epoch = 1 WHERE id = ?1",
+            "UPDATE items SET forget_epoch = 0 WHERE id = ?1",
+        ),
+        (
+            "INSERT INTO forget_jobs(ids, items, include_originals) \
+             VALUES ('[]', '[\"' || ?1 || '\"]', 1)",
+            "DELETE FROM forget_jobs WHERE instr(items, ?1) > 0",
+        ),
+        (
+            "INSERT INTO forgotten_claims(item_id, claim) VALUES (?1, 'x')",
+            "DELETE FROM forgotten_claims WHERE item_id = ?1",
+        ),
+        (
+            "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status, metadata) \
+             VALUES ('newer', 'checkin', 'quickCapture', 'trusted', 'h-newer', 'x', \
+             '2026-11-24T10:00:00Z', 'understood', json_object('replaces', ?1))",
+            "DELETE FROM items WHERE id = 'newer' AND ?1 IS NOT NULL",
+        ),
+        (
+            "INSERT INTO phone_records(device_id, source, phone_id, item_id, version, removed_at, \
+             came_in_at) VALUES ('d', 'health', 'p', ?1, 1, '2026-11-24T10:00:00Z', \
+             '2026-11-24T09:00:00Z')",
+            "DELETE FROM phone_records WHERE item_id = ?1",
+        ),
+    ] {
+        sql(&f, break_it);
+        assert!(!goes(&f), "{break_it}");
+        sql(&f, mend);
+        assert!(goes(&f), "{mend}");
+    }
+    // An earlier version it replaced being forgotten keeps the newer one here too.
+    let old = "older-version";
+    let item2 = item.clone();
+    f.engine
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status, \
+                 forget_epoch, metadata) VALUES (?1, 'checkin', 'quickCapture', 'trusted', \
+                 'h-old', 'x', '2026-11-23T09:00:00Z', 'understood', 1, '{}')",
+                [old],
+            )?;
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.replaces', ?2) WHERE id = ?1",
+                [&item2, old],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    assert!(!goes(&f), "a forgotten earlier version");
+    // An id that is no line of anything kept never goes.
+    let gone = format!("{}missing", super::KEPT_LINE);
+    assert!(!f.engine.mind_may_read(&[gone.clone()]).unwrap()[0]);
+    assert!(f.engine.online_verdicts(&[gone]).unwrap()[0].is_some());
+}

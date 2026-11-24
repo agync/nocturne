@@ -190,16 +190,16 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
 /// words or labels does. Fails closed: a memory the store does not know counts as private.
 fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
     // A check-in, an entry or a reading kept as it is goes like a memory, unless it is private.
+    // It fails closed: anything not given by a look-up now stays here.
     if let Some(item) = crate::lookup::kept_line_item(id) {
-        let private: Option<bool> = conn
-            .query_row("SELECT private FROM items WHERE id = ?1", [item], |r| {
+        if !crate::lookup::kept_line_may_go(conn, id)? {
+            return Ok(Some(LeftOut::Private));
+        }
+        let private: bool =
+            conn.query_row("SELECT private FROM items WHERE id = ?1", [item], |r| {
                 r.get(0)
-            })
-            .optional()?;
-        return Ok(match private {
-            Some(false) => None,
-            _ => Some(LeftOut::Private),
-        });
+            })?;
+        return Ok(private.then_some(LeftOut::Private));
     }
     let row: Option<(bool, Option<String>)> = conn
         .query_row(
@@ -485,13 +485,8 @@ impl Engine {
         self.read(|conn| {
             ids.iter()
                 .map(|id| {
-                    if let Some(item) = crate::lookup::kept_line_item(id) {
-                        let known: bool = conn.query_row(
-                            "SELECT EXISTS (SELECT 1 FROM items WHERE id = ?1 AND forget_epoch = 0)",
-                            [item],
-                            |r| r.get(0),
-                        )?;
-                        return Ok(known);
+                    if crate::lookup::is_kept_line(id) {
+                        return crate::lookup::kept_line_may_go(conn, id);
                     }
                     let row: Option<(bool, Option<String>, String)> = conn
                         .query_row(

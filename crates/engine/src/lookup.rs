@@ -639,6 +639,27 @@ fn kept_item(conn: &Connection, id: &str) -> Result<bool> {
     Ok(conn.query_row(&sql, [id], |r| r.get(0))?)
 }
 
+/// Whether the kept line `id` may still be given or sent: its item exists and passes the rules
+/// every look-up applies (not being forgotten, in no forget job, nothing of it forgotten, not
+/// replaced, not removed in Health), and so does every earlier version it replaced. Anything
+/// else, an id that is no kept line included, may not.
+pub(crate) fn kept_line_may_go(conn: &Connection, id: &str) -> Result<bool> {
+    let Some(item) = kept_line_item(id) else {
+        return Ok(false);
+    };
+    if !kept_item(conn, item)? {
+        return Ok(false);
+    }
+    let sql = "WITH RECURSIVE chain(id) AS ( \
+         SELECT json_extract(metadata, '$.replaces') FROM items WHERE id = ?1 \
+         UNION SELECT json_extract(i.metadata, '$.replaces') FROM items i JOIN chain c ON i.id = c.id) \
+         SELECT COUNT(*) FROM chain c JOIN items i ON i.id = c.id WHERE i.forget_epoch != 0 \
+         OR EXISTS (SELECT 1 FROM forgotten_claims f WHERE f.item_id = i.id) \
+         OR EXISTS (SELECT 1 FROM forget_jobs j WHERE instr(j.items, '\"' || i.id || '\"') > 0)";
+    let bad: i64 = conn.query_row(sql, [item], |r| r.get(0))?;
+    Ok(bad == 0)
+}
+
 #[cfg(test)]
 #[path = "lookup_tests.rs"]
 mod tests;
