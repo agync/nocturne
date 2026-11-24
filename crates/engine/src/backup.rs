@@ -43,9 +43,9 @@ const DB_ENTRY: &str = "store/nocturne.db";
 /// The backup format this build writes and reads; a higher number is a newer Nocturne's.
 const FORMAT: u32 = 1;
 /// The costliest passphrase setting a file may ask for, so a hostile file cannot stall opening.
-const MAX_WORK_FACTOR: u8 = 19;
+pub(crate) const MAX_WORK_FACTOR: u8 = 19;
 /// The passphrase setting a backup asks for, well below what the reader allows.
-const WORK_FACTOR: u8 = 18;
+pub(crate) const WORK_FACTOR: u8 = 18;
 const CHUNK: usize = 64 * 1024;
 const BLOCK: usize = 512;
 const MAX_MANIFEST: usize = 1024 * 1024;
@@ -90,10 +90,10 @@ pub(crate) struct Written {
 }
 
 /// One original to stream into the archive.
-struct Original {
-    sha: String,
-    path: PathBuf,
-    size: u64,
+pub(crate) struct Original {
+    pub sha: String,
+    pub path: PathBuf,
+    pub size: u64,
 }
 
 /// Bytes copied so far, out of the whole run, and the person's way to stop.
@@ -158,6 +158,7 @@ pub(crate) fn remove_leftover_scratch(dir: &Path) {
     if scratch.exists() {
         fsutil::shred_tree(&scratch);
     }
+    crate::nightly::remove_leftover_scratch(dir);
 }
 
 fn write_header(w: &mut impl Write, name: &str, size: u64) -> Result<()> {
@@ -221,7 +222,7 @@ fn write_stream(
     Ok(hex(&hasher.finalize()))
 }
 
-fn is_sha256(name: &str) -> bool {
+pub(crate) fn is_sha256(name: &str) -> bool {
     name.len() == 64
         && name
             .bytes()
@@ -241,7 +242,7 @@ fn connection_has_data(conn: &Connection) -> Result<bool> {
         "entities",
         "pages",
         "questions",
-        "settings",
+        "settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'",
         "ledger",
         "online_sends",
     ] {
@@ -415,16 +416,7 @@ impl Engine {
             committed: false,
         };
 
-        // One consistent moment, in a file of its own.
-        let snapshot = guard.scratch.join("nocturne.db");
-        let snapshot_text = snapshot
-            .to_str()
-            .ok_or_else(|| Error::invalid("the store path is not valid text"))?;
-        self.read(|conn| {
-            conn.execute("VACUUM INTO ?1", [snapshot_text])?;
-            Ok(())
-        })?;
-        let snap = self.scrub_snapshot(&snapshot)?;
+        let (snapshot, snap) = self.take_snapshot(&guard.scratch)?;
 
         let mut extra_files: Vec<(&str, PathBuf, u64)> = Vec::new();
         for &(name, path) in run.extras {
@@ -574,6 +566,21 @@ impl Engine {
         Ok(in_tables || originals_exist(&self.originals_dir()))
     }
 
+    /// One consistent moment of the store in `scratch/nocturne.db`, scrubbed of what is not the
+    /// person's own work, with the originals it keeps.
+    pub(crate) fn take_snapshot(&self, scratch: &Path) -> Result<(PathBuf, Snapshot)> {
+        let snapshot = scratch.join("nocturne.db");
+        let snapshot_text = snapshot
+            .to_str()
+            .ok_or_else(|| Error::invalid("the store path is not valid text"))?;
+        self.read(|conn| {
+            conn.execute("VACUUM INTO ?1", [snapshot_text])?;
+            Ok(())
+        })?;
+        let snap = self.scrub_snapshot(&snapshot)?;
+        Ok((snapshot, snap))
+    }
+
     /// Scrub the snapshot and list the originals it still keeps. Returns its size, version,
     /// counts and whether online answers or a phone were in use, all before the scrub.
     fn scrub_snapshot(&self, snapshot: &Path) -> Result<Snapshot> {
@@ -658,8 +665,8 @@ fn scrub_database(conn: &Connection, now: &str) -> Result<()> {
          DELETE FROM embeddings_next;",
     )?;
     conn.execute(
-        "DELETE FROM settings WHERE key = ?1",
-        [crate::TRUNCATE_PENDING],
+        "DELETE FROM settings WHERE key IN (?1, ?2)",
+        [crate::TRUNCATE_PENDING, crate::nightly::FORGOT],
     )?;
     // The phones stay paired by name, but what would let them in again does not travel. A
     // phone's own row was never a pairing and travels as it is.
@@ -752,15 +759,15 @@ fn place_originals(conn: &Connection, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-struct Snapshot {
-    size: u64,
-    version: u32,
-    memories: u32,
-    items: u32,
-    pages: u32,
-    online_used: bool,
-    away_used: bool,
-    originals: Vec<Original>,
+pub(crate) struct Snapshot {
+    pub size: u64,
+    pub version: u32,
+    pub memories: u32,
+    pub items: u32,
+    pub pages: u32,
+    pub online_used: bool,
+    pub away_used: bool,
+    pub originals: Vec<Original>,
 }
 
 fn count(conn: &Connection, sql: &str) -> Result<u32> {
@@ -868,7 +875,7 @@ pub fn store_left_behind(dir: &Path, today: Date) -> Result<LeftBehind> {
              + (SELECT COUNT(*) FROM name_questions WHERE answered_at IS NOT NULL), \
            (SELECT COUNT(*) FROM memories WHERE confirmed = 1) \
              + (SELECT COUNT(*) FROM conflicts WHERE resolved_at IS NOT NULL), \
-           EXISTS(SELECT 1 FROM settings), \
+           EXISTS(SELECT 1 FROM settings WHERE key NOT LIKE '\\_%' ESCAPE '\\'), \
            (SELECT COUNT(*) FROM phone_records r JOIN items i ON i.id = r.item_id \
             WHERE r.source = 'calendar' AND r.removed_at IS NULL \
               AND COALESCE(json_extract(i.metadata, '$.endDay'), json_extract(i.metadata, '$.day')) < ?1), \
@@ -1276,6 +1283,33 @@ fn read_backup(
         }
     }
 
+    let (memories, items, pages, kept) = check_unpacked(&store_dir, keep_originals)?;
+
+    let found = manifest.ok_or(Error::BackupDamaged)?;
+    guard.keep = keep_originals;
+    let summary = BackupSummary {
+        made_at: found.made_at,
+        app_version: found.app_version,
+        store_version: found.store_version,
+        memories,
+        items,
+        pages,
+        originals,
+        online_used: found.online_used,
+        away_used: found.away_used,
+        bytes: size as f64,
+    };
+    Ok((summary, kept))
+}
+
+/// Check a store unpacked into `store_dir` (its `nocturne.db`, and its `originals` named by
+/// hash when `keep_originals`), bring it up to date, and count what it holds: memories, items,
+/// pages and the columns a phone shows. With `keep_originals` the originals take their names and
+/// the store is scrubbed, as for a restore.
+pub(crate) fn check_unpacked(
+    store_dir: &Path,
+    keep_originals: bool,
+) -> Result<(u32, u32, u32, KeptCounts)> {
     let db = store_dir.join("nocturne.db");
     {
         let conn = open_for_check(&db).map_err(|_| Error::BackupDamaged)?;
@@ -1320,21 +1354,7 @@ fn read_backup(
         fsutil::shred(Path::new(&name));
     }
 
-    let found = manifest.ok_or(Error::BackupDamaged)?;
-    guard.keep = keep_originals;
-    let summary = BackupSummary {
-        made_at: found.made_at,
-        app_version: found.app_version,
-        store_version: found.store_version,
-        memories,
-        items,
-        pages,
-        originals,
-        online_used: found.online_used,
-        away_used: found.away_used,
-        bytes: size as f64,
-    };
-    Ok((summary, kept))
+    Ok((memories, items, pages, kept))
 }
 
 fn read_small(entry: &mut tar::Entry<'_, Payload>, reading: &Reading) -> Result<Vec<u8>> {

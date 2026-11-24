@@ -27,6 +27,7 @@ mod lifecycle;
 mod memory;
 mod merge;
 mod mind;
+pub mod nightly;
 mod online;
 mod page;
 mod phones;

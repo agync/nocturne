@@ -1356,6 +1356,7 @@ impl Engine {
         let now = fmt_ts(self.clock_now());
         self.write(|tx| {
             store::delete(tx, period)?;
+            crate::nightly::note_forgot(tx)?;
             store::decline(tx, period, &now)
         })
     }

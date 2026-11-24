@@ -281,6 +281,7 @@ pub(crate) fn scrub_items(tx: &Transaction<'_>, items: &[String]) -> Result<u32>
     if items.is_empty() {
         return Ok(0);
     }
+    crate::nightly::note_forgot(tx)?;
     let gone: BTreeSet<&str> = items.iter().map(String::as_str).collect();
     let mut total = 0;
     for (id, kind, body, removed) in citing(tx, items)? {
