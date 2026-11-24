@@ -41,17 +41,17 @@ Settled on 2026-11-24: 1 to 4 as recommended, 5 and 6 as the owner chose for Rea
 
 In `docs/design/mockups/mind-online-setup/`. `phone.html` uses the phone parity kit, Android and
 iPhone side by side; `?state=`, `?theme=dark`, `?text=200` (the phone's text at 200 per cent, at
-the phone's real height) and `?end=1` (scrolled to the end) work on every state. `desktop.html` uses
-the app's own tokens like the step flow mockups: serve the repository root over HTTP after
-`make ui/install`. `reading.html` shows This phone and "Reading what you kept" on battery, with the
+the phone's real height) and `?end=1` (scrolled to the end, past any line the top edge would cut)
+work on every state. `desktop.html` uses the app's own tokens like the step flow mockups: serve the
+repository root over HTTP after `make ui/install`. `reading.html` shows This phone and "Reading what you kept" on battery, with the
 same parameters as `phone.html`; at 200 per cent each screen starts at the mind group.
 
 | Screen | File and state | Renders |
 |---|---|---|
 | Step 1, "Everything that is sent" open | `phone.html?state=what` | `what-light.png` |
 | Step 4, agree | `phone.html?state=agree` | `agree-light.png`, `agree-dark.png`, `agree-200-light.png` |
-| Step 2, URL and key filled | `phone.html?state=details` | `details-light.png` |
-| Step 2, looking at the list | `phone.html?state=loading` | `loading-light.png` |
+| Step 2, URL and key filled | `phone.html?state=details&end=1` | `details-light.png` |
+| Step 2, looking at the list | `phone.html?state=loading&end=1` | `loading-light.png` |
 | The list, short | `phone.html?state=list` | `list-light.png`, `list-dark.png` |
 | The list, long, searched | `phone.html?state=search` | `search-light.png` |
 | The list, nothing matches | `phone.html?state=nomatch` | `nomatch-light.png` |

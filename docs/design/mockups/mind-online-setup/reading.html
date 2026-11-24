@@ -32,13 +32,13 @@
     <p class="ghead">Nocturne’s mind online</p>
     <div class="rows">
       <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Its mind</span>
-        <span class="rowHint" data-state="waiting">answers.example, online · Waiting to charge · 89 to read</span>
-        <span class="rowHint" data-state="now back">answers.example, online · Reading now · 12 of 89</span>
-        <span class="rowHint" data-state="low">answers.example, online · Waiting to charge · 58 to read</span>
-        <span class="rowHint" data-state="anyway">answers.example, online · Reading now · 31 of 89</span>
+        <span class="rowHint" data-state="waiting">answers.example, online&nbsp;· Waiting to charge&nbsp;· 89&nbsp;to&nbsp;read</span>
+        <span class="rowHint" data-state="now back">answers.example, online&nbsp;· Reading now&nbsp;· 12&nbsp;of&nbsp;89</span>
+        <span class="rowHint" data-state="low">answers.example, online&nbsp;· Waiting to charge&nbsp;· 58&nbsp;to&nbsp;read</span>
+        <span class="rowHint" data-state="anyway">answers.example, online&nbsp;· Reading now&nbsp;· 31&nbsp;of&nbsp;89</span>
         <span class="rowHint" data-state="done">answers.example, online</span>
-        <span class="rowHint" data-state="limit">answers.example, online · Paused by your limit · 77 to read</span>
-        <span class="rowHint" data-state="unreachable">answers.example, online · Not answering · 77 to read</span>
+        <span class="rowHint" data-state="limit">answers.example, online&nbsp;· Paused by your limit&nbsp;· 77&nbsp;to&nbsp;read</span>
+        <span class="rowHint" data-state="unreachable">answers.example, online&nbsp;· Not answering&nbsp;· 77&nbsp;to&nbsp;read</span>
       </span></div>
 
       <div class="rn" data-state="waiting">
@@ -115,7 +115,7 @@
       <p class="bannerText">iPhone paused it when you left Nocturne, after 12 of 89. Open Nocturne to carry on.</p>
     </div>
   </div>
-  <p class="osLabel" data-state="paused" data-os="android" style="padding-top: 320px">iPhone only. Android reads on with its notification.</p>
+  <p class="osLabel" data-state="paused" data-os="android" style="margin: auto 0">iPhone only. Android reads on with its notification.</p>
 
   <!-- Reading what you kept, right after turning on, on battery -->
   <div class="hero" data-state="first-waiting first-now" style="padding-top: 72px">
@@ -142,13 +142,17 @@
 <script>
 const view = new URLSearchParams(location.search).get("state") || "waiting";
 document.documentElement.dataset.view = view;
-// At 200 per cent, each screen starts at the mind group, as the person would scroll to it.
-if (document.documentElement.dataset.text === "200") {
+// At 200 per cent, each screen starts at the mind group, as the person would scroll to it, once
+// the fonts have set where lines fall.
+document.fonts.ready.then(() => {
   for (const scroll of document.querySelectorAll(".scroll")) {
-    const head = [...scroll.querySelectorAll(".ghead")].find((h) => h.textContent.startsWith("Nocturne"));
-    if (head) scroll.scrollTop = head.offsetTop - 8;
+    if (document.documentElement.dataset.text === "200") {
+      const head = [...scroll.querySelectorAll(".ghead")].find((h) => h.textContent.startsWith("Nocturne"));
+      if (head) scroll.scrollTop = head.offsetTop - 8;
+    }
+    if (scroll.scrollTop > 0) scroll.closest(".screen").dataset.scrolled = "";
   }
-}
+});
 </script>
 </body>
 </html>
