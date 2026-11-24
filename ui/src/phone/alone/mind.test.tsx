@@ -294,12 +294,32 @@ describe("The mind in This phone", () => {
     expect(screen.getByRole("region", { name: "Saturday 21 November" })).toBeInTheDocument();
     expect(screen.getByText("Older than 90 days are removed by themselves.")).toBeInTheDocument();
     expect(screen.getByText(/ · answers\.example · 1\.8 kB/)).toBeInTheDocument();
-    // Two rows carry words, each behind a tap; the check's look at the list and the row whose
-    // thing was forgotten carry none.
+    // A question in three parts, and two rows, carry words, each behind a tap; the check's look
+    // at the list and the row whose thing was forgotten carry none.
     const rows = document.querySelectorAll("details");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(screen.getByText("Removed when you forgot it")).toBeInTheDocument();
-    const read = rows[0];
+    const question = rows[0] as HTMLElement;
+    expect(
+      within(question).getByText(/ · answers\.example · 9\.9 kB · 3 parts, counted 3 times/),
+    ).toBeInTheDocument();
+    expect(within(question).getByText("Nothing you kept answered it")).toBeInTheDocument();
+    fireEvent.click(within(question).getByText("Answered a question"));
+    expect(within(question).getByText("Part 1 · 1.9 kB")).toBeVisible();
+    expect(within(question).getByText("Part 2 · 3.4 kB")).toBeVisible();
+    expect(
+      within(question).getByText(
+        "Your provider asked to look through your calendar for Saturday 21 to Sunday 22 November.",
+      ),
+    ).toBeVisible();
+    expect(within(question).getByText("Sent back:")).toBeVisible();
+    expect(within(question).getByText(/\[m2\] Leo’s football/)).toBeVisible();
+    expect(
+      within(question).getByText("Your provider asked to look for “haircut hairdresser”."),
+    ).toBeVisible();
+    expect(within(question).getByText("Sent back: nothing kept.")).toBeVisible();
+    expect(within(question).getByText(/Each part sent the parts before it again/)).toBeVisible();
+    const read = rows[1];
     if (!read) throw new Error("a row with words");
     expect(
       within(read as HTMLElement).getByText("Ask about the swap for the 28th"),
@@ -485,6 +505,21 @@ describe("The answer screen on a phone alone", () => {
     await ask("which day is the swap?");
     expect(await screen.findByText("Open each one to see which is right.")).toBeVisible();
     expect(screen.queryByText(/computer/)).toBeNull();
+  });
+
+  it("names where it looks while the mind looks further, in place of answering", async () => {
+    await app("m=kept&mind=on&look");
+    await screen.findByText("Written by answers.example");
+    fireEvent.click(within(nav()).getByRole("button", { name: "Ask" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your question" }), {
+      target: { value: "What’s on tomorrow?" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Ask" }));
+    const line = await screen.findByText("Looking through your calendar…");
+    expect(line.closest("[role=status]")).not.toBeNull();
+    expect(screen.queryByText("Answering from what you kept…")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(await screen.findByText("Stopped.")).toBeVisible();
   });
 
   it("stops a question: the request is dropped and nothing is shown", async () => {

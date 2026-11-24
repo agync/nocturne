@@ -2,7 +2,7 @@
 // Each call is one of the app's own commands; the key goes in once, with turning on.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { CheckOutcome } from "../../engine/bindings";
+import type { CheckOutcome, ReadingKind } from "../../engine/bindings";
 
 /** The form's three details, as typed. */
 export interface ProviderForm {
@@ -50,6 +50,31 @@ export interface MindSent {
   said: MindSaid[];
   /** Its words were removed when something it carried was forgotten. */
   forgotten: boolean;
+  /** For a question sent in parts: which part, and what the provider asked to look up. */
+  part?: MindPart;
+  /** The question ended with nothing found. */
+  nothing?: boolean;
+}
+
+/** One look-up the provider asked for, and how many lines went back. */
+export interface MindAsked {
+  look: "calendar" | "journal" | "search" | "health";
+  from?: string;
+  to?: string;
+  words?: string;
+  kind?: ReadingKind;
+  lines: number;
+}
+
+/**
+ * Which part of a question a request was: the question's id, its number from 1, what the
+ * provider asked for in the part before, and where in `said` the words new to it begin.
+ */
+export interface MindPart {
+  ask: string;
+  n: number;
+  asked: MindAsked[];
+  from: number;
 }
 
 /** How the mind is doing, for Today, Ask and This phone. */

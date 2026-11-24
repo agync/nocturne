@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tc } from "../../components/ControlChip/copy";
 import { richText } from "../../components/PageLine/richText";
-import { t } from "../../copy/t";
+import { type CopyId, t } from "../../copy/t";
 import type { AnsweredBy, AskDelta, AskPhase, NearMatch, Receipt } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
 import { receiptMeta } from "../labels";
@@ -238,6 +238,21 @@ interface AskProps {
   alone?: boolean;
 }
 
+/** The phases while Nocturne looks further for the mind, each naming the place. */
+const LOOKING: Partial<Record<AskModel["phase"], CopyId>> = {
+  lookingCalendar: "phone.ask.looking.calendar",
+  lookingJournal: "phone.ask.looking.journal",
+  lookingSearch: "phone.ask.looking.search",
+  lookingHealth: "phone.ask.looking.health",
+  lookingSeveral: "phone.ask.looking.several",
+};
+const LOOKING_PHASES: string[] = Object.keys(LOOKING);
+
+/** The line under the question while it is answered: where Nocturne is looking, or working. */
+function workingLine(phase: AskModel["phase"]): CopyId {
+  return LOOKING[phase] ?? "phone.ask.working";
+}
+
 export function Ask({
   model,
   connected,
@@ -261,6 +276,7 @@ export function Ask({
       "askingOnline",
       "waitingOnline",
       "switchingToComputer",
+      ...LOOKING_PHASES,
     ].includes(model.phase);
   const answerRef = useRef<HTMLHeadingElement>(null);
   const receipts = UNIQUE(model.receipts);
@@ -390,7 +406,7 @@ export function Ask({
                   <div className="ph-row-between" role="status" style={{ marginTop: 6 }}>
                     <span className="ph-status" style={{ padding: 0 }}>
                       <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
-                      {t("phone.ask.working")}
+                      {t(workingLine(model.phase))}
                     </span>
                     <button type="button" className="ph-ib ph-ib--line" onClick={onStop}>
                       {t("phone.ask.stop")}

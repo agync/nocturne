@@ -743,6 +743,28 @@ div.ph-mind-sent,
   font-size: 0.9375rem;
 }
 
+/* A question sent in parts: each part under its size, what was asked, and what went back */
+.ph-mind-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--rule);
+}
+
+.ph-mind-part .ph-mind-sent-words {
+  margin: 0;
+}
+
+.ph-mind-part-h {
+  margin: 0;
+  color: var(--ink2);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .ph-mind-sent-meta {
   font-family: var(--font-mono);
   font-size: 0.8125rem;

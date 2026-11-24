@@ -13,7 +13,7 @@ import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
-import { t } from "../../copy/t";
+import { type CopyId, t } from "../../copy/t";
 import type { AskPhase, AskPlace, HelpView, MemoryView, Receipt } from "../../engine/bindings";
 import { useAsk, useEngine, useStatus } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
@@ -41,6 +41,15 @@ const TERMINAL: ReadonlySet<string> = new Set<AskPhase>([
   "nothing",
   "unavailable",
 ]);
+
+/** While Nocturne looks further for the mind, the line names where (it replaces "Reading them…"). */
+const LOOKING: Partial<Record<string, CopyId>> = {
+  lookingCalendar: "ask.looking.calendar",
+  lookingJournal: "ask.looking.journal",
+  lookingSearch: "ask.looking.search",
+  lookingHealth: "ask.looking.health",
+  lookingSeveral: "ask.looking.several",
+};
 
 const same = (a: Receipt, b: Receipt) =>
   a.itemId === b.itemId && JSON.stringify(a.span) === JSON.stringify(b.span);
@@ -687,15 +696,15 @@ export default function Ask() {
                 </p>
               ) : null}
 
-              {phase === "reading" && found !== null ? (
-                <div className={styles.progress}>
+              {(phase === "reading" || LOOKING[phase]) && found !== null ? (
+                <div className={styles.progress} role="status">
                   <p>
                     <span aria-hidden="true">✓ </span>
                     {t("ask.found", { count: found })}
                   </p>
                   <p className={styles.reading}>
                     <span aria-hidden="true">· </span>
-                    {t("ask.reading", { count: found })}
+                    {LOOKING[phase] ? t(LOOKING[phase]) : t("ask.reading", { count: found })}
                   </p>
                 </div>
               ) : null}
