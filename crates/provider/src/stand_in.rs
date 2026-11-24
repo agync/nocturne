@@ -25,6 +25,8 @@ pub const KEY: &str = "stand-in-key";
 pub enum Answer {
     /// A reply with these words, ended as `finish_reason`.
     Text(String, &'static str),
+    /// A reply that asks for these look-ups, each a name and its arguments as JSON text.
+    Tools(Vec<(String, String)>),
     /// This status, with this body.
     Status(u16, String),
     /// A redirect to this address.
@@ -36,6 +38,11 @@ pub enum Answer {
 impl Answer {
     pub fn text(words: &str) -> Answer {
         Answer::Text(words.to_string(), "stop")
+    }
+
+    /// A reply that asks for one look-up.
+    pub fn look(name: &str, arguments: &str) -> Answer {
+        Answer::Tools(vec![(name.to_string(), arguments.to_string())])
     }
 }
 
@@ -180,6 +187,25 @@ async fn answer(State(script): State<Arc<Mutex<Script>>>, req: Request) -> Respo
                     "usage": {"prompt_tokens": 10, "completion_tokens": 2, "cost": 0.0001},
                 }))
                 .into_response(),
+                Answer::Tools(calls) => {
+                    let calls: Vec<Value> = calls
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (name, arguments))| {
+                            json!({"id": format!("call_{i}"), "type": "function",
+                                   "function": {"name": name, "arguments": arguments}})
+                        })
+                        .collect();
+                    axum::Json(json!({
+                        "id": "chatcmpl-stand-in",
+                        "object": "chat.completion",
+                        "model": MODEL,
+                        "choices": [{"index": 0, "message": {"role": "assistant", "content": null,
+                                     "tool_calls": calls}, "finish_reason": "tool_calls"}],
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 2, "cost": 0.0001},
+                    }))
+                    .into_response()
+                }
                 Answer::Status(status, body) => status_of(status, body),
                 Answer::Hang => StatusCode::GATEWAY_TIMEOUT.into_response(),
                 Answer::Redirect(to) => {

@@ -31,6 +31,12 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::client::{Exchange, Failed, Provider, Reply, Stop};
+use crate::lookup::{
+    Answered, Asked, FIRST_LINES, LOOK_UP_SECONDS, LookUps, MAX_LINES, MAX_LOOK_UPS, MAX_PER_ROUND,
+    MAX_REQUESTS, MAX_ROUNDS, Part, Parts, Tools,
+};
+use nocturne_engine::AskToday;
+use nocturne_mind::lookup::{self as look, LookUp, Place};
 
 const READ_SECONDS: u64 = 180;
 const ANSWER_SECONDS: u64 = 60;
@@ -76,6 +82,84 @@ pub struct ProviderMind {
     /// provider takes none, and none is sent again.
     photos_refused: AtomicU32,
     sound_refused: AtomicU32,
+    /// Whether the provider takes look-ups, and who to tell when that is learned.
+    tools: std::sync::Mutex<Tools>,
+    on_tools: Option<Arc<dyn Fn(Tools) + Send + Sync>>,
+    /// Questions in a row whose look-ups were all broken.
+    broken_in_a_row: AtomicU32,
+}
+
+/// One question on a phone alone's mind: the question, the lines found (the words' lines, then
+/// the date step's), today, and the look-ups when the question takes the look-up path.
+pub struct Asking<'a> {
+    /// Names the question's parts on the Sent online list.
+    pub ask: &'a str,
+    pub question: &'a str,
+    pub facts: &'a [Fact],
+    pub today: &'a AskToday,
+    pub look_ups: Option<&'a LookUps>,
+    pub parts: Parts<'a>,
+    pub stop: Option<Stop>,
+}
+
+/// Questions in a row with only broken look-ups that mean a provider does not take them.
+const BROKEN_IN_A_ROW: u32 = 2;
+
+/// Today as this device's clock and zone have it, for an answer asked without one.
+fn today_here() -> AskToday {
+    let now = jiff::ZonedDateTime::now();
+    AskToday {
+        day: now.date(),
+        hour: now.hour(),
+        minute: now.minute(),
+        zone: now
+            .time_zone()
+            .iana_name()
+            .map_or_else(|| format!("UTC{}", now.offset()), str::to_string),
+        week_start: jiff::civil::Weekday::Monday,
+    }
+}
+
+/// What a reply is: an answer, a set of look-ups, or neither.
+enum Replied {
+    Answer(String),
+    Looks(Vec<Value>),
+    Neither,
+}
+
+fn said_of(reply: &Reply, offered: bool) -> Replied {
+    if offered && !reply.tool_calls.is_empty() {
+        let named = reply
+            .tool_calls
+            .iter()
+            .all(|c| c["function"]["name"].is_string() && c["id"].is_string());
+        return if named {
+            Replied::Looks(reply.tool_calls.clone())
+        } else {
+            Replied::Neither
+        };
+    }
+    if reply.text.trim().is_empty() {
+        Replied::Neither
+    } else {
+        Replied::Answer(reply.text.clone())
+    }
+}
+
+/// How many parts of what a request carries `messages` make, as the Sent online list counts
+/// them: one for each message with words.
+fn said_count(messages: &[Value]) -> u32 {
+    messages.iter().filter(|m| m["content"].is_string()).count() as u32
+}
+
+fn places(looks: &[LookUp]) -> Vec<Place> {
+    let mut out: Vec<Place> = Vec::new();
+    for l in looks {
+        if !out.contains(&l.place()) {
+            out.push(l.place());
+        }
+    }
+    out
 }
 
 /// The things kept and the memories whose words a request was handed. A thing being read is the
@@ -84,6 +168,7 @@ pub struct ProviderMind {
 struct Handed {
     items: Vec<String>,
     memories: Vec<String>,
+    part: Option<Part>,
 }
 
 impl Handed {
@@ -194,6 +279,37 @@ impl ProviderMind {
             schema_refused: AtomicBool::new(false),
             photos_refused: AtomicU32::new(0),
             sound_refused: AtomicU32::new(0),
+            tools: std::sync::Mutex::new(Tools::Unknown),
+            on_tools: None,
+            broken_in_a_row: AtomicU32::new(0),
+        }
+    }
+
+    /// Starts from what is known of look-ups, and tells `learned` whenever it learns more.
+    pub fn with_tools(
+        mut self,
+        known: Tools,
+        learned: Arc<dyn Fn(Tools) + Send + Sync>,
+    ) -> ProviderMind {
+        self.tools = std::sync::Mutex::new(known);
+        self.on_tools = Some(learned);
+        self
+    }
+
+    /// What is known now of whether the provider takes look-ups.
+    pub fn tools(&self) -> Tools {
+        self.tools.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn learn_tools(&self, known: Tools) {
+        let mut held = self.tools.lock().unwrap_or_else(|e| e.into_inner());
+        if *held == known {
+            return;
+        }
+        *held = known.clone();
+        drop(held);
+        if let Some(tell) = &self.on_tools {
+            tell(known);
         }
     }
 
@@ -251,6 +367,7 @@ impl ProviderMind {
         if let Some(exchange) = exchange {
             exchange.carried.items = carried.items.clone();
             exchange.carried.memories = carried.memories.clone();
+            exchange.carried.part = carried.part.clone();
         }
         match &reply {
             Ok(r) => self.note(job, &r.exchange),
@@ -264,16 +381,274 @@ impl ProviderMind {
         reply
     }
 
-    /// Answers `question` as [`Mind::answer`] does, ended as soon as `stop` turns true: nothing
-    /// is asked once it has, and a request under way is dropped.
-    pub async fn answer_until(
+    /// Answers one question on a phone alone, ended as soon as its `stop` turns true: nothing
+    /// is asked once it has, and a request under way is dropped. With look-ups it takes the
+    /// look-up path (docs/design/ask-with-tools.md); without, the date step path, in one
+    /// request. Each part answered is counted, and the month's limit is looked at before each.
+    pub async fn answer_asked(
         &self,
-        question: &str,
-        facts: &[Fact],
+        asking: Asking<'_>,
         out: mpsc::Sender<String>,
-        stop: Stop,
-    ) -> Result<AnswerMeta, MindError> {
-        self.answer_impl(question, facts, out, Some(stop)).await
+    ) -> Result<Answered, MindError> {
+        let started = tokio::time::Instant::now();
+        // This device is the person's home: every line found may go.
+        let all = |ids: &[String]| vec![true; ids.len()];
+        let Some(q) = online::question_of(
+            asking.question,
+            asking.facts,
+            FIRST_LINES,
+            &all,
+            asking.today,
+            asking.look_ups.is_some() && self.tools().offered(),
+        ) else {
+            return Ok(Answered {
+                meta: AnswerMeta {
+                    not_sure: true,
+                    ..AnswerMeta::default()
+                },
+                ..Answered::default()
+            });
+        };
+        let look_ups = asking.look_ups.filter(|_| self.tools().offered());
+        let limit = look_ups.map_or(Duration::from_secs(ANSWER_SECONDS), |l| l.limit);
+        let mut system = q.system.clone();
+        if look_ups.is_some() {
+            system = format!("{system}\n{}", look::SYSTEM);
+        }
+        let first = vec![
+            json!({"role": "system", "content": system}),
+            json!({"role": "user", "content": q.user}),
+        ];
+        let mut messages = first.clone();
+        let mut facts: Vec<Fact> = q.facts.clone();
+        let mut asked_before: Vec<Asked> = Vec::new();
+        let mut new_from = 0u32;
+        let mut parts = 0u32;
+        let mut rounds = 0u32;
+        let mut looked = 0usize;
+        let mut broken_only = None::<bool>;
+        let mut offered = look_ups.is_some();
+        loop {
+            let n = parts + 1;
+            if !(asking.parts.may_send)() {
+                // The month's limit is reached between parts: no more go.
+                return Err(MindError::Unavailable);
+            }
+            let left = limit.saturating_sub(started.elapsed());
+            if left.is_zero() {
+                return Err(MindError::Online(OnlineFailure::Slow));
+            }
+            let tools_now = offered && rounds < MAX_ROUNDS && n < MAX_REQUESTS;
+            if offered && !tools_now {
+                new_from = said_count(&messages);
+                messages.push(json!({"role": "user", "content": look::ANSWER_NOW}));
+            }
+            let mut body = json!({
+                "messages": messages,
+                "temperature": temperature::ANSWER,
+                "max_tokens": online::MAX_TOKENS,
+            });
+            if tools_now && let Some(l) = look_ups {
+                body["tools"] = look::tools(&l.kinds);
+                body["tool_choice"] = json!("auto");
+            }
+            let mut carried = Handed::of_facts(&facts);
+            carried.part = Some(Part {
+                ask: asking.ask.to_string(),
+                n,
+                asked: std::mem::take(&mut asked_before),
+                from: new_from,
+            });
+            let seconds = left.as_secs().clamp(1, ANSWER_SECONDS);
+            let reply = self
+                .ask_until(Job::Answer, body, seconds, asking.stop.clone(), &carried)
+                .await;
+            let reply = match reply {
+                Ok(r) => r,
+                // Refused with look-ups offered, the first time: the date step path at once,
+                // with the same lines, and remembered.
+                Err(f) if n == 1 && tools_now && matches!(f.exchange.status, Some(400 | 422)) => {
+                    tracing::warn!("the provider refused look-ups; answering without them");
+                    self.learn_tools(Tools::Refuses {
+                        on: asking.today.day.to_string(),
+                    });
+                    offered = false;
+                    messages = vec![
+                        json!({"role": "system", "content": q.system}),
+                        json!({"role": "user", "content": q.user}),
+                    ];
+                    continue;
+                }
+                Err(f) => return Err(online(f)),
+            };
+            parts += 1;
+            (asking.parts.counted)();
+            match said_of(&reply, tools_now) {
+                Replied::Answer(text) => {
+                    if let Some(only) = broken_only {
+                        self.after_broken(only, asking.today.day);
+                    }
+                    let judged = judge(&text, &facts, &system);
+                    let meta = conclude(judged, &facts, &out).await?;
+                    return Ok(Answered {
+                        meta,
+                        facts,
+                        parts,
+                        nothing: false,
+                    });
+                }
+                Replied::Neither if tools_now && n == 1 && rounds == 0 => {
+                    // Not a well-formed answer or look-up: the date step path at once.
+                    self.learn_tools(Tools::Refuses {
+                        on: asking.today.day.to_string(),
+                    });
+                    offered = false;
+                    messages = vec![
+                        json!({"role": "system", "content": q.system}),
+                        json!({"role": "user", "content": q.user}),
+                    ];
+                }
+                Replied::Neither => {
+                    return Ok(Answered {
+                        meta: AnswerMeta {
+                            not_sure: true,
+                            ..AnswerMeta::default()
+                        },
+                        facts,
+                        parts,
+                        nothing: false,
+                    });
+                }
+                Replied::Looks(calls) => {
+                    let Some(l) = look_ups else {
+                        return Err(MindError::Failed("look-ups that were not offered".into()));
+                    };
+                    if matches!(self.tools(), Tools::Unknown) {
+                        self.learn_tools(Tools::Takes {
+                            on: asking.today.day.to_string(),
+                        });
+                    }
+                    rounds += 1;
+                    messages
+                        .push(json!({"role": "assistant", "content": null, "tool_calls": calls}));
+                    new_from = said_count(&messages);
+                    // Each look-up asked for is answered, in the order asked.
+                    let mut results: Vec<(String, String)> = Vec::new();
+                    let mut wanted: Vec<(usize, LookUp)> = Vec::new();
+                    let mut any_good = false;
+                    let mut any_broken = false;
+                    for (i, call) in calls.iter().enumerate() {
+                        let id = call["id"].as_str().unwrap_or_default().to_string();
+                        let f = &call["function"];
+                        let name = f["name"].as_str().unwrap_or_default();
+                        let args = match &f["arguments"] {
+                            Value::String(a) => a.clone(),
+                            other => other.to_string(),
+                        };
+                        if i >= MAX_PER_ROUND || looked >= MAX_LOOK_UPS {
+                            results.push((id, look::TOO_MANY.to_string()));
+                            continue;
+                        }
+                        looked += 1;
+                        match look::parse(name, &args, asking.today.day) {
+                            Ok(lookup) => {
+                                any_good = true;
+                                wanted.push((results.len(), lookup));
+                                results.push((id, String::new()));
+                            }
+                            Err(w) => {
+                                any_broken |= w.broken;
+                                any_good |= !w.broken;
+                                results.push((id, w.line));
+                            }
+                        }
+                    }
+                    broken_only = Some(match broken_only {
+                        Some(only) => only && any_broken && !any_good,
+                        None => any_broken && !any_good,
+                    });
+                    if !wanted.is_empty() {
+                        (l.looking)(&places(
+                            &wanted.iter().map(|(_, w)| w.clone()).collect::<Vec<_>>(),
+                        ));
+                    }
+                    let mut all_empty = !wanted.is_empty();
+                    for (at, lookup) in wanted {
+                        let text = if facts.len() >= MAX_LINES {
+                            asked_before.push(Asked::of(&lookup, 0));
+                            look::NO_MORE.to_string()
+                        } else {
+                            let run = l.run.clone();
+                            let job = lookup.clone();
+                            let found = tokio::time::timeout(
+                                LOOK_UP_SECONDS,
+                                tokio::task::spawn_blocking(move || run(&job)),
+                            )
+                            .await;
+                            match found {
+                                Ok(Ok(Some((lines, more)))) => {
+                                    let fresh: Vec<Fact> = lines
+                                        .into_iter()
+                                        .filter(|f| {
+                                            !facts.iter().any(|h| h.memory.id == f.memory.id)
+                                        })
+                                        .take(MAX_LINES - facts.len())
+                                        .collect();
+                                    if !fresh.is_empty() {
+                                        all_empty = false;
+                                    }
+                                    asked_before.push(Asked::of(&lookup, fresh.len()));
+                                    let start = facts.len();
+                                    let text = look::lines(
+                                        prompts::ONLINE_TIER,
+                                        &fresh,
+                                        start,
+                                        more,
+                                        &q.nonce,
+                                        lookup.nothing(),
+                                    );
+                                    facts.extend(fresh);
+                                    text
+                                }
+                                _ => {
+                                    asked_before.push(Asked::of(&lookup, 0));
+                                    look::COULD_NOT.to_string()
+                                }
+                            }
+                        };
+                        results[at].1 = text;
+                    }
+                    // Nothing came back, and the question has no lines at all: the mind has
+                    // nothing it could cite, so nothing more is asked.
+                    if all_empty && facts.is_empty() {
+                        return Ok(Answered {
+                            meta: AnswerMeta {
+                                not_sure: true,
+                                ..AnswerMeta::default()
+                            },
+                            facts,
+                            parts,
+                            nothing: true,
+                        });
+                    }
+                    for (id, text) in results {
+                        messages.push(json!({"role": "tool", "tool_call_id": id, "content": text}));
+                    }
+                }
+            }
+        }
+    }
+
+    /// After a question whose look-ups were all broken, or not: two in a row mean the provider
+    /// does not take look-ups, until the next check.
+    fn after_broken(&self, only: bool, day: jiff::civil::Date) {
+        if !only {
+            self.broken_in_a_row.store(0, Ordering::Relaxed);
+        } else if self.broken_in_a_row.fetch_add(1, Ordering::Relaxed) + 1 >= BROKEN_IN_A_ROW {
+            self.learn_tools(Tools::Refuses {
+                on: day.to_string(),
+            });
+        }
     }
 
     /// `body` asking for a reply matching `schema`, and asked again by the prompt alone when
@@ -445,7 +820,7 @@ impl ProviderMind {
     ) -> Result<AnswerMeta, MindError> {
         // This device is the person's home: every line found may go.
         let all = |ids: &[String]| vec![true; ids.len()];
-        let Some(q) = online::question(question, facts, &all) else {
+        let Some(q) = online::question(question, facts, &all, &today_here()) else {
             return Ok(AnswerMeta {
                 not_sure: true,
                 ..AnswerMeta::default()
@@ -535,7 +910,7 @@ impl ProviderMind {
         });
         let carried = Handed {
             items: input.items.iter().map(|i| i.id.to_string()).collect(),
-            memories: Vec::new(),
+            ..Handed::default()
         };
         let reply = self
             .ask_until(Job::Reflection, body, WRITE_SECONDS, None, &carried)
