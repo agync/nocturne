@@ -155,7 +155,8 @@ pub struct NightRun<'a> {
     pub progress: &'a dyn Fn(BackupPhase, u64, u64),
     /// When set, the run stops; nights already in the account stay whole.
     pub cancel: &'a AtomicBool,
-    /// Read the whole night back after writing it, as the first backup does.
+    /// Read every piece back before the night is written, as the first backup does. Other nights
+    /// read back only the pieces they sent.
     pub check: bool,
 }
 
@@ -451,6 +452,8 @@ struct Sender<'a> {
     /// Pieces the account holds, by the hash of their plain bytes.
     known: HashMap<String, PieceRef>,
     sent: u64,
+    /// The pieces sent this run.
+    new: Vec<PieceRef>,
 }
 
 impl Sender<'_> {
@@ -469,6 +472,7 @@ impl Sender<'_> {
         self.place.put(&format!("{PIECE}{}", r.piece), &locked)?;
         self.sent += locked.len() as u64;
         self.known.insert(hash, r.clone());
+        self.new.push(r.clone());
         Ok(r)
     }
 }
@@ -645,7 +649,16 @@ fn check_night(
     night: &Night,
     run: &NightRun,
 ) -> NightResult<()> {
-    let total = night.body.pieces().map(|p| p.size).sum();
+    check_body(place, key, &night.body, run)
+}
+
+fn check_body(
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    body: &Body,
+    run: &NightRun,
+) -> NightResult<()> {
+    let total = body.pieces().map(|p| p.size).sum();
     let mut progress = Progress {
         phase: BackupPhase::Checking,
         done: 0,
@@ -653,7 +666,7 @@ fn check_night(
         run,
     };
     (run.progress)(BackupPhase::Checking, 0, total);
-    for r in night.body.pieces() {
+    for r in body.pieces() {
         fetch_piece(place, key, r)?;
         progress.step(r.size)?;
     }
@@ -853,6 +866,7 @@ impl Engine {
             key,
             known,
             sent: 0,
+            new: Vec::new(),
         };
         let mut store = Vec::new();
         cutter.pieces(&mut std::fs::File::open(&snapshot)?, |plain| {
@@ -914,6 +928,18 @@ impl Engine {
             store,
             files,
         };
+        // A night lists only pieces that read back as they were sent: on the first night every
+        // piece, read back in full ([`NightRun::check`]); on the others, those sent tonight.
+        if run.check {
+            check_body(place, key, &body, run)?;
+        } else {
+            for r in &sender.new {
+                fetch_piece(place, key, r)?;
+                if run.cancel.load(Ordering::SeqCst) {
+                    return Err(NightError::Cancelled);
+                }
+            }
+        }
         let name = night_name(count, &state.device);
         let locked = seal_night(key, &name, &body)?;
         // A forget began while the pieces were made: they may hold what the person just removed,
@@ -935,10 +961,6 @@ impl Engine {
             body,
         };
         drop(scratch);
-
-        if run.check {
-            check_night(place, key, &night, run)?;
-        }
 
         let carried_forget = forgot.is_some();
         let mut kept: Vec<&Night> = if carried_forget {
