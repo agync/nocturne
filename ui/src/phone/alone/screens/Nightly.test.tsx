@@ -104,7 +104,7 @@ describe("Backup in This phone", () => {
       "Choose account",
     ],
     [
-      "noAccess",
+      "noPermission",
       "&os=ios",
       "iCloud is turned off for Nocturne, so the backup has stopped. Turn it on in Settings, under iCloud.",
       "Open Settings",
@@ -120,6 +120,16 @@ describe("Backup in This phone", () => {
     expect(await nightly()).toHaveTextContent("Stopped · last backup Monday, 3:05 am");
     expect(screen.getByText(line)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
+  });
+
+  it("on an iPhone, asks iCloud again on coming back from Settings", async () => {
+    await app("m=kept&v=nightly&b=signedOut&os=ios");
+    expect(await screen.findByRole("button", { name: "Open Settings" })).toBeInTheDocument();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument(),
+    );
+    expect(scriptedBackup.calls).toContain("backup_connect");
   });
 
   it("choosing another account says where the earlier backup stays", async () => {

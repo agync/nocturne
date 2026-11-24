@@ -13,10 +13,7 @@ export interface LastNight {
   bytes: number;
 }
 
-/**
- * How the backup stands. `signedOut` and `noPermission` replace `noAccess` once the phone can
- * tell them apart; until then `noAccess` reads as permission taken back.
- */
+/** How the backup stands. */
 export type BackupState =
   | { state: "off" }
   | { state: "unavailable" }
@@ -26,7 +23,6 @@ export type BackupState =
   | { state: "waitingForWifi" }
   | { state: "notInUse" }
   | { state: "noRoom" }
-  | { state: "noAccess" }
   | { state: "signedOut" }
   | { state: "noPermission" }
   | { state: "anotherPhone"; madeAt: string }
@@ -57,7 +53,6 @@ export type BackupProblem =
   | "newer"
   | "damaged"
   | "noRoom"
-  | "noAccess"
   | "signedOut"
   | "noPermission"
   | "offline"
@@ -153,7 +148,6 @@ const PROBLEMS: ReadonlySet<string> = new Set<BackupProblem>([
   "newer",
   "damaged",
   "noRoom",
-  "noAccess",
   "signedOut",
   "noPermission",
   "offline",
@@ -236,8 +230,6 @@ export function stopCause(s: BackupStatus | null): StopCause | null {
     case "anotherPhone":
     case "newer":
       return s.state.state;
-    case "noAccess":
-      return "noPermission";
     default:
       return null;
   }
