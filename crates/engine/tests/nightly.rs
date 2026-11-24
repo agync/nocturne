@@ -3,7 +3,10 @@ mod common;
 use std::sync::atomic::AtomicBool;
 
 use common::*;
-use nocturne_contract::{BackupPhase, Edition, Kept, Source};
+use nocturne_contract::{
+    BackupPhase, CalendarBatch, CalendarChange, CalendarEntry, Edition, Kept, PhoneCalendar,
+    Reading, ReadingBatch, ReadingChange, ReadingValue, Source, TimeSpan,
+};
 use nocturne_engine::nightly::{
     self, BackupPlace, FolderPlace, KEY_PHRASE, KEY_RECOVERY, MemoryPlace, NightError, NightKey,
     NightRun, NightState, PlaceError,
@@ -712,6 +715,178 @@ fn a_memory_read_here_from_a_thing_on_both_is_kept_once_with_both_marks() {
             &format!("SELECT keep_forever FROM memories WHERE id = '{mine}'")
         ),
         1
+    );
+}
+
+fn calendar_batch(sync: &str, entries: &[(&str, &str, &str)]) -> CalendarBatch {
+    CalendarBatch {
+        sync_id: sync.into(),
+        seq: 0,
+        last: true,
+        window_from: "2026-11-18".into(),
+        window_to: "2026-12-04".into(),
+        calendars: vec![PhoneCalendar {
+            id: "c1".into(),
+            name: "Home".into(),
+            colour: None,
+            account: None,
+        }],
+        changes: entries
+            .iter()
+            .map(|(id, title, start)| CalendarChange::Upsert {
+                entry: CalendarEntry {
+                    phone_id: (*id).into(),
+                    calendar_id: "c1".into(),
+                    title: (*title).into(),
+                    start: (*start).into(),
+                    end: start.replace(":00:00Z", ":30:00Z"),
+                    time_zone: Some("Europe/London".into()),
+                    all_day: false,
+                    place: None,
+                    people: Vec::new(),
+                    repeats: false,
+                    notes: None,
+                    repeat_rule: None,
+                },
+            })
+            .collect(),
+    }
+}
+
+fn sleep_batch(sync: &str, id: &str) -> ReadingBatch {
+    ReadingBatch {
+        sync_id: sync.into(),
+        seq: 0,
+        last: true,
+        changes: vec![ReadingChange::Upsert {
+            reading: Reading {
+                phone_id: id.into(),
+                day: "2026-11-19".into(),
+                start: "2026-11-18T23:00:00Z".into(),
+                end: None,
+                source_device: Some("Watch".into()),
+                value: ReadingValue::Sleep {
+                    asleep: vec![TimeSpan {
+                        from: "2026-11-18T23:00:00Z".into(),
+                        to: "2026-11-19T06:30:00Z".into(),
+                    }],
+                    in_bed_only: false,
+                },
+            },
+        }],
+    }
+}
+
+fn titles_by_entry(f: &Fixture) -> Vec<(String, String)> {
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.phone_id, i.title FROM phone_records r JOIN items i ON i.id = r.item_id \
+             JOIN remote_devices d ON d.id = r.device_id WHERE d.connection = 'local' \
+             ORDER BY r.phone_id",
+        )
+        .unwrap();
+    stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+#[test]
+fn calendar_entries_and_health_readings_come_once_and_the_newer_version_stays() {
+    let old = fixture_at("2026-11-20T05:00:00Z", "Europe/London");
+    let phone = old.engine.ensure_local_device("Old phone").unwrap();
+    old.engine
+        .take_calendar(
+            &phone,
+            calendar_batch(
+                "s1",
+                &[
+                    ("ev1", "Dentist", "2026-11-25T09:00:00Z"),
+                    ("ev2", "Gym", "2026-11-26T09:00:00Z"),
+                    ("ev3", "Haircut", "2026-11-27T10:00:00Z"),
+                ],
+            ),
+        )
+        .unwrap();
+    old.engine
+        .take_readings(&phone, sleep_batch("r1", "sleep1"))
+        .unwrap();
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+
+    // This phone saw the haircut before the old one did, and the gym after it had moved.
+    let here = fixture_at("2026-11-20T04:00:00Z", "Europe/London");
+    let mine = here.engine.ensure_local_device("Pixel").unwrap();
+    here.engine
+        .take_calendar(
+            &mine,
+            calendar_batch("h1", &[("ev3", "Haircut", "2026-11-27T09:00:00Z")]),
+        )
+        .unwrap();
+    here.clock.set("2026-11-20T06:00:00Z".parse().unwrap());
+    here.engine
+        .take_calendar(
+            &mine,
+            calendar_batch("h2", &[("ev2", "Gym moved", "2026-11-28T09:00:00Z")]),
+        )
+        .unwrap();
+    here.engine
+        .take_readings(&mine, sleep_batch("h3", "sleep1"))
+        .unwrap();
+    let brought = bring_newest(&here.engine, &place, &key);
+    assert_eq!((brought.things, brought.same, brought.already), (0, 0, 0));
+    assert_eq!(
+        titles_by_entry(&here),
+        vec![
+            ("ev1".to_string(), "Dentist".to_string()),
+            ("ev2".to_string(), "Gym moved".to_string()),
+            ("ev3".to_string(), "Haircut".to_string()),
+            ("sleep/sleep1".to_string(), "Sleep".to_string()),
+        ]
+    );
+    let haircut: String = rusqlite::Connection::open(here.dir.path().join("nocturne.db"))
+        .unwrap()
+        .query_row(
+            "SELECT json_extract(i.metadata, '$.entry.start') FROM phone_records r \
+             JOIN items i ON i.id = r.item_id WHERE r.phone_id = 'ev3'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(haircut, "2026-11-27T10:00:00Z", "the newer version stays");
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE kind = 'reading'"
+        ),
+        1,
+        "a reading on both is kept once"
+    );
+    let status = |f: &Fixture, id: &str| -> String {
+        rusqlite::Connection::open(f.dir.path().join("nocturne.db"))
+            .unwrap()
+            .query_row(
+                "SELECT i.status FROM phone_records r JOIN items i ON i.id = r.item_id \
+                 WHERE r.phone_id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(
+        status(&here, "ev1"),
+        status(&old, "ev1"),
+        "it comes as it was"
+    );
+
+    let items = sql_count(here.dir.path(), "SELECT COUNT(*) FROM items");
+    bring_newest(&here.engine, &place, &key);
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM items"),
+        items,
+        "brought in twice, nothing doubles"
     );
 }
 

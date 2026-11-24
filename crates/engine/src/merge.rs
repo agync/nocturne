@@ -27,6 +27,7 @@ use crate::error::{Error, Result};
 use crate::util::{new_id, random_hex};
 
 mod derived;
+mod entries;
 
 /// What bringing a phone's things in added, and what it found already here.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -50,6 +51,22 @@ pub struct BroughtIn {
 enum Bring {
     Move,
     Backup,
+}
+
+/// How the things arrive, and what a backup holds beside them: the records of its calendar
+/// entries and health readings. A move brings none.
+struct Notes {
+    bring: Bring,
+    records: Vec<entries::Record>,
+}
+
+impl Notes {
+    fn of(bring: Bring) -> Notes {
+        Notes {
+            bring,
+            records: Vec::new(),
+        }
+    }
 }
 
 /// Metadata that names another item by its id.
@@ -272,6 +289,7 @@ fn read_phone(
     phone: &Connection,
     shared: &[String],
     name: &str,
+    bring: Bring,
 ) -> Result<(Vec<Arriving>, Vec<Resent>)> {
     let at = |c: &str| shared.iter().position(|s| s == c);
     let need = |c: &str| at(c).ok_or_else(|| Error::invalid(format!("the phone's items lack {c}")));
@@ -289,7 +307,12 @@ fn read_phone(
     let gone = forgetting(phone)?;
     let mut claims = forgotten(phone)?;
     let mut marks = marked(phone)?;
-    let again = resent(phone, &mut claims, &mut marks)?;
+    // A backup brings calendar entries and health readings itself, with what was forgotten or
+    // marked of them; after a move the phone sends them again.
+    let again = match bring {
+        Bring::Move => resent(phone, &mut claims, &mut marks)?,
+        Bring::Backup => Vec::new(),
+    };
     // The device each phone keep came through, and the name of any that is not the phone itself.
     let mut keeps: HashMap<String, (String, Option<String>)> = HashMap::new();
     {
@@ -311,8 +334,12 @@ fn read_phone(
         }
     }
     let cols = shared.join(", ");
+    let only = match bring {
+        Bring::Move => format!("WHERE kind NOT IN {SENT_AGAIN}"),
+        Bring::Backup => String::new(),
+    };
     let mut stmt = phone.prepare(&format!(
-        "SELECT {cols} FROM items WHERE kind NOT IN {SENT_AGAIN} ORDER BY kept_at, rowid"
+        "SELECT {cols} FROM items {only} ORDER BY kept_at, rowid"
     ))?;
     let width = shared.len();
     let rows = stmt.query_map([], |r| {
@@ -734,14 +761,21 @@ impl Engine {
             .into_iter()
             .filter(|c| here_cols.contains(c))
             .collect();
-        let (arriving, again) = read_phone(&phone, &shared, name)?;
-        // A move needs nothing more of the phone's store; a backup brings what was worked out.
-        let phone = match bring {
+        let (arriving, again) = read_phone(&phone, &shared, name, bring)?;
+        // A move needs nothing more of the phone's store; a backup brings what was worked out,
+        // and its calendar entries and health readings by the phone's own ids for them.
+        let (phone, notes) = match bring {
             Bring::Move => {
                 drop(phone);
-                None
+                (None, Notes::of(bring))
             }
-            Bring::Backup => Some(phone),
+            Bring::Backup => {
+                let notes = Notes {
+                    records: entries::records(&phone)?,
+                    ..Notes::of(bring)
+                };
+                (Some(phone), notes)
+            }
         };
 
         // The originals are copied first, outside the transaction, so the store is never held
@@ -760,7 +794,7 @@ impl Engine {
 
         let written = self.write(|tx| {
             let (brought, placed, mut files) =
-                self.add_arriving(tx, device, &arriving, &shared, &mut copies, bring)?;
+                self.add_arriving(tx, device, &arriving, &notes, &shared, &mut copies)?;
             files.extend(carry_resent(tx, device, &again)?);
             if let Some(phone) = &phone {
                 files.extend(derived::bring(tx, phone, &placed)?);
@@ -807,9 +841,9 @@ impl Engine {
         tx: &Transaction<'_>,
         device: &str,
         arriving: &[Arriving],
+        notes: &Notes,
         shared: &[String],
         copies: &mut Staged,
-        bring: Bring,
     ) -> Result<(BroughtIn, derived::Placed, Vec<PathBuf>)> {
         // A forget here that has not finished yet still removes its things and their originals:
         // a thing it names could swallow the phone's own copy of it, or lose the original an
@@ -822,9 +856,26 @@ impl Engine {
         let originals = self.originals_dir();
         let mut brought = BroughtIn::default();
         let mut files = Vec::new();
+        // An entry version the plan leaves out comes only when it is here already.
+        let bring = notes.bring;
+        let plan = entries::plan(tx, device, &notes.records, arriving)?;
+        let mut kept: Vec<&Arriving> = Vec::with_capacity(arriving.len());
+        for p in arriving {
+            let comes = !entries::is_entry(&p.kind)
+                || plan.keep.contains(&p.id)
+                || tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM items WHERE sha256 = ?1)",
+                    [&p.sha],
+                    |r| r.get(0),
+                )?;
+            if comes {
+                kept.push(p);
+            }
+        }
+        let arriving = kept;
         let mut fates: Vec<Fate> = Vec::with_capacity(arriving.len());
         let mut taken: HashSet<String> = HashSet::new();
-        for p in arriving {
+        for p in &arriving {
             let f = fate(tx, device, p, &taken)?;
             if let Fate::Add(id) = &f {
                 taken.insert(id.clone());
@@ -882,7 +933,9 @@ impl Engine {
             let id = match f {
                 Fate::Add(id) => id,
                 Fate::Same(here) | Fate::Already(here) => {
-                    if matches!(f, Fate::Same(_)) {
+                    // Calendar entries and health readings are not things the person counts.
+                    if entries::is_entry(&p.kind) {
+                    } else if matches!(f, Fate::Same(_)) {
                         brought.same += 1;
                     } else {
                         brought.already += 1;
@@ -939,7 +992,15 @@ impl Engine {
             {
                 obj.insert("block".into(), json!(n));
             }
-            obj.remove("phone");
+            match bring {
+                Bring::Move => {
+                    obj.remove("phone");
+                }
+                Bring::Backup => entries::rehome(obj, device),
+            }
+            if let Some(before) = plan.after.get(&p.id) {
+                obj.insert("replaces".into(), json!(before));
+            }
             // A thing the person forgot something from is never read again by itself, as here
             // (`Engine::queue_reread`): it arrives as read, so no mind gets a second chance to say
             // what was forgotten. Only one not read yet waits to be read. From a backup, every
@@ -1011,7 +1072,7 @@ impl Engine {
                 matches!(g, Fate::Add(_))
                     && q.meta.get("replaces").and_then(Value::as_str) == Some(p.id.as_str())
             });
-            if replaced {
+            if replaced || entries::is_entry(&p.kind) {
                 continue;
             }
             match p.role() {
@@ -1021,6 +1082,7 @@ impl Engine {
                 None => brought.things += 1,
             }
         }
+        entries::write(tx, device, &notes.records, &plan, &map)?;
         let placed = derived::Placed {
             items: arriving
                 .iter()
