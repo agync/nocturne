@@ -21,7 +21,7 @@ getrandom.workspace = true
 # The phone's networked client (`client`): off for the computer.
 nocturne-contract = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake", "__rustls-tls"], optional = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "__rustls-tls"], optional = true }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"], optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
