@@ -1017,3 +1017,220 @@ div.ph-mind-sent,
 .ph-nb-done {
   margin-left: auto;
 }
+
+/* Step 2's name field and the service's list. */
+.ph-mind-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ph-mind-pick[aria-disabled="true"] {
+  color: var(--ink3);
+  cursor: default;
+}
+
+.ph-mind-pick[data-busy] {
+  color: var(--ink2);
+}
+
+.ph-mind-from {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.ph-mind-from--ink {
+  color: var(--ink);
+}
+
+.ph-mind-name {
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+}
+
+.ph-mind-prob {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--ember-soft);
+}
+
+.ph-mind-prob--calm {
+  background: var(--accent-soft);
+}
+
+.ph-mind-prob p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ph-mind-prob p:first-child {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.ph-names-sheet {
+  max-height: 86dvh;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom));
+}
+
+.ph-names-sheet--tall {
+  height: 86dvh;
+}
+
+html.ph-keyboard .ph-names-sheet {
+  height: 100dvh;
+  max-height: none;
+}
+
+.ph-names-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ph-names-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.375rem;
+  line-height: 1.25;
+}
+
+.ph-names-count {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink2);
+  font: 400 0.875rem / 1.4 var(--font-sans);
+}
+
+.ph-names-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -6px -10px 0 0;
+}
+
+.ph-names-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  color: var(--ink2);
+}
+
+.ph-names-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.ph-names-note {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.ph-names-note:empty {
+  display: none;
+}
+
+.ph-names {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ph-names-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.ph-names-row:last-child {
+  border-bottom: 0;
+}
+
+.ph-names-row input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+}
+
+.ph-names-row input:checked ~ .ph-radio {
+  border: 6px solid var(--ink);
+}
+
+.ph-names-row:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ph-names-name {
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+.ph-names-name mark {
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+.ph-names-none {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ph-names-none p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-names-sheet {
+    animation: none;
+    transition: none;
+  }
+}

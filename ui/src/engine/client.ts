@@ -37,6 +37,7 @@ import type {
   Mention,
   MergeOutcome,
   ModelChoice,
+  ModelList,
   ModelsView,
   NeedsYouEntry,
   OnlineForm,
@@ -383,6 +384,8 @@ export interface EngineClient {
   getOnline(): Promise<OnlineView>;
   /** One short question to the address the person entered, through the engine. */
   checkOnline(form: OnlineForm): Promise<CheckOutcome>;
+  /** One look at the service's list of models with the address and key entered. */
+  listOnlineModels(form: OnlineForm): Promise<ModelList>;
   cancelOnlineCheck(): Promise<void>;
   turnOnOnline(settings: OnlineSettings): Promise<OnlineView>;
   /** Turns it off; `forget` also removes the key. */

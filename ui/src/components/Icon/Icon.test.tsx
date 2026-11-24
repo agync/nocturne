@@ -16,6 +16,7 @@ describe("Icon", () => {
         "moon",
         "folder-inbox",
         "image",
+        "list",
         "file-text",
         "audio-lines",
         "lock",

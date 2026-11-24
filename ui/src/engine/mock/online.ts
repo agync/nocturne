@@ -1,5 +1,6 @@
 import type {
   CheckOutcome,
+  ModelList,
   OnlineAdvanced,
   OnlineForm,
   OnlineSend,
@@ -11,6 +12,31 @@ import type {
   SentLine,
 } from "../bindings";
 import { EngineError } from "../client";
+
+/** The stand-in service's list: six names, in its own order. */
+export const SHORT_LIST = [
+  "writer-pro",
+  "reader-large",
+  "sight-reader-1",
+  "reader-small",
+  "writer-mini",
+  "reader-large-2026-09",
+];
+
+/** A long list, searched in the renders for "small". */
+export const LONG_LIST = (() => {
+  const names = [
+    "open-reader-small",
+    "open-reader-small-instruct",
+    "reader-small",
+    "reader-small-2026-05",
+    "reader-small-2026-10",
+    "sight-reader-small",
+    "writer-small-fast",
+  ];
+  for (let i = 1; names.length < 214; i++) names.push(`model-${i}`);
+  return names;
+})();
 
 /** The states a visit can start from: `?mockOnline=<name>` before the `#`. */
 export const ONLINE_SCENARIOS = [
@@ -89,6 +115,8 @@ export class OnlineSim {
   private readonly now: () => number;
   /** Every form a check was asked about, without its key. For tests. */
   readonly checks: Array<{ baseUrl: string; model: string }> = [];
+  /** Every look at the list, by its address. For tests. */
+  readonly lists: Array<{ baseUrl: string }> = [];
   /** How many times setup was left. For tests. */
   abandoned = 0;
 
@@ -351,6 +379,23 @@ export class OnlineSim {
         : null;
     this.changed();
     return result;
+  }
+
+  /**
+   * One look at the list, as the stand-in answers it: what stops the check stops it, an address
+   * with "nolist" in it has none, and `?mockNames=long` lists 214 names.
+   */
+  async list(form: OnlineForm): Promise<ModelList> {
+    this.lists.push({ baseUrl: form.baseUrl });
+    const outcome = this.outcomeFor({ ...form, model: "list" });
+    if (outcome.type === "emptyReply" || outcome.type === "works") {
+      if (form.baseUrl.includes("nolist")) return { type: "none" };
+      const long =
+        typeof location !== "undefined" &&
+        new URLSearchParams(location.search).get("mockNames") === "long";
+      return { type: "listed", names: long ? LONG_LIST : SHORT_LIST };
+    }
+    return { type: "failed", problem: outcome };
   }
 
   async cancelCheck(): Promise<void> {

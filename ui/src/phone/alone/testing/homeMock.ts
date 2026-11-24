@@ -12,6 +12,7 @@ import type {
   JournalDay,
   KeptCounts,
   KeptHow,
+  ModelList,
   PageView,
   PhoneItem,
   PhoneMode,
@@ -359,6 +360,43 @@ export function resetScriptedMind(): void {
   scriptedMind.pageLoads = 0;
   scriptedMind.stopped = [];
   waiting.clear();
+}
+
+/** The service's list as the stand-in gives it: six names, or 214 with `&names=long`. */
+export const LISTED = [
+  "writer-pro",
+  "reader-large",
+  "sight-reader-1",
+  "reader-small",
+  "writer-mini",
+  "reader-large-2026-09",
+];
+
+function longList(): string[] {
+  const names = [
+    "open-reader-small",
+    "open-reader-small-instruct",
+    "reader-small",
+    "reader-small-2026-05",
+    "reader-small-2026-10",
+    "sight-reader-small",
+    "writer-small-fast",
+  ];
+  for (let i = 1; names.length < 214; i++) names.push(`model-${i}`);
+  return names;
+}
+
+/**
+ * The look at the list, as the stand-in answers it: as the check for a refused key, no internet
+ * and plain http://; an address with "nolist" in it has no list, one with "busy" is busy.
+ */
+export function scriptedList(form: ProviderForm): ModelList {
+  const outcome = scriptedCheck({ ...form, model: "list" });
+  if (outcome.type !== "works") return { type: "failed", problem: outcome };
+  if (form.url.includes("nolist")) return { type: "none" };
+  if (form.url.includes("busy")) return { type: "failed", problem: { type: "busy" } };
+  const long = new URLSearchParams(location.search).get("names") === "long";
+  return { type: "listed", names: long ? longList() : LISTED };
 }
 
 /** Questions under way that wait to be stopped, by their ids. */
@@ -792,6 +830,8 @@ export function homeState(scenario: HomeScenario) {
         return mind;
       case "mind_check":
         return scriptedCheck(args.form as ProviderForm);
+      case "mind_list":
+        return scriptedList(args.form as ProviderForm);
       case "mind_turn_on": {
         const outcome = scriptedCheck(args.form as ProviderForm);
         if (outcome.type === "notHttps") throw "notHttps";

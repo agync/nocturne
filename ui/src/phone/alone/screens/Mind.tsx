@@ -8,11 +8,19 @@ import {
   useState,
 } from "react";
 import { type CopyId, type CopyValues, t, tParts } from "../../../copy/t";
-import type { CheckOutcome } from "../../../engine/bindings";
+import type { CheckOutcome, ModelList } from "../../../engine/bindings";
 import { parseQuestions, parseUsd, usdText } from "../../../screens/online/limits";
+import {
+  afterLook,
+  against,
+  type ListProblem,
+  type ListState,
+  typingHelps,
+} from "../../../screens/online/modelList";
 import { useHeading } from "../../native/screens/parts";
 import { BackBar, Button, Icon, Page } from "../../screens/ui";
 import { hostOf, type MindLimit, type MindReading, type ProviderForm } from "../mind";
+import { ModelSheet } from "./ModelSheet";
 import { Chip } from "./parts";
 
 /** What the person has entered so far, held above the steps so Back keeps it. */
@@ -249,16 +257,28 @@ type Checking =
   | { name: "done"; outcome: CheckOutcome; host: string; model: string }
   | { name: "failed" };
 
-/** Step 2: the service's three details, and the check. */
+/** The words under the name field for a look that failed: the check's title, and the list's help. */
+function listProblem(problem: ListProblem): [CopyId, CopyId] {
+  const [title, detail] = CHECK_WORDS[problem];
+  if (typingHelps(problem)) return [title, "phone.mind.details.list.later.detail"];
+  if (problem === "keyRefused") return [title, "phone.mind.details.list.keyRefused.detail"];
+  if (problem === "noInternet") return [title, "phone.mind.details.list.noInternet.detail"];
+  return [title, detail];
+}
+
+/** Step 2: the service's three details, the service's list to choose the name from, and the check. */
 export function MindDetails({
   draft,
   check,
+  list,
   onDraft,
   onBack,
   onNext,
 }: {
   draft: MindDraft;
   check(form: ProviderForm): Promise<CheckOutcome>;
+  /** One look at the service's list; none on a screen that offers no list. */
+  list?(form: ProviderForm): Promise<ModelList>;
   onDraft(next: MindDraft): void;
   onBack(): void;
   onNext(): void;
@@ -274,24 +294,59 @@ export function MindDetails({
         }
       : { name: "idle" },
   );
+  // The list is the step's alone: leaving it forgets the list, and a new address or key drops it.
+  const [looked, setLooked] = useState<ListState | { name: "error" }>({ name: "idle" });
+  const [open, setOpen] = useState(false);
   const heading = useHeading("details");
   const id = useId();
+  const nameField = useRef<HTMLInputElement>(null);
+  const pick = useRef<HTMLButtonElement>(null);
   // Each edit or check starts a new run; a check that answers for an older one is dropped.
   const runs = useRef(0);
+  const looks = useRef(0);
   const filled = form.url.trim() !== "" && form.key.trim() !== "" && form.model.trim() !== "";
+  const ready = form.url.trim() !== "" && form.key.trim() !== "";
   const works = checking.name === "done" && checking.outcome.type === "works";
+  const host = hostOf(form.url);
+  const names = looked.name === "listed" ? looked.names : null;
+  const stands = against(form.model, names);
 
   const edit = (part: Partial<ProviderForm>) => {
     runs.current += 1;
     const next = { ...form, ...part };
     setForm(next);
     setChecking({ name: "idle" });
+    if (part.url !== undefined || part.key !== undefined) {
+      looks.current += 1;
+      setLooked({ name: "idle" });
+    }
     onDraft({ ...draft, form: next, works: null });
   };
 
+  const look = async () => {
+    if (!list || !ready || looked.name === "looking") return;
+    if (names) return setOpen(true);
+    const mine = ++looks.current;
+    setLooked({ name: "looking" });
+    try {
+      const found = afterLook(await list(form));
+      if (mine !== looks.current) return;
+      setLooked(found);
+      if (found.name === "listed") setOpen(true);
+      else if (found.name === "none") nameField.current?.focus();
+    } catch {
+      if (mine === looks.current) setLooked({ name: "error" });
+    }
+  };
+
+  const choose = (name: string) => {
+    setOpen(false);
+    edit({ model: name });
+    nameField.current?.focus();
+  };
+
   const run = async () => {
-    if (!filled || checking.name === "checking") return;
-    const host = hostOf(form.url);
+    if (!filled || checking.name === "checking" || looked.name === "looking") return;
     const mine = ++runs.current;
     setChecking({ name: "checking", host });
     try {
@@ -346,7 +401,7 @@ export function MindDetails({
   }
 
   const field = (
-    part: keyof ProviderForm,
+    part: "url" | "key",
     label: CopyId,
     extra: InputHTMLAttributes<HTMLInputElement>,
   ) => (
@@ -366,6 +421,94 @@ export function MindDetails({
     </div>
   );
 
+  // The line under the name field, joined to it.
+  let under: ReactNode = null;
+  if (stands.kind === "on") {
+    under = <p className="ph-mind-from">{t("phone.mind.details.list.on", { host })}</p>;
+  } else if (stands.kind === "notOn") {
+    under = (
+      <p className="ph-mind-from ph-mind-from--ink">
+        {t("phone.mind.details.list.notOn", { name: form.model.trim(), host })}
+      </p>
+    );
+  } else if (stands.kind === "capitals") {
+    under = (
+      <div className="ph-stack" style={{ gap: 6 }}>
+        <p className="ph-mind-from ph-mind-from--ink">
+          {t("phone.mind.details.list.capitals", {
+            name: form.model.trim(),
+            host,
+            listed: stands.listed,
+          })}
+        </p>
+        <button type="button" className="ph-link" onClick={() => choose(stands.listed)}>
+          {t("phone.mind.details.list.useListed", { listed: stands.listed })}
+        </button>
+      </div>
+    );
+  }
+
+  let problem: ReactNode = null;
+  if (looked.name === "failed") {
+    const [title, detail] = listProblem(looked.problem);
+    problem = (
+      <div className="ph-mind-prob" role="alert">
+        <p>{t(title, { host, used: form.model.trim() })}</p>
+        <p>{t(detail)}</p>
+      </div>
+    );
+  } else if (looked.name === "none") {
+    problem = (
+      <div className="ph-mind-prob ph-mind-prob--calm" role="status">
+        <p>{t("phone.mind.details.list.none", { host })}</p>
+        <p>{t("phone.mind.details.list.none.detail")}</p>
+      </div>
+    );
+  } else if (looked.name === "error") {
+    problem = (
+      <p className="ph-error" role="alert">
+        {t("phone.mind.details.list.failed")}
+      </p>
+    );
+  }
+
+  const again = looked.name === "failed" || looked.name === "none" || looked.name === "error";
+  let control: ReactNode = null;
+  if (list) {
+    control =
+      looked.name === "looking" ? (
+        <p className="ph-mind-pick" data-busy="" role="status">
+          <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
+          <span>{t("phone.mind.details.list.looking", { host })}</span>
+        </p>
+      ) : (
+        <>
+          <button
+            ref={pick}
+            type="button"
+            className="ph-mind-pick"
+            aria-disabled={ready ? undefined : true}
+            aria-describedby={ready ? undefined : `${id}-needs`}
+            onClick={() => void look()}
+          >
+            <Icon name={again ? "refresh" : "list"} size={20} />
+            <span>
+              {again
+                ? t("phone.mind.details.list.again")
+                : ready && host
+                  ? t("phone.mind.details.list", { host })
+                  : t("phone.mind.details.list.noHost")}
+            </span>
+          </button>
+          {ready ? null : (
+            <p id={`${id}-needs`} className="ph-mind-from">
+              {t("phone.mind.details.list.needs")}
+            </p>
+          )}
+        </>
+      );
+  }
+
   return (
     <Page bar={<BackOnly onBack={onBack} />}>
       <main className="ph-main" style={{ gap: 14 }}>
@@ -382,9 +525,31 @@ export function MindDetails({
         <p id={`${id}-kept`} className="ph-hint ph-hint--ink2" style={{ marginTop: -6 }}>
           {t("phone.mind.details.kept")}
         </p>
-        {field("model", "phone.mind.details.model", { type: "text" })}
+        <div className="ph-field">
+          <label htmlFor={`${id}-model`}>{t("phone.mind.details.model")}</label>
+          <input
+            ref={nameField}
+            id={`${id}-model`}
+            className="ph-input ph-input--note ph-mind-name"
+            type="text"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={t("phone.mind.details.model.placeholder")}
+            value={form.model}
+            aria-describedby={under ? `${id}-under` : undefined}
+            onChange={(e) => edit({ model: e.target.value })}
+          />
+          {under ? <div id={`${id}-under`}>{under}</div> : null}
+        </div>
+        {control}
+        {problem}
         <div className="ph-stack" style={{ gap: 10 }}>
-          <Button disabled={!filled || checking.name === "checking"} onClick={() => void run()}>
+          <Button
+            disabled={!filled || checking.name === "checking" || looked.name === "looking"}
+            onClick={() => void run()}
+          >
             {checking.name === "done" && !works
               ? t("phone.mind.checkAgain")
               : t("phone.mind.check")}
@@ -405,6 +570,18 @@ export function MindDetails({
           </p>
         )}
       </footer>
+      {open && names ? (
+        <ModelSheet
+          host={host}
+          names={names}
+          chosen={form.model.trim()}
+          onChoose={choose}
+          onClose={() => {
+            setOpen(false);
+            pick.current?.focus();
+          }}
+        />
+      ) : null}
     </Page>
   );
 }
