@@ -52,6 +52,10 @@ apps, and a backup that needs the person to set up a folder is not automatic. Th
   phone's in: nothing there is put aside or deleted, and a thing on both is kept once. Each index
   names, unlocked, a random number for the phone that wrote it and a count; a phone that finds a
   newer index from another phone stops, so nightly backups never overwrite or merge.
+- **No health readings.** Revised 2026-11-24 (owner): raw health readings never go into the
+  backup, on iPhone and Android alike, since App Store guideline 5.1.3 bars health data in iCloud.
+  Pages, reflections and day lines that speak of them stay. A restore reads them again from Health
+  or Health Connect, as far back as the phone allows, and says what doesn't come back.
 - **Export is separate.** Saving everything as one 0013 file stays its own action.
 - **It is the online backup.** The phone's own device backup is out of scope, and the memory stays
   out of it.
