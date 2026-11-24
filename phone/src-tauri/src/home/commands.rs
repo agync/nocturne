@@ -233,8 +233,9 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
             (HomeAnswer::Deleted, _) if deletes => {
                 syncer.ledger.reset();
                 // The mind's key, its choice and what it sent go in the same step: a new
-                // start chooses again.
+                // start chooses again. So does the nightly backup, from the account too.
                 worker.state::<crate::mind::PhoneMind>().erase();
+                worker.state::<crate::backup::PhoneBackup>().erase();
             }
             (HomeAnswer::SourceDeleted, Some((source, also_stop))) => {
                 forget_source_sends(&syncer.ledger, source, also_stop)
@@ -247,16 +248,12 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     .unwrap_or(HomeAnswer::Error {
         code: HomeError::Failed,
     });
-    let ledger = &app.state::<AppState>().syncer.ledger;
     if matches!(answer, HomeAnswer::Restored) {
         if restores {
             let_go_backup_file(app.clone());
         }
         if swaps {
-            // What was sent before went into the store that is gone: send it all again.
-            ledger.forget_sends();
-            emit_mode(&app);
-            hear_soon(&app);
+            restored(&app);
         }
     }
     if deletes && matches!(answer, HomeAnswer::Deleted) {
@@ -264,6 +261,14 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
         emit_mode(&app);
     }
     answer
+}
+
+/// A store came back in place of the one here: what was sent before went into the store that is
+/// gone, so it is all sent again.
+pub(crate) fn restored<R: Runtime>(app: &AppHandle<R>) {
+    app.state::<AppState>().syncer.ledger.forget_sends();
+    emit_mode(app);
+    hear_soon(app);
 }
 
 /// After what a source brought was deleted: stop it, or have the calendar's next two weeks
@@ -287,7 +292,9 @@ pub(crate) fn forget_source_sends(ledger: &LedgerFile, source: PhoneSource, also
 
 /// A progress callback for the engine: at most one event every [`PROGRESS_EVERY`], always when
 /// the phase changes, and always the last.
-fn progress<R: Runtime>(app: AppHandle<R>) -> impl Fn(BackupPhase, u64, u64) + Send + Sync {
+pub(crate) fn progress<R: Runtime>(
+    app: AppHandle<R>,
+) -> impl Fn(BackupPhase, u64, u64) + Send + Sync {
     let last = Mutex::new(None::<(Instant, BackupPhase)>);
     move |phase, done, total| {
         let now = Instant::now();
