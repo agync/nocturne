@@ -50,6 +50,7 @@ const OFF: BackupStatus = {
   state: { state: "off" },
   moved: false,
   deletePending: false,
+  deleteElsewhere: false,
   forgetWaiting: false,
 };
 
@@ -97,6 +98,8 @@ function first(): BackupStatus {
       return { ...on({ state: "waiting" }), forgetWaiting: true };
     case "deleting":
       return { ...OFF, deletePending: true };
+    case "deletingElsewhere":
+      return { ...OFF, deletePending: true, deleteElsewhere: true };
     case "kept":
       return { ...OFF, last: stopped };
     case "moved":

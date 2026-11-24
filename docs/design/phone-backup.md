@@ -393,6 +393,7 @@ again. "Cancel" before "Print or save…" keeps the earlier key, if any. After i
 | After, kept | Row hint: "Off · your backup from {day} is still in your iCloud" |
 | After, deleted | Row hint: "Off" and, once, "Your backup was deleted." |
 | Deleting while offline | Row hint: "Off · your backup goes from your iCloud the next time this phone is online" |
+| Deleting, owed to an account the phone no longer reaches | Row hint, iPhone: "Off · your backup goes from the iCloud it was in the next time this iPhone is signed in to it". Android: "Off · your backup goes from the Google Drive it was in the next time you choose that account" |
 
 What happens to the copies:
 
@@ -648,6 +649,7 @@ on or kept, and the Welcome line after it changes.
 | Body | "Everything you kept, your journal, check-ins, calendar and health readings in Nocturne go from this phone for good. Your calendar and Health themselves aren’t touched. Your backup in your iCloud is deleted too. A backup file you saved elsewhere isn’t touched." ("in your Google Drive" on Android) |
 | After, on Welcome | "Everything was deleted from this phone and from your iCloud." |
 | After, offline | "Everything was deleted from this phone. Your backup in your iCloud goes the next time this phone is online. If you remove Nocturne before then, delete it yourself in {place}." {place} is "iCloud in Settings" or "your Google Drive" |
+| After, offline, then another account | iPhone: "Everything was deleted from this phone. Your backup goes from the iCloud it was in the next time this iPhone is signed in to it. If you remove Nocturne before then, delete it yourself in iCloud in Settings while signed in to that account." Android: "Everything was deleted from this phone. Your backup goes from the Google Drive it was in the next time you choose that account in Nocturne. If you remove Nocturne before then, delete it yourself in that account’s Google Drive." |
 
 Until the backup is gone, Welcome keeps that line, and "I have a backup" does not offer the backup
 that is being deleted. When the person chooses another account before the phone is back online,

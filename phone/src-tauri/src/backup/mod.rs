@@ -256,6 +256,9 @@ pub struct BackupStatus {
     /// The person asked for the backup in the account to go, and it goes once the account
     /// answers.
     pub delete_pending: bool,
+    /// A deletion is owed to an account other than the one the phone reaches now: it goes the
+    /// next time Nocturne reaches that one.
+    pub delete_elsewhere: bool,
     /// Something forgotten for good is still in the backup until the account can be reached.
     pub forget_waiting: bool,
 }
@@ -782,6 +785,10 @@ impl PhoneBackup {
             state,
             moved: saved.moved,
             delete_pending: !saved.delete_owed.is_empty(),
+            delete_elsewhere: saved
+                .delete_owed
+                .iter()
+                .any(|o| !o.is_for(saved.account, &saved.account_name)),
             forget_waiting: false,
         }
     }

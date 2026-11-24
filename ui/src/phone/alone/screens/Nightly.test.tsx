@@ -218,6 +218,10 @@ describe("Backup in This phone", () => {
       "deleting",
       "Off · your backup goes from your Google Drive the next time this phone is online",
     ],
+    [
+      "deletingElsewhere",
+      "Off · your backup goes from the Google Drive it was in the next time you choose that account",
+    ],
   ])("says how it stands (%s)", async (state, hint) => {
     await app(`m=kept&v=nightly&b=${state}`);
     expect(await nightly()).toHaveTextContent(hint);

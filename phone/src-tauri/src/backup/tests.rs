@@ -978,6 +978,7 @@ fn a_deletion_owed_to_one_account_stays_with_it_across_a_change() {
     p.backup
         .reconnected(Some("b@example.org"), Some("a@example.org"));
     assert!(p.backup.status().delete_pending, "the change keeps it");
+    assert!(p.backup.status().delete_elsewhere);
     assert!(!p.backup.is_on(), "nothing is owed to this account");
     assert!(!p.backup.pass(&p.home, true));
 
@@ -1001,6 +1002,7 @@ fn a_deletion_owed_to_one_account_stays_with_it_across_a_change() {
     assert!(!p.backup.pass(&p.home, false));
     assert!(old.names().is_empty());
     assert!(!p.backup.status().delete_pending);
+    assert!(!p.backup.status().delete_elsewhere);
     assert_eq!(new.names(), theirs);
 }
 
