@@ -913,6 +913,7 @@ export function HomeApp({
       screen = (
         <Restore
           holds
+          here={nightly.here}
           pickFile={home.chooseBackupFile}
           check={home.checkBackup}
           restore={home.restoreBackup}

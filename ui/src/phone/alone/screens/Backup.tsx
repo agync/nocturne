@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { formatBytes, formatTimeOfDay } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress, BackupReport } from "../../../engine/bindings";
 import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
@@ -12,7 +12,7 @@ import {
   type PickedFile,
   type Progress,
 } from "../api";
-import { backupDay } from "../nightly";
+import type { Here } from "../nightly";
 
 const MIN_PASSPHRASE = 8;
 
@@ -375,6 +375,7 @@ export function Restore({
   onBack,
   onDone,
   holds = false,
+  here,
 }: {
   /** The phone's open sheet; null when closed, a `notABackup` error for another file. */
   pickFile(): Promise<PickedFile | null>;
@@ -391,6 +392,8 @@ export function Restore({
   onDone(): void;
   /** This phone holds a memory (Restore in This phone): bringing its things in is asked first. */
   holds?: boolean;
+  /** This phone's things and its first day, for the counts before bringing things in. */
+  here?(): Promise<Here>;
 }) {
   const [file, setFile] = useState<PickedFile | null>(null);
   const [passphrase, setPassphrase] = useState("");
@@ -504,6 +507,7 @@ export function Restore({
     return (
       <BringIn
         checked={step.checked}
+        here={here}
         onNotNow={onBack}
         onBring={() => void bringIn(step.checked, true)}
       />
@@ -624,15 +628,28 @@ function RestoreProblem({ error }: { error: RestoreError }) {
 /** "This phone has a memory too": both sides, then whether to bring the backup's things in. */
 function BringIn({
   checked,
+  here,
   onNotNow,
   onBring,
 }: {
   checked: Checked;
+  here?(): Promise<Here>;
   onNotNow(): void;
   onBring(): void;
 }) {
   const heading = useHeading("bringIn");
   const { summary } = checked.check;
+  const [mine, setMine] = useState<Here | null>(null);
+  useEffect(() => {
+    let gone = false;
+    here?.().then(
+      (h) => !gone && setMine(h),
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [here]);
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
@@ -645,14 +662,22 @@ function BringIn({
             <span>
               {t("phone.backup.merge.backupLineNoFirst", {
                 count: checked.backup.things,
-                day: backupDay(summary.madeAt),
+                day: formatLongDay(summary.madeAt),
                 size: formatBytes(summary.bytes),
               })}
             </span>
           </div>
           <div>
             <b>{t("phone.backup.merge.onPhone")}</b>
-            {checked.here ? (
+            {mine?.first ? (
+              <span>
+                {t("phone.backup.merge.phoneLine", {
+                  count: mine.things,
+                  first: formatLongDay(mine.first),
+                  last: t("phone.backup.today"),
+                })}
+              </span>
+            ) : checked.here ? (
               <span>{t("phone.backup.merge.things", { count: checked.here.things })}</span>
             ) : null}
           </div>

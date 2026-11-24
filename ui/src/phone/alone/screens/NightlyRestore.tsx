@@ -728,7 +728,7 @@ export function NightlyRestore({
           <div className="ph-nb-both">
             <div>
               <b>{t("phone.backup.merge.inBackup")}</b>
-              <span>{backupLine(chosen, size, new Date(now()))}</span>
+              <span>{backupLine(chosen, size)}</span>
             </div>
             <div>
               <b>{t("phone.backup.merge.onPhone")}</b>
@@ -1099,10 +1099,10 @@ export function NightlyRestore({
 }
 
 /** "In the backup": its things, from its first day to the night's, and its size. */
-function backupLine(night: NightView | null, size: number, now: Date): string {
+function backupLine(night: NightView | null, size: number): string {
   const about = t("phone.backup.merge.about", { size: formatBytes(size) });
   if (!night?.madeAt) return about;
-  const day = backupDay(night.madeAt, now);
+  const day = formatLongDay(night.madeAt);
   if (night.items === null)
     return `${t("phone.backup.nights.night", { day, time: backupTime(night.madeAt) })} · ${about}`;
   return night.first
