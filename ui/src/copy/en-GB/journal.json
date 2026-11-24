@@ -211,15 +211,13 @@
   "journal.a11y.saved": "Saved",
   "journal.online.step1.more.staysHere": "Writing your reflections and recaps",
   "journal.online.step5.neverSent": "Your reflections and recaps. They are written on this computer and stay here.",
-  "journal.online.step5.privateNote": "Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
-  "journal.online.step5.choice.entries": "Journal entries, check-ins and good things",
+  "journal.online.step5.choice.entries": "What you kept, your journal included",
   "journal.online.step5.choice.entriesValue": "May be sent",
   "journal.online.step5.choice.checkins": "Reflections and recaps",
   "journal.online.step5.choice.checkinsValue": "Never sent",
   "journal.online.settings.label": "Your journal",
-  "journal.online.settings.hint": "A line from an entry, a check-in or a good thing may go with a question it helps answer. They can’t be marked private. Reflections and recaps never go.",
+  "journal.online.settings.hint": "A line from an entry, a check-in or a good thing may go with a question it helps answer. Reflections and recaps never go.",
   "journal.online.settings.value": "Entries, check-ins and good things, when they help",
   "journal.online.settings.staysHere": "Your reflections and recaps",
-  "journal.online.settings.privateNote": "Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
   "journal.online.sentFrom": "from your journal, {day}"
 }

@@ -79,11 +79,11 @@ function CheckingPage({ back }: { back: Back }) {
   );
 }
 
-/** What never leaves this computer, and the one thing that can: journal lines, which cannot be marked private. */
+/** What stays on this computer, and what a private mark does. */
 function StaysHere() {
   const stays = [
     t("online.stays.photos"),
-    t("online.stays.private"),
+    t("online.stays.letGo"),
     t("journal.online.settings.staysHere"),
     t("online.stays.keeping"),
     t("online.stays.page"),
@@ -97,7 +97,6 @@ function StaysHere() {
         ))}
       </ul>
       <LockNote>{t("online.stays.markPrivate")}</LockNote>
-      <LockNote>{t("journal.online.settings.privateNote")}</LockNote>
     </>
   );
 }
@@ -429,9 +428,6 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
             />
           </li>
         ) : null}
-        <Row title={t("online.row.private.label")} hint={t("online.row.private.hint")}>
-          <span className={styles.value}>{t("online.row.private.value")}</span>
-        </Row>
         <Row title={t("journal.online.settings.label")} hint={t("journal.online.settings.hint")}>
           <span className={styles.value}>{t("journal.online.settings.value")}</span>
         </Row>

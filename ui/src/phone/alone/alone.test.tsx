@@ -609,7 +609,7 @@ describe("keeping and an item on a phone alone", () => {
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(
       screen.getByText(
-        "Never sent to a mind you use online or borrow at home. If your memory moves, it moves too, locked like the rest.",
+        "Private things don’t come up on their own in notifications, reminders or updates. They still help answer what you ask. If your memory moves, it moves too, locked like the rest.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/your computer/)).toBeNull();

@@ -30,7 +30,7 @@ describe("online", () => {
   it("off_never_set_up: names no provider and has no key to forget", async () => {
     await openOnline(PAGE, "off");
     expect(screen.queryByRole("button", { name: /Forget the key/ })).toBeNull();
-    expect(screen.getByText("Always stays here")).toBeInTheDocument();
+    expect(screen.getByText("Stays here")).toBeInTheDocument();
   });
 
   it("checking: has its own view, with no switch and nothing to turn on", async () => {
@@ -233,7 +233,7 @@ describe("online, when the computer cannot be read", () => {
 });
 
 describe("the journal on the Online answers page", () => {
-  it("has the Your journal row and both Always stays here additions", async () => {
+  it("has the Your journal row, and the reflections line under Stays here", async () => {
     await openOnline(PAGE, "on");
     const row = screen.getByText("Your journal").closest("li") as HTMLElement;
     expect(
@@ -241,28 +241,26 @@ describe("the journal on the Online answers page", () => {
     ).toBeInTheDocument();
     expect(
       within(row).getByText(
-        "A line from an entry, a check-in or a good thing may go with a question it helps answer. They can’t be marked private. Reflections and recaps never go.",
+        "A line from an entry, a check-in or a good thing may go with a question it helps answer. Reflections and recaps never go.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Your reflections and recaps")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
-      ),
-    ).toBeInTheDocument();
   });
 });
 
-describe("only what is marked private is held back", () => {
-  it("has no health, money or ID switch, and says to mark things private", async () => {
+describe("what a private mark does", () => {
+  it("has no health, money or ID switch and no Private things row, and says what private does", async () => {
     await openOnline(PAGE, "on");
     expect(screen.queryByRole("switch", { name: /Health, money and ID/ })).toBeNull();
     expect(screen.queryByText(/health, money/i)).toBeNull();
+    expect(screen.queryByText("Private things")).toBeNull();
+    expect(screen.queryByText(/never sent/i)).toBeNull();
     expect(
       screen.getByText(
-        "Nocturne doesn’t guess what is private. Mark anything you never want sent as private.",
+        "Marking something private keeps it from coming up on its own, in reminders and notifications. It still helps answer what you ask.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Things you let go")).toBeInTheDocument();
   });
 });
 
