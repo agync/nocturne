@@ -6,8 +6,7 @@ mod common;
 use common::*;
 use jiff::Timestamp;
 use nocturne_contract::{
-    LeftOut, LimitKind, LocalReason, OnlineLimit, OnlinePause, SendKind, SendResult, SentLine,
-    SentMemory,
+    LimitKind, LocalReason, OnlineLimit, OnlinePause, SendKind, SendResult, SentLine, SentMemory,
 };
 use nocturne_engine::{CorrectPatch, DELETE_PHRASE, NewSend, Predicate};
 
@@ -134,14 +133,12 @@ fn sendable_fails_closed() {
     let ok = memory(&f, "The bins go out on Tuesday");
     let ids = vec![ok.clone(), "mem_unknown".into(), String::new()];
     assert_eq!(f.engine.sendable(&ids).unwrap(), [true, false, false]);
-    assert_eq!(
-        f.engine.online_verdicts(&ids).unwrap(),
-        [None, Some(LeftOut::Private), Some(LeftOut::Private)]
-    );
 }
 
+/// A private mark decides only what comes up on its own (decision 0011, amended 2026-11-23): a
+/// private memory goes with an answer it helps, in every version of it.
 #[test]
-fn private_in_any_version_not_sendable() {
+fn private_in_any_version_is_sendable() {
     let f = fixture();
     let id = memory(&f, "The safe code is 4321");
     let new = f
@@ -157,20 +154,12 @@ fn private_in_any_version_not_sendable() {
             },
         )
         .unwrap();
-    assert_eq!(
-        f.engine.sendable(std::slice::from_ref(&new)).unwrap(),
-        [true]
-    );
     exec(
         f.dir.path(),
         "UPDATE memories SET private = 1 WHERE id = ?1",
         &id,
     );
-    assert_eq!(
-        f.engine.sendable(&[id, new]).unwrap(),
-        [false, false],
-        "an earlier private version keeps the chain private"
-    );
+    assert_eq!(f.engine.sendable(&[id, new]).unwrap(), [true, true]);
 }
 
 fn correct(f: &Fixture, id: &str, object: &str, sentence: &str) -> String {
@@ -207,13 +196,12 @@ fn health_money_and_id_lines_are_sendable() {
         &labelled,
     );
     let ids = vec![insulin, bank, passport, pay, now_plain, therapy, labelled];
-    assert_eq!(f.engine.online_verdicts(&ids).unwrap(), [None; 7]);
     assert_eq!(f.engine.sendable(&ids).unwrap(), [true; 7]);
 }
 
-/// What the person marked private stays here, whatever it is about.
+/// Marking a health line private, or the note it was read from, keeps nothing out of an answer.
 #[test]
-fn a_marked_private_health_line_is_not_sendable() {
+fn a_marked_private_line_and_a_private_note_are_sendable() {
     let f = fixture();
     let open = memory(&f, "Gran sees the nurse on Friday");
     let marked = memory(&f, "Gran takes warfarin every evening");
@@ -222,10 +210,37 @@ fn a_marked_private_health_line_is_not_sendable() {
         "UPDATE memories SET private = 1 WHERE id = ?1",
         &marked,
     );
-    assert_eq!(
-        f.engine.online_verdicts(&[open, marked]).unwrap(),
-        [None, Some(LeftOut::Private)]
+    let (note, kept) = learn(
+        &f.engine,
+        "Gran keeps her pills in the blue tin",
+        cand(
+            "Gran",
+            Predicate::Happened,
+            "tin",
+            "Gran keeps her pills in the blue tin",
+        ),
     );
+    f.engine.set_item_private(&note, true).unwrap();
+    assert_eq!(
+        f.engine.sendable(&[open, marked, kept]).unwrap(),
+        [true, true, true]
+    );
+}
+
+/// A kept line (a check-in, an entry or a reading) goes whether or not its item is marked
+/// private, as long as the item is still kept.
+#[test]
+fn a_private_kept_line_is_sendable_and_a_missing_one_is_not() {
+    let f = fixture();
+    let (item, _) = learn(
+        &f.engine,
+        "Feeling tired after the long drive",
+        cand("Sam", Predicate::Happened, "tired", "Sam felt tired"),
+    );
+    f.engine.set_item_private(&item, true).unwrap();
+    let line = format!("{}{item}", nocturne_engine::KEPT_LINE);
+    let gone = format!("{}item_unknown", nocturne_engine::KEPT_LINE);
+    assert_eq!(f.engine.sendable(&[line, gone]).unwrap(), [true, false]);
 }
 
 #[test]

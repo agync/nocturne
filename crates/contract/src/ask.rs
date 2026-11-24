@@ -63,7 +63,7 @@ pub struct AskDelta {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub answered_by: Option<AnsweredBy>,
-    /// Set when remembered things were kept back from an online question.
+    /// Set when part of an online answer was added here from what never goes online.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub left_out: Option<LeftOut>,

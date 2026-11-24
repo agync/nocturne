@@ -21,7 +21,7 @@ plain: boolean,
  */
 answeredBy?: AnsweredBy | null, 
 /**
- * Set when remembered things were kept back from an online question.
+ * Set when part of an online answer was added here from what never goes online.
  */
 leftOut?: LeftOut | null, 
 /**

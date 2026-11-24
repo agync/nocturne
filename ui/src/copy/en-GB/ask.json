@@ -84,7 +84,6 @@
   "ask.online.waiting.title": "Still waiting: your provider is taking a while.",
   "ask.online.waiting.body": "Nocturne switches to this computer by itself after 20 seconds.",
   "ask.online.waiting.button": "Answer on this computer instead",
-  "ask.leftOut.private": "Some things you marked private were left out. Ask on this computer to include them.",
   "ask.leftOut.other": "Some things were left out. Ask on this computer to include them.",
   "ask.leftOut.button": "Ask on this computer",
   "ask.changed.title": "Online answers has changed",

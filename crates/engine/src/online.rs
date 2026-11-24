@@ -12,8 +12,8 @@ use std::path::Path;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use nocturne_contract::{
-    KeyStorage, LeftOut, LimitKind, LocalReason, OnlineLimit, OnlinePause, OnlineProblem,
-    OnlineSend, SendKind, SendResult, SentLine, SentMemory,
+    KeyStorage, LimitKind, LocalReason, OnlineLimit, OnlinePause, OnlineProblem, OnlineSend,
+    SendKind, SendResult, SentLine, SentMemory,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -185,21 +185,14 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
     Ok(())
 }
 
-/// Why a memory may not be sent, or `None` when it may. Only the person's own choices keep a
-/// memory here: marked private in any version, being forgotten or let go. Nothing about its
-/// words or labels does. Fails closed: a memory the store does not know counts as private.
-fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
-    // A check-in, an entry or a reading kept as it is goes like a memory, unless it is private.
-    // It fails closed: anything not given by a look-up now stays here.
-    if let Some(item) = crate::lookup::kept_line_item(id) {
-        if !crate::lookup::kept_line_may_go(conn, id)? {
-            return Ok(Some(LeftOut::Private));
-        }
-        let private: bool =
-            conn.query_row("SELECT private FROM items WHERE id = ?1", [item], |r| {
-                r.get(0)
-            })?;
-        return Ok(private.then_some(LeftOut::Private));
+/// Whether a memory may be sent. Only the person's own choice to let it go or forget it keeps
+/// one here: a private mark does not (decision 0011, amended 2026-11-23), and nothing about its
+/// words or labels does. Fails closed: a memory the store does not know is not sent.
+fn may_send(conn: &Connection, id: &str) -> Result<bool> {
+    // A check-in, an entry or a reading kept as it is goes like a memory, private or not. It
+    // fails closed: anything not given by a look-up now stays here.
+    if crate::lookup::kept_line_item(id).is_some() {
+        return crate::lookup::kept_line_may_go(conn, id);
     }
     let row: Option<(bool, Option<String>)> = conn
         .query_row(
@@ -208,13 +201,7 @@ fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()?;
-    let Some((forgetting, let_go)) = row else {
-        return Ok(Some(LeftOut::Private));
-    };
-    if forgetting || let_go.is_some() || crate::memory::is_private_chain(conn, id)? {
-        return Ok(Some(LeftOut::Private));
-    }
-    Ok(None)
+    Ok(matches!(row, Some((false, None))))
 }
 
 /// The first instant of `now`'s calendar month in `tz`, and of the next one.
@@ -463,19 +450,10 @@ impl Engine {
         })
     }
 
-    /// Whether each memory may be sent online now. Unknown ids are `false`.
+    /// Whether each memory may be sent online now: known, not being forgotten and not let go. A
+    /// private one may: private decides only what comes up on its own. Unknown ids are `false`.
     pub fn sendable(&self, ids: &[String]) -> Result<Vec<bool>> {
-        Ok(self
-            .online_verdicts(ids)?
-            .into_iter()
-            .map(|v| v.is_none())
-            .collect())
-    }
-
-    /// For each memory, why it may not be sent online, or `None` when it may: private in any
-    /// version, let go, being forgotten or unknown (`Private`).
-    pub fn online_verdicts(&self, ids: &[String]) -> Result<Vec<Option<LeftOut>>> {
-        self.read(|conn| ids.iter().map(|id| verdict(conn, id)).collect())
+        self.read(|conn| ids.iter().map(|id| may_send(conn, id)).collect())
     }
 
     /// For each memory, whether the person's own online mind may be given it (ADR 0020): known,
