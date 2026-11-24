@@ -11,6 +11,9 @@ object Reading {
     /** The person pressed Stop in the notification since the core last asked. */
     @Volatile var stopAsked = false
 
+    /** Android's own daily time for data sync ran out since the core last asked. */
+    @Volatile var timedOut = false
+
     /** A Nocturne screen is in front. */
     @Volatile var inFront = false
 
@@ -18,7 +21,7 @@ object Reading {
     @Volatile var running = false
 
     /** What the core gets back after each call. */
-    data class Answer(val stop: Boolean, val notes: Boolean)
+    data class Answer(val stop: Boolean, val timeout: Boolean, val notes: Boolean)
 
     /** The calls the core makes. */
     enum class State { Reading, Ended }
@@ -32,10 +35,14 @@ object Reading {
     /** A stop is told once: the next answer starts clean. */
     @Synchronized
     fun answer(notes: Boolean): Answer {
-        val stop = stopAsked
+        val answer = Answer(stopAsked, timedOut, notes)
         stopAsked = false
-        return Answer(stop, notes)
+        timedOut = false
+        return answer
     }
+
+    /** After a Stop or the time limit, the reading is not shown again until the core says. */
+    fun keepShowing(answer: Answer): Boolean = !answer.stop && !answer.timeout
 
     /** One quiet line stays after the end only for a person who is not looking at Nocturne. */
     fun leaveLine(title: String?, inFront: Boolean): Boolean = title != null && !inFront

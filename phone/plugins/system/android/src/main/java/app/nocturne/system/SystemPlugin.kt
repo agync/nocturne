@@ -406,15 +406,20 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
     fun readingNow(invoke: Invoke) {
         val args = invoke.parseArgs(ReadingArgs::class.java)
         val context = activity.applicationContext
-        when (Reading.state(args.state)) {
-            Reading.State.Reading -> reading(context, args)
-            Reading.State.Ended -> ended(context, args)
-            null -> return invoke.reject("invalid")
-        }
+        val state = Reading.state(args.state) ?: return invoke.reject("invalid")
+        // What the person did is taken first: a reading they stopped is not started again.
         val notes = NotificationManagerCompat.from(context).areNotificationsEnabled()
         val answer = Reading.answer(notes)
+        when (state) {
+            Reading.State.Reading -> if (Reading.keepShowing(answer)) reading(context, args)
+            Reading.State.Ended -> ended(context, args)
+        }
         invoke.resolve(
-            JSObject().put("stop", answer.stop).put("paused", false).put("notes", answer.notes)
+            JSObject()
+                .put("stop", answer.stop)
+                .put("timeout", answer.timeout)
+                .put("paused", false)
+                .put("notes", answer.notes)
         )
     }
 

@@ -11,6 +11,7 @@ class ReadingTest {
     @Before
     fun clean() {
         Reading.stopAsked = false
+        Reading.timedOut = false
     }
 
     @Test
@@ -27,6 +28,24 @@ class ReadingTest {
         Reading.stopAsked = true
         assertTrue(Reading.answer(true).stop)
         assertFalse(Reading.answer(true).stop)
+    }
+
+    @Test
+    fun androidsOwnTimeLimitIsToldApartFromStop() {
+        Reading.timedOut = true
+        val answer = Reading.answer(true)
+        assertTrue(answer.timeout)
+        assertFalse(answer.stop)
+        assertFalse(Reading.answer(true).timeout)
+    }
+
+    @Test
+    fun aStoppedReadingIsNeverShownAgain() {
+        assertTrue(Reading.keepShowing(Reading.answer(true)))
+        Reading.stopAsked = true
+        assertFalse(Reading.keepShowing(Reading.answer(true)))
+        Reading.timedOut = true
+        assertFalse(Reading.keepShowing(Reading.answer(true)))
     }
 
     @Test
