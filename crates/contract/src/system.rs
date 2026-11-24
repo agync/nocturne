@@ -473,6 +473,8 @@ pub struct BackupReport {
     /// The backup file that was written.
     pub path: String,
     pub memories: u32,
+    /// The items it holds, counted in the copy that was written.
+    pub items: u32,
     pub pages: u32,
     pub originals: u32,
     /// The size of the file.

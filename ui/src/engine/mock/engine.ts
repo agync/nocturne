@@ -463,6 +463,7 @@ export class MockEngine implements EngineClient {
     this.backups = new MockBackups({
       counts: () => ({
         memories: this.memories.length,
+        items: this.items.length,
         pages: this.pages.length,
         originals: this.items.filter((item) => item.hasOriginal).length,
       }),

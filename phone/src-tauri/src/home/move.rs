@@ -313,11 +313,11 @@ impl Home {
             started: &|_| {},
             work_factor: Some(MOVE_WORK_FACTOR),
         };
-        let made = open
-            .engine
-            .backup_to(&file, &passphrase, &run)
-            .and_then(|report| Ok((report, open.engine.stats()?.item_count)));
-        let (report, items) = match made {
+        // The items are counted in the copy the backup wrote, not in the store again after it:
+        // what the calendar or health added meanwhile is not in the backup, and counting it
+        // would never match what the computer finds there.
+        let made = open.engine.backup_to(&file, &passphrase, &run);
+        let report = match made {
             Ok(made) => made,
             Err(e) => {
                 calls::clear(&dir);
@@ -333,8 +333,8 @@ impl Home {
             file,
             sha256,
             passphrase,
+            items: report.items,
             report,
-            items,
         })
     }
 
@@ -483,12 +483,11 @@ impl Home {
                 work_factor: Some(MOVE_WORK_FACTOR),
             };
             let report = engine.backup_to(&file, &passphrase, &run)?;
-            let items = engine.stats()?.item_count;
             let since = engine.journal_days()?.last().map(|d| d.to_string());
-            Ok::<_, nocturne_engine::Error>((report, items, since))
+            Ok::<_, nocturne_engine::Error>((report, since))
         })();
         mark_read_only(&folder, true);
-        let (report, items, since) = match made {
+        let (report, since) = match made {
             Ok(made) => made,
             Err(e) => {
                 calls::clear(&dir);
@@ -504,8 +503,8 @@ impl Home {
             file,
             sha256,
             passphrase,
+            items: report.items,
             report,
-            items,
         };
         Ok((prepared, since))
     }
@@ -1550,6 +1549,56 @@ mod tests {
         clock.advance_days(30);
         home.clear_old_put_aside();
         assert!(home.put_aside_names().is_empty());
+    }
+
+    #[test]
+    fn what_arrives_while_the_backup_is_made_does_not_break_the_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let (home, _) = alone(dir.path());
+        let mut computer = Fake::new();
+        computer.brings = true;
+        let only = home.exclusive();
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let once = std::sync::atomic::AtomicBool::new(false);
+        // The calendar or health writes into the store while the backup is made, without the
+        // hold the screens wait for.
+        let prepared = home
+            .prepare_move(
+                &|_, _, _| {
+                    if once.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+                    let open = home.open_store().unwrap();
+                    let answer = dispatch::answer(
+                        &open,
+                        RemoteCall::KeepText {
+                            text: "Dentist on Friday.".into(),
+                            client_id: "c3".into(),
+                            feeling: None,
+                            good: None,
+                            captured_at: None,
+                            web: false,
+                        },
+                    );
+                    assert!(matches!(answer, RemoteAnswer::Kept { .. }), "{answer:?}");
+                },
+                &stop,
+            )
+            .unwrap();
+        assert!(
+            once.load(std::sync::atomic::Ordering::SeqCst),
+            "something arrived meanwhile"
+        );
+        let arrival = block(carry(
+            &computer,
+            &prepared,
+            &|_, _, _| {},
+            std::time::Duration::ZERO,
+            false,
+        ))
+        .unwrap();
+        assert!(home.finish_move(&prepared, arrival).is_ok());
+        drop(only);
     }
 
     /// A setting of its own in the phone's store: something that stays only on the phone.
