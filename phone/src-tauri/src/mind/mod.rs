@@ -14,6 +14,9 @@ pub mod commands;
 pub mod events;
 pub mod host;
 pub mod keys;
+pub mod read_now;
+#[cfg(test)]
+mod read_now_tests;
 pub mod sent;
 pub mod sound;
 pub mod status;
@@ -41,6 +44,7 @@ use crate::home::Home;
 use crate::sync::ledger::write_private;
 use host::PhoneHost;
 pub use keys::{Keys, MemoryKeys, SafeKeys};
+use read_now::{ReadKind, ReadNow, Refused, Stopped};
 pub use sent::{Sent, SentFor, SentLog};
 
 const FILE: &str = "mind.json";
@@ -272,6 +276,8 @@ pub struct PhoneMind {
     asking: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
     /// Questions stopped before they began: none is asked when it does.
     stopped_early: Mutex<Vec<String>>,
+    /// The person's Read now or Read anyway, this run only.
+    read_now: Mutex<ReadNow>,
     /// The list from the person's last look at step 2.
     looked: Mutex<Option<Looked>>,
     /// Looks names up in place of the phone, and whether the service then counts as online
@@ -300,6 +306,7 @@ impl PhoneMind {
             looks: Mutex::default(),
             asking: Mutex::default(),
             stopped_early: Mutex::default(),
+            read_now: Mutex::default(),
             looked: Mutex::default(),
             #[cfg(test)]
             lookup: Mutex::default(),
@@ -509,6 +516,7 @@ impl PhoneMind {
     /// Turns the mind off: the slot is emptied, the key forgotten and the choice removed, so
     /// nothing more goes, and a request under way is dropped. What was already read stays.
     pub fn turn_off(&self) {
+        *lock(&self.read_now) = ReadNow::default();
         lock(&self.looked).take();
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(on) = lock(&self.on).take() {
@@ -685,14 +693,23 @@ impl PhoneMind {
             }
             return Pass::Off;
         }
-        if !self.host.charging() {
+        let charging = self.host.charging();
+        if charging {
+            self.end_read_now(Stopped::Charging);
+        } else if !self.read_now_holds() {
             return Pass::NotCharging;
         }
         if self.paused_until().is_some() {
+            self.end_read_now(Stopped::Limit);
             return Pass::Paused;
         }
         if self.waiting() {
+            self.end_read_now(Stopped::Trouble);
             return Pass::Waiting;
+        }
+        if !charging && lock(&self.trouble).is_some() {
+            self.end_read_now(Stopped::Trouble);
+            return Pass::NotCharging;
         }
         let Ok((_use, open)) = home.using() else {
             return Pass::NotReady;
@@ -752,9 +769,15 @@ impl PhoneMind {
                 tokio::time::sleep(WANTED_POLL).await;
             }
         };
-        let (pass, abandoned) = rt.block_on(async {
+        let (pass, abandoned, idle) = rt.block_on(async {
+            // On battery the reader reads only what it is asked to: everything, while Read now
+            // lasts.
+            if !charging {
+                t.reader.read_now(None).await;
+            }
             let reading = async {
                 let mut read = 0;
+                let mut idle = false;
                 // Each thing read counts toward the month: the one that reaches a limit is the
                 // last before the pause.
                 while read < FEW && !home.store_wanted() && self.paused_until().is_none() {
@@ -778,27 +801,32 @@ impl PhoneMind {
                                 }
                             }
                         }
+                        Step::Idle => {
+                            idle = true;
+                            break;
+                        }
                         _ => break,
                     }
                 }
-                read
+                (read, idle)
             };
             // A move, a restore or a fresh start waits for the store: the thing being read is
             // given back at once, uncounted, rather than after its requests end.
             tokio::pin!(reading);
-            let read = tokio::select! {
+            let (read, idle) = tokio::select! {
                 read = &mut reading => read,
                 () = wanted() => {
                     let _giving_way = t.reader.ask_begin();
                     reading.await
                 }
             };
-            // Turned off, paused by the limit, or before the first morning: nothing more is
-            // written.
+            // Turned off, paused by the limit, before the first morning, or on battery: nothing
+            // more is written. The page waits for the charger, Read now or not.
             if home.store_wanted()
                 || !self.is_on()
                 || !self.morning_come()
                 || self.paused_until().is_some()
+                || !charging
             {
                 return (
                     Pass::Ran {
@@ -806,6 +834,7 @@ impl PhoneMind {
                         scheduled: false,
                     },
                     false,
+                    idle,
                 );
             }
             // The page or a reflection being written is dropped unsaved for the store, and the
@@ -823,15 +852,119 @@ impl PhoneMind {
                                 TidyStep::Finished(_) | TidyStep::Resaved(_) | TidyStep::Skipped
                             )
                     );
-                    (Pass::Ran { read, scheduled }, false)
+                    (Pass::Ran { read, scheduled }, false, idle)
                 }
-                () = wanted() => (Pass::Ran { read, scheduled: false }, true),
+                () = wanted() => (Pass::Ran { read, scheduled: false }, true, idle),
             }
         });
         if abandoned {
             thinking.take();
         }
+        if idle {
+            self.end_read_now(Stopped::Done);
+        } else if self.paused_until().is_some() {
+            self.end_read_now(Stopped::Limit);
+        }
         pass
+    }
+}
+
+impl PhoneMind {
+    /// Things read since the mind was turned on, this run.
+    fn done(&self) -> u32 {
+        lock(&self.on).as_ref().map_or(0, |on| on.read)
+    }
+
+    /// Ends Read now, when on, for `why`.
+    fn end_read_now(&self, why: Stopped) {
+        let done = self.done();
+        if lock(&self.read_now).end(why, done) {
+            tracing::info!("reading on battery ended: {why:?}");
+        }
+    }
+
+    /// Whether Read now lets the reader run on battery now; ended when the battery says not.
+    fn read_now_holds(&self) -> bool {
+        let Some(kind) = lock(&self.read_now).on else {
+            return false;
+        };
+        match read_now::battery_stop(kind, self.host.percent(), self.host.saver()) {
+            Some(why) => {
+                self.end_read_now(why);
+                false
+            }
+            None => true,
+        }
+    }
+
+    /// The person pressed Read now or Read anyway. Under a service not answering it first looks
+    /// once at its list, noted as a connection check, and reads only when that is answered.
+    /// Blocks on `rt`: call it off the async workers.
+    pub fn read_now(&self, kind: ReadKind, rt: &tokio::runtime::Handle) -> Result<(), Refused> {
+        use status::Trouble;
+        let Some(on) = lock(&self.on).clone() else {
+            return Err(Refused::Off);
+        };
+        match read_now::battery_stop(kind, self.host.percent(), self.host.saver()) {
+            Some(Stopped::Floor) => return Err(Refused::Floor),
+            Some(Stopped::Low) => return Err(Refused::Low),
+            Some(_) => return Err(Refused::Saver),
+            None => {}
+        }
+        if self.paused_until().is_some() {
+            return Err(Refused::Limit);
+        }
+        let trouble = *lock(&self.trouble);
+        match trouble {
+            Some(Trouble::KeyRefused | Trouble::NoCredit) => return Err(Refused::Trouble),
+            Some(Trouble::Offline(_)) => return Err(Refused::Offline),
+            Some(Trouble::Unreachable(_)) => {
+                match rt.block_on(on.mind.provider().models()) {
+                    Ok((_, exchange)) => on.noting.note(Job::Check, &exchange),
+                    Err(f) if f.refused => on.noting.unsent(f.failure),
+                    Err(f) => on.noting.note(Job::Check, &f.exchange),
+                }
+                if lock(&self.trouble).is_some() {
+                    lock(&self.read_now).still_not = true;
+                    return Err(Refused::NotAnswering);
+                }
+                self.retry.store(true, Ordering::SeqCst);
+            }
+            None => {}
+        }
+        lock(&self.read_now).start(kind);
+        Ok(())
+    }
+
+    /// The person pressed Stop, in Nocturne or where the phone shows the reading.
+    pub fn stop_read_now(&self) {
+        self.end_read_now(Stopped::Person);
+    }
+
+    /// iPhone paused the reading while the person was away. Read now stays theirs, so it carries
+    /// on when they come back, and Nocturne says after how many it paused.
+    pub fn paused_away(&self) {
+        let done = self.done();
+        let mut read_now = lock(&self.read_now);
+        if read_now.on.is_some() {
+            read_now.away = Some(done);
+        }
+    }
+
+    /// Whether Android shows Nocturne's notifications, as the phone says: when not, progress
+    /// shows only in the app.
+    pub fn set_quiet(&self, quiet: bool) {
+        lock(&self.read_now).quiet = quiet;
+    }
+
+    /// Read now's kind while it lasts.
+    pub fn read_now_on(&self) -> Option<ReadKind> {
+        lock(&self.read_now).on
+    }
+
+    /// The last stop of Read now, this run.
+    pub fn read_now_stopped(&self) -> Option<read_now::Stop> {
+        lock(&self.read_now).stopped
     }
 }
 
@@ -847,6 +980,7 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut asked: Option<tauri_plugin_nocturne_system::Windows> = None;
+        let mut shown = false;
         loop {
             let worker = app.clone();
             let more = tauri::async_runtime::spawn_blocking(move || {
@@ -855,7 +989,8 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let mind = worker.state::<PhoneMind>();
                 let backup = worker.state::<crate::backup::PhoneBackup>();
                 let power = system.power().unwrap_or_default();
-                mind.host().set_charging(power.charging);
+                mind.host()
+                    .set_power(power.charging, power.percent, power.saver);
                 backup.set_unmetered(power.unmetered);
                 let windows = tauri_plugin_nocturne_system::Windows {
                     mind: mind.is_on(),
@@ -874,6 +1009,7 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let more = mind.pass(&home, &rt).more();
                 let progress = crate::home::commands::progress(worker.clone());
                 let more = backup.pass_with(&home, power.charging == Some(true), &progress) || more;
+                let shown = status::tell_the_phone(&worker, &mind, shown);
                 if mind.status() != was {
                     events::status_changed(&worker);
                 }
@@ -883,12 +1019,13 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 {
                     tracing::warn!("the background window could not be ended: {e:?}");
                 }
-                (more, asked)
+                (more, asked, shown)
             })
             .await;
             let more = match more {
-                Ok((more, now_asked)) => {
+                Ok((more, now_asked, now_shown)) => {
                     asked = now_asked;
+                    shown = now_shown;
                     more
                 }
                 Err(_) => false,

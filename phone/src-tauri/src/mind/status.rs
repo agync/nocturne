@@ -7,6 +7,7 @@ use jiff::ToSpan;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::read_now::{ReadKind, Stop};
 use super::{PhoneMind, Sent, SentFor, lock};
 use crate::home::Home;
 use crate::sync::ledger::write_private;
@@ -34,12 +35,30 @@ pub struct MindMonth {
     pub limit: MindLimit,
 }
 
-/// What was kept before turning on, being read a few at a time.
+/// What was kept, being read a few at a time, and why reading waits when it does: the phone's
+/// power, the person's Read now, and why it last stopped. The screens choose their words from
+/// these facts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MindReading {
     pub done: u32,
     pub count: u32,
+    /// Known to charge.
+    pub charging: bool,
+    /// The battery level, when the phone says.
+    pub percent: Option<u8>,
+    /// Battery saving is on.
+    pub saver: bool,
+    /// Read now or Read anyway, while it lasts.
+    pub now: Option<ReadKind>,
+    /// Why the last Read now stopped, this run.
+    pub stopped: Option<Stop>,
+    /// iPhone paused it while the person was away, after this many.
+    pub away: Option<u32>,
+    /// The last Read now looked once more and the service was still not answering.
+    pub still_not: bool,
+    /// Android shows no notifications for Nocturne.
+    pub quiet: bool,
 }
 
 /// How the mind is doing, for Today, Ask and This phone.
@@ -275,9 +294,18 @@ impl PhoneMind {
             .ok()
             .and_then(|(_use, open)| open.engine.pending_items(10_000).ok())
             .map_or(0, |p| p.len() as u32);
+        let read_now = lock(&self.read_now);
         MindReading {
             done,
             count: done + waiting,
+            charging: self.host.charging(),
+            percent: self.host.percent(),
+            saver: self.host.saver(),
+            now: read_now.on,
+            stopped: read_now.stopped,
+            away: read_now.away,
+            still_not: read_now.still_not,
+            quiet: read_now.quiet,
         }
     }
 
@@ -344,7 +372,18 @@ pub async fn mind_month<R: Runtime>(app: AppHandle<R>) -> Option<MindMonth> {
 pub async fn mind_reading<R: Runtime>(app: AppHandle<R>) -> MindReading {
     blocking(move || app.state::<PhoneMind>().reading(&app.state::<Home>()))
         .await
-        .unwrap_or(MindReading { done: 0, count: 0 })
+        .unwrap_or(MindReading {
+            done: 0,
+            count: 0,
+            charging: false,
+            percent: None,
+            saver: false,
+            now: None,
+            stopped: None,
+            away: None,
+            still_not: false,
+            quiet: false,
+        })
 }
 
 #[tauri::command]
@@ -352,4 +391,121 @@ pub async fn mind_status<R: Runtime>(app: AppHandle<R>) -> MindStatus {
     blocking(move || app.state::<PhoneMind>().status())
         .await
         .unwrap_or(MindStatus::Off)
+}
+
+/// The phone's line for the reading under way: its words filled with how far it has got.
+pub(super) fn reading_note(
+    words: &super::read_now::ReadWords,
+    reading: &MindReading,
+) -> tauri_plugin_nocturne_system::ReadingNote {
+    use super::read_now::fill;
+    let (done, count) = (reading.done, reading.count);
+    tauri_plugin_nocturne_system::ReadingNote::Reading {
+        channel: words.channel.clone(),
+        channel_about: words.channel_about.clone(),
+        title: words.title.clone(),
+        text: fill(&words.progress, done, count),
+        stop: words.stop.clone(),
+        done,
+        count,
+        paused_title: words.paused_title.clone(),
+        paused_text: fill(&words.paused_text, done, count),
+    }
+}
+
+/// The phone's line once the reading on battery ended for `stop`.
+pub(super) fn ended_note(
+    words: &super::read_now::ReadWords,
+    stop: Stop,
+) -> tauri_plugin_nocturne_system::ReadingNote {
+    let line = super::read_now::ended_line(words, stop.why, stop.done);
+    let why = serde_json::to_value(stop.why)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
+    tauri_plugin_nocturne_system::ReadingNote::Ended {
+        why,
+        title: line.as_ref().map(|l| l.0.clone()),
+        text: line.map(|l| l.1),
+    }
+}
+
+/// Read now or Read anyway, from the person's tap while Nocturne is in front, as Android
+/// requires to start showing it. `words` are what the phone shows it with. The refusal is
+/// named as `read_now::Refused` says.
+#[tauri::command]
+pub async fn mind_read_now<R: Runtime>(
+    app: AppHandle<R>,
+    kind: super::read_now::ReadKind,
+    words: super::read_now::ReadWords,
+) -> Result<MindReading, super::read_now::Refused> {
+    use tauri_plugin_nocturne_system::SystemExt;
+    blocking(move || {
+        let mind = app.state::<PhoneMind>();
+        lock(&mind.read_now).words = words.clone();
+        mind.read_now(kind, &tokio::runtime::Handle::current())?;
+        let reading = mind.reading(&app.state::<Home>());
+        match app.system().reading_now(&reading_note(&words, &reading)) {
+            Ok(answer) => mind.set_quiet(!answer.notes),
+            Err(e) => tracing::warn!("the reading could not be shown by the phone: {e:?}"),
+        }
+        Ok(mind.reading(&app.state::<Home>()))
+    })
+    .await
+    .unwrap_or(Err(super::read_now::Refused::Off))
+}
+
+/// Stop, in Nocturne: the reading on battery ends, and the phone stops showing it.
+#[tauri::command]
+pub async fn mind_read_stop<R: Runtime>(app: AppHandle<R>) -> Option<MindReading> {
+    use tauri_plugin_nocturne_system::SystemExt;
+    blocking(move || {
+        let mind = app.state::<PhoneMind>();
+        let was = mind.read_now_on().is_some();
+        mind.stop_read_now();
+        if was && let Some(stop) = mind.read_now_stopped() {
+            let words = lock(&mind.read_now).words.clone();
+            if let Err(e) = app.system().reading_now(&ended_note(&words, stop)) {
+                tracing::warn!("the phone could not stop showing the reading: {e:?}");
+            }
+        }
+        mind.reading(&app.state::<Home>())
+    })
+    .await
+}
+
+/// Between passes: the reading on battery as the phone shows it, kept up to date, and what the
+/// person did there. `shown` is whether the phone shows it now; the answer is whether it does
+/// after.
+pub(super) fn tell_the_phone<R: Runtime>(
+    app: &AppHandle<R>,
+    mind: &PhoneMind,
+    shown: bool,
+) -> bool {
+    use tauri_plugin_nocturne_system::SystemExt;
+    let words = lock(&mind.read_now).words.clone();
+    if mind.read_now_on().is_some() {
+        let reading = mind.reading(&app.state::<Home>());
+        match app.system().reading_now(&reading_note(&words, &reading)) {
+            Ok(answer) => {
+                mind.set_quiet(!answer.notes);
+                if answer.paused {
+                    mind.paused_away();
+                }
+                if answer.stop {
+                    mind.stop_read_now();
+                    return tell_the_phone(app, mind, true);
+                }
+            }
+            Err(e) => tracing::warn!("the phone could not show the reading: {e:?}"),
+        }
+        return true;
+    }
+    if shown
+        && let Some(stop) = mind.read_now_stopped()
+        && let Err(e) = app.system().reading_now(&ended_note(&words, stop))
+    {
+        tracing::warn!("the phone could not stop showing the reading: {e:?}");
+    }
+    false
 }

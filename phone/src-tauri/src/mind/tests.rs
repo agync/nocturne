@@ -29,17 +29,17 @@ impl Keys for Shared {
     }
 }
 
-struct World {
+pub(super) struct World {
     _dir: tempfile::TempDir,
-    clock: Arc<ManualClock>,
-    rt: Runtime,
-    home: Home,
-    mind: PhoneMind,
-    keys: Arc<MemoryKeys>,
-    stand_in: StandIn,
+    pub(super) clock: Arc<ManualClock>,
+    pub(super) rt: Runtime,
+    pub(super) home: Home,
+    pub(super) mind: PhoneMind,
+    pub(super) keys: Arc<MemoryKeys>,
+    pub(super) stand_in: StandIn,
 }
 
-fn world() -> World {
+pub(super) fn world() -> World {
     let dir = tempfile::tempdir().unwrap();
     let clock = Arc::new(ManualClock::at("2026-11-22T09:00:00Z", "Europe/London"));
     let home = Home::new(
@@ -75,7 +75,7 @@ fn world() -> World {
 }
 
 impl World {
-    fn keep(&self, text: &str, client_id: &str) -> String {
+    pub(super) fn keep(&self, text: &str, client_id: &str) -> String {
         let call = RemoteCall::KeepText {
             text: text.into(),
             client_id: client_id.into(),
@@ -90,12 +90,12 @@ impl World {
         }
     }
 
-    fn status(&self, id: &str) -> ItemStatus {
+    pub(super) fn status(&self, id: &str) -> ItemStatus {
         let open = self.home.open_store().unwrap();
         open.engine.get_item(id).unwrap().status
     }
 
-    fn settings(&self) -> ProviderSettings {
+    pub(super) fn settings(&self) -> ProviderSettings {
         ProviderSettings {
             url: self.stand_in.url(),
             key: KEY.into(),
@@ -103,8 +103,19 @@ impl World {
         }
     }
 
-    fn pass(&self) -> Pass {
+    pub(super) fn pass(&self) -> Pass {
         self.mind.pass(&self.home, self.rt.handle())
+    }
+
+    /// The app started again: a new mind over the same folder and keys.
+    pub(super) fn relaunch(&self) -> PhoneMind {
+        let again = PhoneMind::new(
+            self._dir.path().to_path_buf(),
+            Box::new(Shared(self.keys.clone())),
+            self.clock.clone(),
+        );
+        again.follow(&self.home);
+        again
     }
 }
 
@@ -711,7 +722,7 @@ impl crate::home::voice::Reader for NoWords {
 
 #[test]
 fn with_a_limit_of_three_things_the_fourth_waits() {
-    use super::status::{MindLimit, MindReading, MindStatus};
+    use super::status::{MindLimit, MindStatus};
     let w = world();
     let ids: Vec<String> = (0..4)
         .map(|n| {
@@ -733,7 +744,8 @@ fn with_a_limit_of_three_things_the_fourth_waits() {
     assert_eq!(waiting, 1);
     assert_eq!(w.pass(), Pass::Paused);
     assert_eq!(w.mind.month().count, 3);
-    assert_eq!(w.mind.reading(&w.home), MindReading { done: 3, count: 4 });
+    let reading = w.mind.reading(&w.home);
+    assert_eq!((reading.done, reading.count), (3, 4));
     assert!(matches!(w.mind.status(), MindStatus::Paused { until, .. } if until == "2026-12-01"));
     let asked = w.stand_in.chats().len();
     assert_eq!(w.ask("Ana").last().unwrap().phase, AskPhase::Unavailable);

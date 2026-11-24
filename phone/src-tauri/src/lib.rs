@@ -129,6 +129,8 @@ pub fn run() {
             mind::status::mind_month,
             mind::status::mind_reading,
             mind::status::mind_status,
+            mind::status::mind_read_now,
+            mind::status::mind_read_stop,
             mind::commands::mind_list,
             mind::commands::mind_check,
             mind::commands::mind_turn_on,
