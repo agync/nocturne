@@ -5,7 +5,7 @@
 // `&found=offline` no internet, `&connect=` what asking for the account answers (`refused`,
 // `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting,
 // `&restore=slow` holds a restore part way until it is stopped (`&checking` once it checks,
-// `&adding` once it is checked), `&restore=newer` is a newer Nocturne's,
+// `&adding` once it is checked), `&restore=newer` is a newer Nocturne's, `&own` is this phone's own,
 // `&restore=offline` loses the internet until
 // `scriptedBackup.wifi`, and `&net=mobile` is on mobile data until `scriptedBackup.wifi`.
 // The phrase "wrong words" and any recovery key but the one below open nothing.
@@ -258,11 +258,13 @@ export function backupState(phone: {
               checkins: 118,
               same: 12,
               already: 0,
+              own: params.has("own"),
             }
           : {
               kind: "replaced",
               summary,
               kept: { things: 2140, journalEntries: 300, photosAndRecordings: 410, checkins: 140 },
+              own: params.has("own"),
             };
         if (params.get("restore") === "slow")
           return new Promise((resolve, reject) => {

@@ -159,9 +159,10 @@ fn a_backup_turned_on_runs_its_first_night_and_comes_back_on_a_new_phone() {
             &|_, _, _| {},
         )
         .unwrap();
-    let super::Restored::Replaced { summary, .. } = restored else {
+    let super::Restored::Replaced { summary, own, .. } = restored else {
         panic!("an empty phone takes the backup as it is");
     };
+    assert!(!own, "another phone's backup");
     assert_eq!(summary.items, 1);
     let open = new.home.open_store().unwrap();
     assert_eq!(open.engine.find_items("plumber", 5).unwrap().len(), 1);
@@ -410,7 +411,11 @@ fn a_backup_restored_onto_a_phone_with_a_memory_brings_its_things_in() {
         .unwrap();
     assert!(matches!(
         restored,
-        super::Restored::BroughtIn { things: 1, .. }
+        super::Restored::BroughtIn {
+            things: 1,
+            own: false,
+            ..
+        }
     ));
     assert!(
         new.home.put_aside_names().is_empty(),
@@ -834,5 +839,34 @@ fn a_newer_backup_names_both_versions_to_the_screens() {
     assert_eq!(
         serde_json::to_value(BackupProblem::WrongPhrase).unwrap(),
         serde_json::json!("wrongPhrase")
+    );
+}
+
+#[test]
+fn this_phone_s_own_backup_turned_off_comes_back_as_its_own() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("The plumber comes on Tuesday.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    p.backup.turn_off(false).unwrap();
+    let restored = p
+        .backup
+        .restore(
+            &p.home,
+            false,
+            &Opening::Phrase(PHRASE.into()),
+            None,
+            &|_, _, _| {},
+        )
+        .unwrap();
+    assert!(matches!(
+        restored,
+        super::Restored::BroughtIn { own: true, .. }
+    ));
+    p.backup.turn_on_again().unwrap();
+    assert!(
+        p.backup.status().on,
+        "the same backup, on again with no steps"
     );
 }

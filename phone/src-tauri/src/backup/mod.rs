@@ -303,10 +303,12 @@ impl From<HomeError> for BackupProblem {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Restored {
-    /// An empty phone: the backup is the memory here now.
+    /// An empty phone: the backup is the memory here now. `own`: the backup is this phone's
+    /// own, so nothing asks whether this phone makes the backups.
     Replaced {
         summary: BackupSummary,
         kept: KeptCounts,
+        own: bool,
     },
     /// A phone that held a memory: the backup's things joined it.
     #[serde(rename_all = "camelCase")]
@@ -318,6 +320,7 @@ pub enum Restored {
         /// On both, so kept once.
         same: u32,
         already: u32,
+        own: bool,
     },
 }
 
@@ -1068,6 +1071,11 @@ impl PhoneBackup {
                 return Err(naming_newer(e, place.as_ref(), &key, night));
             }
         };
+        let own = self.key().is_ok_and(|held| held.same_as(&key))
+            && self
+                .saved()
+                .state
+                .is_some_and(|s| s.device == unpacked.night.device);
         let restored = if holds {
             let brought = home
                 .using()
@@ -1089,19 +1097,16 @@ impl PhoneBackup {
                 checkins: brought.checkins,
                 same: brought.same,
                 already: brought.already,
+                own,
             }
         } else {
             home.put_in_place(&stage)?;
             Restored::Replaced {
                 summary: unpacked.summary,
                 kept: unpacked.kept,
+                own,
             }
         };
-        let own = self.key().is_ok_and(|held| held.same_as(&key))
-            && self
-                .saved()
-                .state
-                .is_some_and(|s| s.device == unpacked.night.device);
         if !own {
             self.keep_key(&key)?;
             let _held = lock(&self.locking);

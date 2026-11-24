@@ -207,6 +207,8 @@ export function NightlyRestore({
   const [failed, setFailed] = useState(false);
   // The night's things are being added: Stop is no longer offered.
   const adding = useRef(false);
+  // The backup restored was this phone's own.
+  const ownBackup = useRef(false);
   const stopped = useRef(false);
   const name = useId();
   const field = useId();
@@ -371,13 +373,17 @@ export function NightlyRestore({
   };
 
   /** After a restore: a new phrase when the recovery key opened it, then who makes backups. */
-  const after = async () => {
+  const after = async (own: boolean) => {
     const s = await api.status().catch(() => null);
-    // This phone's own backup: it goes on making them.
+    // This phone's own backup: it goes on making them, or turns on again with no steps.
     if (s?.on) return onDone();
+    ownBackup.current = own;
     if (withKey) return setStep({ name: "newPhrase" });
-    setStep({ name: "inUse" });
+    toInUse();
   };
+
+  /** "Make the backups from this phone?", unless the backup is this phone's own. */
+  const toInUse = () => (ownBackup.current ? onDone() : setStep({ name: "inUse" }));
 
   switch (step.name) {
     case "where":
@@ -934,7 +940,7 @@ export function NightlyRestore({
       return (
         <Screen
           foot={
-            <Button kind="primary" onClick={() => void after()}>
+            <Button kind="primary" onClick={() => void after(step.restored.own)}>
               {t("phone.backup.continue")}
             </Button>
           }
@@ -956,7 +962,7 @@ export function NightlyRestore({
       return (
         <Screen
           foot={
-            <Button kind="primary" onClick={() => void after()}>
+            <Button kind="primary" onClick={() => void after(step.restored.own)}>
               {t("phone.backup.continue")}
             </Button>
           }
@@ -984,11 +990,7 @@ export function NightlyRestore({
               <Button kind="primary" onClick={() => setStep({ name: "phrase" })}>
                 {t("phone.backup.continue")}
               </Button>
-              <button
-                type="button"
-                className="ph-textbtn"
-                onClick={() => setStep({ name: "inUse" })}
-              >
+              <button type="button" className="ph-textbtn" onClick={toInUse}>
                 {t("phone.backup.notNow")}
               </button>
             </>
@@ -1021,7 +1023,7 @@ export function NightlyRestore({
           onDone={async (phrase) => {
             await api.changePhrase(phrase);
             setDraft(NEW_PHRASE);
-            setStep({ name: "inUse" });
+            toInUse();
           }}
         />
       );

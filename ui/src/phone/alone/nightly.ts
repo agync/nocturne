@@ -120,8 +120,9 @@ export interface Here {
 
 export type Opening = { with: "phrase"; text: string } | { with: "recoveryKey"; text: string };
 
+/** What a restore did. `own`: the backup was this phone's own. */
 export type Restored =
-  | { kind: "replaced"; summary: BackupSummary; kept: KeptCounts }
+  | { kind: "replaced"; summary: BackupSummary; kept: KeptCounts; own: boolean }
   | {
       kind: "broughtIn";
       summary: BackupSummary;
@@ -130,6 +131,7 @@ export type Restored =
       checkins: number;
       same: number;
       already: number;
+      own: boolean;
     };
 
 export type KeySaved = "saved" | "cancelled" | "failed";
