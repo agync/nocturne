@@ -2,7 +2,7 @@
 
 .PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/e2e-phone-native ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
-	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test phone/ios-sim phone/ios-test \
+	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test phone/ios-sim phone/ios-test phone/ios-release \
 	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
@@ -222,7 +222,8 @@ phone/test: ## Test the phone app's Rust side on this machine
 
 ##@ Phone app (iPhone)
 
-# macOS with Xcode only, and for the Simulator only: no signing yet. Xcode comes from
+# macOS with Xcode only. The Simulator targets need no signing; phone/ios-release signs and needs
+# the App Store Connect key in the environment (docs/contribution/release.md). Xcode comes from
 # DEVELOPER_DIR or xcode-select; see docs/contribution/building.md.
 IOS_SIMULATOR ?= iPhone 18 Pro
 
@@ -235,6 +236,10 @@ phone/ios-test: phone/ios-sim ## The iPhone plugins' Swift tests in a Simulator 
 	  (cd phone/plugins/$$p/ios && xcodebuild test -scheme tauri-plugin-nocturne-$$p \
 	    -destination "platform=iOS Simulator,name=$(IOS_SIMULATOR)") || exit 1; \
 	done
+
+phone/ios-release: ui/node_modules ## Build, sign and export the iPhone app for TestFlight (needs APPLE_API_*, APPLE_DEVELOPMENT_TEAM)
+	cd ui && npm run build:phone-native
+	$(PHONE_TAURI) ios build --target aarch64 --export-method app-store-connect --ci
 
 ##@ Utilities
 
