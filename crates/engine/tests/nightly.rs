@@ -890,6 +890,136 @@ fn calendar_entries_and_health_readings_come_once_and_the_newer_version_stays() 
     );
 }
 
+fn forget_for_good(engine: &Engine, memory: &str) {
+    let preview = engine.preview_forget(&[memory.to_string()], true).unwrap();
+    engine.forget(&preview.token).unwrap();
+}
+
+#[test]
+fn what_this_phone_forgot_for_good_does_not_come_back_from_an_earlier_night() {
+    let f = fixture();
+    f.engine.ensure_local_device("Pixel").unwrap();
+    let (item, memory) = learn(
+        &f.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    keep(&f.engine, "Something to keep.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&f.engine, &place, &key, &mut NightState::new()).unwrap();
+    // Forgotten while the account cannot be reached: the earlier night still holds it.
+    forget_for_good(&f.engine, &memory);
+    assert!(f.engine.get_item(&item).is_err());
+
+    let brought = bring_newest(&f.engine, &place, &key);
+    assert_eq!((brought.things, brought.already), (0, 1));
+    assert!(
+        f.engine.get_item(&item).is_err(),
+        "the thing stays forgotten"
+    );
+    assert!(
+        f.engine.get_memory(&memory).is_err(),
+        "and what was read from it"
+    );
+    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM memories"), 0);
+}
+
+#[test]
+fn a_thing_kept_again_after_it_was_forgotten_comes() {
+    let f = fixture();
+    f.engine.ensure_local_device("Old phone").unwrap();
+    let (item, memory) = learn(
+        &f.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    forget_for_good(&f.engine, &memory);
+    assert!(f.engine.get_item(&item).is_err());
+    keep(&f.engine, "Zed knows x.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&f.engine, &place, &key, &mut NightState::new()).unwrap();
+
+    let here = fixture();
+    here.engine.ensure_local_device("Pixel").unwrap();
+    let brought = bring_newest(&here.engine, &place, &key);
+    assert_eq!(brought.things, 1, "kept again, it is the person's again");
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM forgotten_for_good WHERE key LIKE 'sha:%' \
+             AND substr(key, 5) IN (SELECT sha256 FROM items)"
+        ),
+        0,
+        "no note here names what is here"
+    );
+}
+
+#[test]
+fn what_another_phone_forgot_for_good_is_noted_and_nothing_here_goes() {
+    let first = fixture();
+    first.engine.ensure_local_device("Old phone").unwrap();
+    let (item, memory) = learn(
+        &first.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&first.engine, &place, &key, &mut state).unwrap();
+
+    // A second phone brings it in, forgets it for good and backs up.
+    let second = fixture();
+    second.engine.ensure_local_device("New phone").unwrap();
+    bring_newest(&second.engine, &place, &key);
+    forget_for_good(&second.engine, &memory);
+    let other = MemoryPlace::new();
+    let other_key = nightly::turn_on(&other, PHRASE, WORK).unwrap();
+    night(&second.engine, &other, &other_key, &mut NightState::new()).unwrap();
+
+    // The first phone brings that in: what it holds stays, and it keeps the note.
+    bring_newest(&first.engine, &other, &other_key);
+    assert!(first.engine.get_item(&item).is_ok(), "nothing here goes");
+    assert_eq!(
+        sql_count(
+            first.dir.path(),
+            &format!("SELECT COUNT(*) FROM forgotten_for_good WHERE key = 'item:{item}'")
+        ),
+        1
+    );
+    // The first phone's page says it, and goes into its backup.
+    first.clock.set_str("2026-11-14T07:00:00Z");
+    let day = common::date("2026-11-14");
+    let page = first.engine.compose_page(day, Edition::Screen).unwrap();
+    first.engine.save_page(&page).unwrap();
+    let cites = format!(
+        "SELECT COUNT(*) FROM pages WHERE instr(body, '{memory}') > 0 \
+         OR instr(body, '{item}') > 0"
+    );
+    assert!(sql_count(first.dir.path(), &cites) > 0, "the page cites it");
+    night(&first.engine, &place, &key, &mut state).unwrap();
+
+    // A third phone holding the second phone's notes does not get it back from the first
+    // phone's backup, and the page comes with that line blank.
+    let third = fixture();
+    third.engine.ensure_local_device("Third phone").unwrap();
+    bring_newest(&third.engine, &other, &other_key);
+    bring_newest(&third.engine, &place, &key);
+    assert!(third.engine.get_item(&item).is_err());
+    assert!(third.engine.get_memory(&memory).is_err());
+    assert!(
+        third.engine.page(Some(day)).unwrap().is_some(),
+        "the page came"
+    );
+    assert_eq!(
+        sql_count(third.dir.path(), &cites),
+        0,
+        "what was forgotten is not on it"
+    );
+}
+
 #[test]
 fn a_night_is_refused_when_the_phrase_lock_has_gone() {
     let f = fixture();

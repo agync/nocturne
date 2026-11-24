@@ -740,6 +740,7 @@ impl Engine {
                 "entity_changes",
                 "entities",
                 "items",
+                "forgotten_for_good",
                 "ledger",
                 "settings",
                 "forget_tokens",
