@@ -3,7 +3,7 @@
 //! receipt keeps. The reply is judged on this device by [`crate::judge`].
 
 use nocturne_contract::{SentLine, SentMemory};
-use nocturne_engine::{Fact, NewSend};
+use nocturne_engine::{AskToday, Fact, NewSend};
 
 use crate::prompts;
 
@@ -18,6 +18,8 @@ pub const CHECK_MAX_TOKENS: u32 = 8;
 
 /// A question ready to send, made before anything leaves.
 pub struct Question {
+    /// The fresh word the facts are fenced with; a look-up's lines are fenced with it too.
+    pub nonce: String,
     pub system: String,
     pub user: String,
     /// The facts the question numbers `[m1]`..`[mN]`, in order.
@@ -31,18 +33,33 @@ pub struct Question {
     pub line_hashes: Vec<String>,
 }
 
-/// The question for `question`: the first [`MAX_FACTS`] facts that `sendable` still allows,
-/// numbered again from 1 without gaps. `None` when none may go. A section of the Nocturne guide
-/// never goes: help is written on this device.
+/// The question for `question`, asked on `today`: the first [`MAX_FACTS`] facts that `sendable`
+/// still allows, numbered again from 1 without gaps. `None` when none may go. A section of the
+/// Nocturne guide never goes: help is written on this device.
 pub fn question(
     question: &str,
     facts: &[Fact],
     sendable: &dyn Fn(&[String]) -> Vec<bool>,
+    today: &AskToday,
+) -> Option<Question> {
+    question_of(question, facts, MAX_FACTS, sendable, today, false)
+}
+
+/// [`question`] with at most `max` facts: a question that names a time sends the date step's
+/// lines beside the words' lines. With `open`, a question with no facts is still made, for a
+/// mind that may look things up.
+pub fn question_of(
+    question: &str,
+    facts: &[Fact],
+    max: usize,
+    sendable: &dyn Fn(&[String]) -> Vec<bool>,
+    today: &AskToday,
+    open: bool,
 ) -> Option<Question> {
     let first: Vec<Fact> = facts
         .iter()
         .filter(|f| !nocturne_engine::is_guide_section(&f.memory.id))
-        .take(MAX_FACTS)
+        .take(max)
         .cloned()
         .collect();
     let ids: Vec<String> = first.iter().map(|f| f.memory.id.clone()).collect();
@@ -53,14 +70,14 @@ pub fn question(
         .filter_map(|(f, ok)| ok.then_some(f))
         .collect();
     let dropped = ids.len() - facts.len();
-    if facts.is_empty() {
+    if facts.is_empty() && !open {
         return None;
     }
     let nonce = prompts::nonce();
     let tier = prompts::ONLINE_TIER;
     let system = prompts::answer_system(tier, &nonce);
-    let user = prompts::answer_user(tier, question, &facts, &nonce, None);
-    let (head, tail) = prompts::answer_frame(question, &nonce, None);
+    let user = prompts::answer_user(tier, question, &facts, &nonce, today);
+    let (head, tail) = prompts::answer_frame(question, &nonce, today);
     let mut template = vec![SentLine::Text {
         text: system.clone(),
     }];
@@ -89,6 +106,7 @@ pub fn question(
     }
     template.extend(tail.into_iter().map(|text| SentLine::Text { text }));
     Some(Question {
+        nonce,
         system,
         user,
         facts,

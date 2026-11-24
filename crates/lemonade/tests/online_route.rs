@@ -18,6 +18,16 @@ use nocturne_lemonade::{Dirs, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
+fn today() -> nocturne_engine::AskToday {
+    nocturne_engine::AskToday {
+        day: "2026-11-24".parse().unwrap(),
+        hour: 21,
+        minute: 40,
+        zone: "Europe/London".into(),
+        week_start: jiff::civil::Weekday::Monday,
+    }
+}
+
 const KEY: &str = "sk-route-test-0123456789abcdefghij";
 
 fn quick() -> SupervisorOptions {
@@ -857,7 +867,12 @@ async fn real_engine_takes_the_key_at_run_time() {
     );
     let (tx, _rx) = tokio::sync::mpsc::channel(4);
     let meta = mind
-        .answer("When do the bins go out?", std::slice::from_ref(&fact), tx)
+        .answer(
+            "When do the bins go out?",
+            std::slice::from_ref(&fact),
+            &today(),
+            tx,
+        )
         .await
         .unwrap();
     assert!(!meta.not_sure);
@@ -870,7 +885,7 @@ async fn real_engine_takes_the_key_at_run_time() {
         .await
         .unwrap();
     let (tx, _rx) = tokio::sync::mpsc::channel(4);
-    assert!(mind.answer("again?", &[fact], tx).await.is_err());
+    assert!(mind.answer("again?", &[fact], &today(), tx).await.is_err());
     let seen = provider.requests().await;
     assert!(seen.iter().all(|r| r["path"] != "/v1/elsewhere"));
     assert!(
