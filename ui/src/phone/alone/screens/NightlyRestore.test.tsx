@@ -189,6 +189,20 @@ describe("bringing back a backup onto an empty phone", () => {
     ).toBeInTheDocument();
   });
 
+  it("names both versions when a newer Nocturne made it", async () => {
+    await fromWelcome("&restore=newer");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByRole("heading", { name: "This backup is from a newer Nocturne" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "It was made with Nocturne 0.9.0, and this phone has 0.8.0. Update Nocturne from Google Play, then try again. Nothing was changed.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("waits for the internet and carries on", async () => {
     await fromWelcome("&restore=offline");
     await screen.findByRole("heading", { name: "Bring back your memory" });

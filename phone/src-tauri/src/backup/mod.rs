@@ -217,7 +217,7 @@ pub struct BackupStatus {
 }
 
 /// Why a backup call did not do what was asked, as the screens name it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BackupProblem {
     /// No account can be reached from this phone yet.
@@ -234,7 +234,12 @@ pub enum BackupProblem {
     AlreadyThere,
     AnotherPhone,
     NotInUse,
-    Newer,
+    /// A newer Nocturne made the backup: the one it names, when it does, and this one.
+    #[serde(rename_all = "camelCase")]
+    Newer {
+        theirs: Option<String>,
+        ours: String,
+    },
     Damaged,
     NoRoom,
     SignedOut,
@@ -257,7 +262,10 @@ impl From<NightError> for BackupProblem {
             NightError::AlreadyThere => BackupProblem::AlreadyThere,
             NightError::AnotherPhone { .. } => BackupProblem::AnotherPhone,
             NightError::NotInUse => BackupProblem::NotInUse,
-            NightError::TooNew => BackupProblem::Newer,
+            NightError::TooNew => BackupProblem::Newer {
+                theirs: None,
+                ours: nightly::APP_VERSION.to_string(),
+            },
             NightError::Damaged => BackupProblem::Damaged,
             NightError::NoPhrase => BackupProblem::NoPhrase,
             NightError::Place(PlaceError::NoRoom) => BackupProblem::NoRoom,
@@ -311,6 +319,22 @@ pub enum Restored {
 pub struct FoundBackup {
     pub at: Option<String>,
     pub bytes: u64,
+}
+
+/// A backup call's problem, naming the Nocturne that made the night when it was a newer one.
+fn naming_newer(
+    e: NightError,
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    count: Option<u64>,
+) -> BackupProblem {
+    match BackupProblem::from(e) {
+        BackupProblem::Newer { ours, .. } => BackupProblem::Newer {
+            theirs: nightly::made_with(place, key, count),
+            ours,
+        },
+        other => other,
+    }
 }
 
 fn open_with(place: &dyn BackupPlace, opening: &Opening) -> Result<NightKey, BackupProblem> {
@@ -989,7 +1013,8 @@ impl PhoneBackup {
     pub fn nights(&self, opening: &Opening) -> Result<Vec<nightly::NightSummary>, BackupProblem> {
         let place = self.place()?;
         let key = open_with(place.as_ref(), opening)?;
-        Ok(nightly::nights(place.as_ref(), &key)?)
+        nightly::nights(place.as_ref(), &key)
+            .map_err(|e| naming_newer(e, place.as_ref(), &key, None))
     }
 
     /// "Bring it back": the night of `night`, or the newest, opened with the phrase or the
@@ -1021,7 +1046,7 @@ impl PhoneBackup {
             Ok(done) => done,
             Err(e) => {
                 crate::home::calls::clear(&stage);
-                return Err(e.into());
+                return Err(naming_newer(e, place.as_ref(), &key, night));
             }
         };
         let restored = if holds {
