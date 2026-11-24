@@ -109,6 +109,8 @@ pub struct Failed {
     /// The request never left: its address was refused, there was no way to the internet
     /// (`NoInternet`: its name could not be looked up, or no route), or it was stopped first.
     pub refused: bool,
+    /// The provider's refusal names tools or functions, and not the length of what was sent.
+    pub names_tools: bool,
 }
 
 /// The person's provider: its address, the model they named and their key.
@@ -532,10 +534,13 @@ impl Provider {
         }
         exchange.seconds = started.elapsed().as_secs_f32();
         if !(200..300).contains(&status) {
-            let says_model = String::from_utf8_lossy(&bytes)
-                .to_ascii_lowercase()
-                .contains("model");
-            return Err(failed(by_status(status, says_model), exchange));
+            let said = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
+            let mut f = failed(by_status(status, said.contains("model")), exchange);
+            f.names_tools = (said.contains("tool") || said.contains("function"))
+                && !["context", "token", "length", "too long"]
+                    .iter()
+                    .any(|w| said.contains(w));
+            return Err(f);
         }
         Ok((status, bytes, exchange))
     }
@@ -546,6 +551,7 @@ fn never_left(failure: OnlineFailure) -> Failed {
         failure,
         exchange: Exchange::default(),
         refused: true,
+        names_tools: false,
     }
 }
 
@@ -562,6 +568,7 @@ fn failed(failure: OnlineFailure, exchange: Exchange) -> Failed {
         failure,
         exchange,
         refused: false,
+        names_tools: false,
     }
 }
 
