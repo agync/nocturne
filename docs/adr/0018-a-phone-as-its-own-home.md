@@ -74,9 +74,11 @@ web-view interface); on a computer it ships and supervises a private, embedded L
 > engine's requests to the one provider they chose for answers, online or on their own network (each
 > question with what a good answer to it needs), plus one look at that provider's list of models
 > each time the engine starts; while a phone that is its own home has backup turned on, that phone's
-> backups of its memory, locked with a phrase only the person holds, to the person's own iCloud or
-> Google Drive account that the phone is signed in to, plus the sign-in, listing and removal that
-> account needs (0019); while a phone that is its own home has an online mind the person
+> nightly copy of its memory, locked with a phrase only the person holds, to the person's own iCloud
+> or Google Drive account that the phone is signed in to, plus the sign-in, listing and removal that
+> account needs; after the person turns backup off or deletes everything, only the removals they
+> asked for in that account (a forget for good, or deleting the backup), with the same sign-in and
+> listing (0019); while a phone that is its own home has an online mind the person
 > chose, that phone's requests to the one provider they chose, online or on their own network (what
 > each reading, page or answer needs to be done well), plus one look at that provider's list of
 > models when it is checked (0020); and, while the person borrows a household's mind with the code its

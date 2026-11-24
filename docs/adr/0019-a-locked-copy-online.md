@@ -63,11 +63,14 @@ apps, and a backup that needs the person to set up a folder is not automatic. Th
 
 Nocturne itself now sends the backup, so invariant 2 gains this clause, written here and in
 [0018](0018-a-phone-as-its-own-home.md#proposed-contract-changes). It is in `AGENTS.md` since this
-record was accepted:
+record was accepted. Since 2026-11-24 (owner) it names what may still go once backup is off:
 
-> while a phone that is its own home has backup turned on, that phone's backups of its memory,
-> locked with a phrase only the person holds, to the person's own iCloud or Google Drive account
-> that the phone is signed in to, plus the sign-in, listing and removal that account needs (0019)
+> while a phone that is its own home has backup turned on, that phone's nightly copy of its
+> memory, locked with a phrase only the person holds, to the person's own iCloud or Google Drive
+> account that the phone is signed in to, plus the sign-in, listing and removal that account
+> needs; after the person turns backup off or deletes everything, only the removals they asked
+> for in that account (a forget for good, or deleting the backup), with the same sign-in and
+> listing (0019)
 
 ## Consequences
 
