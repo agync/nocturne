@@ -223,6 +223,7 @@
   "phone.backup.problem.missing.action": "Choose an earlier night",
   "phone.backup.problem.newer.title": "This backup is from a newer Nocturne",
   "phone.backup.problem.newer.body": "Update Nocturne from {store}, then try again. Nothing was changed.",
+  "phone.backup.problem.newer.bodyVersions": "It was made with Nocturne {theirs}, and this phone has {ours}. Update Nocturne from {store}, then try again. Nothing was changed.",
   "phone.backup.problem.lost.title": "Nocturne lost its way to your backup",
   "phone.backup.problem.lost.ios": "iCloud was turned off or signed out. Nothing on this phone changed.",
   "phone.backup.problem.lost.android": "Google stopped letting Nocturne in. Nothing on this phone changed.",

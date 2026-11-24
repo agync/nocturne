@@ -55,6 +55,8 @@ pub(crate) const FORGOT: &str = "_forgotSinceNight";
 pub(crate) const SCRATCH: &str = "night-tmp";
 /// How many nights the account keeps.
 pub const NIGHTS_KEPT: usize = 7;
+/// The Nocturne that writes and reads nights here, as a night names the one that made it.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const NIGHT: &str = "night-";
 const PIECE: &str = "piece-";
@@ -762,6 +764,34 @@ pub fn found(place: &dyn BackupPlace) -> NightResult<Option<Found>> {
     }))
 }
 
+/// The Nocturne a night says made it, the night of `count` or the newest, for "This backup is
+/// from a newer Nocturne". Read without the checks a night must pass to be restored: a newer
+/// Nocturne's night does not pass them, and nothing here is relied on but the words shown.
+pub fn made_with(place: &dyn BackupPlace, key: &NightKey, count: Option<u64>) -> Option<String> {
+    let listed = place.list(NIGHT).ok()?;
+    let named: Vec<(u64, &str)> = listed
+        .iter()
+        .filter_map(|e| parse_night(&e.name).map(|(c, _)| (c, e.name.as_str())))
+        .collect();
+    let (_, name) = named
+        .iter()
+        .find(|(c, _)| Some(*c) == count)
+        .or_else(|| named.iter().max_by_key(|(c, _)| *c))?;
+    let locked = place.get(name).ok()??;
+    if locked.len() > MAX_NIGHT {
+        return None;
+    }
+    let plain = key.unlock(&locked).ok()?;
+    let split = plain.iter().position(|&b| b == b'\n')?;
+    let json: serde_json::Value = serde_json::from_slice(&plain[split + 1..]).ok()?;
+    let version = json.get("appVersion")?.as_str()?;
+    let shown = version.len() <= 32
+        && version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-');
+    shown.then(|| version.to_string())
+}
+
 /// The nights in the account as its listing shows them, newest first, before any phrase: their
 /// count, when each was made and what each takes. Empty when the account holds no backup.
 pub fn listed_nights(place: &dyn BackupPlace) -> NightResult<Vec<ListedNight>> {
@@ -1127,7 +1157,7 @@ impl Engine {
             device: state.device.clone(),
             count,
             made_at: fmt_ts(made),
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            app_version: APP_VERSION.to_string(),
             store_version: snap.version,
             memories: snap.memories,
             items: snap.items,
@@ -1259,6 +1289,24 @@ mod tests {
         ] {
             assert!(read_night_name(bad).is_none(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_newer_nocturne_s_night_is_refused_and_names_its_maker() {
+        let place = MemoryPlace::new();
+        let key = NightKey::generate();
+        let name = "night-000000000002-0123456789abcdef-1763003520-0";
+        let json = serde_json::json!({ "format": 2, "appVersion": "9.1.0", "whatever": true });
+        let json = serde_json::to_vec(&json).unwrap();
+        let mac = key.mac(&[name.as_bytes(), &[0], &json]);
+        let mut plain = hex(&mac).into_bytes();
+        plain.push(b'\n');
+        plain.extend_from_slice(&json);
+        place.put(name, &key.lock(&plain).unwrap()).unwrap();
+        assert!(matches!(nights(&place, &key), Err(NightError::TooNew)));
+        assert_eq!(made_with(&place, &key, None).as_deref(), Some("9.1.0"));
+        assert_eq!(made_with(&place, &key, Some(2)).as_deref(), Some("9.1.0"));
+        assert_eq!(made_with(&place, &NightKey::generate(), None), None);
     }
 
     #[test]

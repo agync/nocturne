@@ -17,6 +17,8 @@ import {
   onPhone,
   problemOf,
   type Restored,
+  type Versions,
+  versionsOf,
 } from "../nightly";
 import { BackOnly, CheckStep, NEW_PHRASE, type PhraseDraft, PhraseStep } from "./NightlyOn";
 import { Chip, chips } from "./parts";
@@ -32,7 +34,8 @@ type Step =
   | { name: "mobile" }
   /** Coming down, or waiting for Wi-Fi or for the internet to come back. */
   | { name: "getting"; wait?: "wifi" | "internet" }
-  | { name: "problem"; why: "room" | "missing" | "newer" | "lost" | "stopped" | "failed" }
+  | { name: "problem"; why: "room" | "missing" | "lost" | "stopped" | "failed" }
+  | { name: "problem"; why: "newer"; versions: Versions | null }
   | { name: "restored"; restored: Extract<Restored, { kind: "replaced" }> }
   | { name: "merged"; restored: Extract<Restored, { kind: "broughtIn" }> }
   | { name: "newPhrase" }
@@ -265,6 +268,7 @@ export function NightlyRestore({
     } catch (e) {
       const p = problemOf(e);
       if (p === "wrongPhrase" || p === "noPhrase") setWrong((n) => n + 1);
+      else if (p === "newer") setStep({ name: "problem", why: "newer", versions: versionsOf(e) });
       else if (p === "offline") setStep({ name: "none", why: "offline" });
       else setStep({ name: "problem", why: lostOr(p) });
       return null;
@@ -315,7 +319,7 @@ export function NightlyRestore({
         return setStep({ name: "problem", why: "room" });
       }
       if (p === "damaged" || p === "noBackup") return setStep({ name: "problem", why: "missing" });
-      if (p === "newer") return setStep({ name: "problem", why: "newer" });
+      if (p === "newer") return setStep({ name: "problem", why: "newer", versions: versionsOf(e) });
       if (p === "wrongPhrase") {
         setWrong((n) => n + 1);
         return setStep({ name: "found" });
@@ -887,9 +891,15 @@ export function NightlyRestore({
           >
             <Hero icon="info" title={t("phone.backup.problem.newer.title")}>
               <p className="ph-body ph-ink2">
-                {t("phone.backup.problem.newer.body", {
-                  store: onPhone(ios, "phone.backup.store.ios", "phone.backup.store.android"),
-                })}
+                {step.versions?.theirs
+                  ? t("phone.backup.problem.newer.bodyVersions", {
+                      theirs: step.versions.theirs,
+                      ours: step.versions.ours,
+                      store: onPhone(ios, "phone.backup.store.ios", "phone.backup.store.android"),
+                    })
+                  : t("phone.backup.problem.newer.body", {
+                      store: onPhone(ios, "phone.backup.store.ios", "phone.backup.store.android"),
+                    })}
               </p>
             </Hero>
           </Screen>

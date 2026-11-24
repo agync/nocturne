@@ -802,3 +802,20 @@ fn a_phrase_changed_after_the_first_night_on_a_new_account_goes_there_at_once() 
     assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
     assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
 }
+
+#[test]
+fn a_newer_backup_names_both_versions_to_the_screens() {
+    let shown = serde_json::to_value(BackupProblem::Newer {
+        theirs: Some("9.1.0".into()),
+        ours: "0.7.2".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        shown,
+        serde_json::json!({ "newer": { "theirs": "9.1.0", "ours": "0.7.2" } })
+    );
+    assert_eq!(
+        serde_json::to_value(BackupProblem::WrongPhrase).unwrap(),
+        serde_json::json!("wrongPhrase")
+    );
+}

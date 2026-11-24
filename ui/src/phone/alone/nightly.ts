@@ -69,9 +69,18 @@ export type BackupProblem =
 
 /** A call that answered with one of the backup's own reasons. */
 export class BackupError extends Error {
-  constructor(readonly problem: BackupProblem) {
+  constructor(
+    readonly problem: BackupProblem,
+    /** For `newer`: the Nocturne that made the backup, when it says, and this one. */
+    readonly versions: Versions | null = null,
+  ) {
     super(problem);
   }
+}
+
+export interface Versions {
+  theirs: string | null;
+  ours: string;
 }
 
 /** What came of asking for the account. */
@@ -186,6 +195,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   try {
     return await invoke<T>(cmd, args);
   } catch (e) {
+    const newer = (e as { newer?: Versions } | null)?.newer;
+    if (typeof e === "object" && newer) throw new BackupError("newer", newer);
     throw new BackupError(
       typeof e === "string" && PROBLEMS.has(e) ? (e as BackupProblem) : "failed",
     );
@@ -246,6 +257,10 @@ export const CARD_SHOWN = "backup-card-shown";
 
 export const problemOf = (e: unknown): BackupProblem =>
   e instanceof BackupError ? e.problem : "failed";
+
+/** The two versions a `newer` problem names. */
+export const versionsOf = (e: unknown): Versions | null =>
+  e instanceof BackupError ? e.versions : null;
 
 /** Stopped for something only the person can fix. */
 export type StopCause = "noRoom" | "signedOut" | "noPermission" | "anotherPhone" | "newer";
