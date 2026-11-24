@@ -38,7 +38,8 @@ pub fn kept_line_item(id: &str) -> Option<&str> {
     id.strip_prefix(KEPT_LINE)
 }
 
-/// The most days apart the ends of each look-up may be.
+/// The most days apart the ends of each look-up may be, both ends included: 62 apart is 63
+/// days.
 pub const CALENDAR_DAYS: i64 = 62;
 pub const JOURNAL_DAYS: i64 = 14;
 pub const HEALTH_DAYS: i64 = 31;
@@ -470,7 +471,7 @@ impl Engine {
             let mut out = Vec::new();
             let mut seen: HashSet<String> = HashSet::new();
             for item in items {
-                if !kept_item(conn, &item.view.id)? || (!scope.private && item.view.private) {
+                if !kept_chain(conn, &item.view.id)? || (!scope.private && item.view.private) {
                     continue;
                 }
                 let day = item.day(&ctx)?;
@@ -522,7 +523,7 @@ impl Engine {
         let originals = self.originals_dir();
         let hits = self.read(|conn| {
             let ctx = Ctx::load(conn, self.clock())?;
-            let items = load_items(
+            let found = load_items(
                 conn,
                 &originals,
                 &format!(
@@ -532,10 +533,12 @@ impl Engine {
                 ),
                 &[enum_str(&kind), day_text(from), day_text(to)],
             )?;
-            let mut items: Vec<JItem> = items
-                .into_iter()
-                .filter(|i| scope.private || !i.view.private)
-                .collect();
+            let mut items: Vec<JItem> = Vec::new();
+            for i in found {
+                if (scope.private || !i.view.private) && kept_chain(conn, &i.view.id)? {
+                    items.push(i);
+                }
+            }
             items.sort_by(|a, b| {
                 (a.meta_str("day"), a.meta_str("start"))
                     .cmp(&(b.meta_str("day"), b.meta_str("start")))
@@ -602,7 +605,7 @@ impl Engine {
             );
             if from <= today {
                 let end = to.min(today);
-                let start = from.max(end.checked_sub((JOURNAL_DAYS - 1).days()).unwrap_or(from));
+                let start = from.max(end.checked_sub(JOURNAL_DAYS.days()).unwrap_or(from));
                 add(
                     self.look_up_journal(start, end, scope, JOURNAL_LINES)?,
                     &mut out,
@@ -629,9 +632,14 @@ impl Engine {
     }
 }
 
-/// `to`, or the last day within `days` of `from`.
+/// `to`, or the last day at most `days` apart from `from`.
 fn clamp(from: Date, to: Date, days: i64) -> Date {
-    to.min(from.checked_add((days - 1).days()).unwrap_or(to))
+    to.min(from.checked_add(days.days()).unwrap_or(to))
+}
+
+/// Whether the item and every earlier version it replaced may be given ([`kept_line_may_go`]).
+fn kept_chain(conn: &Connection, item_id: &str) -> Result<bool> {
+    kept_line_may_go(conn, &format!("{KEPT_LINE}{item_id}"))
 }
 
 fn kept_item(conn: &Connection, id: &str) -> Result<bool> {
