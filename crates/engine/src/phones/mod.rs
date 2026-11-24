@@ -276,6 +276,22 @@ pub(crate) struct NewVersion<'a> {
     pub metadata: Value,
 }
 
+/// A health reading's item id, made from what Health says of it: the kind and the health app's
+/// own id for it, and its contents. A reading read again from Health after a restore, whose
+/// backup leaves readings out, gets the id it had, so what cites it finds it again. When that id
+/// is taken here already (the same contents came back after a change), a new one is made.
+fn reading_item_id(tx: &Transaction<'_>, key: &str, content: &Value) -> Result<String> {
+    let canonical = serde_json::to_string(&json_sorted(content)).unwrap_or_default();
+    let hash = sha256_hex(format!("reading\n{key}\n{canonical}").as_bytes());
+    let id = format!("itm_{}", &hash[..16]);
+    let taken: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
+        [&id],
+        |r| r.get(0),
+    )?;
+    Ok(if taken { new_id("itm") } else { id })
+}
+
 /// Insert a version as a new item and point the entry's record at it. Returns the item id.
 pub(crate) fn insert_version(
     tx: &Transaction<'_>,
@@ -283,7 +299,11 @@ pub(crate) fn insert_version(
     v: NewVersion<'_>,
     before: Option<&Record>,
 ) -> Result<String> {
-    let id = new_id("itm");
+    let id = if v.kind == "reading" {
+        reading_item_id(tx, v.phone_id, &v.metadata)?
+    } else {
+        new_id("itm")
+    };
     let version = before.map_or(1, |b| b.version + 1);
     let mut meta = v.metadata;
     meta["phone"] = serde_json::json!({

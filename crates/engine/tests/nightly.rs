@@ -1225,6 +1225,61 @@ fn health_readings_never_go_into_a_night_and_a_restore_says_how_far_back_to_read
 }
 
 #[test]
+fn a_reading_read_again_after_a_restore_is_what_its_citations_name() {
+    let old = fixture_at("2026-11-20T05:00:00Z", "Europe/London");
+    let phone = old.engine.ensure_local_device("Old phone").unwrap();
+    old.engine
+        .take_readings(&phone, sleep_batch("r1", "sleep1"))
+        .unwrap();
+    let reading: String = raw_db(&old)
+        .query_row("SELECT id FROM items WHERE kind = 'reading'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    reflect_on(&old, "2026-11-19", "Slept well", "A good night.");
+    {
+        let conn = raw_db(&old);
+        let reflection: String = conn
+            .query_row("SELECT id FROM reflections", [], |r| r.get(0))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO reflection_cites(reflection_id, item_id) VALUES (?1, ?2)",
+            [&reflection, &reading],
+        )
+        .unwrap();
+    }
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+
+    let (out, _, _) = restore(&place, &key).unwrap();
+    let store = out.path().join("stage/store");
+    let dangling = "SELECT COUNT(*) FROM reflection_cites c \
+                    WHERE NOT EXISTS (SELECT 1 FROM items i WHERE i.id = c.item_id)";
+    assert_eq!(sql_count(&store, dangling), 1, "the reading stays out");
+    assert_eq!(
+        sql_count(
+            &store,
+            "SELECT COUNT(*) FROM remote_keeps WHERE client_id LIKE 'phone-%'"
+        ),
+        0,
+        "nothing of the reading stays behind"
+    );
+    let again = Engine::open(&store, old.clock.clone()).unwrap();
+    let me = again.ensure_local_device("Old phone").unwrap();
+    again
+        .take_readings(&me, sleep_batch("r2", "sleep1"))
+        .unwrap();
+    assert!(again.get_item(&reading).is_ok(), "read again under its id");
+    drop(again);
+    assert_eq!(
+        sql_count(&store, dangling),
+        0,
+        "every citation finds its reading"
+    );
+}
+
+#[test]
 fn calendar_entries_and_health_readings_come_once_and_the_newer_version_stays() {
     let old = fixture_at("2026-11-20T05:00:00Z", "Europe/London");
     let phone = old.engine.ensure_local_device("Old phone").unwrap();
