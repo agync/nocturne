@@ -560,6 +560,7 @@ impl Engine {
         Ok(BackupReport {
             path: dest.to_string_lossy().into_owned(),
             memories: snap.memories,
+            items: snap.items,
             pages: snap.pages,
             originals: snap.originals.len() as u32,
             bytes,

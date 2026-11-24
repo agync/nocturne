@@ -471,6 +471,7 @@ export function homeState(scenario: HomeScenario) {
           report: {
             path: call.dest,
             memories: 0,
+            items: rows.length,
             pages: 0,
             originals: rows.length,
             bytes: 412_000_000,

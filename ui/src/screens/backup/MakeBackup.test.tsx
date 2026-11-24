@@ -420,6 +420,7 @@ describe("Make a backup: leaving and coming back", () => {
       finish({
         path: BACKUP,
         memories: 14,
+        items: 40,
         pages: 5,
         originals: 8,
         bytes: 4_300_000_000,

@@ -70,6 +70,7 @@ export interface MockBackupsScript {
 
 export interface Counts {
   memories: number;
+  items: number;
   pages: number;
   originals: number;
 }

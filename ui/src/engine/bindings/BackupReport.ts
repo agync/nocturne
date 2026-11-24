@@ -7,7 +7,11 @@ export type BackupReport = {
 /**
  * The backup file that was written.
  */
-path: string, memories: number, pages: number, originals: number, 
+path: string, memories: number, 
+/**
+ * The items it holds, counted in the copy that was written.
+ */
+items: number, pages: number, originals: number, 
 /**
  * The size of the file.
  */
