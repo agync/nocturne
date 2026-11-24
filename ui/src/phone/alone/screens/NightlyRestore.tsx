@@ -1,5 +1,11 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { formatBytes, formatLongDay } from "../../../copy/format";
+import {
+  addDays,
+  formatBytes,
+  formatDayMonthYear,
+  formatLongDay,
+  localDay,
+} from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress } from "../../../engine/bindings";
 import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
@@ -11,6 +17,7 @@ import {
   backupDay,
   backupTime,
   type FoundBackup,
+  type HealthAgain,
   type Here,
   type NightView,
   type Opening,
@@ -982,6 +989,7 @@ export function NightlyRestore({
               <p className="ph-small">{chips("phone.backup.restored.mind")}</p>
             ) : null}
             <p className="ph-small">{t("phone.backup.restored.sources")}</p>
+            <HealthAgainLine health={step.restored.health} ios={ios} />
           </Hero>
         </Screen>
       );
@@ -1007,6 +1015,7 @@ export function NightlyRestore({
             {r.same > 0 ? (
               <p className="ph-small">{t("phone.backup.merged.same", { same: r.same })}</p>
             ) : null}
+            <HealthAgainLine health={r.health} ios={ios} />
           </Hero>
         </Screen>
       );
@@ -1143,5 +1152,27 @@ function MergeHeading() {
     <h1 className="ph-steph" tabIndex={-1} ref={heading}>
       {t("phone.backup.merge.title")}
     </h1>
+  );
+}
+
+/** The health readings a backup leaves out: read again from the phone's health app, or, where
+ * Health Connect gives only the last 30 days, what doesn't come back. */
+function HealthAgainLine({ health, ios }: { health: HealthAgain | null; ios: boolean }) {
+  if (!health) return null;
+  if (!health.reaches)
+    return (
+      <p className="ph-small">
+        {t("phone.backup.restored.health.short", {
+          from: formatDayMonthYear(addDays(localDay(new Date()), -29)),
+        })}
+      </p>
+    );
+  const day = formatDayMonthYear(health.since);
+  return (
+    <p className="ph-small">
+      {ios
+        ? chips("phone.backup.restored.health.ios", { day })
+        : chips("phone.backup.restored.health.android", { day })}
+    </p>
   );
 }

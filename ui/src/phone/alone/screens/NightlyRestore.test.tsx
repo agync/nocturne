@@ -63,6 +63,28 @@ describe("bringing back a backup onto an empty phone", () => {
     expect(await screen.findByText("Your memory is on this phone")).toBeInTheDocument();
   });
 
+  it("says the health readings are read again from Health Connect, back to their first day", async () => {
+    await fromWelcome("&health");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Health readings aren’t kept in your backup/)).toHaveTextContent(
+      "Health readings aren’t kept in your backup. With Health on in This phone, Nocturne reads them again from Health Connect, back to 14 March 2025, once you allow older readings there.",
+    );
+  });
+
+  it("says which health readings don't come back where Health Connect gives 30 days", async () => {
+    await fromWelcome("&health=short");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    await screen.findByRole("heading", { name: "Your memory is back on this phone." });
+    expect(
+      screen.getByText(/lets Nocturne read only the last 30 days, so readings from before/),
+    ).toHaveTextContent(/Pages and reflections that mention them stay\.$/);
+  });
+
   it("says a wrong phrase, and after three tries points to the password manager", async () => {
     await fromWelcome();
     await screen.findByRole("heading", { name: "Bring back your memory" });

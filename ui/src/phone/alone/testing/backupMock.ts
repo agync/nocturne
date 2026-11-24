@@ -251,6 +251,9 @@ export function backupState(phone: {
           awayUsed: false,
           bytes: 1.4 * GB,
         };
+        const health = params.has("health")
+          ? { since: "2025-03-14", reaches: params.get("health") !== "short" }
+          : null;
         const done: Restored = phone.holds()
           ? {
               kind: "broughtIn",
@@ -261,12 +264,14 @@ export function backupState(phone: {
               same: 12,
               already: 0,
               own: params.has("own"),
+              health,
             }
           : {
               kind: "replaced",
               summary,
               kept: { things: 2140, journalEntries: 300, photosAndRecordings: 410, checkins: 140 },
               own: params.has("own"),
+              health,
             };
         if (params.get("restore") === "slow")
           return new Promise((resolve, reject) => {

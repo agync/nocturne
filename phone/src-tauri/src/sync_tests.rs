@@ -846,6 +846,33 @@ fn older_readings_read_a_year_when_allowed() {
 }
 
 #[test]
+fn a_restore_reads_health_again_back_to_where_the_backup_left_it_out() {
+    let (_dir, s) = syncer();
+    s.ledger.update(|l| l.health.settings.bring = true);
+    let d = FakeDevice::new();
+    let link = FakeLink::new(Mode::Take);
+    sync(&s, &d, &link);
+    assert_eq!(*d.reads.lock().unwrap(), vec![30]);
+
+    s.ledger.read_health_back_to("2024-01-01");
+    s.ledger.read_health_back_to("2025-06-01");
+    let today = jiff::ZonedDateTime::now().date().to_string();
+    let span = health::days_back_to("2024-01-01", &today).unwrap();
+    assert!(span > 365);
+    // Without older readings allowed, the usual 30 days, and the restore still waits.
+    sync(&s, &d, &link);
+    assert_eq!(*d.reads.lock().unwrap(), vec![30, 30]);
+    assert_eq!(s.ledger.get().health.back_to.as_deref(), Some("2024-01-01"));
+    // Allowed: back to the first day the backup left out, once.
+    d.granted.lock().unwrap().history = true;
+    sync(&s, &d, &link);
+    assert_eq!(*d.reads.lock().unwrap(), vec![30, 30, span]);
+    assert_eq!(s.ledger.get().health.back_to, None);
+    sync(&s, &d, &link);
+    assert_eq!(d.reads.lock().unwrap().len(), 3, "then only what changed");
+}
+
+#[test]
 fn only_chosen_and_allowed_kinds_are_read() {
     let kinds = health::kinds_to_read(
         &[ReadingKind::Weight, ReadingKind::Steps, ReadingKind::Sleep],

@@ -63,6 +63,15 @@ fn change_key(c: &ReadingChange) -> String {
     }
 }
 
+/// How many days back from `today` reach `day`, both `YYYY-MM-DD`; `None` when either doesn't
+/// read as a day.
+pub fn days_back_to(day: &str, today: &str) -> Option<u32> {
+    let (day, today): (jiff::civil::Date, jiff::civil::Date) =
+        (day.parse().ok()?, today.parse().ok()?);
+    let span = today.since(day).ok()?.get_days();
+    Some(u32::try_from(span).unwrap_or(0) + 1)
+}
+
 /// The kinds to read: chosen and allowed, in order.
 pub fn kinds_to_read(chosen: &[ReadingKind], allowed: &[ReadingKind]) -> Vec<ReadingKind> {
     ORDER
@@ -288,15 +297,23 @@ pub async fn sync(
     }
     let older = settings.older_readings && granted.history;
     let h = ledger.get().health;
+    // After a restore, back to the day its readings began, once the phone allows that far.
+    let back_to = h
+        .back_to
+        .as_deref()
+        .filter(|_| granted.history)
+        .and_then(|day| days_back_to(day, &jiff::ZonedDateTime::now().date().to_string()));
     let full = h.token.is_none()
         || h.token_kinds != kinds
         || h.token_older != older
-        || h.token_distance != granted.distance;
+        || h.token_distance != granted.distance
+        || back_to.is_some();
     let days = if older {
         HEALTH_DAYS_OLDER
     } else {
         HEALTH_DAYS
-    };
+    }
+    .max(back_to.unwrap_or(0));
     let whole = if full {
         true
     } else {
@@ -323,7 +340,12 @@ pub async fn sync(
         }
     };
     if whole && let Ok(read) = device.health_read(&kinds, days) {
-        ledger.update(|l| take_full(&mut l.health, read, &kinds, &granted, older));
+        ledger.update(|l| {
+            take_full(&mut l.health, read, &kinds, &granted, older);
+            if back_to.is_some() {
+                l.health.back_to = None;
+            }
+        });
     }
     let changes = in_order(ledger.get().health.pending.into_values().collect());
     // As the calendar: an empty send once after the app starts.

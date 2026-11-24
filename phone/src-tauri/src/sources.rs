@@ -378,16 +378,21 @@ pub async fn health_older_available<R: Runtime>(app: AppHandle<R>) -> bool {
     waiting(|| app.health().older_available())
 }
 
-/// Health Connect's own screen for the kinds chosen; answers what is allowed after it.
+/// Health Connect's own screen for the kinds chosen; answers what is allowed after it. Older
+/// readings are asked for with the others wherever Health Connect offers them, so a phone
+/// restored from a backup, which holds no health readings, can read them again that far back.
 #[tauri::command]
 pub async fn health_request<R: Runtime>(
     app: AppHandle<R>,
     kinds: Vec<ReadingKind>,
     history: bool,
 ) -> Result<Granted, String> {
-    waiting(|| app.health().request(&kinds, history))
-        .map(granted)
-        .map_err(|e| e.to_string())
+    waiting(|| {
+        let health = app.health();
+        health.request(&kinds, history || health.older_available())
+    })
+    .map(granted)
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
