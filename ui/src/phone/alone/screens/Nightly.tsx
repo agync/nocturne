@@ -52,8 +52,14 @@ export function backupHint(
       day: backupDay(s.last.at, now),
     });
   }
-  // The first night is under way; how far it is shows once it says.
-  if (!s.last) return undefined;
+  // No night finished yet: just turned on, or starting afresh in an account chosen since.
+  if (!s.last) {
+    if (s.state.state === "running") return undefined;
+    if (STOPPED.has(s.state.state)) return t("phone.backup.hint.noneStopped");
+    if (s.state.state === "waitingForWifi") return t("phone.backup.hint.noneWifi");
+    if (s.state.state === "notCharged") return t("phone.backup.hint.noneNotCharged");
+    return t("phone.backup.hint.none");
+  }
   const day = backupDay(s.last.at, now);
   const time = backupTime(s.last.at);
   switch (s.state.state) {
@@ -68,17 +74,29 @@ export function backupHint(
       return t("phone.backup.hint.wifi", { day, time });
     case "notCharged":
       return t("phone.backup.hint.notCharged", { day, time });
-    case "noRoom":
-    case "signedOut":
-    case "noPermission":
-    case "anotherPhone":
-    case "newer":
-      return t("phone.backup.hint.stopped", { day, time });
     default:
+      if (STOPPED.has(s.state.state)) return t("phone.backup.hint.stopped", { day, time });
       // Waiting for tonight, no internet, or a night that did not finish: it carries on.
       return t("phone.backup.hint.tonight", { day, time });
   }
 }
+
+/** The states where the backup has stopped until the person does something. */
+const STOPPED: ReadonlySet<string> = new Set([
+  "noRoom",
+  "signedOut",
+  "noPermission",
+  "anotherPhone",
+  "newer",
+  "otherBackup",
+  "needsPhrase",
+]);
+
+/** "There's no room…": with the day the last backup is from, or alone when there is none. */
+const noRoomLine = (ios: boolean, day: string | null) =>
+  day
+    ? onPhone(ios, "phone.backup.say.noRoom.ios", "phone.backup.say.noRoom.android", { day })
+    : onPhone(ios, "phone.backup.say.noRoomNone.ios", "phone.backup.say.noRoomNone.android");
 
 /** The account did not answer: the backup is off, and goes from the account once it does. */
 const PENDING: ReadonlySet<string> = new Set([
@@ -284,9 +302,7 @@ export function NightlyBackup({
       };
     else if (state === "noRoom")
       say = {
-        line: onPhone(ios, "phone.backup.say.noRoom.ios", "phone.backup.say.noRoom.android", {
-          day,
-        }),
+        line: noRoomLine(ios, s.last ? day : null),
         action: onPhone(
           ios,
           "phone.backup.say.noRoom.action.ios",
@@ -326,6 +342,18 @@ export function NightlyBackup({
         }),
         action: t("phone.backup.say.newer.action"),
         onAction: () => open(ios ? APP_STORE : STORE),
+      };
+    else if (state === "otherBackup")
+      say = {
+        line: t("phone.backup.say.otherBackup.android"),
+        action: t("phone.backup.say.chooseAccount"),
+        onAction: chooseAccount,
+      };
+    else if (state === "needsPhrase")
+      say = {
+        line: t("phone.backup.say.needsPhrase"),
+        action: t("phone.backup.change"),
+        onAction: () => setSheet("change"),
       };
   }
 
@@ -566,9 +594,9 @@ export function todayCard(
   const at = s.last?.at ?? "";
   if (cause) {
     const line = {
-      noRoom: onPhone(ios, "phone.backup.say.noRoom.ios", "phone.backup.say.noRoom.android", {
-        day,
-      }),
+      noRoom: noRoomLine(ios, s.last ? day : null),
+      otherBackup: t("phone.backup.say.otherBackup.android"),
+      needsPhrase: t("phone.backup.say.needsPhrase"),
       signedOut: onPhone(
         ios,
         "phone.backup.say.signedOut.ios",

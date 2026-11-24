@@ -134,6 +134,12 @@ pub enum Trouble {
         made_at: String,
     },
     Newer,
+    /// The account chosen already holds another backup: nothing is written over it, and nothing
+    /// is tried again until the person chooses an account.
+    OtherBackup,
+    /// The backup can't start in the account chosen until the phrase is set again: the phone
+    /// does not know the locks to carry there.
+    NeedsPhrase,
     Damaged,
     Failed,
 }
@@ -195,6 +201,8 @@ pub enum BackupState {
         made_at: String,
     },
     Newer,
+    OtherBackup,
+    NeedsPhrase,
     Damaged,
     Failed,
 }
@@ -524,7 +532,10 @@ impl PhoneBackup {
         *lock(&self.failed_at) = None;
         let _held = lock(&self.locking);
         self.update(|s| {
-            if matches!(s.trouble, Some(Trouble::SignedOut | Trouble::NoPermission)) {
+            if matches!(
+                s.trouble,
+                Some(Trouble::SignedOut | Trouble::NoPermission | Trouble::OtherBackup)
+            ) {
                 s.trouble = None;
             }
             if !changed {
@@ -584,6 +595,8 @@ impl PhoneBackup {
                 Trouble::NoPermission => BackupState::NoPermission,
                 Trouble::AnotherPhone { made_at } => BackupState::AnotherPhone { made_at },
                 Trouble::Newer => BackupState::Newer,
+                Trouble::OtherBackup => BackupState::OtherBackup,
+                Trouble::NeedsPhrase => BackupState::NeedsPhrase,
                 Trouble::Damaged => BackupState::Damaged,
                 Trouble::Failed => BackupState::Failed,
             }
@@ -727,13 +740,18 @@ impl PhoneBackup {
         let _held = lock(&self.locking);
         if self.saved().fresh {
             let locked = nightly::phrase_lock(&key, phrase, self.work_factor)?;
-            self.update(|s| match s.locks.as_mut() {
-                Some(locks) => locks.phrase = locked,
-                None => {
-                    s.locks = Some(KeyLocks {
-                        phrase: locked,
-                        recovery: None,
-                    })
+            self.update(|s| {
+                match s.locks.as_mut() {
+                    Some(locks) => locks.phrase = locked,
+                    None => {
+                        s.locks = Some(KeyLocks {
+                            phrase: locked,
+                            recovery: None,
+                        })
+                    }
+                }
+                if s.trouble == Some(Trouble::NeedsPhrase) {
+                    s.trouble = None;
                 }
             });
             return Ok(());
@@ -938,7 +956,7 @@ impl PhoneBackup {
         }
         // Without a copy the phone can trust, nothing is carried: "Change the phrase" makes a
         // new one.
-        let locks = saved.locks.ok_or(NightError::Damaged)?;
+        let locks = saved.locks.ok_or(NightError::NoPhrase)?;
         self.update(|s| {
             if !s.carried.contains(&locks.phrase) {
                 s.carried.push(locks.phrase.clone());
@@ -969,11 +987,12 @@ impl PhoneBackup {
             Err(NightError::Place(PlaceError::NoRoom)) => Some(Trouble::NoRoom),
             Err(NightError::Place(PlaceError::SignedOut)) => Some(Trouble::SignedOut),
             Err(NightError::Place(PlaceError::NoPermission)) => Some(Trouble::NoPermission),
-            Err(
-                NightError::Place(PlaceError::Failed(_))
-                | NightError::Failed(_)
-                | NightError::AlreadyThere,
-            ) => Some(Trouble::Failed),
+            // Only a start in another account finds a backup there already.
+            Err(NightError::AlreadyThere) => Some(Trouble::OtherBackup),
+            Err(NightError::NoPhrase) => Some(Trouble::NeedsPhrase),
+            Err(NightError::Place(PlaceError::Failed(_)) | NightError::Failed(_)) => {
+                Some(Trouble::Failed)
+            }
             Err(_) => None,
         };
         let last = result.as_ref().ok().map(|r| LastNight {
@@ -1157,6 +1176,8 @@ impl PhoneBackup {
                     | Trouble::Newer
                     | Trouble::SignedOut
                     | Trouble::NoPermission
+                    | Trouble::OtherBackup
+                    | Trouble::NeedsPhrase
             )
         );
         if blocked || saved.state.as_ref().is_some_and(|s| !s.in_use) {
