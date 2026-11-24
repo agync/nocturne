@@ -26,6 +26,9 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock helpers.lock ./
 COPY crates/ crates/
 COPY src-tauri/ src-tauri/
+# Cargo reads every workspace member's manifest, the phone's included.
+COPY phone/src-tauri/ phone/src-tauri/
+COPY phone/plugins/ phone/plugins/
 # The guide ships inside the app (help with Nocturne).
 COPY docs/guide/ docs/guide/
 # Help names controls with the interface's own words, read when the app is built.

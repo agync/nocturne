@@ -6,6 +6,8 @@
 !lemonade.lock
 !crates/
 !src-tauri/
+!phone/src-tauri/
+!phone/plugins/
 !docs/guide/
 !ui/
 !scripts/fetch-lemonade.sh
@@ -13,6 +15,8 @@
 **/target/
 **/node_modules/
 src-tauri/gen/
+phone/src-tauri/gen/
+**/.tauri/
 ui/dist/
 ui/dist-preview/
 ui/dist-server/
