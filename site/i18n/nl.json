@@ -212,8 +212,8 @@
     "from": "It stays quiet"
   },
   "journal.quiet.detail": {
-    "text": "Niets uit je dagboek wordt voorgelezen of getoond in een melding of op een vergrendelscherm. Zet je Online antwoorden (Online answers) aan, dan kan een regel uit je dagboek meegaan met een vraag die hij helpt beantwoorden. Je gevoelsnotities, reflecties en terugblikken nooit.",
-    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+    "text": "Niets uit je dagboek wordt voorgelezen of getoond in een melding of op een vergrendelscherm. Zet je Online antwoorden (Online answers) aan, dan kan een regel uit je dagboek of een gevoelsnotitie meegaan met een vraag die hij helpt beantwoorden. Je reflecties en terugblikken nooit.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal or a check-in can go with a question it helps answer. Your reflections and recaps never do."
   },
   "journal.day.alt": {
     "text": "Vandaag in het dagboek, donderdag 12 november: een dagboektekst over de lunch met Priya, met een spraakmemo en een foto. Ernaast hoe vandaag voelde, met drie gevoelsnotities (moe, blij, opgelucht en tevreden).",
@@ -284,8 +284,8 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina en dagboek lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Daar kunnen regels uit je dagboek bij zitten, maar nooit je gevoelsnotities, reflecties of terugblikken. Nooit iets wat als privé is gemarkeerd.",
-    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
+    "text": "Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina en dagboek lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Daar kunnen regels uit je dagboek en je gevoelsnotities bij zitten, maar nooit je reflecties of terugblikken. Nooit iets wat als privé is gemarkeerd.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal and your check-ins, but never your reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
     "text": "Nocturne op een gekoppelde telefoon: verbonden met de computer thuis, met Vragen, Bewaren, de pagina van vandaag en het dagboek, en een opmerking dat wat als privé is gemarkeerd op de computer blijft.",

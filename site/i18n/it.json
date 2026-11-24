@@ -212,8 +212,8 @@
     "from": "It stays quiet"
   },
   "journal.quiet.detail": {
-    "text": "Niente del tuo diario viene letto ad alta voce o mostrato in una notifica o sulla schermata di blocco. Se attivi Risposte online (Online answers), una riga del tuo diario può accompagnare una domanda a cui aiuta a rispondere. I tuoi stati d’animo, le riflessioni e i riepiloghi, mai.",
-    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+    "text": "Niente del tuo diario viene letto ad alta voce o mostrato in una notifica o sulla schermata di blocco. Se attivi Risposte online (Online answers), una riga del tuo diario o uno stato d’animo può accompagnare una domanda a cui aiuta a rispondere. Le tue riflessioni e i riepiloghi, mai.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal or a check-in can go with a question it helps answer. Your reflections and recaps never do."
   },
   "journal.day.alt": {
     "text": "Oggi nel diario, giovedì 12 novembre: un’annotazione sul pranzo con Priya, con una nota vocale e una foto. Accanto, gli stati d’animo di oggi, annotati tre volte (stanchezza, soddisfazione, sollievo e appagamento).",
@@ -284,8 +284,8 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "Fuori casa (Away from home) permette al tuo telefono di chiedere, conservare e leggere la tua pagina e il tuo diario, in forma sigillata perché l’azienda in mezzo non possa leggerli. Risposte online (Online answers) invia una domanda, e le poche frasi ricordate che le servono, a un solo servizio che scegli tu. Possono includere righe del tuo diario, ma mai i tuoi stati d’animo, le riflessioni o i riepiloghi. Mai niente di segnato come privato.",
-    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
+    "text": "Fuori casa (Away from home) permette al tuo telefono di chiedere, conservare e leggere la tua pagina e il tuo diario, in forma sigillata perché l’azienda in mezzo non possa leggerli. Risposte online (Online answers) invia una domanda, e le poche frasi ricordate che le servono, a un solo servizio che scegli tu. Possono includere righe del tuo diario e i tuoi stati d’animo, ma mai le riflessioni o i riepiloghi. Mai niente di segnato come privato.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal and your check-ins, but never your reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
     "text": "Nocturne su un telefono abbinato: collegato al computer di casa, con Chiedi, Conserva, la pagina di oggi e il diario, e una nota che dice che le cose segnate come private restano sul computer.",
