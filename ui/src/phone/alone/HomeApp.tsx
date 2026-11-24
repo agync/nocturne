@@ -591,8 +591,11 @@ export function HomeApp({
   const leaveThen = (n: number, next: View) => {
     const open = () => {
       window.removeEventListener("popstate", open);
+      clearTimeout(late);
       go(next);
     };
+    // A step back that never comes must not leave a later Back opening `next`.
+    const late = setTimeout(() => window.removeEventListener("popstate", open), 2_000);
     window.addEventListener("popstate", open);
     leave(n);
   };
