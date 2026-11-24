@@ -1723,3 +1723,73 @@ fn a_phone_answers_only_a_question_from_the_journal_with_its_choices() {
     }
     assert!(answer_items(&w.f).is_empty());
 }
+
+/// Every table of the store in `db` that holds `needle` anywhere, in a text or in a blob, the
+/// full-text indexes' own tables with them.
+fn tables_holding(db: &std::path::Path, needle: &str) -> Vec<String> {
+    let c = rusqlite::Connection::open(db).unwrap();
+    let tables: Vec<String> = c
+        .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND sql NOT LIKE 'CREATE VIRTUAL%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let mut found = Vec::new();
+    for t in tables {
+        let mut stmt = c.prepare(&format!("SELECT * FROM \"{t}\"")).unwrap();
+        let n = stmt.column_count();
+        let mut rows = stmt.query([]).unwrap();
+        'rows: while let Some(row) = rows.next().unwrap() {
+            for i in 0..n {
+                let bytes: Vec<u8> = match row.get_ref(i).unwrap() {
+                    rusqlite::types::ValueRef::Text(b) | rusqlite::types::ValueRef::Blob(b) => {
+                        b.to_vec()
+                    }
+                    _ => continue,
+                };
+                if bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) {
+                    found.push(t.clone());
+                    break 'rows;
+                }
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn a_forget_while_backup_is_off_leaves_the_sentence_nowhere_in_the_kept_night() {
+    use nocturne_engine::nightly::{self, MemoryPlace, NightRun, NightState};
+    let w = answered_world();
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, "harbour violet pencil", Some(4)).unwrap();
+    let mut state = NightState::new();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let run = NightRun {
+        progress: &|_, _, _| {},
+        cancel: &cancel,
+        check: false,
+    };
+    w.f.engine
+        .back_up_night(&place, &key, &mut state, &run)
+        .unwrap();
+
+    // Backup off, then the block and its memory are deleted.
+    let preview =
+        w.f.engine
+            .preview_delete(std::slice::from_ref(&w.memory), true, &[], false)
+            .unwrap();
+    w.f.engine.forget(&preview.token).unwrap();
+    w.f.engine
+        .forget_in_kept_backup(&place, &key, &mut state, &run)
+        .unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    let stage = out.path().join("stage");
+    nightly::restore_night(&place, &key, None, &stage, &run).unwrap();
+    assert_eq!(
+        tables_holding(&stage.join("store/nocturne.db"), "looking forward"),
+        Vec::<String>::new()
+    );
+}

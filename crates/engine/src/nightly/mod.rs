@@ -1021,6 +1021,17 @@ const NOTES: [&str; 3] = [
     "reflections_declined",
 ];
 
+/// Merge every full-text index's segments, so no deleted word stays in them.
+fn optimize(conn: &Connection) -> rusqlite::Result<()> {
+    for table in crate::store::FTS_TABLES {
+        conn.execute(
+            &format!("INSERT INTO {table}({table}) VALUES ('optimize')"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 fn quoted(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
@@ -1030,7 +1041,9 @@ fn quoted(name: &str) -> String {
 /// every other row stays as `base` has it, so nothing kept or changed since goes. Where a forget
 /// took a line out of a page or a reflection, the line goes here too: a page the forget only
 /// blanked lines in takes the phone's blanked copy, and a page or reflection changed otherwise
-/// since is left out of this night. The phone's notes of what was forgotten come only for what
+/// since is left out of this night. What a forget scrubbed elsewhere (a question's quoted
+/// sentence, an answer's, the online answers log) is scrubbed here as the phone has it, and the
+/// full-text indexes are merged so no deleted word stays in them. The phone's notes of what was forgotten come only for what
 /// `base` held. Returns the store file.
 fn keep_only_base(
     place: &dyn BackupPlace,
@@ -1061,6 +1074,8 @@ fn keep_only_base(
         crate::store::lock_down(&conn)?;
         conn.pragma_update(None, "journal_mode", "DELETE")?;
         conn.pragma_update(None, "secure_delete", "ON")?;
+        // Rows go table by table, each on its own key: nothing cascades.
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
         conn.execute(
             "ATTACH DATABASE ?1 AS now",
             [snapshot.to_string_lossy().as_ref()],
@@ -1123,8 +1138,9 @@ fn keep_only_base(
         conn.execute_batch(
             "UPDATE main.page_lines SET forgotten = 1, text = '' \
                WHERE id IN (SELECT id FROM now.page_lines WHERE forgotten = 1);
-             UPDATE main.pages SET body = n.body, dek = n.dek FROM now.pages n \
-               WHERE n.date = pages.date AND n.resaves = pages.resaves AND n.body IS NOT pages.body;
+             INSERT OR REPLACE INTO main.pages SELECT n.* FROM now.pages n \
+               JOIN main.pages p ON p.date = n.date \
+               WHERE n.resaves = p.resaves AND n.body IS NOT p.body;
              CREATE TEMP TABLE changed AS SELECT p.date FROM main.pages p JOIN now.pages n \
                ON n.date = p.date WHERE n.body IS NOT p.body;
              DELETE FROM main.page_line_memories WHERE line_id IN \
@@ -1132,14 +1148,25 @@ fn keep_only_base(
              DELETE FROM main.page_lines WHERE page_date IN (SELECT date FROM changed);
              DELETE FROM main.questions WHERE page_date IN (SELECT date FROM changed);
              DELETE FROM main.pages WHERE date IN (SELECT date FROM changed);
+             UPDATE main.questions SET text = '' WHERE page_date IN \
+               (SELECT page_date FROM now.questions WHERE text = '');
              DELETE FROM main.questions WHERE EXISTS (SELECT 1 FROM now.questions n \
                WHERE n.page_date = questions.page_date AND \
                (n.text IS NOT questions.text OR n.memory_id IS NOT questions.memory_id));
+             UPDATE main.items SET metadata = json_set(metadata, '$.sentence', '') \
+               WHERE id IN (SELECT id FROM now.items \
+                 WHERE json_extract(metadata, '$.journal') = 'answer' \
+                 AND json_extract(metadata, '$.sentence') = '');
+             INSERT OR REPLACE INTO main.online_sends SELECT n.* FROM now.online_sends n \
+               JOIN main.online_sends o ON o.id = n.id \
+               WHERE n.template IS NOT o.template OR n.memory_lines IS NOT o.memory_lines;
              CREATE TEMP TABLE rewritten AS SELECT r.id FROM main.reflections r \
                JOIN now.reflections n ON n.id = r.id WHERE n.body IS NOT r.body;
              DELETE FROM main.reflection_cites WHERE reflection_id IN (SELECT id FROM rewritten);
              DELETE FROM main.reflections WHERE id IN (SELECT id FROM rewritten);",
         )?;
+        // Deleted rows leave their words in a full-text index until its segments merge.
+        optimize(&conn)?;
         conn.execute_batch("COMMIT")?;
         conn.execute_batch("DETACH DATABASE now")?;
         conn.execute_batch("VACUUM")?;
@@ -1150,9 +1177,14 @@ fn keep_only_base(
     Ok(db)
 }
 
-/// The counts and originals of the store [`keep_only_base`] made: only the originals `base`
-/// lists that the phone still keeps, which the account holds already.
-fn recount(snapshot: &Path, snap: &mut crate::backup::Snapshot, base: &Night) -> NightResult<()> {
+/// The counts and originals of a night's store once rows went out of it; with `base`
+/// ([`keep_only_base`]), only the originals it lists that the phone still keeps, which the
+/// account holds already.
+fn recount(
+    snapshot: &Path,
+    snap: &mut crate::backup::Snapshot,
+    base: Option<&Night>,
+) -> NightResult<()> {
     let conn = Connection::open(snapshot).map_err(Error::from)?;
     let counted = (|| -> rusqlite::Result<_> {
         let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0));
@@ -1170,9 +1202,11 @@ fn recount(snapshot: &Path, snap: &mut crate::backup::Snapshot, base: &Night) ->
     .map_err(Error::from)?;
     drop(conn);
     let (memories, items, pages, first, shas) = counted;
-    let listed: BTreeSet<&str> = base.body.files.iter().map(|f| f.sha.as_str()).collect();
-    snap.originals
-        .retain(|o| shas.contains(&o.sha) && listed.contains(o.sha.as_str()));
+    let listed: Option<BTreeSet<&str>> =
+        base.map(|b| b.body.files.iter().map(|f| f.sha.as_str()).collect());
+    snap.originals.retain(|o| {
+        shas.contains(&o.sha) && listed.as_ref().is_none_or(|l| l.contains(o.sha.as_str()))
+    });
     snap.memories = memories as u32;
     snap.items = items as u32;
     snap.pages = pages as u32;
@@ -1265,6 +1299,8 @@ impl Engine {
         let (mut snapshot, mut snap) = self.take_snapshot(&scratch.dir)?;
         if let Some(base) = base {
             snapshot = keep_only_base(place, key, base, &scratch.dir, &snapshot, run)?;
+        }
+        if base.is_some() {
             recount(&snapshot, &mut snap, base)?;
         }
 
