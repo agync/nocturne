@@ -1,4 +1,4 @@
-// Checks the served site: axe on the landing page, the install page, their German and French
+// Checks the served site: axe on the landing page, the install page, the support page, their German and French
 // copies and a few docs pages in both themes, no policy violations or console errors, no sideways
 // scrolling at 360 px (320 px for the install page), the theme buttons work from the keyboard, and
 // full-page screenshots at 1440 and 390 px.
@@ -28,12 +28,14 @@ mkdirSync(shots, { recursive: true });
 const pages = [
   { name: "landing", path: "/", shoot: true },
   { name: "install", path: "/install", shoot: true },
+  { name: "support", path: "/support", shoot: true },
   { name: "docs-home", path: "/docs/", shoot: true },
   { name: "docs-concept", path: "/docs/design/concept.html", shoot: false },
   { name: "docs-install", path: "/docs/guide/install.html", shoot: false },
   { name: "not-found", path: "/no-such-page", shoot: false },
   { name: "landing-de", path: "/de/", shoot: true },
   { name: "install-de", path: "/de/install", shoot: true },
+  { name: "support-de", path: "/de/support", shoot: true },
   { name: "landing-fr", path: "/fr/", shoot: false },
   { name: "not-found-nl", path: "/nl/no-such-page", shoot: false },
 ];
