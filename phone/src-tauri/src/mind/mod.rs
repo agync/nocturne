@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use jiff::Timestamp;
-use nocturne_contract::{CheckOutcome, ItemKind};
+use nocturne_contract::{CheckOutcome, ItemKind, ModelList};
 use nocturne_engine::{Clock, Engine};
 use nocturne_intelligence::{
     MindSlot, NullEvents, Outcome, Reader, Scheduler, Step, Tidy, new_mind_slot,
@@ -50,6 +50,8 @@ const TICK: std::time::Duration = std::time::Duration::from_secs(30);
 const FEW: usize = 3;
 /// How often a pass looks whether the store is wanted.
 const WANTED_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+/// How long the list from the person's own look serves the check that follows it.
+const LIST_KEPT_MINUTES: i64 = 15;
 /// Minutes between looks at a service that stopped answering, or while this phone is offline:
 /// the last one repeats.
 const LOOK_AGAIN: [i64; 4] = [1, 5, 15, 30];
@@ -191,6 +193,23 @@ fn missing(found: nocturne_engine::Result<()>) -> bool {
     matches!(found, Err(nocturne_engine::Error::NotFound(_)))
 }
 
+/// The list from the person's last look at step 2, for the check that follows with the same
+/// address and key. Used once, and never kept past [`LIST_KEPT_MINUTES`].
+struct Looked {
+    tag: String,
+    at: Timestamp,
+    list: ModelList,
+}
+
+/// What ties a look to the address and key it was made with, without keeping the key.
+fn look_tag(settings: &ProviderSettings) -> String {
+    address_tag(&format!(
+        "{}\n{}",
+        settings.url.trim(),
+        address_tag(settings.key.trim())
+    ))
+}
+
 /// The looks again at a service that stopped answering, since it stopped.
 #[derive(Debug, Default)]
 struct Looks {
@@ -253,6 +272,8 @@ pub struct PhoneMind {
     asking: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
     /// Questions stopped before they began: none is asked when it does.
     stopped_early: Mutex<Vec<String>>,
+    /// The list from the person's last look at step 2.
+    looked: Mutex<Option<Looked>>,
     /// Looks names up in place of the phone, and whether the service then counts as online
     /// rather than at home, so a test can take it offline.
     #[cfg(test)]
@@ -279,6 +300,7 @@ impl PhoneMind {
             looks: Mutex::default(),
             asking: Mutex::default(),
             stopped_early: Mutex::default(),
+            looked: Mutex::default(),
             #[cfg(test)]
             lookup: Mutex::default(),
         };
@@ -382,14 +404,70 @@ impl PhoneMind {
         Ok(())
     }
 
-    /// The connection check for `settings`: one look at the provider's list of models and one
-    /// short question, no memories. Each request goes on the Sent online list; nothing else is
-    /// kept.
-    pub async fn check(&self, settings: &ProviderSettings) -> CheckOutcome {
+    /// The provider for `settings`, asked for `model`, with the test's own lookup when it has
+    /// one.
+    fn provider_for(
+        &self,
+        settings: &ProviderSettings,
+        model: &str,
+    ) -> Result<Provider, UrlProblem> {
         let key = OnlineKey::new(settings.key.trim().to_string());
-        match Provider::new(settings.url.trim(), &settings.model, key) {
+        let provider = Provider::new(settings.url.trim(), model, key)?;
+        #[cfg(test)]
+        let provider = match lock(&self.lookup).clone() {
+            Some((lookup, _)) => provider.with_lookup(lookup),
+            None => provider,
+        };
+        Ok(provider)
+    }
+
+    /// One look at the service's list of models with the address and key of `settings`, at the
+    /// person's request. It goes on the Sent online list as a connection check, and the check
+    /// that follows with the same address and key uses it in place of looking again.
+    pub async fn list(&self, settings: &ProviderSettings) -> ModelList {
+        // The look names no model; the provider is built with a stand-in name it never sends.
+        let provider = match self.provider_for(settings, "list") {
+            Ok(p) => p,
+            Err(UrlProblem::NotHttps) => {
+                return ModelList::Failed {
+                    problem: CheckOutcome::NotHttps,
+                };
+            }
+            Err(_) => {
+                return ModelList::Failed {
+                    problem: CheckOutcome::AddressNotAllowed,
+                };
+            }
+        };
+        let look = provider.list().await;
+        if let Some(exchange) = &look.exchange {
+            self.sent.note(Job::Check, provider.host(), "", exchange);
+        }
+        *lock(&self.looked) = Some(Looked {
+            tag: look_tag(settings),
+            at: self.clock.now(),
+            list: look.list.clone(),
+        });
+        look.list
+    }
+
+    /// The list from the last look, when it was made with these details lately. Taken: a
+    /// check uses it once.
+    fn looked_for(&self, settings: &ProviderSettings) -> Option<ModelList> {
+        let looked = lock(&self.looked).take()?;
+        let fresh =
+            self.clock.now() < looked.at + jiff::SignedDuration::from_mins(LIST_KEPT_MINUTES);
+        (fresh && looked.tag == look_tag(settings)).then_some(looked.list)
+    }
+
+    /// The connection check for `settings`: one look at the provider's list of models, or the
+    /// person's own look just before, and one short question, no memories. Each request goes on
+    /// the Sent online list; nothing else is kept.
+    pub async fn check(&self, settings: &ProviderSettings) -> CheckOutcome {
+        let looked = self.looked_for(settings);
+        match self.provider_for(settings, &settings.model) {
             Ok(provider) => {
-                let (outcome, made) = provider.check().await;
+                let (outcome, made) = provider.check_with(looked.as_ref()).await;
                 for exchange in &made {
                     self.sent
                         .note(Job::Check, provider.host(), provider.model(), exchange);
@@ -407,6 +485,7 @@ impl PhoneMind {
     /// Turns the mind on with `settings`, in place of any chosen before. The first page it
     /// writes is the next morning's.
     pub fn turn_on(&self, settings: ProviderSettings) -> Result<(), UrlProblem> {
+        lock(&self.looked).take();
         let saved = Saved {
             url: settings.url.trim().to_string(),
             model: settings.model.trim().to_string(),
@@ -430,6 +509,7 @@ impl PhoneMind {
     /// Turns the mind off: the slot is emptied, the key forgotten and the choice removed, so
     /// nothing more goes, and a request under way is dropped. What was already read stays.
     pub fn turn_off(&self) {
+        lock(&self.looked).take();
         self.slot.write().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(on) = lock(&self.on).take() {
             on.noting.live.store(false, Ordering::SeqCst);

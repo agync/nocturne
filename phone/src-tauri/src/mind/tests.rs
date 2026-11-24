@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nocturne_contract::{
-    AnsweredBy, AskDelta, AskPhase, CheckOutcome, ItemStatus, RemoteAnswer, RemoteCall,
+    AnsweredBy, AskDelta, AskPhase, CheckOutcome, ItemStatus, ModelList, RemoteAnswer, RemoteCall,
 };
 use nocturne_engine::ManualClock;
 use nocturne_mind::prompts;
@@ -1462,4 +1462,79 @@ fn check_again_refreshes_what_the_running_mind_knows() {
         w.mind.tools(),
         nocturne_provider::lookup::Tools::Takes { .. }
     ));
+}
+
+#[test]
+fn the_list_is_one_look_that_the_check_then_uses() {
+    let w = world();
+    w.stand_in.models(&["reader-small", "reader-large"]);
+    let settings = ProviderSettings {
+        model: "reader-smal".into(),
+        ..w.settings()
+    };
+    let rows = w.mind.sent(1000, None).len();
+    let list = w.rt.block_on(w.mind.list(&settings));
+    assert_eq!(
+        list,
+        ModelList::Listed {
+            names: vec!["reader-small".into(), "reader-large".into()]
+        }
+    );
+    let sent = w.mind.sent(1000, None);
+    assert_eq!(sent.len(), rows + 1);
+    assert_eq!(sent[0].sent_for, super::SentFor::Check);
+    // The check that follows with the same address and key asks its question, and no second
+    // look; a name not on the list is let through when the service answers.
+    let outcome = w.rt.block_on(w.mind.check(&settings));
+    assert!(matches!(outcome, CheckOutcome::Works { .. }), "{outcome:?}");
+    let looks = w
+        .stand_in
+        .seen()
+        .iter()
+        .filter(|s| s.path == "/v1/models")
+        .count();
+    assert_eq!(looks, 1);
+    // A check after that looks itself: the list is used once.
+    w.rt.block_on(w.mind.check(&settings));
+    let looks_after = |w: &World| {
+        w.stand_in
+            .seen()
+            .iter()
+            .filter(|s| s.path == "/v1/models")
+            .count()
+    };
+    assert_eq!(looks_after(&w), 2);
+    // Another key drops the list.
+    w.rt.block_on(w.mind.list(&settings));
+    let other = ProviderSettings {
+        key: format!("{KEY}-other"),
+        ..settings.clone()
+    };
+    w.rt.block_on(w.mind.check(&other));
+    assert_eq!(looks_after(&w), 4);
+}
+
+#[test]
+fn a_list_that_fails_says_why_and_is_listed() {
+    let w = world();
+    w.stand_in.models_status(401);
+    let rows = w.mind.sent(1000, None).len();
+    let list = w.rt.block_on(w.mind.list(&w.settings()));
+    assert_eq!(
+        list,
+        ModelList::Failed {
+            problem: CheckOutcome::KeyRefused
+        }
+    );
+    assert_eq!(w.mind.sent(1000, None).len(), rows + 1);
+    let plain = ProviderSettings {
+        url: "http://answers.example/v1".into(),
+        ..w.settings()
+    };
+    assert_eq!(
+        w.rt.block_on(w.mind.list(&plain)),
+        ModelList::Failed {
+            problem: CheckOutcome::NotHttps
+        }
+    );
 }
