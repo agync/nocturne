@@ -660,5 +660,15 @@ Where the page left a choice, the build reads it this way:
   of its own.
 - **The computer's dialog** uses the app's own dialog, with its title and Close as every dialog
   has them.
+- **iPhone's own progress ending** (iOS 26 and later), whether by the person's Stop there or by
+  iPhone, is taken as the person's Stop, since Nocturne never reads on against them: no "Reading
+  paused" line, and reading does not carry on by itself on return. Before iOS 26, the end of the
+  short while iPhone gives stays a pause with its "Reading paused" line, as designed. If iPhone
+  refuses its own progress, Nocturne falls back to that short while.
+- **Android's own time limit** for data sync, if it is ever reached, ends Read now as its own
+  stop, not the person's: the notification leaves "Read now stopped", and This phone says "Read
+  now stopped" and offers Read now again.
+- **The battery and Stop are looked at before each thing read** on battery, not only between
+  passes, so nothing more is sent after Stop, 20% or 5%.
 - **Done and charging lines** show while they hold, until Nocturne is closed or a new Read now
   starts, rather than only until the person leaves This phone.
