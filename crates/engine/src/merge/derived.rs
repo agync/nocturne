@@ -737,10 +737,7 @@ pub(super) fn bring(
     let mut files = Vec::new();
     // Things in the backup that did not come, so nothing brought may cite them.
     let stayed: Vec<String> = {
-        let mut stmt = phone.prepare(&format!(
-            "SELECT id FROM items WHERE kind NOT IN {}",
-            super::SENT_AGAIN
-        ))?;
+        let mut stmt = phone.prepare("SELECT id FROM items")?;
         let all: Vec<String> = stmt
             .query_map([], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?;
