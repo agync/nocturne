@@ -167,7 +167,7 @@ impl Home {
 
     /// Whether the phone holds anything of the person's now. A store that cannot be opened
     /// counts as holding something, so nothing is replaced on a guess.
-    fn here(&self, made_after: Option<&str>) -> Option<Holdings> {
+    pub(crate) fn here(&self, made_after: Option<&str>) -> Option<Holdings> {
         if let Ok(open) = self.open_store() {
             return open
                 .engine
@@ -194,7 +194,7 @@ impl Home {
 
     /// A backup may come back on a phone that is alone or has not chosen yet; a companion's
     /// memory is on its computer.
-    fn may_restore(&self, paired: bool) -> Result<(), HomeError> {
+    pub(crate) fn may_restore(&self, paired: bool) -> Result<(), HomeError> {
         match self.mode(paired) {
             Some(PhoneMode::Companion) => Err(HomeError::NotReady),
             _ => Ok(()),
@@ -267,6 +267,12 @@ impl Home {
             clear(&stage);
             return Err(code(&e));
         }
+        self.put_in_place(&stage)
+    }
+
+    /// Put the store unpacked in `stage` in the store's place: what was here is put aside
+    /// whole, never deleted. The phone is alone afterwards. The caller holds the job.
+    pub(crate) fn put_in_place(&self, stage: &Path) -> Result<HomeAnswer, HomeError> {
         let store = self.store_dir();
         // Every use ends first, and nothing opens the store while it changes places.
         let _only = self.exclusive();
@@ -291,7 +297,7 @@ impl Home {
                 }
             })
         })();
-        clear(&stage);
+        clear(stage);
         if let Err(e) = moved {
             tracing::warn!("the backup could not be put in place: {e}");
             return Err(if io_full(&e) {

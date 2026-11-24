@@ -748,9 +748,10 @@ impl PhoneMind {
 }
 
 /// Runs a pass every [`TICK`] while the app runs, sooner while there is more to do. Before each,
-/// the phone says whether it charges. While the mind is on the system is asked for background
-/// windows while the phone charges, and for none while it is off; an open window is ended once
-/// a pass finds nothing more to do. While the mind is off a pass returns at once and asks nothing.
+/// the phone says whether it charges. While the mind or the nightly backup is on the system is
+/// asked for background windows while the phone charges, and for none while both are off; an
+/// open window is ended once a pass finds nothing more to do. Each pass also gives the nightly
+/// backup its look ([`crate::backup::PhoneBackup::pass`]).
 pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     use tauri::Manager;
     use tauri_plugin_nocturne_system::SystemExt;
@@ -763,9 +764,10 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let rt = tokio::runtime::Handle::current();
                 let system = worker.system();
                 let mind = worker.state::<PhoneMind>();
+                let backup = worker.state::<crate::backup::PhoneBackup>();
                 let power = system.power().unwrap_or_default();
                 mind.host().set_charging(power.charging);
-                let on = mind.is_on();
+                let on = mind.is_on() || backup.is_on();
                 let was = mind.status();
                 mind.look_again(&rt);
                 if asked != Some(on) {
@@ -774,7 +776,9 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                         Err(e) => tracing::warn!("background work could not be arranged: {e:?}"),
                     }
                 }
-                let more = mind.pass(&worker.state::<Home>(), &rt).more();
+                let home = worker.state::<Home>();
+                let more = mind.pass(&home, &rt).more();
+                let more = backup.pass(&home, power.charging == Some(true)) || more;
                 if mind.status() != was {
                     events::status_changed(&worker);
                 }

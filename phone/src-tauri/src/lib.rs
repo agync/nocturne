@@ -2,6 +2,7 @@
 //! to the person's computer or a memory of the phone's own. The web view reaches nothing on the
 //! network itself.
 
+pub mod backup;
 pub mod commands;
 pub mod home;
 pub mod log;
@@ -37,6 +38,11 @@ pub fn run() {
                 clock.clone(),
                 exclude_from_backup(app.handle()),
             );
+            let nightly = backup::PhoneBackup::new(
+                dir.clone(),
+                Box::new(backup::SafeBackupKeys(app.handle().clone())),
+                clock.clone(),
+            );
             let thinking =
                 mind::PhoneMind::new(dir, Box::new(mind::SafeKeys(app.handle().clone())), clock);
             thinking.follow(&home);
@@ -46,6 +52,7 @@ pub fn run() {
             )));
             app.manage(home);
             app.manage(thinking);
+            app.manage(nightly);
             app.manage(home::r#move::Moving::default());
             sources::start(app.handle());
             home::commands::fade_soon(app.handle());
@@ -124,6 +131,20 @@ pub fn run() {
             mind::commands::mind_turn_on,
             mind::commands::mind_turn_off,
             mind::commands::mind_chosen,
+            backup::commands::backup_status,
+            backup::commands::backup_new_phrase,
+            backup::commands::backup_turn_on,
+            backup::commands::backup_recovery_key,
+            backup::commands::backup_drop_recovery_key,
+            backup::commands::backup_change_phrase,
+            backup::commands::backup_set_wifi_only,
+            backup::commands::backup_now,
+            backup::commands::backup_turn_off,
+            backup::commands::backup_turn_on_again,
+            backup::commands::backup_nights,
+            backup::commands::backup_found,
+            backup::commands::backup_restore,
+            backup::commands::backup_make_in_use,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
