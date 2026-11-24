@@ -3751,6 +3751,7 @@ dependencies = [
  "nocturne-helpers",
  "nocturne-intelligence",
  "nocturne-lemonade",
+ "nocturne-provider",
  "notify",
  "p256 0.14.0",
  "qrcode",

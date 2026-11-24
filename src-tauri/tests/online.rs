@@ -1226,3 +1226,55 @@ fn without_a_way_to_ask_nothing_is_turned_on() {
     assert_eq!(h.code("turn_on_online", settings()), "declined");
     assert_eq!(h.ok("get_online", json!({}))["state"]["type"], "off");
 }
+
+#[test]
+fn the_list_is_one_look_with_the_address_and_key_entered() {
+    let l = lab();
+    let sends = |l: &Lab| {
+        l.h.ok("list_online_sends", json!({"limit": 10, "before": null}))
+            .as_array()
+            .unwrap()
+            .clone()
+    };
+    // A blank key is the one kept, and none is: nothing leaves.
+    let out = l.h.ok(
+        "list_online_models",
+        json!({"form": {"baseUrl": URL, "key": "", "model": ""}}),
+    );
+    assert_eq!(
+        out,
+        json!({"type": "failed", "problem": {"type": "keyRefused"}})
+    );
+    let out = l.h.ok(
+        "list_online_models",
+        json!({"form": {"baseUrl": "https://169.254.169.254/v1", "key": KEY, "model": ""}}),
+    );
+    assert_eq!(out["problem"]["type"], "addressNotAllowed");
+    assert!(sends(&l).is_empty());
+
+    // A service on the person's own network, by name: one look, listed as a connection check.
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let service = rt.block_on(nocturne_provider::stand_in::StandIn::start());
+    service.models(&["reader-small", "reader-large"]);
+    let lookup: nocturne_provider::address::Lookup = Arc::new(|_: String, _: u16| {
+        Box::pin(async { Ok(vec![std::net::IpAddr::from([127, 0, 0, 1])]) })
+    });
+    nocturne_app_lib::online::hub(l.h.app.handle())
+        .unwrap()
+        .set_lookup(lookup);
+    let url = format!("http://gpubox:{}/v1", service.addr.port());
+    let out = l.h.ok(
+        "list_online_models",
+        json!({"form": {"baseUrl": url, "key": KEY, "model": ""}}),
+    );
+    assert_eq!(
+        out,
+        json!({"type": "listed", "names": ["reader-small", "reader-large"]})
+    );
+    let seen = service.seen();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].path, "/v1/models");
+    let sent = sends(&l);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["kind"], "check");
+}

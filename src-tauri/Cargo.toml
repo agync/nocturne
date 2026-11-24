@@ -65,6 +65,7 @@ nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 nocturne-intelligence = { path = "../crates/intelligence" }
 nocturne-lemonade.workspace = true
+nocturne-provider.workspace = true
 nocturne-helpers.workspace = true
 nocturne-channel.workspace = true
 tauri = { workspace = true, features = ["tray-icon", "image-png", "protocol-asset"] }
@@ -113,6 +114,7 @@ tar = "0.4"
 nocturne-engine = { workspace = true, features = ["fake"] }
 nocturne-intelligence = { path = "../crates/intelligence", features = ["fake"] }
 nocturne-lemonade = { workspace = true, features = ["fake-server"] }
+nocturne-provider = { workspace = true, features = ["stand-in"] }
 tauri = { workspace = true, features = ["test"] }
 reqwest.workspace = true
 http-body-util = "0.1"
