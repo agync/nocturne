@@ -99,7 +99,7 @@ describe("setup", () => {
     await openOnline(SETUP, "off", STEP1);
     expect(
       screen.getByText(
-        "Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included.",
+        "Your question and today’s date, with short lines from what you kept that help answer it, your journal entries, check-ins, good things and health readings included.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -732,7 +732,9 @@ describe("the journal, said openly", () => {
     await click("Continue");
     await heading(STEP5);
     expect(
-      screen.getByText(/lines from your journal entries and good things included\. At most 12/),
+      screen.getByText(
+        /lines from your journal entries, check-ins, good things and health readings included\. Each with the day you kept it/,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
