@@ -77,4 +77,17 @@ enum Power {
     default: return nil
     }
   }
+
+  /// The charge as a whole per cent; nil while the phone does not say.
+  static func percent() -> Int? {
+    let device = UIDevice.current
+    device.isBatteryMonitoringEnabled = true
+    let level = device.batteryLevel
+    return level < 0 ? nil : Int(level * 100)
+  }
+
+  /// Whether Low Power Mode is on.
+  static func saver() -> Bool {
+    ProcessInfo.processInfo.isLowPowerModeEnabled
+  }
 }

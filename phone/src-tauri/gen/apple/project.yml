@@ -46,6 +46,8 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.nocturne.readnow.*
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
