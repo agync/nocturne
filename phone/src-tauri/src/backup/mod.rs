@@ -12,6 +12,7 @@
 
 pub mod commands;
 pub mod place_account;
+pub mod screens;
 #[cfg(test)]
 mod tests;
 

@@ -147,6 +147,7 @@ pub fn run() {
             backup::commands::backup_restore,
             backup::commands::backup_make_in_use,
             backup::place_account::backup_connect,
+            backup::screens::backup_save_key,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
