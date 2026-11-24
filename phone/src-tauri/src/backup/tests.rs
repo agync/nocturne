@@ -655,13 +655,11 @@ fn locks_the_phone_could_not_read_back_are_never_carried() {
     assert_eq!(p.state(), BackupState::NeedsPhrase);
     assert!(!p.backup.pass(&p.home, true), "waits for the phrase");
     assert!(new.names().is_empty(), "nothing is carried");
-    p.backup.recovery_key().unwrap();
     assert_eq!(
-        p.backup.keep_recovery_key(),
+        p.backup.recovery_key(),
         Err(BackupProblem::Damaged),
-        "no recovery key is kept for locks the phone doesn't know"
+        "no recovery key is made for locks the phone doesn't know"
     );
-    p.backup.drop_recovery_key();
 
     // "Change the phrase" makes a new copy, and the backup starts afresh with it.
     p.backup.change_phrase("lantern copper meadow").unwrap();
@@ -894,4 +892,19 @@ fn what_the_phone_notes_of_the_backup_stays_out_of_its_own_device_backup() {
     assert!(file.exists());
     assert!(marked.len() >= 2, "marked again after each write");
     assert!(marked.iter().all(|p| *p == file));
+}
+
+#[test]
+fn a_recovery_key_made_for_another_backup_is_never_kept() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.backup.recovery_key().unwrap();
+    p.backup.reconnected(true);
+    assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::NotReady));
+
+    p.backup.recovery_key().unwrap();
+    p.backup.turn_off(true).unwrap();
+    assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::NotReady));
 }

@@ -3,7 +3,8 @@
 // `late`, `notCharged`, `forgot`, `deleting`, `moved`, or with no backup yet `none`,
 // `noRoomNone`, `otherBackup` or `needsPhrase`. `&found=none` finds no backup,
 // `&found=offline` no internet, `&connect=` what asking for the account answers (`refused`,
-// `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting,
+// `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting, `&key=offline` keeps a new key from the
+// account until `scriptedBackup.wifi`,
 // `&restore=slow` holds a restore part way until it is stopped (`&checking` once it checks,
 // `&adding` once it is checked), `&restore=newer` is a newer Nocturne's, `&own` is this phone's own,
 // `&restore=offline` loses the internet until
@@ -182,6 +183,7 @@ export function backupState(phone: {
         return shown;
       case "backup_keep_recovery_key":
         if (shown === null) throw "notReady";
+        if (params.get("key") === "offline" && !scriptedBackup.wifi) throw "offline";
         key = shown;
         shown = null;
         scriptedBackup.key = key;

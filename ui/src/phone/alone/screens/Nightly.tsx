@@ -261,6 +261,7 @@ export function NightlyBackup({
     return (
       <KeyShown
         text={key}
+        ios={ios}
         later
         save={api.saveKey}
         keep={api.keepRecoveryKey}
@@ -432,15 +433,19 @@ export function NightlyBackup({
               action
             />
             <Row label={t("phone.backup.change")} onPress={() => setSheet("change")} />
-            <Row
-              label={t("phone.backup.makeKeyRow")}
-              hint={
-                keyMade
-                  ? t("phone.backup.makeKeyRow.made", { day: backupDay(keyMade, new Date(now())) })
-                  : t("phone.backup.makeKeyRow.none")
-              }
-              onPress={() => setSheet("makeKey")}
-            />
+            {state === "needsPhrase" ? null : (
+              <Row
+                label={t("phone.backup.makeKeyRow")}
+                hint={
+                  keyMade
+                    ? t("phone.backup.makeKeyRow.made", {
+                        day: backupDay(keyMade, new Date(now())),
+                      })
+                    : t("phone.backup.makeKeyRow.none")
+                }
+                onPress={() => setSheet("makeKey")}
+              />
+            )}
             <Row label={t("phone.backup.turnOff")} action onPress={() => setSheet("off")} />
           </Group>
         ) : null}

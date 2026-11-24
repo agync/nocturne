@@ -298,6 +298,30 @@ describe("Backup in This phone", () => {
     ).toBeInTheDocument();
   });
 
+  it("says a saved key doesn't open the backup until the account takes it", async () => {
+    await app("m=kept&v=nightly&b=on&key=offline");
+    fireEvent.click(await screen.findByRole("button", { name: /Make a recovery key…/ }));
+    const ask = await screen.findByRole("dialog", { name: "Make a recovery key?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Make it" }));
+    await screen.findByRole("heading", { name: "Your new recovery key" });
+    fireEvent.click(screen.getByRole("button", { name: "Print or save…" }));
+    expect(
+      await screen.findByText(
+        "Your key is saved, but it doesn’t open your backup yet: Nocturne couldn’t reach your Google Drive.",
+      ),
+    ).toBeInTheDocument();
+    scriptedBackup.wifi = true;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(scriptedBackup.key).toBe(NEW_KEY);
+  });
+
+  it("offers no recovery key while the phrase is needed again", async () => {
+    await app("m=kept&v=nightly&b=needsPhrase");
+    await screen.findByText(/needs its phrase set again/);
+    expect(screen.queryByRole("button", { name: /Make a recovery key…/ })).toBeNull();
+  });
+
   it("keeps the earlier recovery key when the new one is cancelled", async () => {
     await app("m=kept&v=nightly&b=on");
     scriptedBackup.key = null;
