@@ -106,7 +106,16 @@ describe("turning the backup on", () => {
     fireEvent.click(screen.getByRole("button", { name: "Another phrase" }));
     await waitFor(() => expect(words).toHaveTextContent("copper"));
 
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() =>
+      expect(scriptedBackup.copied).toBe("copper lantern meadow ribbon quiet anchor"),
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Use my own phrase instead" }));
+    const own = screen.getByLabelText("Your phrase");
+    expect(own).toHaveAttribute("autocorrect", "off");
+    expect(own).toHaveAttribute("spellcheck", "false");
+    expect(own).toHaveAttribute("type", "text");
     expect(screen.getByRole("button", { name: "Next" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText("Type a phrase to go on.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Your phrase"), {

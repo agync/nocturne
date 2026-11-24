@@ -836,6 +836,7 @@ export function HomeApp({
             draft={phrase.current}
             onDraft={setDraft}
             newPhrase={nightly.newPhrase}
+            copy={nightly.copy}
             onBack={back}
             onNext={() => go({ name: "nightlyOn", step: 3, depth: depth + 1, change })}
           />

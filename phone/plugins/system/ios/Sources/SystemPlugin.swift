@@ -17,6 +17,11 @@ struct SecretArgs: Decodable {
   var value: String?
 }
 
+struct CopyArgs: Decodable {
+  var text: String
+  var clearAfterMs: Double
+}
+
 struct BackgroundArgs: Decodable {
   var mind: Bool
   var backup: Bool
@@ -180,6 +185,17 @@ class SystemPlugin: Plugin {
   /// The core has nothing left to do in this background window.
   @objc public func backgroundDone(_ invoke: Invoke) throws {
     Background.shared.done()
+    invoke.resolve()
+  }
+
+  /// A phrase or recovery key to paste elsewhere: on this iPhone only, never to the person's
+  /// other devices, and gone from the pasteboard after a while.
+  @objc public func copySecret(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(CopyArgs.self)
+    let expires = Date().addingTimeInterval(args.clearAfterMs / 1000)
+    UIPasteboard.general.setItems(
+      [[UTType.utf8PlainText.identifier: args.text]],
+      options: [.localOnly: true, .expirationDate: expires])
     invoke.resolve()
   }
 

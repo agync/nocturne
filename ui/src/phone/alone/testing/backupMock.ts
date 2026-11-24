@@ -104,6 +104,8 @@ export const scriptedBackup = {
   /** With `&net=mobile`, whether the phone has come onto Wi-Fi; with `&restore=offline`,
    * whether the internet came back. */
   wifi: false,
+  /** What "Copy" put on the phone's own clipboard. */
+  copied: null as string | null,
 };
 
 export function backupState(phone: {
@@ -121,6 +123,7 @@ export function backupState(phone: {
   let stopRestore: (() => void) | null = null;
   scriptedBackup.calls = [];
   scriptedBackup.wifi = false;
+  scriptedBackup.copied = null;
 
   const opens = (opening: { with: string; text: string }) => {
     const text = opening.text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -275,6 +278,9 @@ export function backupState(phone: {
         stopRestore?.();
         stopRestore = null;
         return null;
+      case "backup_copy":
+        scriptedBackup.copied = String(args.text);
+        return true;
       case "backup_save_key":
         return "saved";
       default:
