@@ -3,7 +3,10 @@ package app.nocturne.system
 import android.app.Activity
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import android.os.Build
 import android.net.Uri
 import android.os.StatFs
 import android.provider.DocumentsContract
@@ -303,7 +306,22 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
                 it.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             )
         }
-        invoke.resolve(JSObject().put("charging", charging).put("window", Window.isOpen))
+        invoke.resolve(
+            JSObject()
+                .put("charging", charging)
+                .put("window", Window.isOpen)
+                .put("unmetered", unmetered())
+        )
+    }
+
+    /** Whether the network in use costs nothing by the byte, such as Wi-Fi; null when offline. */
+    private fun unmetered(): Boolean? {
+        val connectivity = activity.getSystemService(ConnectivityManager::class.java) ?: return null
+        val network = connectivity.activeNetwork ?: return null
+        val caps = connectivity.getNetworkCapabilities(network) ?: return null
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) ||
+            (Build.VERSION.SDK_INT >= 30 &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_TEMPORARILY_NOT_METERED))
     }
 
     /** Background windows while the mind is on; none while it is off. */

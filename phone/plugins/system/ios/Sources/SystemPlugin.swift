@@ -89,7 +89,10 @@ class SystemPlugin: Plugin {
   @objc public func power(_ invoke: Invoke) throws {
     DispatchQueue.main.async {
       let charging: Any = Power.charging().map { NSNumber(value: $0) } ?? NSNull()
-      invoke.resolve(["charging": charging, "window": Background.shared.isOpen])
+      let unmetered: Any = NetworkCost.shared.unmetered.map { NSNumber(value: $0) } ?? NSNull()
+      invoke.resolve([
+        "charging": charging, "window": Background.shared.isOpen, "unmetered": unmetered,
+      ])
     }
   }
 
@@ -248,5 +251,6 @@ class SystemPlugin: Plugin {
 func initPlugin() -> Plugin {
   // iOS takes a background task only while the app starts, as the app's setup makes its plugins.
   Background.shared.register()
+  _ = NetworkCost.shared
   return SystemPlugin()
 }
