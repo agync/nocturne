@@ -432,6 +432,72 @@ fn seven_nights_are_kept_and_pieces_no_night_lists_go() {
 }
 
 #[test]
+fn the_nights_are_listed_before_the_phrase_and_counted_after_it() {
+    let f = fixture();
+    keep(&f.engine, "The first thing kept.");
+    let place = MemoryPlace::new();
+    assert!(nightly::listed_nights(&place).unwrap().is_empty());
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &place, &key, &mut state).unwrap();
+    keep(&f.engine, "The second thing kept.");
+    night(&f.engine, &place, &key, &mut state).unwrap();
+
+    let listed = nightly::listed_nights(&place).unwrap();
+    let opened = nightly::nights(&place, &key).unwrap();
+    assert_eq!(listed.len(), 2);
+    for (l, o) in listed.iter().zip(&opened) {
+        assert_eq!(l.count, o.count, "newest first, the same nights");
+        assert_eq!(l.bytes, Some(o.bytes), "the size the night takes");
+        let made: jiff::Timestamp = o.made_at.parse().unwrap();
+        assert_eq!(l.made_at.map(|t| t.as_second()), Some(made.as_second()));
+    }
+    assert_eq!(opened[0].items, 2);
+    assert_eq!(opened[1].items, 1);
+    assert!(opened[0].first.is_some());
+    assert_eq!(
+        opened[0].first, opened[1].first,
+        "the first thing is the same"
+    );
+}
+
+#[test]
+fn a_restore_says_it_gets_then_checks_the_night() {
+    let f = fixture();
+    keep(&f.engine, "Something to keep.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&f.engine, &place, &key, &mut NightState::new()).unwrap();
+    let phases = std::sync::Mutex::new(Vec::new());
+    let note = |phase, done, total| phases.lock().unwrap().push((phase, done == total));
+    let cancel = AtomicBool::new(false);
+    let out = tempfile::tempdir().unwrap();
+    nightly::restore_night(
+        &place,
+        &key,
+        None,
+        &out.path().join("stage"),
+        &NightRun {
+            progress: &note,
+            cancel: &cancel,
+            check: false,
+        },
+    )
+    .unwrap();
+    let phases = phases.into_inner().unwrap();
+    let first_check = phases
+        .iter()
+        .position(|(p, _)| *p == BackupPhase::Checking)
+        .unwrap();
+    assert!(
+        phases[..first_check]
+            .iter()
+            .all(|(p, _)| *p == BackupPhase::Restoring)
+    );
+    assert_eq!(phases.last(), Some(&(BackupPhase::Checking, true)));
+}
+
+#[test]
 fn a_forget_reaches_the_backup_at_once() {
     let f = fixture();
     let secret = noise(600_000, 9);
@@ -463,11 +529,9 @@ fn a_forget_reaches_the_backup_at_once() {
     let report = night(&f.engine, &place, &key, &mut state).unwrap();
     assert!(report.carried_forget);
     assert_eq!(report.originals, 0);
-    assert_eq!(
-        names(&place, "night-"),
-        vec![format!("night-000000000004-{}", state.device)],
-        "every older night went"
-    );
+    let left_nights = names(&place, "night-");
+    assert_eq!(left_nights.len(), 1, "every older night went");
+    assert!(left_nights[0].starts_with(&format!("night-000000000004-{}-", state.device)));
     let left = names(&place, "piece-");
     assert!(left.len() < pieces_before.len());
     assert!(!f.engine.forgot_since_night().unwrap());

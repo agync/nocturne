@@ -120,10 +120,9 @@ describe("bringing back a backup onto an empty phone", () => {
     expect(scriptedBackup.calls).toContain("backup_change_phrase");
   });
 
-  it("picks an earlier night, newest marked", async () => {
+  it("picks an earlier night before the phrase, newest marked", async () => {
     await fromWelcome();
     await screen.findByRole("heading", { name: "Bring back your memory" });
-    fireEvent.change(screen.getByLabelText("Your phrase"), { target: { value: SCRIPTED_PHRASE } });
     fireEvent.click(screen.getByRole("button", { name: "An earlier night…" }));
     expect(
       await screen.findByText("The newest is chosen unless you pick another."),
@@ -132,9 +131,78 @@ describe("bringing back a backup onto an empty phone", () => {
     expect(nights).toHaveLength(7);
     expect(nights[0]).toBeChecked();
     expect(screen.getByText("Newest")).toBeInTheDocument();
+    expect(screen.getAllByText(/1.4\sGB|1.3\sGB/)).toHaveLength(7);
     fireEvent.click(screen.getByRole("radio", { name: /Wednesday, 2:40 am/ }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByText(/Backup from Wednesday, 2:40 am/)).toBeInTheDocument();
+    expect(scriptedBackup.calls.filter((c) => c === "backup_nights")).toHaveLength(1);
+    type(SCRIPTED_PHRASE);
+    await waitFor(() => expect(scriptedBackup.calls).toContain("backup_restore"));
+  });
+
+  it("checks the backup, then says the last step can't be stopped", async () => {
+    await fromWelcome("&restore=slow&checking");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(await screen.findByText("Checking the backup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+  });
+
+  it("offers no Stop for its last step", async () => {
+    await fromWelcome("&restore=slow&adding");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByText("Almost done. This last step can’t be stopped."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("asks before coming down over mobile data, and can wait for Wi-Fi", async () => {
+    await fromWelcome("&net=mobile");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByText(
+        /This is about 1.4\sGB. On mobile data, it may count against your plan./,
+      ),
+    ).toBeInTheDocument();
+    expect(scriptedBackup.calls).not.toContain("backup_restore");
+    fireEvent.click(screen.getByRole("button", { name: "Wait for Wi-Fi" }));
+    expect(
+      await screen.findByText("Waiting for Wi-Fi. It starts when this phone is on Wi-Fi."),
+    ).toBeInTheDocument();
+    scriptedBackup.wifi = true;
+    window.dispatchEvent(new Event("online"));
+    expect(
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeInTheDocument();
+  });
+
+  it("goes on over mobile data when asked to", async () => {
+    await fromWelcome("&net=mobile");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    fireEvent.click(await screen.findByRole("button", { name: "Go on" }));
+    expect(
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeInTheDocument();
+  });
+
+  it("waits for the internet and carries on", async () => {
+    await fromWelcome("&restore=offline");
+    await screen.findByRole("heading", { name: "Bring back your memory" });
+    type(SCRIPTED_PHRASE);
+    expect(
+      await screen.findByText(
+        "Waiting for the internet. This carries on when this phone is back online.",
+      ),
+    ).toBeInTheDocument();
+    scriptedBackup.wifi = true;
+    window.dispatchEvent(new Event("online"));
+    expect(
+      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+    ).toBeInTheDocument();
   });
 
   it("says when part of the newest night is missing, and offers an earlier one", async () => {
@@ -213,9 +281,11 @@ describe("bringing a backup into a phone that has a memory", () => {
   it("says both sides, then brings its things in", async () => {
     await toMerge();
     const inBackup = screen.getByText("In the backup").parentElement as HTMLElement;
-    expect(within(inBackup).getByText(/about 1.4\sGB/)).toBeInTheDocument();
+    expect(inBackup).toHaveTextContent(
+      /2,120 things, from Sunday 2 March to today · about 1.4\sGB/,
+    );
     const here = screen.getByText("On this phone").parentElement as HTMLElement;
-    expect(await within(here).findByText(/\d+ things?/)).toBeInTheDocument();
+    expect(here).toHaveTextContent("412 things, from Saturday 20 June to today");
     expect(
       screen.getByText(
         "A phone holds one person’s memory, so the backup’s things join the one here.",

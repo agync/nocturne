@@ -979,6 +979,12 @@ impl PhoneBackup {
         }
     }
 
+    /// The nights the account lists, newest first, before the phrase.
+    pub fn listed(&self) -> Result<Vec<nightly::ListedNight>, BackupProblem> {
+        let place = self.place()?;
+        Ok(nightly::listed_nights(place.as_ref())?)
+    }
+
     /// The nights the backup holds, newest first, for "Which night?".
     pub fn nights(&self, opening: &Opening) -> Result<Vec<nightly::NightSummary>, BackupProblem> {
         let place = self.place()?;

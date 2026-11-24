@@ -124,34 +124,91 @@ pub async fn backup_found<R: Runtime>(
     blocking(app, |app| app.state::<PhoneBackup>().found()).await
 }
 
-/// "Which night?": the nights the backup holds, newest first, once the phrase opens it.
+/// "Which night?": the nights the backup holds, newest first. Before the phrase, `opening` is
+/// `None` and each night is what the account's listing says; once the phrase opens it, each
+/// also says what it holds.
 #[tauri::command]
 pub async fn backup_nights<R: Runtime>(
     app: AppHandle<R>,
-    opening: Opening,
+    opening: Option<Opening>,
 ) -> Result<Vec<NightView>, BackupProblem> {
     blocking(app, move |app| {
-        Ok(app
-            .state::<PhoneBackup>()
+        let backup = app.state::<PhoneBackup>();
+        let Some(opening) = opening else {
+            return Ok(backup
+                .listed()?
+                .into_iter()
+                .map(|n| NightView {
+                    count: n.count,
+                    made_at: n.made_at.map(|t| t.to_string()),
+                    bytes: n.bytes,
+                    items: None,
+                    first: None,
+                })
+                .collect());
+        };
+        Ok(backup
             .nights(&opening)?
             .into_iter()
             .map(|n| NightView {
                 count: n.count,
-                made_at: n.made_at,
-                bytes: n.bytes,
+                made_at: Some(n.made_at),
+                bytes: Some(n.bytes),
+                items: Some(n.items),
+                first: n.first,
             })
             .collect())
     })
     .await
 }
 
-/// One night, as "Which night?" lists it.
+/// One night, as "Which night?" lists it. What the account does not say is `None`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NightView {
     pub count: u64,
-    pub made_at: String,
-    pub bytes: u64,
+    pub made_at: Option<String>,
+    pub bytes: Option<u64>,
+    /// The things it holds, once the phrase opened it.
+    pub items: Option<u32>,
+    /// When the first of them was kept, when the night says.
+    pub first: Option<String>,
+}
+
+/// This phone's side of "This phone has a memory too": its things, and when the first was kept.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Here {
+    pub things: u32,
+    pub first: Option<String>,
+}
+
+/// What the memory on this phone holds, for the counts before a restore brings things in.
+#[tauri::command]
+pub async fn backup_here<R: Runtime>(app: AppHandle<R>) -> Result<Here, BackupProblem> {
+    blocking(app, |app| {
+        let home = app.state::<Home>();
+        let (_use, open) = home.using()?;
+        let things = open
+            .engine
+            .stats()
+            .map_err(|_| BackupProblem::Failed)?
+            .item_count;
+        let first = open
+            .engine
+            .first_kept()
+            .map_err(|_| BackupProblem::Failed)?;
+        Ok(Here { things, first })
+    })
+    .await
+}
+
+/// Whether the phone is on Wi-Fi now: `false` on mobile data, `None` offline or when it can't
+/// say. A restore warns before it comes down over mobile data.
+#[tauri::command]
+pub fn backup_on_wifi<R: Runtime>(app: AppHandle<R>) -> Option<bool> {
+    use tauri_plugin_nocturne_system::SystemExt;
+    app.system().power().ok().and_then(|p| p.unmetered)
 }
 
 /// "Bring it back" with the phrase or the recovery key: the night of `night`, or the newest.

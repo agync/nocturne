@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { formatBytes } from "../../../copy/format";
+import { formatBytes, formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress } from "../../../engine/bindings";
 import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
@@ -11,6 +11,7 @@ import {
   backupDay,
   backupTime,
   type FoundBackup,
+  type Here,
   type NightView,
   type Opening,
   onPhone,
@@ -27,7 +28,10 @@ type Step =
   | { name: "found" }
   | { name: "nights" }
   | { name: "merge" }
-  | { name: "getting" }
+  /** On mobile data: whether to go on now or wait for Wi-Fi. */
+  | { name: "mobile" }
+  /** Coming down, or waiting for Wi-Fi or for the internet to come back. */
+  | { name: "getting"; wait?: "wifi" | "internet" }
   | { name: "problem"; why: "room" | "missing" | "newer" | "lost" | "stopped" | "failed" }
   | { name: "restored"; restored: Extract<Restored, { kind: "replaced" }> }
   | { name: "merged"; restored: Extract<Restored, { kind: "broughtIn" }> }
@@ -42,6 +46,8 @@ const lostOr = (p: string): "lost" | "failed" =>
 
 /** Wrong this many times, the line points to the password manager and the recovery key. */
 const WRONG_AGAIN = 3;
+/** How often a wait for Wi-Fi or the internet looks again. */
+const LOOK_AGAIN_MS = 5_000;
 
 function Hero({
   icon,
@@ -152,7 +158,6 @@ export function NightlyRestore({
   api,
   ios,
   holds,
-  things,
   freeSpace,
   onFile,
   onBack,
@@ -165,8 +170,6 @@ export function NightlyRestore({
   ios: boolean;
   /** This phone holds a memory, so the backup's things join it. */
   holds: boolean;
-  /** How many things the memory here holds. */
-  things?(): Promise<number>;
   freeSpace(): Promise<number | null>;
   /** "A backup file": the file restore. */
   onFile(): void;
@@ -179,13 +182,15 @@ export function NightlyRestore({
   const [withKey, setWithKey] = useState(false);
   const [text, setText] = useState("");
   const [wrong, setWrong] = useState(0);
+  // The nights as the account lists them, before the phrase, then as the phrase opened them.
+  const [listed, setListed] = useState<NightView[] | null>(null);
   const [nights, setNights] = useState<NightView[] | null>(null);
   const [night, setNight] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BackupProgress | null>(null);
   const [asking, setAsking] = useState(false);
-  const [here, setHere] = useState<number | null>(null);
+  const [here, setHere] = useState<Here | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const [draft, setDraft] = useState<PhraseDraft>(NEW_PHRASE);
   const [failed, setFailed] = useState(false);
@@ -206,11 +211,14 @@ export function NightlyRestore({
     },
     [api],
   );
-  const downloaded = progress !== null && progress.total > 0 && progress.done >= progress.total;
+  // Checked in full: the last step, which cannot be stopped, or adding the things here.
+  const checked =
+    progress?.phase === "checking" && progress.total > 0 && progress.done >= progress.total;
 
   const opening = (): Opening =>
     withKey ? { with: "recoveryKey", text } : { with: "phrase", text };
-  const chosen = nights?.find((n) => n.count === night) ?? nights?.[0] ?? null;
+  const shownNights = nights ?? listed;
+  const chosen = shownNights?.find((n) => n.count === night) ?? shownNights?.[0] ?? null;
   const size = chosen?.bytes ?? found?.bytes ?? 0;
 
   const look = async () => {
@@ -268,17 +276,23 @@ export function NightlyRestore({
     setBusy(true);
     try {
       if (!(await open())) return;
-      if (!holds) return void (await restore());
-      const [count, room] = await Promise.all([
-        things ? things().catch(() => null) : Promise.resolve(null),
+      if (!holds) return void (await begin());
+      const [mine, room] = await Promise.all([
+        api.here().catch(() => null),
         freeSpace().catch(() => null),
       ]);
-      setHere(count);
+      setHere(mine);
       setFree(room);
       setStep({ name: "merge" });
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Over mobile data the person is asked first. */
+  const begin = async () => {
+    if ((await api.onWifi().catch(() => null)) === false) return setStep({ name: "mobile" });
+    await restore();
   };
 
   const restore = async () => {
@@ -289,7 +303,7 @@ export function NightlyRestore({
     try {
       const done = await api.restore(opening(), night, (p) => {
         setProgress(p);
-        if (p.total > 0 && p.done >= p.total) adding.current = true;
+        if (p.phase === "checking" && p.total > 0 && p.done >= p.total) adding.current = true;
       });
       if (done.kind === "replaced") setStep({ name: "restored", restored: done });
       else setStep({ name: "merged", restored: done });
@@ -306,12 +320,37 @@ export function NightlyRestore({
         setWrong((n) => n + 1);
         return setStep({ name: "found" });
       }
-      if (p === "offline") return setStep({ name: "none", why: "offline" });
+      if (p === "offline") return setStep({ name: "getting", wait: "internet" });
       setStep({ name: "problem", why: lostOr(p) });
     } finally {
       setProgress(null);
     }
   };
+
+  // Waiting for Wi-Fi or for the internet: it starts again by itself once the phone is there.
+  const waiting = step.name === "getting" ? step.wait : undefined;
+  const again = useRef(restore);
+  again.current = restore;
+  useEffect(() => {
+    if (!waiting) return;
+    let gone = false;
+    const look = async () => {
+      if (gone) return;
+      const ready =
+        waiting === "wifi" ? (await api.onWifi().catch(() => null)) === true : navigator.onLine;
+      if (ready && !gone) {
+        gone = true;
+        void again.current();
+      }
+    };
+    const timer = setInterval(() => void look(), LOOK_AGAIN_MS);
+    window.addEventListener("online", look);
+    return () => {
+      gone = true;
+      clearInterval(timer);
+      window.removeEventListener("online", look);
+    };
+  }, [waiting, api]);
 
   const stop = () => {
     stopped.current = true;
@@ -455,7 +494,7 @@ export function NightlyRestore({
       );
     }
     case "found": {
-      const shown = chosen ? { at: chosen.madeAt, bytes: chosen.bytes } : found;
+      const shown = chosen?.madeAt ? { at: chosen.madeAt, bytes: chosen.bytes ?? size } : found;
       const error =
         wrong === 0
           ? null
@@ -504,11 +543,19 @@ export function NightlyRestore({
                 <button
                   type="button"
                   className="ph-link"
-                  aria-disabled={text.trim() === "" || busy ? true : undefined}
+                  aria-disabled={busy ? true : undefined}
                   onClick={async () => {
-                    if (text.trim() === "" || busy) return;
+                    if (busy) return;
                     setBusy(true);
-                    const list = nights ?? (await open());
+                    const list =
+                      shownNights ??
+                      (await api.nights(null).then(
+                        (l) => {
+                          setListed(l);
+                          return l;
+                        },
+                        () => null,
+                      ));
                     setBusy(false);
                     if (!list) return;
                     setPicked(night ?? list[0]?.count ?? null);
@@ -537,7 +584,6 @@ export function NightlyRestore({
               onChange={(e) => {
                 setText(e.target.value);
                 setNights(null);
-                setNight(null);
               }}
             />
             {error ? (
@@ -554,7 +600,6 @@ export function NightlyRestore({
               setText("");
               setWrong(0);
               setNights(null);
-              setNight(null);
             }}
           >
             {withKey ? t("phone.backup.found.usePhrase") : t("phone.backup.found.useKey")}
@@ -593,25 +638,29 @@ export function NightlyRestore({
             <p className="ph-body ph-ink2">{t("phone.backup.nights.lead")}</p>
             <fieldset className="ph-nb-nights">
               <legend className="sr-only">{t("phone.backup.nights.title")}</legend>
-              {(nights ?? []).map((n, i) => (
+              {(shownNights ?? []).map((n, i) => (
                 <label key={n.count} className="ph-nb-night">
                   <input
                     type="radio"
                     name={name}
-                    checked={(picked ?? nights?.[0]?.count) === n.count}
+                    checked={(picked ?? shownNights?.[0]?.count) === n.count}
                     onChange={() => setPicked(n.count)}
                   />
                   <span className="ph-radio" aria-hidden="true" />
                   <span>
-                    {t("phone.backup.nights.night", {
-                      day: backupDay(n.madeAt, new Date(now()), true),
-                      time: backupTime(n.madeAt),
-                    })}
+                    {n.madeAt
+                      ? t("phone.backup.nights.night", {
+                          day: backupDay(n.madeAt, new Date(now()), true),
+                          time: backupTime(n.madeAt),
+                        })
+                      : null}
                   </span>
                   {i === 0 ? (
                     <span className="ph-nb-newest">{t("phone.backup.nights.newest")}</span>
                   ) : null}
-                  <span className="ph-nb-size">{formatBytes(n.bytes)}</span>
+                  {n.bytes !== null ? (
+                    <span className="ph-nb-size">{formatBytes(n.bytes)}</span>
+                  ) : null}
                 </label>
               ))}
             </fieldset>
@@ -625,7 +674,7 @@ export function NightlyRestore({
           bar={<BackOnly onBack={onBack} label={t("phone.sheet.title")} />}
           foot={
             <>
-              <Button kind="primary" onClick={() => void restore()}>
+              <Button kind="primary" onClick={() => void begin()}>
                 {t("phone.backup.merge.yes")}
               </Button>
               <button type="button" className="ph-textbtn" onClick={onBack}>
@@ -638,22 +687,20 @@ export function NightlyRestore({
           <div className="ph-nb-both">
             <div>
               <b>{t("phone.backup.merge.inBackup")}</b>
-              {chosen ? (
-                <span>
-                  {t("phone.backup.nights.night", {
-                    day: backupDay(chosen.madeAt, new Date(now()), true),
-                    time: backupTime(chosen.madeAt),
-                  })}
-                </span>
-              ) : null}
-              <span className="ph-small">
-                {t("phone.backup.merge.about", { size: formatBytes(size) })}
-              </span>
+              <span>{backupLine(chosen, size, new Date(now()))}</span>
             </div>
             <div>
               <b>{t("phone.backup.merge.onPhone")}</b>
               {here !== null ? (
-                <span>{t("phone.backup.merge.things", { count: here })}</span>
+                <span>
+                  {here.first
+                    ? t("phone.backup.merge.phoneLine", {
+                        count: here.things,
+                        first: formatLongDay(here.first),
+                        last: t("phone.backup.today"),
+                      })
+                    : t("phone.backup.merge.things", { count: here.things })}
+                </span>
               ) : null}
             </div>
           </div>
@@ -671,9 +718,51 @@ export function NightlyRestore({
         </Screen>
       );
     }
+    case "mobile":
+      return (
+        <Screen
+          foot={
+            <>
+              <Button kind="primary" onClick={() => void restore()}>
+                {t("phone.backup.mobile.go")}
+              </Button>
+              <button
+                type="button"
+                className="ph-textbtn"
+                onClick={() => setStep({ name: "getting", wait: "wifi" })}
+              >
+                {t("phone.backup.mobile.wait")}
+              </button>
+            </>
+          }
+        >
+          <Hero
+            icon="info"
+            title={holds ? t("phone.backup.adding.title") : t("phone.backup.getting.title")}
+          >
+            <p className="ph-body ph-ink2">
+              {t("phone.backup.mobile.body", { size: formatBytes(size) })}
+            </p>
+          </Hero>
+        </Screen>
+      );
     case "getting":
+      if (step.wait)
+        return (
+          <Bringing
+            title={holds ? t("phone.backup.adding.title") : t("phone.backup.getting.title")}
+            label={
+              step.wait === "wifi"
+                ? t("phone.backup.first.wifi")
+                : t("phone.backup.getting.offline")
+            }
+            progress={null}
+            body={holds ? t("phone.backup.adding.body") : t("phone.backup.getting.body")}
+            onStop={() => setStep({ name: "problem", why: "stopped" })}
+          />
+        );
       if (holds) {
-        const isAdding = progress !== null && progress.total > 0 && progress.done >= progress.total;
+        const isAdding = checked;
         return (
           <>
             <Bringing
@@ -705,10 +794,16 @@ export function NightlyRestore({
       return (
         <Bringing
           title={t("phone.backup.getting.title")}
-          label={t("phone.backup.getting.stage")}
+          label={
+            progress?.phase !== "checking"
+              ? t("phone.backup.getting.stage")
+              : checked
+                ? t("phone.backup.getting.almost")
+                : t("phone.backup.getting.checking")
+          }
           progress={progress}
           body={t("phone.backup.getting.body")}
-          onStop={downloaded ? undefined : stop}
+          onStop={checked ? undefined : stop}
         />
       );
     case "problem": {
@@ -950,6 +1045,27 @@ export function NightlyRestore({
         </Screen>
       );
   }
+}
+
+/** "In the backup": its things, from its first day to the night's, and its size. */
+function backupLine(night: NightView | null, size: number, now: Date): string {
+  const about = t("phone.backup.merge.about", { size: formatBytes(size) });
+  if (!night?.madeAt) return about;
+  const day = backupDay(night.madeAt, now);
+  if (night.items === null)
+    return `${t("phone.backup.nights.night", { day, time: backupTime(night.madeAt) })} · ${about}`;
+  return night.first
+    ? t("phone.backup.merge.backupLine", {
+        count: night.items,
+        first: formatLongDay(night.first),
+        day,
+        size: formatBytes(size),
+      })
+    : t("phone.backup.merge.backupLineNoFirst", {
+        count: night.items,
+        day,
+        size: formatBytes(size),
+      });
 }
 
 function WhereHeading() {
