@@ -927,9 +927,16 @@ async fn use_computer<R: Runtime>(app: &AppHandle<R>) -> Result<(), MoveError> {
             .map_err(|_| MoveError::Failed)?
     };
     let worker = app.clone();
-    let done = tauri::async_runtime::spawn_blocking(move || worker.state::<Home>().use_computer())
-        .await
-        .unwrap_or(Err(MoveError::Failed));
+    let done = tauri::async_runtime::spawn_blocking(move || {
+        let done = worker.state::<Home>().use_computer();
+        if done.is_ok() {
+            // The memory here is put aside: its nightly backup stops.
+            worker.state::<crate::backup::PhoneBackup>().memory_moved();
+        }
+        done
+    })
+    .await
+    .unwrap_or(Err(MoveError::Failed));
     drop(hold);
     done.inspect_err(|e| tracing::info!("the memory here was not put aside: {e:?}"))?;
     tracing::info!("the memory here is put aside: this phone uses the computer's");
@@ -1019,8 +1026,12 @@ pub async fn move_memory<R: Runtime>(app: AppHandle<R>) -> Result<Moved, MoveErr
         let home = worker.state::<Home>();
         let out = home.finish_move(&prepared, arrival);
         match &out {
-            // The memory lives on the computer now, whose own mind reads it.
-            Ok(_) => worker.state::<crate::mind::PhoneMind>().turn_off(),
+            // The memory lives on the computer now, whose own mind reads it, and the nightly
+            // backup of the memory here stops.
+            Ok(_) => {
+                worker.state::<crate::mind::PhoneMind>().turn_off();
+                worker.state::<crate::backup::PhoneBackup>().memory_moved();
+            }
             Err(_) => home.drop_move(),
         }
         out
