@@ -24,7 +24,7 @@ screen follows, the data model, and how quality is measured.
 - [Control chips and easier reading in setup](control-chips.md) - A named place or control shown in the copy with its own icon and words, a chevron on buttons that open more, and measurable reading rules for setup.
 - [Keeping the next step in view](step-flow-actions.md) - The approved bar that keeps a step flow's main button in view, and lighter first steps for Online answers and Away from home.
 - [Help with Nocturne, from the ask box](in-app-help.md) - The approved design for answering "how do I" questions from the guide that ships with Nocturne, with guide receipts, a Settings entry and a gate for each size of computer.
-- [Ask with tools](ask-with-tools.md) - Proposal for answering questions the words cannot find, such as "What's on tomorrow?": today's date in every answer, a built-in date step, and read-only look-ups of kept lines with their receipts, on the phone and the computer.
+- [Ask with tools](ask-with-tools.md) - The approved design for answering questions the words cannot find, such as "What's on tomorrow?": today's date in every answer, a built-in date step, and read-only look-ups of kept lines, check-ins and health readings with their receipts, on the phone and the computer.
 - [Advanced details](advanced-details.md) - The words the advanced details view uses where they have been designed and approved.
 - [The site in five languages](site-localisation.md) - Addresses, language switch and upkeep for the site in German, French, Spanish, Italian and Dutch.
 - [Site copy](site-copy/index.md) - The approved words for the site in each language, with a glossary per language.
