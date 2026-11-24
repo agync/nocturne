@@ -563,7 +563,7 @@ impl Engine {
                 .flatten()
                 .filter_map(|n| serde_json::from_value(Value::String(n)).ok())
                 .collect();
-            kinds.sort_by_key(|k| enum_str(k));
+            kinds.sort_by_key(enum_str);
             Ok(kinds)
         })
     }

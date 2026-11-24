@@ -339,9 +339,8 @@ pub fn date_step(question: &str, today: Date, week_start: Weekday) -> DateStep {
     for (i, word) in w.iter().enumerate() {
         let mut found: &[ReadingKind] = &[];
         for (names, kinds) in KINDS {
-            if names.len() == 1 && names[0] == word {
-                found = kinds;
-            } else if names.len() == 2 && names[0] == word && at(i + 1) == names[1] {
+            let second = names.get(1).is_none_or(|n| at(i + 1) == *n);
+            if names[0] == word && second {
                 found = kinds;
             }
         }

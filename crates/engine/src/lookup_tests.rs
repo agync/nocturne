@@ -578,7 +578,7 @@ fn a_kept_line_goes_only_while_its_item_is_kept() {
     assert!(!goes(&f), "a forgotten earlier version");
     // An id that is no line of anything kept never goes.
     let gone = format!("{}missing", super::KEPT_LINE);
-    assert!(!f.engine.mind_may_read(&[gone.clone()]).unwrap()[0]);
+    assert!(!f.engine.mind_may_read(std::slice::from_ref(&gone)).unwrap()[0]);
     assert!(f.engine.online_verdicts(&[gone]).unwrap()[0].is_some());
 }
 

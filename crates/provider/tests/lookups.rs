@@ -50,10 +50,13 @@ fn fact(id: &str, sentence: &str) -> Fact {
     )
 }
 
+/// Each request the mind noted: what for, and which part.
+type Noted = Arc<Mutex<Vec<(Job, Option<Part>)>>>;
+
 struct Rig {
     stand_in: StandIn,
     mind: ProviderMind,
-    parts: Arc<Mutex<Vec<(Job, Option<Part>)>>>,
+    parts: Noted,
     looked: Arc<Mutex<Vec<LookUp>>>,
     places: Arc<Mutex<Vec<Vec<Place>>>>,
     learned: Arc<Mutex<Vec<Tools>>>,
@@ -61,7 +64,7 @@ struct Rig {
 
 async fn rig(known: Tools) -> Rig {
     let stand_in = StandIn::start().await;
-    let parts: Arc<Mutex<Vec<(Job, Option<Part>)>>> = Arc::default();
+    let parts: Noted = Arc::default();
     let learned: Arc<Mutex<Vec<Tools>>> = Arc::default();
     let p = parts.clone();
     let l = learned.clone();

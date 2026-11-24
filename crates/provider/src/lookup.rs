@@ -27,6 +27,9 @@ pub const LOOK_UP_SECONDS: Duration = Duration::from_secs(2);
 /// it could not be looked up.
 pub type Run = Arc<dyn Fn(&LookUp) -> Option<(Vec<Fact>, usize)> + Send + Sync>;
 
+/// Told where the next round of look-ups looks, as it begins.
+pub type Looking = Arc<dyn Fn(&[Place]) + Send + Sync>;
+
 /// The device's side of the look-up path.
 #[derive(Clone)]
 pub struct LookUps {
@@ -34,7 +37,7 @@ pub struct LookUps {
     pub kinds: Vec<ReadingKind>,
     pub run: Run,
     /// Told where the next round looks, as it begins.
-    pub looking: Arc<dyn Fn(&[Place]) + Send + Sync>,
+    pub looking: Looking,
     /// The whole question's time.
     pub limit: Duration,
 }
