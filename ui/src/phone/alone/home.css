@@ -825,9 +825,15 @@ div.ph-mind-sent,
 }
 
 .ph-nb-group {
+  padding: 4px 16px;
   border-radius: 16px;
   background: var(--sheet);
   box-shadow: 0 0 0 1px var(--rule);
+}
+
+/* The card is the row's edge: no rule under its one row. */
+.ph-nb-group > .ph-switch-row:last-child {
+  border-bottom: 0;
 }
 
 .ph-nb-key {
