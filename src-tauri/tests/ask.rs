@@ -796,3 +796,44 @@ fn a_question_naming_a_day_is_given_what_was_kept_for_it() {
         vec![AskPhase::Searching, AskPhase::Nothing]
     );
 }
+
+/// The date step adds beside the words' lines, never in their place: with more kept for the day
+/// than the date step may add, the line the words found still reaches the mind.
+#[test]
+fn the_date_step_never_pushes_out_what_the_words_found() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    h.clock.set_str("2026-11-13T12:00:00Z");
+    let mut dated = Vec::new();
+    for n in 0..14 {
+        let mut c = nocturne_engine::Candidate::new(
+            &format!("Errand {n}"),
+            nocturne_engine::Predicate::Scheduled,
+            "Saturday",
+            &format!("Errand number {n} is on Saturday 14 November."),
+            0.9,
+        );
+        c.due = Some("2026-11-14".parse().unwrap());
+        dated.extend(h.learn_candidate(&format!("errand note {n}"), c).1);
+    }
+    let (_, violin) = h.learn(
+        "violin note",
+        "Mrs Okafor teaches the violin lesson.",
+        "Violin lesson",
+        "Mrs Okafor",
+    );
+    let (_, done) = done_delta(&h, "Who teaches the violin lesson tomorrow?");
+    assert_eq!(done.phase, AskPhase::Done, "{done:?}");
+    let given: Vec<String> = mind
+        .answered_from
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .iter()
+        .map(|f| f.memory.id.clone())
+        .collect();
+    assert!(given.contains(&violin), "the words' line stays: {given:?}");
+    let days = given.iter().filter(|id| dated.contains(id)).count();
+    assert_eq!(days, 12, "the date step adds at most 12");
+}
