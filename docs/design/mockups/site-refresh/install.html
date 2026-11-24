@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!-- Mockup for docs/design/site-refresh.md: the English install page as proposed. ?visitor=android shows it
+     sorted for an Android phone. Serve the repository root over HTTP. Marked words changed. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get Nocturne · Download for Mac, Windows, Linux, Android and iPhone</title>
+<meta name="description" content="Download Nocturne for a Mac with an Apple chip, a Windows 10 or 11 computer, or a Linux desktop. Free and open source, with no account. The first time it opens, it sets itself up for the computer it is on.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://nocturne.is/install">
+<link rel="alternate" hreflang="de" href="https://nocturne.is/de/install">
+<link rel="alternate" hreflang="en" href="https://nocturne.is/install">
+<link rel="alternate" hreflang="es" href="https://nocturne.is/es/install">
+<link rel="alternate" hreflang="fr" href="https://nocturne.is/fr/install">
+<link rel="alternate" hreflang="it" href="https://nocturne.is/it/install">
+<link rel="alternate" hreflang="nl" href="https://nocturne.is/nl/install">
+<link rel="alternate" hreflang="x-default" href="https://nocturne.is/install">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="nl_NL">
+<meta property="og:title" content="Get Nocturne · Download for Mac, Windows and Linux">
+<meta property="og:description" content="Free and open source, with no account. The first time it opens, Nocturne sets itself up for the computer it is on.">
+<meta property="og:url" content="https://nocturne.is/install">
+<meta property="og:image" content="https://nocturne.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://nocturne.is/assets/img/og.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../../site/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="../../../../site/favicon.svg">
+<link rel="apple-touch-icon" href="../../../../site/apple-touch-icon.png">
+<link rel="preload" href="../../../../site/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../../../../site/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../../../../site/assets/css/site.css">
+<link rel="stylesheet" href="site-refresh.css">
+<script src="../../../../site/assets/js/theme.js"></script>
+<script src="../../../../site/assets/js/lang.js" defer></script>
+<script>
+// Mockup only: ?visitor=android shows the page as install.js would for an Android phone.
+document.addEventListener("DOMContentLoaded", () => {
+  if (new URLSearchParams(location.search).get("visitor") !== "android") return;
+  const list = document.querySelector("[data-platforms]");
+  const here = document.getElementById("android");
+  list.prepend(here);
+  here.classList.add("is-here");
+  here.querySelector("[data-here-tag]").hidden = false;
+  list.classList.add("is-sorted");
+  const others = list.querySelector("[data-others]");
+  here.after(others);
+  others.hidden = false;
+  document.querySelector("[data-here]").innerHTML = '<mark class="chg">This looks like an Android phone, so its app comes first.</mark>';
+});
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Nocturne, home">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a class="nav-section" href="/#how">How it works</a>
+    <a class="nav-section" href="/#privacy">Privacy</a>
+    <a class="nav-section" href="#needs">Requirements</a>
+    <a href="/install" aria-current="page">Download</a>
+    <a href="/docs/">Docs</a>
+  </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="System"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">System</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">Light</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">Dark</span></button>
+    </div>
+    <details class="lang">
+      <summary>
+        <svg class="lang-globe" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M1.75 8h12.5M8 1.75c-1.9 1.8-2.75 3.9-2.75 6.25S6.1 12.45 8 14.25M8 1.75c1.9 1.8 2.75 3.9 2.75 6.25S9.9 12.45 8 14.25" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>
+        <span class="visually-hidden">Language: </span><span class="lang-name">English</span><span class="lang-code" aria-hidden="true">EN</span>
+      </summary>
+      <ul>
+        <li><a href="/de/install" lang="de" hreflang="de">Deutsch</a></li>
+        <li><a href="/install" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+        <li><a href="/es/install" lang="es" hreflang="es">Español</a></li>
+        <li><a href="/fr/install" lang="fr" hreflang="fr">Français</a></li>
+        <li><a href="/it/install" lang="it" hreflang="it">Italiano</a></li>
+        <li><a href="/nl/install" lang="nl" hreflang="nl">Nederlands</a></li>
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="get" aria-labelledby="get-title">
+  <h1 id="get-title">Get Nocturne.</h1>
+  <p class="lede">Free and open source, for Mac, Windows, Linux<mark class="chg">, Android and iPhone</mark>. No account, nothing to sign in to.</p>
+  <p class="here" data-here>Choose your computer <mark class="chg">or phone</mark> below. Each link gives the latest version.</p>
+</section>
+
+<!-- Each platform's download and its first-open steps. install.js moves the visitor's platform
+     to the top; without it they stay in this order. The first-open steps follow
+     docs/guide/install.md ("The first time you open it"); change both together. -->
+<div class="platforms" data-platforms>
+
+  <section class="platform" id="mac" data-platform="mac" aria-labelledby="mac-title">
+    <div class="platform-head">
+      <h2 id="mac-title">Mac</h2>
+      <p class="spec-line">Apple chip, M1 or later · macOS 26 or later</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-macos-arm64.dmg">Download for Mac</a>
+        <p class="file">Nocturne-macos-arm64.dmg</p>
+      </div>
+      <p class="note">Macs with an Intel chip are not supported. To see which chip yours has, open the Apple menu and choose About This Mac.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Open the downloaded file, then drag Nocturne into Applications.</li>
+          <li><mark class="chg">Open Nocturne from Applications. The first time, your Mac asks whether you want to open an app downloaded from the internet. Click <b>Open</b>.</mark></li>
+        </ol>
+        <p class="why"><mark class="chg">Nocturne for Mac is signed and checked by Apple, so it opens like any other app.</mark></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="platform" id="windows" data-platform="windows" aria-labelledby="windows-title">
+    <div class="platform-head">
+      <h2 id="windows-title">Windows</h2>
+      <p class="spec-line">Windows 10 or 11, 64-bit</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64-setup.exe">Download for Windows</a>
+        <p class="file">Nocturne-windows-x64-setup.exe</p>
+      </div>
+      <p class="note">Installs for you alone and needs no administrator password. Computers managed by an organisation can use the <a href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64.msi">.msi installer</a> instead.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Your browser may warn that the file is not commonly downloaded. In Edge, open the <b>…</b> menu beside the file, choose <b>Keep</b>, then <b>Show more</b>, then <b>Keep anyway</b>.</li>
+          <li>Open the installer. Windows shows <q>Windows protected your PC</q>. Click <b>More info</b>, then <b>Run anyway</b>.</li>
+        </ol>
+        <p class="why">You only do this once. Microsoft charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="platform" id="linux" data-platform="linux" aria-labelledby="linux-title">
+    <div class="platform-head">
+      <h2 id="linux-title">Linux</h2>
+      <p class="spec-line">64-bit computer with an Intel, AMD or Arm chip</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <ul class="choices" aria-label="Ways to install on Linux">
+        <li>
+          <div class="choice-text">
+            <h3>From your software centre</h3>
+            <p>The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date.<mark class="chg"> </mark></p>
+          </div>
+          <a class="button primary" href="https://flatpak.nocturne.is">Get the Flatpak</a>
+          <details class="terminal">
+            <summary>Or install it from a terminal</summary>
+            <pre><code>flatpak remote-add --user --if-not-exists nocturne https://flatpak.nocturne.is/nocturne.flatpakrepo
+flatpak install --user nocturne is.nocturne.Nocturne</code></pre>
+          </details>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Ubuntu, Linux Mint or Debian</h3>
+            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+          </div>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">.deb for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-arm64.deb">.deb for Arm</a>
+          </div>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Fedora, Red Hat or openSUSE</h3>
+            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+          </div>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">.rpm for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.rpm">.rpm for Arm</a>
+          </div>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Try it without installing</h3>
+            <p>One file that runs on most desktops. In its properties, allow it to run as a program, then open it.</p>
+          </div>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">AppImage for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.AppImage">AppImage for Arm</a>
+          </div>
+        </li>
+      </ul>
+      <p class="note">Most Linux computers have an Intel or AMD chip. To check, run <code>uname -m</code> in a terminal: <code>x86_64</code> means Intel or AMD, <code>aarch64</code> means Arm. The Flatpak picks the right one by itself.</p>
+      <p class="why">Linux shows no warning the first time you open Nocturne.</p>
+    </div>
+  </section>
+
+  <section class="platform" id="android" data-platform="android" aria-labelledby="android-title">
+    <div class="platform-head">
+      <h2 id="android-title">Android</h2>
+      <p class="spec-line">Android 8 or later</p>
+      <p class="here-tag" data-here-tag hidden>For this phone</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <div class="stores"><a class="badge" href="#" aria-label="Get it on Google Play"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span><small>GET IT ON</small><b>Google Play</b></span></a></div>
+        <p class="file">Nocturne, by Nocturne</p>
+      </div>
+      <p class="note">Works on its own, or with Nocturne on your computer. No Google Play on your phone? <a href="#">Download the app file</a> instead; your phone asks once to allow installs from your browser.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Choose <b>Start on this phone</b>, or <b>Connect to my computer</b> if Nocturne is on your computer.</li>
+          <li>Nocturne asks before it uses your microphone, calendar or health readings. <b>Not now</b> always works, and you can change it later in <b>This phone</b>.</li>
+        </ol>
+        <p class="why">Google Play keeps it up to date. <a href="/privacy">Privacy policy</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="platform" id="iphone" data-platform="iphone" aria-labelledby="iphone-title">
+    <div class="platform-head">
+      <h2 id="iphone-title">iPhone</h2>
+      <p class="spec-line">iOS 17 or later</p>
+      <p class="here-tag" data-here-tag hidden>For this phone</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <div class="stores"><a class="badge" href="#" aria-label="Download on the App Store"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span><small>Download on the</small><b>App Store</b></span></a></div>
+        <p class="file">Nocturne, by Nocturne</p>
+      </div>
+      <p class="note">For iPhone. Works on its own, or with Nocturne on your computer.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Choose <b>Start on this phone</b>, or <b>Connect to my computer</b> if Nocturne is on your computer.</li>
+          <li>Nocturne asks before it uses your microphone, calendar or Apple Health. <b>Not now</b> always works, and you can change it later in <b>This phone</b>.</li>
+        </ol>
+        <p class="why">The App Store keeps it up to date. <a href="/privacy">Privacy policy</a></p>
+      </div>
+      <p class="badge-note">Stand-ins: the build uses the official badges, in the page’s language.</p>
+    </div>
+  </section>
+
+  <p class="others" data-others hidden>Other computers and phones</p>
+
+</div>
+
+<p class="checks small">To make sure a download is the one we published, compare it with the fingerprints in <a href="https://github.com/agync/nocturne/releases/latest/download/SHA256SUMS">SHA256SUMS</a>. The <a href="/docs/guide/install.html">install guide</a> shows how, explains each package and how to take Nocturne off again. Earlier versions are on the <a href="https://github.com/agync/nocturne/releases">releases page</a>.</p>
+
+<section id="needs" class="band" aria-labelledby="needs-title">
+  <div class="intro">
+    <h2 id="needs-title">What your computer needs.</h2>
+    <p>Almost certainly, if it has 8&nbsp;GB of memory: an 8&nbsp;GB MacBook Air, or a typical 8&nbsp;GB Windows or Linux laptop.</p>
+  </div>
+  <dl class="promises needs">
+    <div><dt>Memory</dt><dd>8&nbsp;GB is enough. On an 8&nbsp;GB computer Nocturne uses about 5&nbsp;GB at its busiest and gives it back when it has nothing to do. With more memory it offers a larger setup with clearer answers.</dd></div>
+    <div><dt>A graphics card</dt><dd>No graphics card needed. Macs with Apple silicon, and computers with AMD or Intel graphics built in, run Nocturne on the chip and share the computer’s memory. An AMD or NVIDIA graphics card works too, best with 6 GB or more. Other computers run it on the processor.</dd></div>
+    <div><dt>An AI chip</dt><dd>Helpful, never needed. <mark class="chg">On AMD Ryzen AI 300 series computers and newer, with 16 GB or more, the AI chip reads your voice notes. On many with 32 GB or more it also reads what you keep, and on some it answers your questions too, so the rest of the computer has less to do.</mark></dd></div>
+    <div><dt>The system</dt><dd>macOS 26 or later on an Apple chip, Windows 10 or 11 (64-bit), or 64-bit Linux on Intel, AMD or Arm.</dd></div>
+    <div><dt><mark class="chg">A phone</mark></dt><dd><mark class="chg">Android 8 or later, or an iPhone with iOS 17 or later. The phone app works on its own, or with Nocturne on your computer.</mark></dd></div>
+  </dl>
+  <div class="tiers" role="list">
+    <div role="listitem"><h3>Large</h3><p class="spec-line">60 GB+ memory · 28 GB space</p><p>Clearer answers to harder questions.</p></div>
+    <div role="listitem"><h3>Standard</h3><p class="spec-line">28 GB+ memory · 11 GB space</p><p>Many recent laptops with 32 GB.</p></div>
+    <div role="listitem"><h3>Small</h3><p class="spec-line">14 GB+ memory · 7 GB space</p><p>Same page. The daily tidy takes longer.</p></div>
+    <div role="listitem"><h3>Tiny</h3><p class="spec-line">6 GB+ memory · 5.2 GB space</p><p>Made for 8 GB computers. Simpler answers that may miss details.</p></div>
+  </div>
+  <p class="small">Downloads at setup are between about 3 GB and 26 GB, depending on the setup, <mark class="chg">and about 9 GB more where the AI chip reads what you keep</mark>. After that, Nocturne works with no internet at all.</p>
+</section>
+
+<section id="after" class="band" aria-labelledby="after-title">
+  <div class="intro">
+    <h2 id="after-title">After you install.</h2>
+    <p><mark class="chg">On a computer,</mark> Nocturne opens a short setup. You can keep things straight away.</p>
+  </div>
+  <ol class="steps">
+    <li>
+      <span class="when">When it opens</span>
+      <h3>It looks at the computer</h3>
+      <p>It tells you which setup it will use. You can always pick a smaller one, which uses less memory, space and battery.</p>
+    </li>
+    <li>
+      <span class="when">Once, when you agree</span>
+      <h3>It downloads what it needs</h3>
+      <p>It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB, <mark class="chg">and about 9&nbsp;GB more where the AI chip reads what you keep</mark>. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops.</p>
+    </li>
+    <li>
+      <span class="when"><mark class="chg">At the time you choose</mark></span>
+      <h3>Your first page</h3>
+      <p>From then on, Nocturne works with no internet at all.</p>
+    </li>
+  </ol>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    Nocturne · engine by Lemonade · Apache 2.0
+  </p>
+  <nav aria-label="Footer">
+    <a href="/docs/">Docs</a>
+    <a href="/docs/guide/your-data.html">Your data</a>
+    <a href="/docs/guide/install.html">Install guide</a>
+    <a href="/privacy"><mark class="chg">Privacy policy</mark></a>
+    <a href="/support"><mark class="chg">Support</mark></a>
+    <a href="../../../../site/assets/fonts/OFL.txt">Font licence</a>
+  </nav>
+  <ul class="foot-langs" aria-label="Language">
+    <li><a href="/de/install" lang="de" hreflang="de">Deutsch</a></li>
+    <li><a href="/install" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+    <li><a href="/es/install" lang="es" hreflang="es">Español</a></li>
+    <li><a href="/fr/install" lang="fr" hreflang="fr">Français</a></li>
+    <li><a href="/it/install" lang="it" hreflang="it">Italiano</a></li>
+    <li><a href="/nl/install" lang="nl" hreflang="nl">Nederlands</a></li>
+  </ul>
+</footer>
+
+</div>
+</body>
+</html>
