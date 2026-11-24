@@ -1234,3 +1234,31 @@ html.ph-keyboard .ph-names-sheet {
     transition: none;
   }
 }
+
+/* Read now, under "Its mind" on This phone: lined up with the row's words. */
+.ph-mind-rn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 16px 38px;
+}
+
+.ph-mind-rn p {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ph-mind-rn p.ph-mind-rn-said {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 0.9375rem;
+}
+
+.ph-mind-rn .ph-mind-rn-btn {
+  min-height: 44px;
+  border-radius: 22px;
+}

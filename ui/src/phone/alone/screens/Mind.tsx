@@ -19,7 +19,14 @@ import {
 } from "../../../screens/online/modelList";
 import { useHeading } from "../../native/screens/parts";
 import { BackBar, Button, Icon, Page } from "../../screens/ui";
-import { hostOf, type MindLimit, type MindReading, type ProviderForm } from "../mind";
+import {
+  hostOf,
+  type MindLimit,
+  type MindReading,
+  type ProviderForm,
+  type ReadKind,
+} from "../mind";
+import { type ReadAction, readBlock } from "../readNow";
 import { ModelSheet } from "./ModelSheet";
 import { Chip } from "./parts";
 
@@ -765,17 +772,28 @@ export function MindAgree({
   );
 }
 
-/** After turning on, once: what was kept being read, and when the first page comes. */
+/**
+ * After turning on, once: what was kept being read, and when the first page comes. On the charger
+ * it reads by itself; on battery it says it waits to charge and offers Read now, the person's own
+ * choice, with Stop while it reads.
+ */
 export function MindReadingScreen({
   first,
   reading,
+  readNow,
+  readStop,
+  ios = false,
   onDone,
 }: {
   first: MindReading;
   reading(): Promise<MindReading>;
+  readNow?(kind: ReadKind): Promise<MindReading>;
+  readStop?(): Promise<MindReading | null>;
+  ios?: boolean;
   onDone(): void;
 }) {
   const [now, setNow] = useState(first);
+  const [busy, setBusy] = useState(false);
   const heading = useHeading("reading");
   useEffect(() => {
     let gone = false;
@@ -790,7 +808,91 @@ export function MindReadingScreen({
       clearInterval(timer);
     };
   }, [reading]);
+
+  const act = async (action: ReadAction) => {
+    if (busy || !readNow || !readStop) return;
+    setBusy(true);
+    try {
+      if (action === "stop") {
+        const after = await readStop();
+        if (after) setNow(after);
+      } else {
+        setNow(await readNow(action === "anyway" ? "anyway" : "now"));
+      }
+    } catch {
+      reading().then(setNow, () => undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const share = now.count > 0 ? Math.min(1, now.done / now.count) : 0;
+  // A phone that never says whether it charges is taken as on battery, as the core takes it.
+  const onBattery = now.charging === false && now.count > now.done;
+  const block = onBattery ? readBlock({ state: "fine", host: "" }, now, ios) : null;
+  const waiting = onBattery && !now.now;
+
+  const progress = (
+    <div
+      className="ph-progress"
+      role="progressbar"
+      aria-label={t("phone.mind.reading.title")}
+      aria-valuemin={0}
+      aria-valuemax={now.count}
+      aria-valuenow={now.done}
+    >
+      <span style={{ width: `${Math.round(share * 100)}%` }} />
+    </div>
+  );
+
+  let status: ReactNode;
+  let note: ReactNode;
+  if (waiting) {
+    status = (
+      <>
+        {block?.said ? <p className="ph-body">{block.said}</p> : null}
+        <p className="ph-status" role="status">
+          <Icon name="moon" size={16} />
+          {t("phone.mind.reading.waiting", { count: now.count - now.done })}
+        </p>
+      </>
+    );
+    note = (
+      <p className="ph-small">
+        {block?.said
+          ? block.lines.join(" ")
+          : t(
+              ios
+                ? "phone.mind.reading.noteWaiting.iphone"
+                : "phone.mind.reading.noteWaiting.android",
+            )}
+      </p>
+    );
+  } else if (now.now) {
+    status = (
+      <>
+        {progress}
+        <p className="ph-status" role="status">
+          <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
+          {t("phone.mind.row.readingNow", { done: now.done, count: now.count })}
+        </p>
+      </>
+    );
+    note = <p className="ph-small">{block?.lines.join(" ")}</p>;
+  } else {
+    status = (
+      <>
+        {progress}
+        <p className="ph-status">
+          <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
+          {t("phone.mind.reading.progress", { done: now.done, count: now.count })}
+        </p>
+      </>
+    );
+    note = <p className="ph-small">{t("phone.mind.reading.note")}</p>;
+  }
+
+  const button = block?.button;
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14 }}>
@@ -799,30 +901,30 @@ export function MindReadingScreen({
           <h1 className="ph-steph" tabIndex={-1} ref={heading}>
             {t("phone.mind.reading.title")}
           </h1>
-          <p className="ph-body">{t("phone.mind.reading.body", { count: first.count })}</p>
-        </div>
-        <div className="ph-stack" style={{ gap: 8 }}>
-          <div
-            className="ph-progress"
-            role="progressbar"
-            aria-label={t("phone.mind.reading.title")}
-            aria-valuemin={0}
-            aria-valuemax={now.count}
-            aria-valuenow={now.done}
-          >
-            <span style={{ width: `${Math.round(share * 100)}%` }} />
-          </div>
-          <p className="ph-status">
-            <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
-            {t("phone.mind.reading.progress", { done: now.done, count: now.count })}
+          <p className="ph-body">
+            {waiting
+              ? t("phone.mind.reading.bodyWaiting", { count: first.count })
+              : t("phone.mind.reading.body", { count: first.count })}
           </p>
         </div>
-        <p className="ph-small">{t("phone.mind.reading.note")}</p>
+        <div className="ph-stack" style={{ gap: 8 }}>
+          {status}
+        </div>
+        {note}
       </main>
       <footer className="ph-foot ph-foot--plain">
         <Button kind="primary" onClick={onDone}>
           {t("phone.mind.reading.ok")}
         </Button>
+        {button && readNow ? (
+          <Button
+            kind={button.action === "stop" ? "quiet" : undefined}
+            disabled={busy || Boolean(button.needs)}
+            onClick={() => void act(button.action)}
+          >
+            {button.label}
+          </Button>
+        ) : null}
       </footer>
     </Page>
   );

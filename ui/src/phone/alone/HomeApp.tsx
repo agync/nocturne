@@ -45,6 +45,7 @@ import {
   type MindTrouble,
 } from "./mind";
 import { CARD_SHOWN, createBackupApi, KEY_MADE, onPhone } from "./nightly";
+import { readWords } from "./readNow";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { Restore, SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
@@ -725,6 +726,10 @@ export function HomeApp({
             onSent: () => go({ name: "mindSent" }),
             onCheckKey: fixMind,
             fresh: mindTick,
+            status: mind.status,
+            readNow: (kind) => mind.readNow(kind, readWords(ios)),
+            readStop: mind.readStop,
+            ios,
             onTurnOff: async () => {
               await mind.turnOff();
               setMindChosen({ state: "off" });
@@ -795,6 +800,9 @@ export function HomeApp({
         <MindReadingScreen
           first={view.first}
           reading={mind.reading}
+          readNow={(kind) => mind.readNow(kind, readWords(ios))}
+          readStop={mind.readStop}
+          ios={ios}
           onDone={() => leave(view.depth)}
         />
       );

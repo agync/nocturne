@@ -22,7 +22,14 @@ import type {
   TimelineRow,
 } from "../../../engine/bindings";
 import { emptyDay, itemView } from "../../testing/journalFixtures";
-import type { MindChosen, MindSent, MindStatus, ProviderForm } from "../mind";
+import type {
+  MindChosen,
+  MindReading,
+  MindSent,
+  MindStatus,
+  ProviderForm,
+  ReadKind,
+} from "../mind";
 import { memoryNotes, SHOWN, SINCE } from "../reminder";
 import { backupState } from "./backupMock";
 
@@ -348,7 +355,7 @@ const SENT: MindSent[] = [
 export const scriptedMind = {
   trouble: undefined as string | null | undefined,
   page: true,
-  reading: { done: 12, count: 46 },
+  reading: firstReading() as MindReading,
   pageLoads: 0,
   stopped: [] as string[],
 };
@@ -356,10 +363,53 @@ export const scriptedMind = {
 export function resetScriptedMind(): void {
   scriptedMind.trouble = undefined;
   scriptedMind.page = true;
-  scriptedMind.reading = { done: 12, count: 46 };
+  scriptedMind.reading = firstReading();
   scriptedMind.pageLoads = 0;
   scriptedMind.stopped = [];
   waiting.clear();
+}
+
+/**
+ * The reading under way and the phone's power. On the charger unless `&power=` says the phone is
+ * on battery (`battery`, 80 per cent), low (`low`, at 20 per cent, Read now stopped), with
+ * battery saving (`saver`), at the floor (`floor`), reading now (`now`, `anyway`) or all read
+ * (`done`). `&count=` and `&done=` set the counts.
+ */
+function firstReading(): MindReading {
+  const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+  const power = params.get("power");
+  const count = Number(params.get("count") ?? 46);
+  const done = Number(params.get("done") ?? 12);
+  const base: MindReading = {
+    done,
+    count,
+    charging: true,
+    percent: 64,
+    saver: false,
+    now: null,
+    stopped: null,
+    away: null,
+    stillNot: false,
+    quiet: false,
+  };
+  switch (power) {
+    case "battery":
+      return { ...base, charging: false, percent: 80 };
+    case "low":
+      return { ...base, charging: false, percent: 20, stopped: { why: "low", done } };
+    case "saver":
+      return { ...base, charging: false, saver: true, stopped: { why: "saver", done } };
+    case "floor":
+      return { ...base, charging: false, percent: 5, stopped: { why: "floor", done } };
+    case "now":
+      return { ...base, charging: false, percent: 80, now: "now" };
+    case "anyway":
+      return { ...base, charging: false, percent: 18, now: "anyway" };
+    case "done":
+      return { ...base, charging: false, done: count, stopped: { why: "done", done: count } };
+    default:
+      return base;
+  }
 }
 
 /** The service's list as the stand-in gives it: six names, or 214 with `&names=long`. */
@@ -832,6 +882,20 @@ export function homeState(scenario: HomeScenario) {
         return scriptedCheck(args.form as ProviderForm);
       case "mind_list":
         return scriptedList(args.form as ProviderForm);
+      case "mind_read_now": {
+        const r = scriptedMind.reading;
+        const kind = args.kind as ReadKind;
+        const percent = r.percent ?? 100;
+        if (percent <= 5) throw "floor";
+        if (kind === "now" && (percent <= 20 || r.saver)) throw percent <= 20 ? "low" : "saver";
+        scriptedMind.reading = { ...r, now: kind, stopped: null, away: null };
+        return scriptedMind.reading;
+      }
+      case "mind_read_stop": {
+        const r = scriptedMind.reading;
+        scriptedMind.reading = { ...r, now: null, stopped: { why: "person", done: r.done } };
+        return scriptedMind.reading;
+      }
       case "mind_turn_on": {
         const outcome = scriptedCheck(args.form as ProviderForm);
         if (outcome.type === "notHttps") throw "notHttps";
