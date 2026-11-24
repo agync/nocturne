@@ -138,6 +138,7 @@ export function ModelDialog({
               }}
               type="button"
               role="radio"
+              aria-label={name}
               aria-checked={name === chosen}
               tabIndex={i === Math.min(at, shown.length - 1) ? 0 : -1}
               className={styles.listRow}

@@ -109,6 +109,7 @@ export function ModelSheet({
                 <input
                   ref={name === chosen ? on : i === 0 ? first : undefined}
                   type="radio"
+                  aria-label={name}
                   name={`${id}-name`}
                   checked={name === chosen}
                   readOnly
