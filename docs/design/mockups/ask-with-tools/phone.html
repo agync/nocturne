@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask with tools · phone · Nocturne</title>
+<link rel="stylesheet" href="ask.css">
+<script type="application/json" id="frames">
+{
+  "*": { "bar": "brand", "title": "Ask", "tab": "Ask", "action": true },
+  "sent": { "bar": "back", "title": "What was sent", "back": "This phone", "tab": "", "action": false }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="looking answer sent">
+<main id="content">
+
+  <!-- The question while the mind looks through the calendar -->
+  <div class="asked" data-state="looking answer">
+    <p class="ghead">You asked</p>
+    <p class="askedQ">“What’s on tomorrow?”</p>
+  </div>
+  <div class="working new" data-state="looking" role="status"><span class="spin"></span><span>Looking through your calendar…</span></div>
+  <div class="askbar" data-state="looking"><span>Ask something else…</span><span class="stopBtn">Stop</span></div>
+
+  <!-- The answer, with its receipts -->
+  <p class="answerText" data-state="answer">Tomorrow, Wednesday 25 November, you have <span class="span">the dentist at 10:30</span> at Smile Dental and <span class="span">Leo’s swimming at 17:00</span> at the leisure centre. <span class="span">The bins go out</span> on Wednesday night.</p>
+  <ul class="rcpts" data-state="answer" aria-label="From 3 things you kept">
+    <li class="rcpt"><span data-icon="calendar" data-size="20"></span><span><span class="rcptTitle">Dentist</span><span class="rcptSaid">Wednesday 25 November, 10:30 · Smile Dental</span><span class="rcptMeta">Calendar · Pixel 9</span></span></li>
+    <li class="rcpt"><span data-icon="calendar" data-size="20"></span><span><span class="rcptTitle">Leo’s swimming</span><span class="rcptSaid">Wednesday 25 November, 17:00 · Leisure centre</span><span class="rcptMeta">Calendar · Pixel 9</span></span></li>
+    <li class="rcpt"><span data-icon="pen" data-size="20"></span><span><span class="rcptTitle">Note</span><span class="rcptSaid">“Bins Weds night from now on”</span><span class="rcptMeta">Kept Monday 2 November</span></span></li>
+  </ul>
+  <p class="markLine" data-state="answer">Answered online by your provider (answers.example)</p>
+  <p class="small" data-state="answer">What was sent is listed in <span class="cc">This phone</span>. Choose <span class="cc">See what was sent</span>.</p>
+  <div class="askbar" data-state="answer"><span>Ask something else…</span><span data-icon="ask" data-size="18"></span></div>
+
+  <!-- What was sent: one question in three parts -->
+  <p class="plead" data-state="sent">Everything this phone sent to answers.example, word for word as it left. Kept for 90 days.</p>
+  <p class="ghead" data-state="sent">Today</p>
+  <div class="sentRow" data-state="sent">
+    <span class="sentWhat">Answered a question</span>
+    <span class="sentMeta new">21:40 · answers.example · 9.8 KB · 3 parts</span>
+    <p class="ghead" style="padding-top: 8px">Exactly what was sent</p>
+    <div class="parts new">
+      <div class="part">
+        <span class="partH">Part 1</span>
+        <pre class="words">Facts:
+[m1] Gran's birthday lunch is on Sunday 29 November at 13:00, at The Swan. (on Sunday 29 November; learned Friday 20 November)
+
+Today is Tuesday 24 November 2026, 21:40, in the time zone Europe/London. The week starts on Monday.
+Question: Am I free for a haircut before Gran’s lunch?</pre>
+      </div>
+      <div class="part">
+        <span class="partH">Part 2</span>
+        <span class="partAsk">Your provider asked to look through your calendar for Wednesday 25 to Sunday 29 November.</span>
+        <span class="partAsk">Sent back:</span>
+        <pre class="words">[m2] Dentist is on Wednesday 25 November at 10:30, at Smile Dental. (on Wednesday 25 November)
+[m3] Leo's swimming is on Wednesday 25 November at 17:00, at the leisure centre. (on Wednesday 25 November)
+[m4] Leo's football is on Saturday 28 November at 09:30. (on Saturday 28 November)</pre>
+      </div>
+      <div class="part">
+        <span class="partH">Part 3</span>
+        <span class="partAsk">Your provider asked to look for “haircut hairdresser”.</span>
+        <span class="partAsk">Sent back: nothing kept.</span>
+      </div>
+      <p class="resent">Each part sent the parts before it again, so your provider could follow on. The size counts every part.</p>
+    </div>
+  </div>
+  <div class="sentRow" data-state="sent">
+    <span class="sentWhat">Answered a question</span>
+    <span class="sentMeta">18:02 · answers.example · 2.1 KB</span>
+  </div>
+  <div class="sentRow" data-state="sent">
+    <span class="sentWhat">Read a thing you kept</span>
+    <span class="sentMeta">17:55 · answers.example · 1.4 KB</span>
+  </div>
+
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
