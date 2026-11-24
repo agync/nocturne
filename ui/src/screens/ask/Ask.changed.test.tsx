@@ -44,12 +44,12 @@ describe("the notice for someone who agreed before", () => {
     expect(await screen.findByRole("heading", { name: TITLE })).toHaveFocus();
     expect(
       screen.getByText(
-        "Nocturne no longer keeps back lines that look like health, money or ID details. Anything you kept can now go with a question it helps answer, unless you marked it private.",
+        "Nocturne no longer keeps back lines that look like health, money or ID details, or things you marked private. Anything you kept can now go with a question it helps answer.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Nocturne doesn’t guess what is private. Mark anything you never want sent as private.",
+        "Marking something private keeps it from coming up on its own, in reminders and notifications. It still helps answer what you ask.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Your question waits until you continue.")).toBeInTheDocument();

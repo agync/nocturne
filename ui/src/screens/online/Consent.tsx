@@ -15,7 +15,7 @@ import { useOnlineAct } from "./useOnline";
 
 const NEVER: CopyId[] = [
   "online.consent.never.photos",
-  "online.consent.never.private",
+  "online.consent.never.letGo",
   "journal.online.step5.neverSent",
   "online.consent.never.rest",
 ];
@@ -81,7 +81,6 @@ export function Consent({
     });
   }
   summary.push(
-    { label: t("online.consent.aside.private"), value: t("online.consent.aside.neverSent") },
     {
       label: t("journal.online.step5.choice.entries"),
       value: t("journal.online.step5.choice.entriesValue"),
@@ -191,7 +190,6 @@ export function Consent({
           ))}
         </ul>
         <p className={styles.body}>{t("online.consent.never.markPrivate")}</p>
-        <p className={styles.body}>{t("journal.online.step5.privateNote")}</p>
       </div>
 
       <div className={styles.sec}>

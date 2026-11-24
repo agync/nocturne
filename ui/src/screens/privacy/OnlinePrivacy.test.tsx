@@ -85,7 +85,6 @@ describe("privacy with online answers", () => {
       "When you ask",
       "This computer’s internet address",
       "Your photos, recordings and documents",
-      "Anything you marked private",
       "Everything else you kept",
     ]) {
       expect(within(section).getByText(line)).toBeInTheDocument();

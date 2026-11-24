@@ -12,7 +12,7 @@ export function OnlineSection({ view }: { view: PrivacyView }) {
   if (!onlineKnown(view)) return null;
   const sees = [t("privacy.online.see1"), t("privacy.online.see2"), t("privacy.online.see3")];
   const seesAddress = t("privacy.online.see4");
-  const cant = [t("privacy.online.cant1"), t("privacy.online.cant2"), t("privacy.online.cant3")];
+  const cant = [t("privacy.online.cant1"), t("privacy.online.cant2")];
   return (
     <section aria-labelledby="online" className={styles.block}>
       <h2 id="online" className={styles.blockTitle}>

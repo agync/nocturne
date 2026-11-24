@@ -99,12 +99,12 @@ describe("setup", () => {
     await openOnline(SETUP, "off", STEP1);
     expect(
       screen.getByText(
-        "Your question and today’s date, with short lines from what you kept that help answer it, your journal entries, check-ins, good things and health readings included.",
+        "Your question and today’s date, with short lines from what you kept that help answer it, your journal entries, check-ins, good things, health readings and things you marked private included.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Your photos, recordings and documents themselves, your reflections and recaps, and anything you marked private.",
+        "Marking something private keeps it from coming up on its own, in reminders and notifications. It still helps answer what you ask.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -139,14 +139,16 @@ describe("setup", () => {
     );
     expect(labels).toEqual([
       "What is sent",
-      "Never sent",
+      "What stays here",
       "Who sees it",
       "What changes",
       "What it costs",
       "What you need",
     ]);
     expect(
-      inside.getByText(/Nocturne doesn’t guess what is private, so mark anything you never want/),
+      inside.getByText(
+        "Your photos, recordings and documents stay on this computer. A short line read from one can go when it helps. Things you let go never go. Your reflections and recaps are written and kept on this computer.",
+      ),
     ).toBeInTheDocument();
     expect(
       inside.getByText(
@@ -341,11 +343,11 @@ describe("setup", () => {
     expect(chipsIn(lead)).toEqual(["Settings", "Online answers"]);
   });
 
-  it("no_judging: no switch for health, money or ID; private things are never sent", async () => {
+  it("no_judging: no switch for health, money or ID, and private things are not held back", async () => {
     await toSend();
     expect(screen.queryByRole("switch", { name: /Health, money and ID/ })).toBeNull();
     expect(screen.queryByText(/health, money/i)).toBeNull();
-    expect(screen.getByText("Private things are never sent")).toBeInTheDocument();
+    expect(screen.queryByText(/Private things are never sent/)).toBeNull();
     expect(screen.queryByRole("switch", { name: /Private things/ })).toBeNull();
   });
 
@@ -458,13 +460,15 @@ describe("setup", () => {
     expect(text).toContain("llama-3.3-70b-instruct");
     expect(text).toContain("Questions on this computer");
     expect(text).toContain("This computer");
+    expect(text).toContain("What you kept, your journal included");
     expect(text).toContain("May be sent");
-    expect(text).toContain("Never sent");
+    expect(text).toContain("Reflections and recaps");
+    expect(text).not.toContain("Private things");
     expect(text).toContain("200 questions");
     expect(text).not.toMatch(/health, money/i);
     expect(
       screen.getByText(
-        "Nocturne doesn’t guess what is private. Mark anything you never want sent as private.",
+        "Marking something private keeps it from coming up on its own. It still helps answer what you ask.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/looks? like health, money or ID/)).toBeNull();
@@ -499,8 +503,10 @@ describe("setup", () => {
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((h) => h.textContent)
-      .filter((text) => ["Never sent", "What changes", "Changing your mind"].includes(text ?? ""));
-    expect(headings).toEqual(["Never sent", "What changes", "Changing your mind"]);
+      .filter((text) =>
+        ["What stays here", "What changes", "Changing your mind"].includes(text ?? ""),
+      );
+    expect(headings).toEqual(["What stays here", "What changes", "Changing your mind"]);
     const bar = document.querySelector<HTMLElement>("[data-action-bar]") as HTMLElement;
     expect(
       within(bar)
@@ -706,7 +712,7 @@ describe("setup", () => {
 });
 
 describe("the journal, said openly", () => {
-  it("step 1 says journal lines and check-ins can go and reflections and recaps never do", async () => {
+  it("step 1 says journal lines and check-ins can go, and what a private mark does", async () => {
     await openOnline(SETUP, "off", STEP1);
     await click("Everything that is sent, and what stays here");
     for (const line of [
@@ -715,19 +721,11 @@ describe("the journal, said openly", () => {
     ]) {
       expect(screen.getByText(line)).toBeInTheDocument();
     }
-    expect(
-      screen.getByText(
-        /Your reflections and recaps are never sent: they are written and kept on this computer\./,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Journal entries, check-ins and good things can’t be marked private, so while this is on/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/can’t be marked private/)).toBeNull();
+    expect(screen.queryByText(/never sent/i)).toBeNull();
   });
 
-  it("step 5 lists what is sent, never sent and the two new choices", async () => {
+  it("step 5 lists what is sent, what stays here and the journal choice", async () => {
     await toLimit();
     await click("Continue");
     await heading(STEP5);
@@ -736,20 +734,17 @@ describe("the journal, said openly", () => {
         /lines from your journal entries, check-ins, good things and health readings included\. Each with the day you kept it/,
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Things you let go")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Your reflections and recaps. They are written on this computer and stay here.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Journal entries, check-ins and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/can’t be marked private/)).toBeNull();
     const choices = screen.getByRole("complementary");
     const row = (label: string) => within(choices).getByText(label).closest("div") as HTMLElement;
     expect(
-      within(row("Journal entries, check-ins and good things")).getByText("May be sent"),
+      within(row("What you kept, your journal included")).getByText("May be sent"),
     ).toBeInTheDocument();
     expect(within(row("Reflections and recaps")).getByText("Never sent")).toBeInTheDocument();
   });

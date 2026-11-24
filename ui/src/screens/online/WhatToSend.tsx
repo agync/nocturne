@@ -1,7 +1,6 @@
 import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
-import { Icon } from "../../components/Icon/Icon";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { t } from "../../copy/t";
 import type { StepProps } from "./draft";
@@ -44,15 +43,6 @@ export function WhatToSend({ draft, phonesAvailable, setDraft, onBack, onNext }:
             />
           </li>
         ) : null}
-        <li className={styles.row}>
-          <span className={styles.lockNote}>
-            <Icon name="lock" size={18} />
-            <span className={styles.textStack}>
-              <span className={styles.name}>{t("online.send.private.label")}</span>
-              <span className={styles.sub}>{t("online.send.private.hint")}</span>
-            </span>
-          </span>
-        </li>
       </ul>
       <ActionBar line={t("online.bar.line")}>
         <Button variant="primary" onClick={onNext}>
