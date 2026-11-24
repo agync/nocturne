@@ -91,7 +91,9 @@ Readings are a new kind of thing kept, `reading`, on the tape beside notes and c
 - **Source and trust.** The source is "Health on {phone}" with the app or device Health names.
   Readings are trusted: they are the person's own.
 - **No memories.** Like a check-in, a reading yields no memories. It never enters what Nocturne
-  remembers, never fades, never reaches Ask, and never goes online ([decision H7](#decisions-for-the-owner)).
+  remembers and never fades. Ask reads it only through the `health` look-up and the date step, as
+  one line in the [wording](#wording) with its source, on every mind the person chose
+  ([decision H7](#decisions-for-the-owner), [Ask with tools](ask-with-tools.md)).
 - **Kept until deleted.** The tape is never let go, so readings stay until the person deletes them.
   This sits with the rule that health, allergy and medication memories are kept forever by default
   ([Concept](concept.md#the-forgetting-policy)): readings are not memories, so there is nothing to
@@ -413,7 +415,7 @@ shown in full where the person looks, and never anywhere that speaks or shows it
 | Print and export | Included |
 | Read aloud | Never |
 | Notifications, the tray, a phone's lock screen | Never |
-| Online answers | Never, because Ask does not use readings. If a later design lets Ask use them, the health, money and ID check keeps them back unless the person chose otherwise ([decision 0011](/adr/0011-online-answers.md)) |
+| Online answers | A reading may go with a question it helps answer, as one line in the [wording](#wording), like any other line Ask finds ([Ask with tools](ask-with-tools.md), [decision 0022](/adr/0022-ask-looks-things-up.md)) |
 | Marked private | Not offered, as for journal items |
 | Noticing | Worked out on this computer only |
 | Local only | Read on the phone, sent only to the person's own computer through the sealed channel. No health company is contacted by Nocturne |
@@ -500,7 +502,6 @@ Check each rule again at submission; store rules change.
 
 ## Out of scope
 
-- Ask answering from readings ([decision H7](#decisions-for-the-owner)).
 - The kinds left out above, including cycle tracking and medications, each of which needs its own
   design.
 - Writing to Health, goals, reminders and any notification.
@@ -519,5 +520,5 @@ The owner accepted every recommendation on 2026-11-21: the Recommendation column
 | H4 | What noticing may use | A: sleep, steps and workouts. B: also heart rate, resting heart rate and blood pressure | A stays with everyday things anyone can read. B can find more, but a sentence about blood pressure next to a journal topic reads like a medical finding | **A** |
 | H5 | How far back on first connecting | A: the last 30 days. B: A, plus "Also bring older readings", up to a year where the phone allows. C: from today | A is enough to show your usual within two weeks and is what Health Connect gives without an extra permission. B lets someone see a longer line, with one more permission and a larger first send. C starts empty | **B**, with 30 days as the default |
 | H6 | Health on the morning page | A: last night's sleep only. B: sleep and resting heart rate. C: nothing; health only in the journal | A gives the one number that matters to a morning, without turning the page into a dashboard. B adds a number most people cannot read. C keeps the page as it is but loses sleep beside the day ahead | **A** |
-| H7 | Ask and readings | A: Ask does not use readings in the first release. B: Ask answers from readings on this computer, kept back from online answers by the health check | A keeps answers about the body out until their wording is designed; the charts already answer "how did I sleep last week?". B is more useful but needs its own design for numbers in answers | **A** |
+| H7 | Ask and readings | A: Ask does not use readings in the first release. B: Ask answers from readings on this computer, kept back from online answers by the health check | A keeps answers about the body out until their wording is designed; the charts already answer "how did I sleep last week?". B is more useful but needs its own design for numbers in answers | **Changed 2026-11-24 (owner):** Ask answers from readings through the `health` look-up and the date step, on every mind the person chose, in the wording above, with no judgement ([Ask with tools](ask-with-tools.md)) |
 | H8 | Weight | A: offered, off by default, never on the page or in noticing. B: left out. C: on with the rest | A serves people who track it without putting it in front of anyone who did not ask. B is simplest. C shows a number many people find hard to see every day | **A** |
