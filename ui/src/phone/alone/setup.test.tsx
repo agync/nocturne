@@ -147,6 +147,11 @@ describe("Step 2, the service's list", () => {
     fireEvent.change(search, { target: { value: "small" } });
     expect(within(sheet).getAllByRole("radio")).toHaveLength(7);
     expect(sheet.querySelectorAll("mark")).toHaveLength(7);
+    // The marked part does not split the name a screen reader reads.
+    expect(within(sheet).getByRole("radio", { name: "reader-small" })).toHaveAttribute(
+      "aria-label",
+      "reader-small",
+    );
     expect(
       await within(sheet).findByText("7 of 214 have “small” in them.", {}, { timeout: 2000 }),
     ).toBeInTheDocument();
