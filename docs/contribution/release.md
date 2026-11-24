@@ -43,8 +43,8 @@ so that its events (the tag push) start the other workflows. The upload and publ
 App for a token limited to contents write; the workflow's own token is read-only there. The release workflow can also be run by hand. With
 `tag` set to an existing release tag (`vX.Y.Z`, with a release page) it builds that tag, signs when
 signing is on and attaches the files to its release; any other value fails. With `tag` empty it
-builds the chosen branch unsigned, runs no signing job and the helper workflow not at all, and
-keeps the files as workflow artifacts. A file already on a release is never replaced, so a failed
+builds the chosen branch unsigned, runs no signing job (unless `sign` is on: the macOS signing dry
+run, see below) and the helper workflow not at all, and keeps the files as workflow artifacts. A file already on a release is never replaced, so a failed
 upload is fixed by deleting the partial files by hand first.
 
 The tag is resolved to its commit once, at the start of the run. Every build, the helper workflow
@@ -152,9 +152,12 @@ set to `true`. When one is on, its signing job must succeed or nothing is attach
 | `MACOS_DEVELOPER_ID_CERTIFICATE` | `release-signing` | the Developer ID Application certificate, a base64 `.p12` | with `MACOS_SIGNING` on, the signing job fails |
 | `MACOS_DEVELOPER_ID_PASSWORD` | `release-signing` | the `.p12` password | as above |
 | `MACOS_DEVELOPER_ID_IDENTITY` | `release-signing` | the identity name, `Developer ID Application: <name> (<team>)` | as above |
-| `MACOS_NOTARY_APPLE_ID` | `release-signing` | the Apple ID that notarises | as above |
-| `MACOS_NOTARY_TEAM_ID` | `release-signing` | the team id | as above |
-| `MACOS_NOTARY_APP_PASSWORD` | `release-signing` | an app-specific password for that Apple ID | as above |
+| `MACOS_NOTARY_API_KEY` | `release-signing` | the App Store Connect API key, the base64 of its `.p8` file; the documented way to notarise | the job falls back to the Apple ID secrets below |
+| `MACOS_NOTARY_API_KEY_ID` | `release-signing` | the key's id | with the API key set, the job fails |
+| `MACOS_NOTARY_API_ISSUER_ID` | `release-signing` | the issuer id shown above the team keys | as above |
+| `MACOS_NOTARY_APPLE_ID` | `release-signing` | fallback: the Apple ID that notarises | with neither path set, the job fails |
+| `MACOS_NOTARY_TEAM_ID` | `release-signing` | fallback: the team id | as above |
+| `MACOS_NOTARY_APP_PASSWORD` | `release-signing` | fallback: an app-specific password for that Apple ID | as above |
 | `WINDOWS_CODE_SIGNING_CERTIFICATE` | `release-signing` | the code signing certificate, a base64 `.pfx` | with `WINDOWS_SIGNING` on, the signing job fails |
 | `WINDOWS_CODE_SIGNING_PASSWORD` | `release-signing` | the `.pfx` password | as above |
 
@@ -162,6 +165,43 @@ The GitHub App needs read and write access to contents (branches, tags, releases
 and to pull requests (the release pull request and its labels) on this repository. The helper
 workflow uses the same signing secrets, and its macOS and Windows jobs fail without them; its
 licence job also fails until `go_licenses_version` in `helpers.lock` is pinned.
+
+## Turning on macOS signing
+
+The workflow signs the app and the engine's executables inside out with the hardened runtime and a
+secure timestamp, notarises the app and then the disk image, staples both, and checks them with
+`spctl`. A rejected submission prints Apple's log in the job. The engine's executables carry the
+`disable-library-validation` entitlement (`src-tauri/macos/Engine.entitlements.plist`) so they can
+load the backend libraries they fetch later; the app carries only the microphone entitlement. None
+needs `allow-jit`. The app has no updater, so there is no updater key. Steps for the owner:
+
+1. On a Mac, open Keychain Access, then Certificate Assistant, Request a Certificate From a
+   Certificate Authority, and save the request to disk. In the Apple Developer account, under
+   Certificates, create a Developer ID Application certificate from it and install the download.
+2. In Keychain Access, export the certificate with its private key as a `.p12` with a password.
+   Encode it: `base64 -i cert.p12 | pbcopy`. The identity name is the certificate's common name,
+   `Developer ID Application: <name> (<team id>)`.
+3. In App Store Connect, under Users and Access, Integrations, Team Keys, create a key with the
+   Developer role. Download the `.p8` once, and note the key id and the issuer id. Encode it:
+   `base64 -i AuthKey_<id>.p8 | pbcopy`.
+4. In the repository settings, add these secrets to the `release-signing` environment:
+   `MACOS_DEVELOPER_ID_CERTIFICATE`, `MACOS_DEVELOPER_ID_PASSWORD`, `MACOS_DEVELOPER_ID_IDENTITY`,
+   `MACOS_NOTARY_API_KEY`, `MACOS_NOTARY_API_KEY_ID` and `MACOS_NOTARY_API_ISSUER_ID`.
+5. On that environment, add required reviewers, and let it deploy from `main` (a dry run is
+   started from `main`).
+6. Run the dry run: Actions, release, Run workflow, from `main`, with `tag` empty and `sign`
+   ticked. It builds, then waits for a reviewer to approve `sign-macos`, signs and notarises, runs
+   `check-macos` and keeps the signed image as the `desktop-macos-signed` artifact for 7 days. No
+   release is touched, and `MACOS_SIGNING` is not read.
+7. Download that artifact on a Mac and run
+   `spctl --assess --type open --context context:primary-signature -vv Nocturne_*.dmg`. It must say
+   `accepted` and `source=Notarized Developer ID`. Open the image, then run
+   `spctl --assess --type execute -vv` on the app inside, and open it once.
+8. Set the repository variable `MACOS_SIGNING` to `true`. From then on a release tag signs, and
+   publishing waits for `check-macos`.
+
+To notarise with an Apple ID instead, set `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID` and
+`MACOS_NOTARY_APP_PASSWORD` and leave the API key secrets unset.
 
 ## Checking a release
 
