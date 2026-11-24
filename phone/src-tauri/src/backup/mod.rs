@@ -1061,13 +1061,23 @@ impl PhoneBackup {
             cancel: &home.stop,
             check,
         };
-        let (result, carried) = match self.start_afresh(place.as_ref(), &key, &state) {
-            Ok(carried) => (
+        // Off with the backup kept, only a forget runs a night: the kept one without what was
+        // forgotten, so nothing kept since goes.
+        let (result, carried) = if !saved.on {
+            (
                 open.engine
-                    .back_up_night(place.as_ref(), &key, &mut state, &run),
-                carried,
-            ),
-            Err(e) => (Err(e), None),
+                    .forget_in_kept_backup(place.as_ref(), &key, &mut state, &run),
+                None,
+            )
+        } else {
+            match self.start_afresh(place.as_ref(), &key, &state) {
+                Ok(carried) => (
+                    open.engine
+                        .back_up_night(place.as_ref(), &key, &mut state, &run),
+                    carried,
+                ),
+                Err(e) => (Err(e), None),
+            }
         };
         let held = lock(&self.locking);
         let noted = self.note(state, result, saved.account, carried);

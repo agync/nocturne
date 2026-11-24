@@ -393,8 +393,12 @@ What happens to the copies:
 | Turn off, keep | The last seven nights stay exactly as they were. Nothing more is added or removed by nightly runs | The key stays in the phone's safe place, so turning it on again needs no steps |
 | Turn off, delete | Every index and piece Nocturne made is removed | The key is removed |
 
-Forgetting for good still reaches a kept backup while it is off: Nocturne keeps its access to the
-account for that, and for nothing else ([below](#forgetting-delete-everything-and-private)).
+Forgetting for good, or deleting a thing, a day or a recap, still reaches a kept backup while it
+is off, exactly as when it is on: a new index without it is written, and every older index that
+lists it is removed, with its pieces. Nothing else goes while it is off: the new index holds the
+newest night that was kept, without what was forgotten, and is dated as that night; what was kept
+or changed since stays on the phone. Nocturne keeps its access to the account for that, and for
+nothing else ([below](#forgetting-delete-everything-and-private)).
 
 ### A newer backup from another phone
 
@@ -629,7 +633,9 @@ on the day of the move, and the phone keeps its access only to delete it later f
   index; the next run sends only what is missing, then writes the index. A night is a backup only
   once its index is written and read back.
 - **Network.** With backup on, the phone reaches only the account's own hosts, and only while a
-  backup, a deletion or a restore runs. The release's network check gains this case.
+  backup, a deletion or a restore runs. With backup off, it reaches them only to remove what the
+  person asked to remove: a forget for good in a kept backup, or deleting the backup. The release's
+  network check gains this case.
 - **Wi-Fi only.** Honoured by nightly runs and by "Back up now"; "Back up now over mobile data" in
   This phone is the one way past it, once.
 - **One phone writes.** Before each night, the phone reads the newest index's phone number and

@@ -550,6 +550,92 @@ fn a_forget_reaches_the_backup_at_once() {
 }
 
 #[test]
+fn a_forget_while_backup_is_off_reaches_the_kept_nights_and_sends_nothing_new() {
+    let f = fixture();
+    let photo = keep_photo(&f.engine, &noise(300_000, 5), "receipt.jpg");
+    f.engine
+        .apply(
+            &photo,
+            vec![cand("Zed", Predicate::Knows, "x", "Zed knows x.")],
+        )
+        .unwrap();
+    keep(&f.engine, "The window needs a new latch.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &place, &key, &mut state).unwrap();
+    f.clock.set_str("2026-11-14T03:00:00Z");
+    night(&f.engine, &place, &key, &mut state).unwrap();
+    let newest = nightly::newest(&place, &key).unwrap().unwrap();
+
+    // Backup is turned off with the backup kept; things are kept after it.
+    f.clock.set_str("2026-11-15T09:00:00Z");
+    keep(&f.engine, "The plumber comes on Tuesday.");
+    keep_photo(&f.engine, &noise(2_000_000, 9), "new.jpg");
+    let memory = f.engine.memories(Default::default()).unwrap()[0].id.clone();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&memory), true)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+
+    let mut report = None;
+    run_with(false, |run| {
+        report = Some(
+            f.engine
+                .forget_in_kept_backup(&place, &key, &mut state, run)
+                .unwrap(),
+        );
+    });
+    let report = report.unwrap();
+    assert!(report.carried_forget);
+    assert_eq!(names(&place, "night-").len(), 1, "every older night went");
+    assert_eq!(
+        report.made_at, newest.made_at,
+        "dated as the night it holds"
+    );
+    assert_eq!((report.items, report.originals), (1, 0));
+    assert!(report.sent < 2_000_000, "the photo kept since never went");
+    assert!(!f.engine.forgot_since_night().unwrap());
+
+    let (out, summary, _) = restore(&place, &key).unwrap();
+    assert_eq!((summary.items, summary.originals), (1, 0));
+    let again = Engine::open(&out.path().join("stage/store"), f.clock.clone()).unwrap();
+    assert_eq!(again.find_items("latch", 5).unwrap().len(), 1);
+    assert!(
+        again.find_items("plumber", 5).unwrap().is_empty(),
+        "nothing kept while off went"
+    );
+    assert!(again.memories(Default::default()).unwrap().is_empty());
+    let held: std::collections::BTreeSet<String> = names(&place, "piece-").into_iter().collect();
+    assert!(
+        held.len() < 40,
+        "only the pieces the one night lists stay: {}",
+        held.len()
+    );
+}
+
+#[test]
+fn a_forget_with_no_night_kept_sends_nothing_and_clears() {
+    let f = fixture();
+    let id = keep(&f.engine, "Gone soon.");
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    f.engine.unkeep(&id).unwrap();
+    let mut state = NightState::new();
+    let mut out = None;
+    run_with(false, |run| {
+        out = Some(
+            f.engine
+                .forget_in_kept_backup(&place, &key, &mut state, run),
+        );
+    });
+    assert!(matches!(out.unwrap(), Err(NightError::NoBackup)));
+    assert!(names(&place, "night-").is_empty());
+    assert!(!f.engine.forgot_since_night().unwrap());
+}
+
+#[test]
 fn a_store_holding_only_the_mark_holds_nothing() {
     let f = fixture();
     let id = keep(&f.engine, "Gone soon.");

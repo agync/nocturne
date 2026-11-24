@@ -351,12 +351,37 @@ fn turning_off_keeps_the_backup_and_a_forget_still_reaches_it() {
     assert!(p.keys.key().is_some(), "the key stays for turning on again");
     assert!(!p.backup.pass(&p.home, true), "no nights while off");
     assert_eq!(nights(&place), 2);
+    let last = p.backup.status().last;
+    p.keep("Kept while backup is off.");
     p.home.open_store().unwrap().engine.unkeep(&id).unwrap();
     assert!(p.backup.pass(&p.home, false));
     assert_eq!(nights(&place), 1, "the forget reached the kept backup");
     assert_eq!(p.state(), BackupState::Off);
+    assert_eq!(
+        p.backup.status().last.map(|l| l.at),
+        last.map(|l| l.at),
+        "the backup kept is still the one from that day"
+    );
+    let other = phone(&place, true);
+    let opening = Opening::Phrase(PHRASE.into());
+    other
+        .backup
+        .restore(&other.home, false, &opening, None, &|_, _, _| {})
+        .unwrap();
+    let open = other.home.open_store().unwrap();
+    assert!(open.engine.find_items("forget", 5).unwrap().is_empty());
+    assert!(
+        open.engine.find_items("Kept while", 5).unwrap().is_empty(),
+        "nothing kept while off went"
+    );
+    assert_eq!(open.engine.find_items("keep", 5).unwrap().len(), 1);
+    drop(open);
     p.backup.turn_on_again().unwrap();
-    assert_eq!(p.state(), BackupState::UpToDate);
+    p.later(21);
+    assert!(
+        p.backup.pass(&p.home, true),
+        "on again, the nights carry on"
+    );
 }
 
 #[test]
