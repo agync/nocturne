@@ -7,7 +7,7 @@ import { Group, Row } from "../../native/screens/chrome";
 import { Switch, useHeading } from "../../native/screens/parts";
 import { APP_STORE, STORE } from "../../native/screens/UpdateCard";
 import { openAppSettings } from "../../native/sources";
-import { BottomSheet } from "../../screens/Dialog";
+import { BottomSheet, CentreDialog } from "../../screens/Dialog";
 import { BackBar, Button } from "../../screens/ui";
 import {
   type BackupApi,
@@ -459,8 +459,8 @@ export function NightlyBackup({
         </section>
       </main>
       {sheet === "off" ? (
-        <BottomSheet label={t("phone.backup.off.title")} onClose={() => setSheet(null)}>
-          <div className="ph-sheet-body ph-stack" style={{ gap: 14 }}>
+        <CentreDialog label={t("phone.backup.off.title")} onClose={() => setSheet(null)}>
+          <div className="ph-stack" style={{ gap: 14 }}>
             <h2 className="ph-h1 ph-h1--small">{t("phone.backup.off.title")}</h2>
             <p className="ph-body ph-ink2">
               {onPhone(ios, "phone.backup.off.body.ios", "phone.backup.off.body.android")}
@@ -495,7 +495,7 @@ export function NightlyBackup({
               {t("phone.backup.off.no")}
             </button>
           </div>
-        </BottomSheet>
+        </CentreDialog>
       ) : null}
       {sheet === "makeKey" ? (
         <Ask
@@ -537,7 +537,7 @@ export function NightlyBackup({
   );
 }
 
-/** A question in a sheet: its title, one line, and two answers. */
+/** A question in the middle of the screen: its title, one line, and two answers. */
 function Ask({
   title,
   body,
@@ -556,8 +556,8 @@ function Ask({
   onNo(): void;
 }) {
   return (
-    <BottomSheet label={title} onClose={onNo}>
-      <div className="ph-sheet-body ph-stack" style={{ gap: 14 }}>
+    <CentreDialog label={title} onClose={onNo}>
+      <div className="ph-stack" style={{ gap: 14 }}>
         <h2 className="ph-h1 ph-h1--small">{title}</h2>
         <p className="ph-body ph-ink2">{body}</p>
         {failed ? (
@@ -572,7 +572,7 @@ function Ask({
           {t("phone.backup.cancel")}
         </button>
       </div>
-    </BottomSheet>
+    </CentreDialog>
   );
 }
 

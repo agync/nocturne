@@ -1250,6 +1250,30 @@ body {
   box-shadow: 0 -12px 40px -12px rgba(23, 24, 28, 0.3);
 }
 
+.ph-scrim--dialog {
+  z-index: 40;
+}
+
+.ph-dialog {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 16px;
+  right: 16px;
+  margin: 0 auto;
+  max-width: 420px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  transform: translateY(-50%);
+  background: var(--sheet);
+  color: var(--ink);
+  border-radius: 18px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .ph-grip {
   align-self: center;
   width: 40px;
