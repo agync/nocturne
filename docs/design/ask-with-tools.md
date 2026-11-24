@@ -1,0 +1,610 @@
+---
+type: Design
+title: Ask with tools
+description: Proposal for answering questions the question's own words cannot find, such as "What's on tomorrow?", by giving every mind today's date and time zone, a built-in date step that fetches the calendar and journal for the days a question names, and read-only look-ups the mind may ask for, each returning only kept lines with their receipts, on a phone alone, a companion phone and the computer.
+status: draft
+tags: [proposal, ux, ask, online-answers, phone, calendar, receipts, copy]
+---
+
+# Ask with tools
+
+A person with a phone of its own and an online mind asked "What's on tomorrow?". Their calendar
+was on, and tomorrow's dentist and swimming were kept. Nocturne said "Nothing you've kept answers
+that."
+
+This page is the design for Ask answering questions like that one. When the question's own words
+are not enough, Ask lets the mind look things up in what the person kept: their calendar, their
+journal for given days, and a search with other words. It is implicit: nothing to turn on and
+nothing to set. The mind only reads, and every line it is given is a kept line with its receipt.
+
+Status: proposal. The flow below follows the owner's decision of 2026-11-24 (see Owner decisions).
+The open questions at the end need the owner before the build starts.
+
+## Mockups
+
+In `docs/design/mockups/ask-with-tools/`, with the kits of the other mockups. Names and data are
+fictional, and today is Tuesday 24 November 2026 in every view. Serve the repository root over HTTP
+after `make ui/install`. `?theme=light` or `?theme=dark`, `?state=` picks a view, and on the phone
+`?text=200` draws the phone's text at 200 per cent. On the computer, the 200 per cent renders are
+the window at 200 per cent zoom.
+
+| View | File and state | Renders |
+|---|---|---|
+| Phone: Ask while the mind looks through the calendar | `phone.html?state=looking` | `phone-looking-light.png`, `phone-looking-dark.png`, `phone-looking-200-light.png` |
+| Phone: the answer to "What's on tomorrow?" with its receipts | `phone.html?state=answer` | `phone-answer-light.png`, `phone-answer-dark.png`, `phone-answer-200-light.png` |
+| Phone: one question in What was sent, opened, in three parts ("Am I free for a haircut before Gran's lunch?": the words find one line, the mind looks through the calendar, then for other words, which find nothing) | `phone.html?state=sent` | `phone-sent-light.png`, `phone-sent-dark.png`, `phone-sent-200-light.png` |
+| Computer with Online answers: Ask while the mind looks through the journal | `desktop.html?state=looking` | `desktop-looking-light.png`, `desktop-looking-dark.png`, `desktop-looking-200-light.png` |
+| Computer with Online answers: the answer to "How was Leo's parents' evening?" | `desktop.html?state=answer` | `desktop-answer-light.png`, `desktop-answer-dark.png`, `desktop-answer-200-light.png` |
+| Computer: Sent online, one question in two parts | `desktop.html?state=sent` | `desktop-sent-light.png`, `desktop-sent-dark.png`, `desktop-sent-200-light.png` |
+
+A dashed outline marks what is new; it is not part of the design.
+
+## The problem
+
+Verified on `main` on 2026-11-24.
+
+- **Ask finds by the question's words.** `retrieve` (`crates/engine/src/retrieve.rs`) searches
+  stemmed words built by `fts_or` (`crates/engine/src/util.rs`). Stop words drop "what" and "on",
+  so "What's on tomorrow?" searches for "tomorrow" alone.
+- **Calendar entries do not say "tomorrow".** A calendar entry is kept as a memory such as
+  "Dentist is on Wednesday 25 November." with its day as `due` and `valid_from`
+  (`crates/engine/src/phones/calendar.rs`). No word of the question is in it.
+- **Nothing turns "tomorrow" into a day.** Ask has no step that maps a relative day to a date.
+- **The online mind does not know today's date.** Local answers end with "Today is Tuesday 24
+  November 2026."; online answers leave it out on purpose (`answer_user` in
+  `crates/mind/src/prompts.rs`), so even a found line cannot be placed as "tomorrow".
+- **A phone alone stops before asking.** With no lines found, the phone answers `Nothing` without
+  calling the provider (`phone/src-tauri/src/mind/ask.rs`).
+- **The computer has the same gap.** Its search adds meaning to words and reranks
+  (`src-tauri/src/ask.rs`), but "tomorrow" means no day to it either, and a companion phone's
+  questions go through the same path.
+
+The same holds for "What did I do last Tuesday?", "Anything this weekend?" and every question whose
+answer is found by its day rather than its words.
+
+## Owner decisions
+
+Made on 2026-11-24.
+
+| Question | Decision |
+|---|---|
+| What happens when the words alone are not enough | Ask falls back to the mind with read-only look-ups |
+| Does the person turn it on | No. It is implicit and transparent: no switch, no opt-in, nothing to set |
+| What may be sent | What a good answer needs. No new "never send" rules |
+| What the look-ups may do | Read only. No look-up writes, shares, schedules or deletes anything. Nocturne suggests; it never acts or decides |
+
+## The flow
+
+Every question takes the same first two steps, on the device that answers it.
+
+1. **Read the question for a time.** The [date step](#the-date-step) finds words such as
+   "tomorrow", "last Tuesday" or "this weekend" and turns them into days. No mind is involved.
+2. **Find by words**, exactly as today: stemmed words on a phone, words and meaning with reranking
+   on the computer.
+
+Then one of three paths:
+
+| The question | Words found | Path | Requests to the mind |
+|---|---|---|---|
+| Names a time | Anything | **Look-up path**, its first request already holding the date step's lines | 1, at most 4 |
+| Names no time | 3 lines or more | **Today's path**, with today's date and time zone added | 1 |
+| Names no time | Fewer than 3 lines | **Look-up path** | 1, at most 4 |
+
+- **The look-up path** is today's request plus the [look-ups](#the-look-ups) the mind may ask for.
+  The mind answers at once when the lines it was given are enough, which is the usual case: the
+  date step has already put tomorrow's calendar in front of it. When they are not, it asks for a
+  look-up, Nocturne runs it on the device and sends the lines back, and the mind answers.
+- **When the mind cannot use look-ups** (see [When the mind cannot look things up](#when-the-mind-cannot-look-things-up)),
+  the look-up path becomes the **date step path**: one request, with the date step's lines beside
+  the words' lines. This is the whole fallback, and it answers every example below but one.
+- **Nothing at all.** No lines from the words, no time named, and a mind that cannot look things
+  up: "Nothing you've kept answers that.", with no request, as today.
+
+```mermaid
+flowchart TD
+    Q[Question] --> D[Date step: does it name a time?]
+    D --> W[Find by words, as today]
+    W --> C{Time named, or fewer than 3 lines?}
+    C -- No --> T[Today's path + today's date: 1 request]
+    C -- Yes --> M{Mind can look things up?}
+    M -- Yes --> L[Look-up path: first request holds the date step's lines]
+    L --> A{Mind answers or asks?}
+    A -- Answers --> R[Checked: every line cited]
+    A -- Asks --> X[Look-up on the device, lines back] --> A
+    M -- No --> S{Any lines?}
+    S -- Yes --> DS[Date step path: 1 request] --> R
+    S -- No --> N[Nothing you've kept answers that]
+```
+
+### Why these thresholds
+
+- **A named time always takes the look-up path**, because a day is what the words miss.
+- **Fewer than 3 lines** is where today's answers turn into "Nothing" or "Not sure". At 3 or more,
+  the words found the subject, and offering look-ups would only add to each request.
+- **Offering look-ups costs nothing extra when they are not used**: the first request is today's,
+  with the look-up descriptions added. Extra requests happen only when the mind asks.
+
+## Today's date and time zone, in every answer
+
+Every answer request, on every mind and every path, ends its facts with one line before the
+question:
+
+> Today is Tuesday 24 November 2026, 21:40, in the time zone Europe/London. The week starts on
+> Monday.
+
+- **Where it comes from.** The answering device's own clock and time zone: the phone's for a phone
+  alone, the computer's for the computer and for a companion phone's questions. A day is the
+  person's day, by the [day boundary](journaling.md#what-a-day-is), so at 1:30 am "today" is still
+  the evening before, as everywhere else in Nocturne.
+- **Why the time and the zone.** "Anything this evening?" needs the time. A calendar entry made in
+  another zone, or a person travelling, needs the zone to place "tomorrow".
+- **Online too.** Online answers and the phone's online mind send it, as a good answer needs it.
+  This reverses the choice in `answer_user` to leave the date out of online answers. The setup
+  words that say what is sent gain it (see [Copy](#copy)).
+- **Local answers** already have the date; they gain the time, the zone and the first day of the
+  week. The test that keeps local answers byte for byte changes with them.
+
+## The date step
+
+A small, fixed reading of the question, in English (the only language Nocturne speaks today),
+on the answering device. It never guesses: words not in this table are not a time.
+
+| The question says | The days |
+|---|---|
+| today, tonight, this morning, this afternoon, this evening | Today |
+| tomorrow (morning, evening and so on) | Tomorrow |
+| the day after tomorrow | Today plus 2 |
+| yesterday, last night | Yesterday |
+| A weekday alone, or "on Tuesday" | The next one from today, today included. In the past tense (did, was, were, went, had, said, saw, met, slept), the last one before today |
+| last Tuesday | The last Tuesday before today |
+| next Tuesday | The first Tuesday after today |
+| this week | Monday to Sunday of this week; in the past tense Monday to today, in the future tense today to Sunday |
+| next week, last week | That Monday to Sunday |
+| this weekend, at the weekend | The coming Saturday and Sunday, or this one on a Saturday or Sunday |
+| next weekend, last weekend | That Saturday and Sunday |
+| this month, next month, last month | That calendar month; this month in the past tense runs to today |
+| A date: 25 November, 25th November, November 25, the 25th | That day, the nearest one to today within six months |
+| recently, lately, these last few days | The 7 days to today |
+| the next few days, the coming days | Today and the 3 days after |
+
+- **The week** starts on the device's own first day of the week, Monday by default.
+- **What it fetches** for those days: the calendar look-up, and for days up to today the journal
+  look-up, each with its own limit. With the [health decision](#open-questions) taken as B, a
+  question that also names sleep, slept, steps, walked, heart, blood pressure, workout, ran or
+  weight fetches that kind of reading for those days too.
+- **Its lines join the words' lines**, never replace them: the first request holds the words' lines
+  as today (up to 12 on a phone, 8 after the computer reranks) and up to 12 lines from the date
+  step, one copy of each. On the computer's smallest size, when a time is named, the first
+  request holds at most 12 lines: the words' first 6 and the date step's first 6.
+- **With no mind, or a paused one,** a phone alone still runs the date step: its lines join what
+  Ask finds by words, so "What's on tomorrow?" lists tomorrow's appointments even then.
+
+## The look-ups
+
+Read-only functions on the answering device. Each returns only lines the person kept, in the same
+form as the facts the mind already gets, each with its receipt behind it. Their names are plain
+words because they appear in "See what was sent".
+
+| Look-up | Inputs | Returns | Limit |
+|---|---|---|---|
+| `calendar` | `from`, `to`: days as YYYY-MM-DD, both included, at most 62 days apart | Appointments from the phone's calendar, and anything kept with a day in that range (a letter's appointment, a renewal date, bin day), in order of day and time | 20 lines |
+| `journal` | `from`, `to`: days, at most 14 days apart, none after today | What the person kept and wrote on those days: journal entries, good things, and what was read from the notes, photos, voice notes and documents kept that day | 20 lines |
+| `search` | `words`: 1 to 8 words | Ask's own finding with other words: stemmed words on a phone, words and meaning on the computer | 12 lines |
+| `health` | `kind` (sleep, steps, resting heart rate, heart rate, blood pressure, workouts, weight when on), `from`, `to`: at most 31 days | One line per night, day or reading, in the [health wording](phone-health.md#wording), with its source | 31 lines. Only with the [health decision](#open-questions) taken as B, and only kinds that have readings |
+
+There is no "today" look-up: every request already carries today's date. There is no "recent"
+look-up: `journal` with a range answers "lately", and `search` answers "the last thing about".
+
+### What a look-up returns
+
+- **Lines, numbered on from the facts**, in the facts' own form, inside the same fence that marks
+  them as data:
+
+  ```
+  [m4] Dentist is on Wednesday 25 November at 10:30, at Smile Dental. (on Wednesday 25 November; learned Saturday 21 November)
+  [m5] Leo's swimming is on Wednesday 25 November at 17:00, at the leisure centre. (on Wednesday 25 November; learned Saturday 21 November)
+  ```
+
+- **More than the limit:** the first lines in order, then "And 6 more. Ask for fewer days to see
+  them."
+- **Nothing:** "Nothing kept for these days." or "Nothing kept with these words."
+- **A wrong input** (a date that is not one, a range too long, an unknown look-up): one plain line
+  saying what is allowed, such as "Give days as YYYY-MM-DD, at most 62 days apart." It counts as a
+  look-up.
+- **Never returned:** anything the person let go or is forgetting, anything superseded, and what
+  Ask does not search today (check-ins, reflections and recaps). Each look-up runs the same checks
+  Ask's lines run today on that device: `mind_may_read` on a phone alone, the lane's filter for a
+  companion phone (memories only, no lines of an original). A line already handed in this
+  question is not handed again.
+- **Private** is handled exactly as Ask handles it: a private mark decides what comes up on its own,
+  not what answers a question the person asked ([What private means](only-marked-private.md)).
+
+### Limits
+
+| Limit | Value |
+|---|---|
+| Rounds of look-ups per question | 3 |
+| Requests to the mind per question | At most 4. The fourth offers no look-ups and says "Answer now from the lines you have." |
+| Look-ups in one round | At most 4; any more are answered "Not looked up: too many at once." |
+| Look-ups per question | At most 8 |
+| Lines in the first request | At most 24 (12 on the computer's smallest size) |
+| Lines in the whole question | At most 60. Past that, a look-up returns "No more lines for this question. Answer from what you have." |
+| One look-up on the device | 2 seconds, else "That couldn't be looked up just now." |
+| One request | As today: 60 seconds on a phone, 20 seconds for Online answers |
+| The whole question | 90 seconds on a phone, 40 seconds for Online answers; then the [fallback](#when-something-fails) |
+
+A round whose look-ups all came back empty, in a question that has no lines at all, ends the
+question as "Nothing you've kept answers that." without another request: the mind has nothing it
+could cite.
+
+## Receipts
+
+Receipts or it did not happen, unchanged:
+
+1. **Every line the mind is given is a kept line** with its receipt behind it. A look-up's lines
+   are no different from the facts found by words.
+2. **Every claim cites a line** as `[mN]`. A citation is checked against every line handed in this
+   question, in any request, before the answer shows.
+3. **An answer that cites nothing is not sure.** The answer is not shown; the nearest 2 lines show
+   with their receipts, the date step's lines first, as "Not sure" does today.
+4. **A citation of a line that was never handed** fails the check as today; the answer shows as not
+   sure.
+5. **What a look-up was asked for is never a receipt.** The mind asking for Wednesday's calendar is
+   not evidence of anything; only the lines that came back are.
+6. **"That's wrong", "Keep forever" and "Delete this…"** act on the memories the answer cited,
+   wherever in the question they came from. Cited memories are marked as used, as today.
+7. **Relative words with the date.** The answer instructions gain one rule: "When you say today,
+   tomorrow or a weekday, also give the date as the fact writes it." So "tomorrow" is always
+   checkable against its receipt.
+
+## When the mind cannot look things up
+
+The fallback for a mind that does not take look-ups, or whose look-ups fail, is the
+[date step path](#the-flow): one request with the date step's lines. Ask never gets worse than
+today: the words' lines are always in the first request, and the date step only adds.
+
+### Found out once, at the check
+
+- **The connection check gains a second request** after the word reply it sends today: a fixed
+  question with no personal data, "What is on 1 January 2030?", with the `calendar` look-up offered.
+  The mind passes when it asks for `calendar` with both days as 2030-01-01, in the expected form.
+- **Remembered** with the address and the name to use: takes look-ups, or does not. It is checked
+  again when the address, the key or the name to use changes, and at every "Check again".
+- **Not counted** against the monthly limit, like the check itself. It is listed in Sent online as
+  part of the "Connection check".
+- **Not shown** in the interface. The advanced details view for Online answers and for the phone's
+  mind gains one row: "Tool calls: supported" or "Tool calls: not supported", with the day it was
+  checked.
+
+### Learned in use
+
+- **For people set up before this ships,** nothing is known until the first look-up question:
+  look-ups are offered once. A refusal that names them (a 400 or 422), or a reply that is not a
+  well-formed answer or look-up, is answered at once by the date step path with the same lines,
+  and the mind is remembered as not taking look-ups until the next check. This is the pattern the
+  phone already uses when a provider refuses a reply shape.
+- **Two questions in a row with only broken look-ups** (unknown names, inputs that do not read)
+  mark the mind as not taking look-ups until the next check.
+
+### When something fails
+
+| What fails | What happens |
+|---|---|
+| A look-up on the device | The mind gets "That couldn't be looked up just now." and goes on |
+| The provider refuses look-ups | The date step path at once, with the lines already found; remembered |
+| The provider fails mid-question (no answer, server error, slow) | As today for that provider. Online answers on the computer: answered on this computer, by the date step path, with today's reason. A phone alone: "No answer came this time. Ask again in a moment." |
+| The whole question passes its time limit | The same as the provider being slow |
+| The key is refused, no credit, the limit reached | As today: Online answers pauses, or the phone's state shows and Ask finds by words, now with the date step's lines |
+
+## What the person sees
+
+The Ask states stay as they are: thinking, the answer with its receipts, not sure, nothing found.
+Two things change.
+
+### A line while the mind looks
+
+While a look-up round is under way, the line that says Ask is working names where it is looking,
+then goes back. It shows from when the mind asks until the next reply begins, which is the wait a
+person notices.
+
+| Round asks for | Line |
+|---|---|
+| The calendar | Looking through your calendar… |
+| The journal | Looking through your journal… |
+| Other words | Looking for other words… |
+| Health readings | Looking through your health readings… |
+| More than one of these | Looking in a few places… |
+
+- On the computer it replaces "Reading them…" under "Found 3 things you kept about this"; the count
+  grows as lines come back. On a phone it replaces "Answering from what you kept…".
+- It is announced to screen readers once per round, politely.
+- A companion phone keeps "Answering from what you kept…": the computer answers its question whole
+  and sends no steps (see [Parity](#parity)).
+
+### What was sent
+
+Each question is still one entry, however many requests it took. Each request in it is a part.
+
+- **On a phone alone**, the row stays "Answered a question", with "{time} · {host} · {size}" and,
+  when there was more than one part, "· {count} parts". "Exactly what was sent" lists the parts:
+  - **Part 1**: the words as they left, as today, now with today's date line.
+  - **Each later part**: "Your provider asked to look through your calendar for Wednesday 25
+    November." then "Sent back:" and the lines, as they left.
+  - Under the parts: "Each part sent the parts before it again, so your provider could follow on.
+    The size counts every part."
+- **On the computer**, Sent online's entry for the question keeps its fields; Size sums every part,
+  Cost sums every part the provider priced, and a new field "Parts" says "2: your provider looked
+  once". "Exactly what was sent" lists the parts as on the phone, each line with where it came
+  from, as today.
+- **"Show Nocturne's standard instructions"** now also shows the look-up descriptions, which are the
+  same for every question.
+- **Forgetting** removes a line's words from every part it was in, as it does today.
+- **A question that ended with nothing found** after a look-up shows "Nothing you kept answered it"
+  as its result.
+
+## Cost and latency
+
+| Question | Requests | Wait, roughly |
+|---|---|---|
+| Names no time, words found 3 or more lines | 1, as today | As today |
+| Names a time; the date step's lines answer it (the usual case) | 1 | As today, plus the look-up descriptions to read |
+| The mind looks once | 2 | About twice today's |
+| Worst case | 4 | Capped at 90 seconds on a phone, 40 for Online answers |
+
+- **Each later part resends the parts before it**, so a question in 4 parts sends about 4 times the
+  words of the first. The cap of 60 lines keeps the largest question near 6,000 words in all.
+- **The look-up descriptions** add about 300 words to every look-up path request.
+- **The monthly limit counts questions, not parts.** A limit set as a number counts one per
+  question, however many parts; the phone's "things read and answered" counts one. A limit set as
+  an amount adds the cost of every part, as the provider reports it. A question that started under
+  the limit may finish its parts; the next one waits. See [open question 3](#open-questions).
+- **The network check** for Online answers changes from "at most once per question" to "at most 4
+  times per question", and the stand-in provider's record must match Sent online part for part.
+- **Nothing is looked up for the overnight tidy, reading, the page or reflections.** Only Ask holds
+  the look-ups.
+
+## Parity
+
+| Where | Today's date and zone | Date step | Look-ups | Line while looking |
+|---|---|---|---|---|
+| A phone alone, with an online mind | The phone's, sent with every question | Yes | Yes, when the mind takes them | Yes |
+| A phone alone, no mind, or paused, unreachable, out of credit | Nothing is asked | Its lines join what Ask finds by words | No | No |
+| A companion phone (the computer answers) | The computer's | The computer's | As the computer | No: "Answering from what you kept…" as today |
+| The computer, its own mind | The computer's | Yes | Only for a size that passed the [look-up check](#checks-before-it-ships) ([open question 2](#open-questions)); otherwise the date step path | Yes, when it looks |
+| The computer, Online answers | The computer's, sent | Yes | Yes, when the engine passes look-ups on and the provider takes them | Yes |
+| A phone that borrows a household's mind | The phone's | Yes, on the phone | No: the household computer writes from the lines the phone sends and cannot read the phone's memory | No |
+
+The companion phone gets no steps because its question travels to the computer as one call and the
+answer comes back whole. A later change could carry the line over Away from home; it is not needed
+for the answer to be right.
+
+## Examples
+
+Today is Tuesday 24 November 2026, 21:40, Europe/London. A phone alone with an online mind that
+takes look-ups. Bold is the answer's own bold span; each `[mN]` becomes the receipt under it.
+
+### "What's on tomorrow?"
+
+- Date step: tomorrow, Wednesday 25 November. Words: "tomorrow", nothing found.
+- Look-up path. The first request holds `calendar` for 25 November: 3 lines.
+- One request; the mind answers without looking further.
+
+> Tomorrow, Wednesday 25 November, you have **the dentist at 10:30** at Smile Dental [m1] and
+> **Leo's swimming at 17:00** at the leisure centre [m2]. **The bins go out** on Wednesday night [m3].
+
+Receipts: the two calendar entries ("Calendar · Pixel 9"), and the note "Bins Weds night from now
+on" kept on 2 November. With a mind that does not take look-ups: the same answer, by the date step
+path, in one request.
+
+### "What did I do last Tuesday?"
+
+- Date step: last Tuesday, 17 November. Words: nothing useful.
+- Look-up path. The first request holds `journal` and `calendar` for 17 November: 4 lines.
+- One request.
+
+> On Tuesday 17 November you **took Gran to the garden centre** [m1] and went to **parents' evening
+> at 18:00** [m2]. Your good thing that day: **Leo read a whole chapter on his own** [m3].
+
+Receipts: the journal entry of 17 November, the calendar entry, the good thing.
+
+### "When is the dentist?"
+
+- Date step: no time. Words: "dentist", 2 lines (the calendar entry and a letter's photo).
+- Fewer than 3 lines: look-up path, with look-ups offered. The mind answers at once.
+- One request.
+
+> That's tomorrow, **Wednesday 25 November at 10:30**, at Smile Dental [m1].
+
+Receipts: the calendar entry, and the photo of the letter if the mind cited it. Today's date is what
+lets the mind pick the coming appointment over last spring's.
+
+### "Anything this weekend?"
+
+- Date step: this weekend, Saturday 28 and Sunday 29 November. Words: nothing.
+- Look-up path. The first request holds `calendar` for 28 to 29 November: 2 lines.
+- One request.
+
+> On Saturday 28 November, **Leo's football at 09:30** [m1]. On Sunday 29 November, **Gran's
+> birthday lunch at 13:00** at The Swan [m2].
+
+### "How was Leo's parents' evening?" (the mind looks once)
+
+On the computer with Online answers, in the mockups.
+
+- Date step: no time. Words: "Leo", "parents", "evening", 1 line: the calendar entry for Tuesday
+  17 November at 18:00.
+- Fewer than 3 lines: look-up path. The mind sees the day in that line and asks `journal` for 17
+  November: 2 lines come back. "Looking through your journal…" shows meanwhile.
+- Two requests.
+
+> Parents' evening was on **Tuesday 17 November at 18:00** [m1]. That day you wrote that **Mrs
+> Patel said Leo's reading has come on a lot** [m2], and your good thing was that **Leo read a whole
+> chapter on his own** [m3].
+
+With a mind that cannot look things up, the date step finds no time in the question, so only the
+calendar line goes: "Parents' evening was on Tuesday 17 November at 18:00.", as today.
+
+### "How did I sleep this week?"
+
+- Date step: this week, past tense, Monday 23 to today. Words: "sleep", 1 line from a journal
+  entry.
+- With the [health decision](#open-questions) taken as B: the first request also holds
+  `health` sleep for 23 to 24 November, 2 lines. One request.
+
+  > The night to Monday 23 November, **6 h 40 min asleep** [m1]. The night to Tuesday 24 November,
+  > **7 h 55 min asleep** [m2]. On Monday you wrote that **Leo had a nightmare** [m3].
+
+  The look-up's lines read "Night to Monday 23 November: 6 h 40 min asleep (Health on Pixel 9)."
+
+  Receipts: the two nights from Health on the phone, and the journal entry. No comparison with a
+  norm and nothing about what the numbers mean, as the health wording requires.
+
+- With H7 as decided today (Ask does not use readings): only the journal line.
+
+  > On Monday 23 November you wrote that you **slept badly because Leo had a nightmare** [m1].
+
+### A question with nothing kept: "When is the car's MOT?"
+
+- Date step: no time. Words: "car", "MOT", nothing found.
+- Look-up path with no lines. The mind asks `search` for "MOT garage car service".
+- Nothing comes back, and the question has no lines: it ends without another request.
+- One request. "Nothing you've kept answers that.", with "Keep a photo now", as today. Sent online
+  lists the question in 1 part, with "Nothing you kept answered it".
+
+With a mind that does not take look-ups, nothing is sent at all, as today.
+
+## Copy
+
+New and changed strings for the en-GB copy deck. `{count}`, `{host}`, `{size}`, `{days}` as named.
+
+### Ask
+
+| Key | Words |
+|---|---|
+| `ask.looking.calendar`, new | Looking through your calendar… |
+| `ask.looking.journal`, new | Looking through your journal… |
+| `ask.looking.search`, new | Looking for other words… |
+| `ask.looking.health`, new | Looking through your health readings… |
+| `ask.looking.several`, new | Looking in a few places… |
+| `phone.ask.looking.*`, new | The same five, for the phone |
+
+### What was sent, on a phone alone
+
+| Key | Words |
+|---|---|
+| `phone.mind.sent.parts`, new | {time} · {host} · {size} · {count} parts |
+| `phone.mind.sent.part`, new | Part {n} |
+| `phone.mind.sent.asked.calendar`, new | Your provider asked to look through your calendar for {days}. |
+| `phone.mind.sent.asked.journal`, new | Your provider asked to look through your journal for {days}. |
+| `phone.mind.sent.asked.search`, new | Your provider asked to look for “{words}”. |
+| `phone.mind.sent.asked.health`, new | Your provider asked to look through your {kind} for {days}. |
+| `phone.mind.sent.back`, new | Sent back: |
+| `phone.mind.sent.backNothing`, new | Sent back: nothing kept. |
+| `phone.mind.sent.resent`, new | Each part sent the parts before it again, so your provider could follow on. The size counts every part. |
+| `phone.mind.sent.nothing`, new | Nothing you kept answered it |
+
+`{days}` is "Wednesday 25 November", or "Saturday 28 to Sunday 29 November".
+
+### Sent online, on the computer
+
+| Key | Words |
+|---|---|
+| `sent.field.parts`, new | Parts |
+| `sent.parts`, new | {count}: your provider looked {looks, plural, one {once} other {# times}} |
+| `sent.part`, new | Part {n} |
+| `sent.asked.*`, new | As the phone's `phone.mind.sent.asked.*` |
+| `sent.back`, new | Sent back: |
+| `sent.back.nothing`, new | Sent back: nothing kept. |
+| `sent.resent`, new | Each part sent the parts before it again, so your provider could follow on. Size and cost count every part. |
+| `sent.result.nothing`, new | Nothing you kept answered it |
+| `sent.row.nothing`, new | {time} · {size} · nothing found |
+
+### What is sent, in setup and settings
+
+| Key | Before | After |
+|---|---|---|
+| `online.explain.short.sent.body` | Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included. | Your question and today's date, with short lines from what you kept that help answer it, your journal entries and good things included. |
+| `phone.mind.agree.sent` | …Each question, with the lines that answer it. Each night, the lines your page is written from. For example: | …Each question with today's date, and the lines that answer it. Each night, the lines your page is written from. For example: |
+| `phone.mind.what.sent` | …And your questions, with what answers them. | …And your questions, with today's date and what answers them. |
+
+If the 2026-11-23 private change lands first, its wording of `online.explain.short.sent.body` is
+the "before", and only "and today's date" is added to it. "A few" goes because a question that
+looks things up can send more than a few lines.
+
+### Advanced details
+
+| Key | Words |
+|---|---|
+| `advanced.online.tools`, new | Tool calls |
+| `advanced.online.tools.yes`, new | Supported · checked {day} |
+| `advanced.online.tools.no`, new | Not supported · checked {day} |
+| `advanced.online.tools.unknown`, new | Not checked yet |
+
+These are in the advanced details view, where technical words are allowed.
+
+## Rules
+
+1. **Read only.** A look-up reads the person's own store on the answering device. None writes,
+   keeps, corrects, forgets, shares, schedules, reminds or sends anything, and none reaches the
+   network.
+2. **Only kept lines.** A look-up returns lines the person kept, in the facts' own form, each with
+   its receipts. It never returns a summary, a count the mind could cite without a line, or
+   anything from outside the store.
+3. **No new reach.** A look-up returns nothing Ask could not already return on that device: the same
+   filters, the same scope, the same handling of private.
+4. **Receipts.** Every claim cites a line handed in this question, and is checked before it shows.
+5. **Never worse than today.** The words' lines are in the first request, the date step only adds,
+   and every failure ends at today's behaviour for that device.
+6. **Implicit.** No switch, no setting, no prompt. The line while looking and Sent online say what
+   happened.
+7. **Bounded.** At most 4 requests, 8 look-ups and 60 lines per question, within a time cap.
+8. **No jargon.** The interface says "looking through your calendar", never tool, function, call or
+   model. "Tool calls" appears only in advanced details.
+
+## Checks before it ships
+
+| Check | Pass |
+|---|---|
+| The examples | Each example above gives its answer and receipts, in the number of requests shown, against the stand-in provider with a scripted mind that takes look-ups, and again with one that does not |
+| Never worse | The existing Ask questions (Evaluation, memory quality) answer at least as well, question by question, with look-ups on as off |
+| The date step | A table test of every phrase above, at a week's turn, a month's turn, a year's turn, after midnight before the day boundary, and in a zone ahead of and behind the device's |
+| Bounded | A scripted mind that always asks for more stops at 4 requests and 8 look-ups, inside the time cap, and the fourth request offers no look-ups |
+| Read only | Every look-up runs on a read-only connection to the store; a test asserts the store is byte for byte the same after a question that used every look-up |
+| Not given | A look-up never returns a let-go, forgotten or superseded memory, a check-in, a reflection or a recap, or, for a companion phone, a line of an original |
+| Sent online | The stand-in's record matches Sent online part for part, on the phone and the computer |
+| The engine passes look-ups on | For Online answers on the computer: the pinned `lemond` passes the look-up descriptions to the provider and the provider's look-up requests back. Until it does, Online answers uses the date step path |
+| The look-up check, per size | For the computer's own mind, as the [help check](in-app-help.md#blending-on-small-computers-a-gate-for-each-size) does: the examples and 20 more questions, three runs each, on a size's preset models. A size passes when every answer is right and cited, it never asks for more than 2 look-ups where 0 were needed, and the first useful sentence stays under 6 seconds at the 95th percentile. A size that fails uses the date step path |
+
+The look-up check joins [Evaluation](evaluation.md) with the build.
+
+## Not changed
+
+- How the words find lines, how answers are written, marked and cited, and the Ask screens' layout.
+- What Ask searches: check-ins, reflections and recaps stay out.
+- The guide and help answers, which are always written on the computer and never look things up.
+- Reading, the overnight tidy, the page and reflections.
+- The monthly limit's settings, and how a paused, unreachable or refused provider is shown.
+
+## Considered and not chosen
+
+- **A switch for it.** The owner chose implicit and transparent.
+- **Look-ups on every question.** More requests and slower answers where the words already found
+  the subject, for no better answer.
+- **Only the date step, no look-ups.** It answers the five dated examples, but not "When is the
+  physio?" kept as "GP referral for my knee", or a question that needs a second look.
+- **Rewriting the question into dates before searching** (for example, searching "Wednesday 25
+  November"). It finds calendar memories by their wording only, and misses dated memories whose
+  sentence names no date.
+- **A "today" look-up.** The date is in every request, so a look-up for it would cost a round.
+- **One row per request in Sent online.** Accurate, but a person thinks in questions; one entry
+  with its parts says the same and keeps the list readable.
+
+## Open questions
+
+| # | Question | Options | Trade-offs | Recommendation |
+|---|---|---|---|---|
+| 1 | Health readings in Ask ([H7](phone-health.md#decisions-for-the-owner) today says no) | **A**: keep readings out of Ask. **B**: the `health` look-up and the date step's health lines, on every mind the person chose, in the health wording. **C**: B on the computer's own mind only | A keeps H7 and "How did I sleep this week?" answers only from journal words; the charts still show it. B answers it with receipts to each night, and an online mind gets the nights it needs, as the owner's rule for online answers says. C splits answers by where they are written, which a person cannot see | **B**, with the health wording rules in the answer instructions |
+| 2 | Look-ups on the computer's own mind | **A**: date step path only. **B**: look-ups for each size that passes the look-up check, date step path for the rest. **C**: look-ups on every size now | A is predictable and fast, and answers every dated example. B adds look-ups where a size has shown it uses them well, as help does. C risks small minds asking for look-ups they do not need, each a wait | **B**; until a size passes, it is A |
+| 3 | How a question with several parts counts against the monthly limit | **A**: one per question; an amount limit adds every part's cost. **B**: every part counts as one | A matches how the limit is worded ("questions", "things read and answered") and how a person thinks; the amount limit stays exact. B can pause a person sooner than they expect, by rules they cannot see | **A** |
+| 4 | The line while the mind looks | **A**: name the place, as in [A line while the mind looks](#a-line-while-the-mind-looks). **B**: one line, "Looking a little further…". **C**: no change | A says why the answer takes longer and what is being read, in plain words. B is simpler but tells less. C leaves a longer wait unexplained | **A** |
+| 5 | Check-ins in the `journal` look-up | **A**: out, as Ask has them out today. **B**: in, so "How was I last week?" can answer from feelings | A changes nothing about what Ask reads. B answers a real question but changes Ask's scope, which deserves its own design of how feelings are worded in an answer | **A** now; B as its own design |

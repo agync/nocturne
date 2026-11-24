@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask with tools · computer · Nocturne</title>
+<link rel="stylesheet" href="ask.css">
+</head>
+<body data-frame="app" data-section="none" data-states="looking answer sent">
+<div id="content" class="sheet">
+
+  <!-- Ask: the question while the mind looks through the journal -->
+  <div class="askCol" data-state="looking answer">
+    <span class="link2" style="font-size: 0.875rem; color: var(--ink2)">← Today</span>
+    <p class="markLine" data-state="answer">Answered online by your provider (answers.example) from 3 things you kept · <span style="color: var(--accent)">See what was sent</span></p>
+    <div class="asked">
+      <p class="eyebrow">You asked</p>
+      <h1 class="askedQ">“How was Leo’s parents’ evening?”</h1>
+    </div>
+    <p class="found" data-state="looking">Found 1 thing you kept about this</p>
+    <div class="working new" data-state="looking" role="status"><span class="spin"></span><span>Looking through your journal…</span></div>
+
+    <p class="answerText" data-state="answer">Parents’ evening was on <span class="span">Tuesday 17 November at 18:00</span>. That day you wrote that <span class="span">Mrs Patel said Leo’s reading has come on a lot</span>, and your good thing was that <span class="span">Leo read a whole chapter on his own</span>.</p>
+    <div class="rcptGrid" data-state="answer">
+      <div class="rcpt"><span data-icon="calendar" data-size="20"></span><span><span class="rcptTitle">Parents’ evening</span><span class="rcptSaid">Tuesday 17 November, 18:00 · School hall</span><span class="rcptMeta">Calendar · Pixel 9</span></span></div>
+      <div class="rcpt"><span data-icon="book" data-size="20"></span><span><span class="rcptTitle">Journal, Tuesday 17 November</span><span class="rcptSaid">“Mrs Patel says his reading has come on a lot…”</span><span class="rcptMeta">Entry · Tue 17 Nov</span></span></div>
+      <div class="rcpt"><span data-icon="sun" data-size="20"></span><span><span class="rcptTitle">Good thing</span><span class="rcptSaid">“Leo read a whole chapter on his own”</span><span class="rcptMeta">Good thing · Tue 17 Nov</span></span></div>
+    </div>
+    <div class="buttons" data-state="answer"><span class="button" data-variant="secondary">That’s wrong</span><span class="button" data-variant="secondary">Keep forever</span><span class="button" data-variant="quiet">Delete this…</span></div>
+  </div>
+
+  <!-- Sent online: one question in two parts -->
+  <div data-state="sent" style="display: flex; flex-direction: column; gap: 18px">
+    <span class="link2" style="font-size: 0.875rem; color: var(--ink2)">← Online answers</span>
+    <h1 class="t-page-title">Sent online</h1>
+    <p class="plead">Every question Nocturne sent for online answers, word for word as it left this computer. Kept for 90 days.</p>
+    <div class="sentSplit">
+      <nav class="sentList" aria-label="Sent by day">
+        <span class="day">Today</span>
+        <span class="item" aria-current="true">How was Leo’s parents’ evening?<small class="new">21:40 · 6.2 KB · answered · 2 parts</small></span>
+        <span class="item">When is the dentist?<small>18:02 · 1.9 KB · answered</small></span>
+        <span class="day">Monday 23 November</span>
+        <span class="item">Connection check<small>09:12 · 0.6 KB · worked</small></span>
+      </nav>
+      <section aria-label="Entry" style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+        <h2 class="entryH">How was Leo’s parents’ evening?</h2>
+        <dl class="fields">
+          <dt>When</dt><dd>Today, 21:40</dd>
+          <dt>To</dt><dd>By Nocturne’s engine, to your provider (answers.example)</dd>
+          <dt>Size</dt><dd>5.1 KB sent, 1.1 KB back</dd>
+          <dt class="new">Parts</dt><dd class="new">2: your provider looked once</dd>
+          <dt>Cost</dt><dd>$0.004</dd>
+          <dt>Result</dt><dd>Answered, with 3 receipts checked on this computer</dd>
+        </dl>
+        <p class="ghead">Exactly what was sent</p>
+        <div class="parts new">
+          <div class="part">
+            <span class="partH">Part 1</span>
+            <pre class="words">Facts:
+[m1] Parents' evening is on Tuesday 17 November at 18:00, at the school hall. (on Tuesday 17 November)
+
+Today is Tuesday 24 November 2026, 21:40, in the time zone Europe/London. The week starts on Monday.
+Question: How was Leo’s parents’ evening?</pre>
+            <span class="fromLine">[m1] from Calendar · Pixel 9</span>
+          </div>
+          <div class="part">
+            <span class="partH">Part 2</span>
+            <span class="partAsk">Your provider asked to look through your journal for Tuesday 17 November.</span>
+            <span class="partAsk">Sent back:</span>
+            <pre class="words">[m2] Mrs Patel said Leo's reading has come on a lot. (learned Tuesday 17 November)
+[m3] Leo read a whole chapter on his own. (learned Tuesday 17 November)</pre>
+            <span class="fromLine">[m2] from Journal entry, Tuesday 17 November · [m3] from Good thing, Tuesday 17 November</span>
+          </div>
+          <p class="resent">Each part sent the parts before it again, so your provider could follow on. Size and cost count every part.</p>
+        </div>
+        <span class="link2" style="font-size: 0.875rem">Show Nocturne’s standard instructions, the same for every question</span>
+      </section>
+    </div>
+  </div>
+
+</div>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
