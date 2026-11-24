@@ -34,7 +34,7 @@ describe("a check-in's own page", () => {
     expect(screen.getByText("Bad night.", { selector: "p" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade and Ask never uses them.",
+        "Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade. Ask reads them for the days a question names.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Low · tired, 8:05 am" })).toBeInTheDocument();

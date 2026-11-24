@@ -42,7 +42,7 @@ not make Nocturne depend on any one company.
   the provider through Lemonade's experimental `cloud_providers` feature. The app has no HTTPS
   client to a provider.
 - **Only the last step.** Only Ask can reach the route. Reading, the overnight tidy and the page never
-  do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; Ask does not search check-ins, reflections and recaps, so none is. Memories being forgotten or let go are never
+  do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; Ask does not search check-ins, reflections and recaps, so none is (amended 2026-11-24: a check-in's line may go, see [0022](0022-ask-looks-things-up.md)). Memories being forgotten or let go are never
   sent. Nothing else about a memory keeps it back: Nocturne does not judge whether it is about
   health, money, ID or anything else, and since 2026-11-23 a private mark does not keep it back
   either. Phones use the route only while Away from home is on and the person has left phones on in its settings.

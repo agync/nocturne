@@ -8,7 +8,9 @@ tags: [adr, journal, privacy, sensitivity]
 
 # 0015 A journal privacy class
 
-Status: accepted. Date: 2026-11-19. Amended 2026-11-23 (owner): "check-ins never go online" is no
+Status: accepted. Date: 2026-11-19. Amended 2026-11-24 (owner): Ask reads check-ins for the days
+a question names, and a check-in's line may go with that question online
+([0022](0022-ask-looks-things-up.md)). Amended 2026-11-23 (owner): "check-ins never go online" is no
 longer a rule. An online mind the person chose gets what a good answer needs, check-ins included;
 on a phone with an online mind ([0020](0020-an-online-mind-on-a-phone.md)) they go so it can write
 reflections and recaps. On the computer, Ask still does not search check-ins, reflections or

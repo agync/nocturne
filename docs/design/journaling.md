@@ -888,7 +888,7 @@ a paired phone, and entries and good things in Ask.
 | Item | Journal content | Can be marked private | May go online with Ask | Read aloud or notified | Printed | On a paired phone |
 |---|---|---|---|---|---|---|
 | Today's entry blocks (text, voice, photo) | Yes | No | Yes, a line it needs; never the photo or recording itself | Never | Yes | Yes |
-| Check-in, including a feeling tapped in quick capture | Yes | No | Never; Ask never uses check-ins | Never | Yes | Yes |
+| Check-in, including a feeling tapped in quick capture | Yes | No | Yes, its line, when Ask reads it for the days a question names ([Ask with tools](ask-with-tools.md)) | Never | Yes | Yes |
 | Good thing | Yes | No | Yes, a line it needs; never its photo | Never | Yes | Yes |
 | Quick note, voice note or photo kept from the keep bar or the phone | No: an ordinary thing kept, shown on the timeline | Yes, as today | As today: a line it needs, unless marked private | As today: unless marked private | As today: unless marked private | As today: unless marked private |
 | Reflection | Yes | No | Never | Never | Yes | Yes |
@@ -928,9 +928,10 @@ not judge what a sentence is about: "Gran’s scan came back clear" may go like 
 **What never goes online.** Revised 2026-11-23 (owner): this is no longer a rule. An online mind
 the person chose gets what a good answer needs, check-ins included, and a private mark keeps nothing
 out of it ([What private means](only-marked-private.md#revised-2026-11-23-private-is-about-what-comes-up-on-its-own)).
-On the computer nothing changes in practice: Ask does not search reflections, recaps or check-ins,
-so Online answers does not send them, and they are written on this computer, even when Online answers is
-on. A phone with an online mind sends its check-ins so the mind can write reflections and recaps
+On the computer, Ask does not search reflections or recaps, so Online answers does not send them,
+and they are written on this computer, even when Online answers is on. Since 2026-11-24 Ask reads
+check-ins for the days a question names, and a check-in's line may go with that question
+([Ask with tools](ask-with-tools.md)). A phone with an online mind sends its check-ins so the mind can write reflections and recaps
 ([Choosing a mind](phone-first.md#choosing-a-mind)). A computer that cannot write a reflection itself shows "At a glance" instead; recaps need no
 writing (see [Journaling follow-ups](journaling-follow-ups.md)).
 
@@ -1062,7 +1063,7 @@ For the implementation PR that follows the approved design.
 | "Leave out of reflections" | A flag on the item |
 | Use | Citing in a reflection or recap does not update `last_seen` |
 | "Which {name} is this?" | A new Needs you kind, `same_name`, with the badge "Same name"; the existing which-is-right kind is unchanged and stays computer-only |
-| Ask and check-ins | Ask never searches check-ins, so none can be cited in an answer or sent online |
+| Ask and check-ins | Ask never searches check-ins by words; since 2026-11-24 it reads them for the days a question names, each as one line that can be cited and sent online ([Ask with tools](ask-with-tools.md)) |
 | The phone's keep message | Gains an optional feeling (part, point, words) and a good-thing mark. New requests: any journal day, a reflection, a recap, "Reflect on today" and the answer to "Which {name} is this?" |
 | The journal mark | A third `sensitivity` value, `journal`, beside `normal` and `private`, on journal items, reflection and recap lines, and every memory read from an entry or a good thing. It blocks audio, notifications, the tray and a phone's lock screen, and allows Print, export and the phone. Online answers applies only to memories read from entries and good things: check-ins, reflections and recaps are never in Ask's search, so they can never be sent. A memory takes the strictest of its sources. Editions and the notifier check it the way they check `private` today |
 | No new predicates | Roles and `knows` cover relationships ([decision 0008](/adr/0008-small-schema.md) stands) |
@@ -1199,7 +1200,7 @@ The owner answered every open question on 2026-11-19.
 | 7 | The one question from the journal | B: at most once a week, and never read aloud. The rule and templates are in [Journaling follow-ups](journaling-follow-ups.md) |
 | 8 | Recaps on a computer that cannot write them | Changed on 2026-11-19: recaps show on every computer and never go online; only reflections fall back to "At a glance" (see [Journaling follow-ups](journaling-follow-ups.md)) |
 | 9 | The phone and the journal | Dropped: the phone reads the whole journal, and answers the name question but not which-is-right |
-| | Online answers | Ask may send the journal sentences a question needs; reflections, recaps and check-ins never go; said openly in setup and settings, with no per-entry exception |
+| | Online answers | Ask may send the journal lines a question needs, check-ins included since 2026-11-24; reflections and recaps never go; said openly in setup and settings, with no per-entry exception |
 
 ## Sources
 

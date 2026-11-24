@@ -37,7 +37,7 @@
   "phone.health.why.title": "Bring health readings to your computer?",
   "phone.health.why.what": "Nocturne reads the kinds you choose from {source}: sleep, heart rate, resting heart rate, blood pressure, steps and workouts.",
   "phone.health.why.far": "From the last 30 days, then each new reading.",
-  "phone.health.why.where": "Only to your computer, in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else.",
+  "phone.health.why.where": "Only to your computer, in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else. If Online answers is on there, a reading can go with a question it helps answer.",
   "phone.health.why.for": "Your journal shows how you slept and moved beside what you wrote, and your page can show last night’s sleep.",
   "phone.health.why.never": "Nocturne never adds or changes anything in Health. It can’t tell what your numbers mean for your health. A doctor or nurse can.",
   "phone.health.why.next": "Next, choose which kinds. Then your phone asks you to confirm.",
