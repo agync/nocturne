@@ -43,6 +43,7 @@ pub fn run() {
                 Box::new(backup::SafeBackupKeys(app.handle().clone())),
                 clock.clone(),
             );
+            backup::place_account::attach(app.handle(), &nightly);
             let thinking =
                 mind::PhoneMind::new(dir, Box::new(mind::SafeKeys(app.handle().clone())), clock);
             thinking.follow(&home);
@@ -145,6 +146,7 @@ pub fn run() {
             backup::commands::backup_found,
             backup::commands::backup_restore,
             backup::commands::backup_make_in_use,
+            backup::place_account::backup_connect,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")

@@ -4,9 +4,10 @@
 //! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
 //! the room left on the phone, and on an iPhone a folder kept out of its backup. For the core
 //! alone: a secret kept in the phone's safe place (Android's keystore, the iPhone's keychain),
-//! whether the phone charges and its network is unmetered, and the background windows the system
-//! allows while it charges. On a computer every command answers a stand-in, and no secret is
-//! kept.
+//! whether the phone charges and its network is unmetered, the background windows the system
+//! allows while it charges, and the nightly backup's folder in the person's own account (Google
+//! Drive on Android, the app's iCloud space on an iPhone). On a computer every command answers a
+//! stand-in, and no secret is kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -129,6 +130,82 @@ pub struct Power {
     /// `None` while offline, or when the phone does not say.
     #[serde(default)]
     pub unmetered: Option<bool>,
+}
+
+/// How a call to the backup's folder in the person's account ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaceOutcome {
+    Ok,
+    NoRoom,
+    NoAccess,
+    Offline,
+    #[serde(other)]
+    Failed,
+}
+
+/// One file in the backup's folder.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct PlaceFile {
+    pub name: String,
+    #[serde(default)]
+    pub size: u64,
+    /// When the account says it last changed, in milliseconds since 1970.
+    #[serde(default)]
+    pub modified: Option<i64>,
+}
+
+/// The phone's answer to a call to the backup's folder.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct PlaceAnswer {
+    pub outcome: PlaceOutcome,
+    #[serde(default)]
+    pub message: Option<String>,
+    /// For a read: whether the file was there.
+    #[serde(default)]
+    pub found: bool,
+    #[serde(default)]
+    pub entries: Vec<PlaceFile>,
+}
+
+/// What came of asking for the person's account.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "outcome", rename_all = "camelCase")]
+pub enum Connected {
+    /// The account can be reached. On Android: its address, the one chosen before when the
+    /// person picked another, and the room left in its Drive when it has a limit.
+    Connected {
+        #[serde(default)]
+        account: Option<String>,
+        #[serde(default)]
+        previous: Option<String>,
+        #[serde(default)]
+        free: Option<u64>,
+    },
+    /// The person refused on Google's screen.
+    Refused,
+    /// No Google account on the phone, or the iPhone is signed out of iCloud.
+    NoAccount,
+    /// iCloud is off for Nocturne.
+    TurnedOff,
+    Offline,
+    #[serde(other)]
+    Failed,
+}
+
+#[derive(Debug, Serialize)]
+struct PlaceCall<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prefix: Option<&'a str>,
+}
+
+#[derive(Debug, Serialize)]
+struct Choose {
+    choose: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -279,6 +356,58 @@ impl<R: Runtime> System<R> {
     pub fn background_done(&self) -> Result<(), Error> {
         let _: Option<serde_json::Value> = self.native("backgroundDone", ())?;
         Ok(())
+    }
+
+    /// Asks for the person's account for the backup: on Android, Google's account picker and its
+    /// permission, shown only when needed, or always with `choose`. Blocks until they close.
+    /// `None` on a computer.
+    pub fn place_connect(&self, choose: bool) -> Result<Option<Connected>, Error> {
+        self.native("placeConnect", Choose { choose })
+    }
+
+    fn place(&self, method: &str, call: PlaceCall<'_>) -> Result<PlaceAnswer, Error> {
+        self.native(method, call)?
+            .ok_or_else(|| Error("no account on a computer".into()))
+    }
+
+    /// Writes the file at `path` to the backup's folder as `name`. Blocks.
+    pub fn place_put(&self, name: &str, path: &Path) -> Result<PlaceAnswer, Error> {
+        let call = PlaceCall {
+            name: Some(name),
+            path: Some(plain(path)?),
+            prefix: None,
+        };
+        self.place("placePut", call)
+    }
+
+    /// Reads `name` from the backup's folder into the file at `path`, when it is there. Blocks.
+    pub fn place_get(&self, name: &str, path: &Path) -> Result<PlaceAnswer, Error> {
+        let call = PlaceCall {
+            name: Some(name),
+            path: Some(plain(path)?),
+            prefix: None,
+        };
+        self.place("placeGet", call)
+    }
+
+    /// The files in the backup's folder whose names start with `prefix`. Blocks.
+    pub fn place_list(&self, prefix: &str) -> Result<PlaceAnswer, Error> {
+        let call = PlaceCall {
+            name: None,
+            path: None,
+            prefix: Some(prefix),
+        };
+        self.place("placeList", call)
+    }
+
+    /// Removes `name` from the backup's folder, with its earlier versions. Blocks.
+    pub fn place_delete(&self, name: &str) -> Result<PlaceAnswer, Error> {
+        let call = PlaceCall {
+            name: Some(name),
+            path: None,
+            prefix: None,
+        };
+        self.place("placeDelete", call)
     }
 
     /// Keep a folder of the app's out of the phone's own backup. Only an iPhone needs asking:
@@ -486,6 +615,62 @@ mod tests {
             Some(true)
         );
         assert_eq!(read("{}"), Power::default());
+    }
+
+    #[test]
+    fn place_answers_read_from_the_phone() {
+        let read = |json: &str| serde_json::from_str::<PlaceAnswer>(json).unwrap();
+        assert_eq!(read(r#"{"outcome":"ok"}"#).outcome, PlaceOutcome::Ok);
+        assert_eq!(
+            read(r#"{"outcome":"noRoom"}"#).outcome,
+            PlaceOutcome::NoRoom
+        );
+        assert_eq!(
+            read(r#"{"outcome":"noAccess","message":"x"}"#).outcome,
+            PlaceOutcome::NoAccess
+        );
+        assert_eq!(
+            read(r#"{"outcome":"offline"}"#).outcome,
+            PlaceOutcome::Offline
+        );
+        assert_eq!(
+            read(r#"{"outcome":"strange"}"#).outcome,
+            PlaceOutcome::Failed
+        );
+        assert!(read(r#"{"outcome":"ok","found":true}"#).found);
+        let listed = read(
+            r#"{"outcome":"ok","entries":[{"name":"night-1-ab","size":12,"modified":1763800000000},
+            {"name":"piece-aa","size":3,"modified":null}]}"#,
+        );
+        assert_eq!(listed.entries.len(), 2);
+        assert_eq!(listed.entries[0].modified, Some(1_763_800_000_000));
+        assert_eq!(listed.entries[1].modified, None);
+    }
+
+    #[test]
+    fn a_connection_reads_from_the_phone() {
+        let read = |json: &str| serde_json::from_str::<Connected>(json).unwrap();
+        assert_eq!(
+            read(r#"{"outcome":"connected","account":"a@example.org","free":600}"#),
+            Connected::Connected {
+                account: Some("a@example.org".into()),
+                previous: None,
+                free: Some(600)
+            }
+        );
+        assert_eq!(
+            read(r#"{"outcome":"connected"}"#),
+            Connected::Connected {
+                account: None,
+                previous: None,
+                free: None
+            }
+        );
+        assert_eq!(read(r#"{"outcome":"refused"}"#), Connected::Refused);
+        assert_eq!(read(r#"{"outcome":"noAccount"}"#), Connected::NoAccount);
+        assert_eq!(read(r#"{"outcome":"turnedOff"}"#), Connected::TurnedOff);
+        assert_eq!(read(r#"{"outcome":"offline"}"#), Connected::Offline);
+        assert_eq!(read(r#"{"outcome":"other"}"#), Connected::Failed);
     }
 
     #[test]
