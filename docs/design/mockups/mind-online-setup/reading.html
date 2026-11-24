@@ -148,7 +148,7 @@ document.fonts.ready.then(() => {
   for (const scroll of document.querySelectorAll(".scroll")) {
     if (document.documentElement.dataset.text === "200") {
       const head = [...scroll.querySelectorAll(".ghead")].find((h) => h.textContent.startsWith("Nocturne"));
-      if (head) scroll.scrollTop = head.offsetTop - 8;
+      if (head) scroll.scrollTop = head.offsetTop - 20;
     }
     if (scroll.scrollTop > 0) scroll.closest(".screen").dataset.scrolled = "";
   }
