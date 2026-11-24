@@ -4,14 +4,15 @@ use std::sync::atomic::AtomicBool;
 
 use common::*;
 use nocturne_contract::{
-    BackupPhase, CalendarBatch, CalendarChange, CalendarEntry, Edition, Kept, PhoneCalendar,
-    Reading, ReadingBatch, ReadingChange, ReadingValue, Source, TimeSpan,
+    BackupPhase, CalendarBatch, CalendarChange, CalendarEntry, Edition, EntityKind, Kept,
+    PeriodKind, PhoneCalendar, Reading, ReadingBatch, ReadingChange, ReadingValue, ReflectionView,
+    SameNameAnswer, Source, Span, TimeSpan, WrittenWhen,
 };
 use nocturne_engine::nightly::{
     self, BackupPlace, FolderPlace, KEY_PHRASE, KEY_RECOVERY, MemoryPlace, NightError, NightKey,
     NightRun, NightState, PlaceError,
 };
-use nocturne_engine::{Engine, Predicate};
+use nocturne_engine::{Candidate, Engine, Predicate, WrittenSentence, hash_embedding};
 
 const PHRASE: &str = "harbour violet pencil maple drift oven";
 /// Passphrase work for test keys, so they open quickly.
@@ -1300,4 +1301,533 @@ fn a_newer_night_from_another_phone_stops_the_locks_being_carried() {
         Err(NightError::AnotherPhone { .. })
     ));
     assert_eq!(place.get(KEY_PHRASE).unwrap(), theirs, "their lock stays");
+}
+
+fn raw_db(f: &Fixture) -> rusqlite::Connection {
+    rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap()
+}
+
+/// A phone that holds a memory of its own, for a backup to be brought into.
+fn phone_with_memory() -> Fixture {
+    let here = fixture();
+    here.engine.ensure_local_device("Pixel").unwrap();
+    keep(&here.engine, "Already on this phone.");
+    here
+}
+
+/// Back up one night of `old` into a place of its own.
+fn back_up_night(old: &Fixture) -> (MemoryPlace, NightKey) {
+    old.engine.ensure_local_device("Old phone").unwrap();
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+    (place, key)
+}
+
+fn read_all(f: &Fixture) {
+    let ids: Vec<String> = raw_db(f)
+        .prepare("SELECT id FROM items WHERE status = 'kept'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    for id in ids {
+        f.engine.apply(&id, vec![]).unwrap();
+    }
+}
+
+/// Write an entry for `day` and a reflection on it that says `line`; returns the entry's id.
+fn reflect_on(f: &Fixture, day: &str, entry: &str, line: &str) -> String {
+    let block = f
+        .engine
+        .save_entry_text(date(day), None, 0, entry)
+        .unwrap()
+        .unwrap();
+    read_all(f);
+    let period = f.engine.period_of(PeriodKind::Day, date(day)).unwrap();
+    let input = f.engine.reflection_input(&period).unwrap();
+    let at = input
+        .items
+        .iter()
+        .position(|i| i.id == block.item.id)
+        .unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[WrittenSentence {
+                text: line.to_string(),
+                cites: vec![at],
+            }],
+            WrittenWhen::Overnight,
+        )
+        .unwrap();
+    block.item.id
+}
+
+fn day_reflection(f: &Fixture, day: &str) -> Option<nocturne_contract::DayReflection> {
+    let period = f.engine.period_of(PeriodKind::Day, date(day)).unwrap();
+    match f.engine.saved_reflection(&period).unwrap() {
+        Some(ReflectionView::Written { reflection }) => Some(reflection),
+        Some(other) => panic!("a day is Written, not {other:?}"),
+        None => None,
+    }
+}
+
+#[test]
+fn a_reflection_comes_for_a_day_this_phone_has_none_for_and_never_replaces_or_revives_one() {
+    let old = fixture();
+    let (d1, d2, d3, d4) = ("2026-11-13", "2026-11-12", "2026-11-11", "2026-11-10");
+    let cited = reflect_on(&old, d1, "Gran came for tea", "Gran came for **tea**.");
+    reflect_on(&old, d2, "Walked by the river", "Old phone: a river walk.");
+    reflect_on(&old, d3, "Fixed the shelf", "Old phone: the shelf.");
+    reflect_on(&old, d4, "Slept badly", "Old phone: a bad night.");
+    let period4 = old.engine.period_of(PeriodKind::Day, date(d4)).unwrap();
+    old.engine.delete_reflection(&period4).unwrap();
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    reflect_on(&here, d2, "Cooked supper", "This phone: supper.");
+    reflect_on(&here, d3, "Painted the door", "This phone: the door.");
+    let period3 = here.engine.period_of(PeriodKind::Day, date(d3)).unwrap();
+    here.engine.delete_reflection(&period3).unwrap();
+    bring_newest(&here.engine, &place, &key);
+
+    let came = day_reflection(&here, d1).expect("a day with none here gets the backup's");
+    assert_eq!(came.the_day[0].text, "Gran came for **tea**.");
+    assert_eq!(came.the_day[0].receipts[0].item_id, cited);
+    assert!(here.engine.get_item(&cited).is_ok(), "its cite came too");
+    assert_eq!(
+        day_reflection(&here, d2).unwrap().the_day[0].text,
+        "This phone: supper.",
+        "the one here is not replaced"
+    );
+    assert!(
+        day_reflection(&here, d3).is_none(),
+        "a day deleted here stays so"
+    );
+    assert!(
+        day_reflection(&here, d4).is_none(),
+        "a day deleted there stays so"
+    );
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM reflections_declined"),
+        2
+    );
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM reflections"),
+        2
+    );
+}
+
+fn add_mention(f: &Fixture, item: &str, entity: &str, name: &str, ord: u32) {
+    let conn = raw_db(f);
+    conn.execute(
+        "INSERT OR IGNORE INTO entities(id, kind, name, key, role) \
+         VALUES (?1, 'person', ?2, ?3, NULL)",
+        rusqlite::params![entity, name, name.to_lowercase()],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO mentions(id, item_id, entity_id, name, start, end, ord, state, new, \
+         created_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, 'found', 0, '2026-11-13T07:00:00.000Z')",
+        rusqlite::params![
+            format!("men_{item}_{entity}"),
+            item,
+            entity,
+            name,
+            name.len() as u32,
+            ord
+        ],
+    )
+    .unwrap();
+}
+
+fn mentioned(f: &Fixture, item: &str) -> Vec<(String, String)> {
+    raw_db(f)
+        .prepare(
+            "SELECT e.id, e.name FROM mentions n JOIN entities e ON e.id = n.entity_id \
+             WHERE n.item_id = ?1 ORDER BY n.ord",
+        )
+        .unwrap()
+        .query_map([item], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn names_found_in_a_brought_thing_come_with_it_under_the_same_entity() {
+    let old = fixture();
+    let note = keep(&old.engine, "Priya came round with Marcus.");
+    add_mention(&old, &note, "ent_old_priya", "Priya", 0);
+    add_mention(&old, &note, "ent_old_marcus", "Marcus", 1);
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    let own = keep(&here.engine, "Priya sent the form.");
+    add_mention(&here, &own, "ent_here_priya", "Priya", 0);
+    bring_newest(&here.engine, &place, &key);
+
+    assert_eq!(
+        mentioned(&here, &note),
+        [
+            ("ent_here_priya".to_string(), "Priya".to_string()),
+            ("ent_old_marcus".to_string(), "Marcus".to_string())
+        ],
+        "Priya is the one here; Marcus is new"
+    );
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM entities WHERE key = 'priya'"
+        ),
+        1,
+        "the same key is the same entity"
+    );
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM mentions WHERE entity_id = 'ent_here_priya'"
+        ),
+        2
+    );
+    assert_eq!(
+        mentioned(&here, &own).len(),
+        1,
+        "what was here is as it was"
+    );
+}
+
+fn person(subject: &str, predicate: Predicate, object: &str, sentence: &str) -> Candidate {
+    Candidate {
+        subject_kind: Some(EntityKind::Person),
+        ..cand(subject, predicate, object, sentence)
+    }
+}
+
+fn entity_of(f: &Fixture, memory: &str) -> String {
+    f.engine.get_memory(memory).unwrap().entity_id.unwrap()
+}
+
+#[test]
+fn a_which_name_question_on_a_brought_thing_comes_with_its_options_remapped() {
+    let old = fixture();
+    let mut sams = Vec::new();
+    for (full, role) in [
+        ("Sam Jones", "your neighbour"),
+        ("Sam Patel", "Leo\u{2019}s teacher"),
+    ] {
+        let (_, m) = learn(
+            &old.engine,
+            &format!("{full} is {role}."),
+            person(full, Predicate::Knows, "you", &format!("{full} is {role}.")),
+        );
+        let entity = entity_of(&old, &m);
+        raw_db(&old)
+            .execute(
+                "UPDATE entities SET role = ?2 WHERE id = ?1",
+                rusqlite::params![entity, role],
+            )
+            .unwrap();
+        sams.push(entity);
+    }
+    let entry = keep(
+        &old.engine,
+        "Priya made tea. Sam came round to fix the sink.",
+    );
+    raw_db(&old)
+        .execute(
+            "UPDATE items SET metadata = json_set(metadata, '$.journal', 'entry', \
+             '$.journal_day', '2026-11-12') WHERE id = ?1",
+            [&entry],
+        )
+        .unwrap();
+    old.engine
+        .apply(
+            &entry,
+            vec![person(
+                "Sam",
+                Predicate::Promised,
+                "the sink",
+                "Sam will fix the sink.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(old.engine.same_name_questions(None).unwrap().len(), 1);
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    let (_, mine) = learn(
+        &here.engine,
+        "Sam Jones lives next door.",
+        person(
+            "Sam Jones",
+            Predicate::Knows,
+            "the lane",
+            "Sam Jones lives next door.",
+        ),
+    );
+    let jones_here = entity_of(&here, &mine);
+    assert_ne!(jones_here, sams[0]);
+    bring_newest(&here.engine, &place, &key);
+
+    let questions = here.engine.same_name_questions(None).unwrap();
+    assert_eq!(questions.len(), 1, "asked once, not twice");
+    let q = &questions[0];
+    assert_eq!(q.name, "Sam");
+    assert_eq!(q.receipt.item_id, entry);
+    assert_eq!(q.quote, "Sam came round to fix the sink.");
+    let ids: Vec<&str> = q.options.iter().map(|o| o.entity_id.as_str()).collect();
+    assert_eq!(ids[0], jones_here, "the Sam Jones here, not the old id");
+    assert_eq!(
+        ids[1], sams[1],
+        "the Sam Patel that came keeps the id it had"
+    );
+    assert_eq!(q.options[1].role.as_deref(), Some("Leo\u{2019}s teacher"));
+    for id in ids {
+        assert_eq!(
+            sql_count(
+                here.dir.path(),
+                &format!("SELECT COUNT(*) FROM entities WHERE id = '{id}'")
+            ),
+            1
+        );
+    }
+
+    here.engine
+        .answer_same_name(
+            &q.id,
+            SameNameAnswer::Entity {
+                entity_id: jones_here.clone(),
+            },
+        )
+        .unwrap();
+    assert!(here.engine.same_name_questions(None).unwrap().is_empty());
+    assert_eq!(
+        mentioned(&here, &entry),
+        [(jones_here, "Sam Jones".to_string())]
+    );
+}
+
+/// A dentist appointment that a later note moves while filed under another name, so it asks.
+fn dentist_conflict(f: &Fixture) -> (String, String) {
+    let dentist = |subject: &str, object: &str, on: &str, quote: &str| {
+        let mut c = cand(
+            subject,
+            Predicate::Scheduled,
+            object,
+            &format!("The dentist appointment with Dr Okafor is on {object}."),
+        );
+        c.due = Some(date(on));
+        c.span = Some(Span::Quote {
+            text: quote.to_string(),
+        });
+        c
+    };
+    const FIRST: &str = "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00.";
+    const LINE: &str = "Dr Okafor's receptionist called: it is now Thursday 19 November at 14:30, not Wednesday 18 November.";
+    learn(
+        &f.engine,
+        FIRST,
+        dentist(
+            "Dr Okafor",
+            "Wednesday 18 November at 10:00",
+            "2026-11-18",
+            FIRST,
+        ),
+    );
+    let moved = keep(
+        &f.engine,
+        &format!("The dentist appointment has moved. {LINE}"),
+    );
+    let report = f
+        .engine
+        .apply(
+            &moved,
+            vec![dentist(
+                "Dentist appointment",
+                "Thursday 19 November at 14:30",
+                "2026-11-19",
+                LINE,
+            )],
+        )
+        .unwrap();
+    assert_eq!(report.conflicts.len(), 1, "{report:?}");
+    raw_db(f)
+        .query_row("SELECT a, b FROM conflicts", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap()
+}
+
+#[test]
+fn a_which_is_right_between_two_brought_memories_comes_in_once() {
+    let old = fixture();
+    let (a, b) = dentist_conflict(&old);
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    bring_newest(&here.engine, &place, &key);
+    assert_eq!(
+        here.engine.open_disputes(std::slice::from_ref(&a)).unwrap(),
+        [(a.clone(), b.clone())]
+    );
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM conflicts"),
+        1
+    );
+    bring_newest(&here.engine, &place, &key);
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM conflicts"),
+        1,
+        "brought again, it does not double"
+    );
+}
+
+#[test]
+fn a_settled_which_is_right_comes_in_settled() {
+    let old = fixture();
+    let (a, b) = dentist_conflict(&old);
+    let conflict: String = raw_db(&old)
+        .query_row("SELECT id FROM conflicts", [], |r| r.get(0))
+        .unwrap();
+    old.engine.resolve_which(&conflict, &b).unwrap();
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    bring_newest(&here.engine, &place, &key);
+    assert!(here.engine.open_disputes(&[a]).unwrap().is_empty());
+    let (settled, kept): (bool, Option<String>) = raw_db(&here)
+        .query_row(
+            "SELECT resolved_at IS NOT NULL, kept FROM conflicts WHERE id = ?1",
+            [&conflict],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(settled);
+    assert_eq!(kept.as_deref(), Some(b.as_str()));
+}
+
+fn thing(subject: &str, object: &str, sentence: &str) -> Candidate {
+    Candidate {
+        subject_kind: Some(EntityKind::Thing),
+        ..cand(subject, Predicate::Knows, object, sentence)
+    }
+}
+
+#[test]
+fn an_entity_merged_on_the_old_phone_arrives_merged_into_the_one_here_with_its_names() {
+    let old = fixture();
+    let (_, a) = learn(
+        &old.engine,
+        "Trinks are 5 pounds on Friday",
+        thing(
+            "Trinks",
+            "5 pounds on Friday",
+            "Trinks are 5 pounds on Friday.",
+        ),
+    );
+    let (_, b) = learn(
+        &old.engine,
+        "Drinks are in the fridge",
+        thing("Drinks", "in the fridge", "Drinks are in the fridge."),
+    );
+    let (trinks, drinks) = (entity_of(&old, &a), entity_of(&old, &b));
+    old.engine.merge_entities(&trinks, &drinks).unwrap();
+    let said = keep(&old.engine, "Trinks again on Friday.");
+    add_mention(&old, &said, &trinks, "Trinks", 0);
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    let (_, mine) = learn(
+        &here.engine,
+        "Drinks are cold",
+        thing("Drinks", "cold", "Drinks are cold."),
+    );
+    let drinks_here = entity_of(&here, &mine);
+    assert_ne!(drinks_here, drinks);
+    bring_newest(&here.engine, &place, &key);
+
+    let merged_into: Option<String> = raw_db(&here)
+        .query_row(
+            "SELECT merged_into FROM entities WHERE id = ?1",
+            [&trinks],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(merged_into.as_deref(), Some(drinks_here.as_str()));
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM entities WHERE name = 'Drinks' AND merged_into IS NULL"
+        ),
+        1,
+        "the Drinks that came is the one here"
+    );
+    assert_eq!(entity_of(&here, &a), drinks_here);
+    assert_eq!(here.engine.get_memory(&a).unwrap().subject, "Drinks");
+    let found = here.engine.entities_matching(None, Some("trinks")).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].id, drinks_here,
+        "the name the person taught finds it"
+    );
+}
+
+#[test]
+fn a_brought_memory_is_found_by_meaning_without_being_embedded_again() {
+    let old = fixture();
+    let (_, swim) = learn(
+        &old.engine,
+        "swimming lessons on Wednesday",
+        cand(
+            "Leo",
+            Predicate::Prefers,
+            "swimming",
+            "Leo has swimming lessons on Wednesday.",
+        ),
+    );
+    old.engine
+        .store_embeddings(vec![(
+            swim.clone(),
+            hash_embedding("swimming lessons on Wednesday"),
+        )])
+        .unwrap();
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    let (_, own) = learn(
+        &here.engine,
+        "dentist on Tuesday",
+        cand(
+            "Dentist",
+            Predicate::Scheduled,
+            "Tuesday",
+            "The dentist is on Tuesday.",
+        ),
+    );
+    here.engine
+        .store_embeddings(vec![(own, hash_embedding("dentist on Tuesday"))])
+        .unwrap();
+    bring_newest(&here.engine, &place, &key);
+
+    let waiting = here.engine.memories_without_embedding(10).unwrap();
+    assert!(
+        waiting.iter().all(|(id, _)| *id != swim),
+        "its vector came with it"
+    );
+    let query = "pool classes midweek";
+    let by_words = here.engine.retrieve(query, None, 5).unwrap();
+    assert!(by_words.iter().all(|h| h.memory.id != swim));
+    let hits = here
+        .engine
+        .retrieve(
+            query,
+            Some(&hash_embedding("swimming lessons on Wednesday")),
+            5,
+        )
+        .unwrap();
+    assert_eq!(hits[0].memory.id, swim);
 }
