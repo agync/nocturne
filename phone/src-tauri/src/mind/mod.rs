@@ -767,6 +767,7 @@ pub fn run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
                 let backup = worker.state::<crate::backup::PhoneBackup>();
                 let power = system.power().unwrap_or_default();
                 mind.host().set_charging(power.charging);
+                backup.set_unmetered(power.unmetered);
                 let on = mind.is_on() || backup.is_on();
                 let was = mind.status();
                 mind.look_again(&rt);
