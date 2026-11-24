@@ -38,7 +38,7 @@ pub(crate) fn effective_last_use(
         let passed = d
             .tomorrow()?
             .at(0, 0, 0, 0)
-            .to_zoned(tz.clone())?
+            .to_zoned_datetime(tz.clone())?
             .timestamp();
         eff = eff.max(passed);
     }
@@ -51,7 +51,7 @@ impl Engine {
     pub fn decay(&self) -> Result<DecayReport> {
         let now = self.clock().now();
         let tz = self.clock().tz();
-        let today = now.to_zoned(tz.clone()).date();
+        let today = now.to_zoned_datetime(tz.clone()).date();
         let (fade_days, let_go_days) = thresholds(self.read(read_settings)?.letting_go);
         let rows = self.read(|conn| {
             query_mems(

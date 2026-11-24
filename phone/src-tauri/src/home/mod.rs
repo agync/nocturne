@@ -333,7 +333,7 @@ impl Home {
         let stamp = self
             .clock
             .now()
-            .to_zoned(self.clock.tz())
+            .to_zoned_datetime(self.clock.tz())
             .strftime("%Y-%m-%d-%H%M%S")
             .to_string();
         let mut name = format!("{PUT_ASIDE}{stamp}");

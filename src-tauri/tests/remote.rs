@@ -1650,7 +1650,7 @@ fn pages_today_and_7_back_only() {
         p.h.clock.advance_days(1);
     }
     let state = p.h.state();
-    let today = state.now().to_zoned(state.clock.tz()).date();
+    let today = state.now().to_zoned_datetime(state.clock.tz()).date();
     let oldest = today
         .checked_sub(jiff::Span::new().days(PAGES_BACK as i64))
         .unwrap();

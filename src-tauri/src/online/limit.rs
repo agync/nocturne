@@ -26,10 +26,10 @@ pub fn reached(
 
 /// Midnight at the start of next month, local, as RFC 3339.
 pub fn next_month_start(now: Timestamp, tz: &TimeZone) -> String {
-    let first = now.to_zoned(tz.clone()).date().first_of_month();
+    let first = now.to_zoned_datetime(tz.clone()).date().first_of_month();
     first
         .checked_add(1.month())
-        .and_then(|d| d.to_zoned(tz.clone()))
+        .and_then(|d| d.to_zoned_datetime(tz.clone()))
         .map(|z| z.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string())
         .unwrap_or_default()
 }
@@ -38,7 +38,7 @@ pub fn next_month_start(now: Timestamp, tz: &TimeZone) -> String {
 pub fn lifted(pause: &OnlinePause, now: Timestamp) -> bool {
     match pause {
         OnlinePause::Limit { until } => until
-            .parse::<jiff::Zoned>()
+            .parse::<jiff::ZonedDateTime>()
             .map(|z| now >= z.timestamp())
             .or_else(|_| until.parse::<Timestamp>().map(|t| now >= t))
             .unwrap_or(true),

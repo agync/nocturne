@@ -923,7 +923,7 @@ fn load_item_info(
         .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
     let kept_on = kept_at
         .parse::<jiff::Timestamp>()
-        .map(|t| t.to_zoned(tz.clone()).date().to_string())
+        .map(|t| t.to_zoned_datetime(tz.clone()).date().to_string())
         .unwrap_or_else(|_| today.to_string());
     Ok(ItemInfo {
         trusted: trust == "trusted",
@@ -2103,7 +2103,12 @@ impl Engine {
     ) -> Result<ApplyReport> {
         let now = fmt_ts(self.clock().now());
         let tz = self.clock().tz();
-        let today = self.clock().now().to_zoned(tz.clone()).date().to_string();
+        let today = self
+            .clock()
+            .now()
+            .to_zoned_datetime(tz.clone())
+            .date()
+            .to_string();
         let (report, files) =
             self.write(|tx| apply(tx, &now, &today, &tz, item, lease, candidates, took))?;
         crate::audio::shred_all(files);
@@ -2247,7 +2252,7 @@ impl Engine {
     /// right?", then unconfirmed. Entries are not-done by construction.
     pub fn needs_you(&self) -> Result<Vec<NeedsYouEntry>> {
         let tz = self.clock().tz();
-        let today = self.clock().now().to_zoned(tz).date();
+        let today = self.clock().now().to_zoned_datetime(tz).date();
         self.read(|conn| needs_you_on(conn, today))
     }
 
@@ -2258,7 +2263,7 @@ impl Engine {
         let until = self
             .clock()
             .now()
-            .to_zoned(self.clock().tz())
+            .to_zoned_datetime(self.clock().tz())
             .date()
             .checked_add(jiff::Span::new().days(i64::from(days)))
             .map_err(Error::from)?
@@ -2424,7 +2429,7 @@ impl Engine {
     /// that must never show it: notifications, the tray, a locked window.
     pub fn needs_you_public(&self) -> Result<Vec<NeedsYouEntry>> {
         let tz = self.clock().tz();
-        let today = self.clock().now().to_zoned(tz).date();
+        let today = self.clock().now().to_zoned_datetime(tz).date();
         self.read(|conn| {
             let mut out = Vec::new();
             for entry in needs_you_on(conn, today)? {

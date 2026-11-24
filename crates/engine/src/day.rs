@@ -38,7 +38,7 @@ impl Window {
 /// The instant of `HH:MM` on `day` in `tz`.
 pub fn page_instant(day: Date, hm: (i8, i8), tz: &TimeZone) -> Result<Timestamp> {
     let dt = day.at(hm.0, hm.1, 0, 0);
-    Ok(tz.to_ambiguous_zoned(dt).compatible()?.timestamp())
+    Ok(tz.to_ambiguous_zoned_datetime(dt).compatible()?.timestamp())
 }
 
 /// The window for the page dated `day`. `earliest` is the oldest item ever kept, used only for
@@ -92,7 +92,7 @@ pub fn journal_cutoff(page_hm: (i8, i8)) -> i64 {
 /// It is the day whose bounds hold the instant, so it agrees with `journal_day_bounds` even
 /// where a cutoff falls in a clock change.
 pub fn journal_day_of(t: Timestamp, page_hm: (i8, i8), tz: &TimeZone) -> Result<Date> {
-    let local = t.to_zoned(tz.clone()).datetime();
+    let local = t.to_zoned_datetime(tz.clone()).datetime();
     let near = local
         .checked_sub(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?
         .date();
@@ -116,7 +116,7 @@ pub fn journal_day_bounds(
     let edge = |d: Date| -> Result<Timestamp> {
         let midnight = d.tomorrow()?.at(0, 0, 0, 0);
         let at = midnight.checked_add(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?;
-        let cutoff = tz.to_ambiguous_zoned(at).compatible()?.timestamp();
+        let cutoff = tz.to_ambiguous_zoned_datetime(at).compatible()?.timestamp();
         let latest = page_instant(d.tomorrow()?, page_hm, tz)?
             .checked_sub(jiff::SignedDuration::from_mins(30))?;
         Ok(cutoff.min(latest))
@@ -228,7 +228,7 @@ mod tests {
         // 01:30 on 2026-03-29 does not exist in London; the instant is 02:30 BST = 01:30Z.
         let t = page_instant(d("2026-03-29"), (1, 30), &london).unwrap();
         assert_eq!(t, ts("2026-03-29T01:30:00Z"));
-        assert_eq!(t.to_zoned(london).date(), d("2026-03-29"));
+        assert_eq!(t.to_zoned_datetime(london).date(), d("2026-03-29"));
     }
 
     #[test]

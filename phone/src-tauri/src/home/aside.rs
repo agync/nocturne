@@ -29,7 +29,7 @@ impl Home {
         let stamp = name.strip_prefix(PUT_ASIDE)?;
         let stamp = stamp.get(..17)?;
         let civil = jiff::civil::DateTime::strptime("%Y-%m-%d-%H%M%S", stamp).ok()?;
-        let at = civil.to_zoned(self.clock.tz()).ok()?.timestamp();
+        let at = civil.to_zoned_datetime(self.clock.tz()).ok()?.timestamp();
         Some(at.to_string())
     }
 

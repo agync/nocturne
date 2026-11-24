@@ -419,7 +419,7 @@ impl Engine {
         let day = self
             .clock()
             .now()
-            .to_zoned(self.clock().tz())
+            .to_zoned_datetime(self.clock().tz())
             .date()
             .to_string();
         std::fs::create_dir_all(dir)?;

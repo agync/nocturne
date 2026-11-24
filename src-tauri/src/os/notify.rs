@@ -50,7 +50,7 @@ impl<R: Runtime> Notifier for PluginNotifier<R> {
 
 fn local(tz: &TimeZone, date: Date, h: i8, m: i8) -> Option<Timestamp> {
     date.at(h, m, 0, 0)
-        .to_zoned(tz.clone())
+        .to_zoned_datetime(tz.clone())
         .ok()
         .map(|z| z.timestamp())
 }
@@ -73,7 +73,7 @@ pub fn decide(
     if settings.delivery != Delivery::Notify || paused || !saved_today || opened {
         return None;
     }
-    let today = now.to_zoned(tz.clone()).date();
+    let today = now.to_zoned_datetime(tz.clone()).date();
     if notified == Some(today) {
         return None;
     }
@@ -98,7 +98,7 @@ pub fn decide_evening(
     if !reminder.on || paused {
         return None;
     }
-    let today = now.to_zoned(tz.clone()).date();
+    let today = now.to_zoned_datetime(tz.clone()).date();
     if notified == Some(today) {
         return None;
     }
@@ -130,7 +130,7 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> bool {
     };
     let now = shell.now();
     let tz = shell.clock.tz();
-    let today = now.to_zoned(tz.clone()).date();
+    let today = now.to_zoned_datetime(tz.clone()).date();
     let paused = shell.status.is_paused(now);
     let file = os.file();
     let notified = file.notified.as_deref().and_then(|d| d.parse().ok());

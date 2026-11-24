@@ -60,7 +60,7 @@ pub(crate) fn day_words(d: Date) -> String {
 
 /// "9:00", in the computer's time.
 pub(crate) fn time_words(t: Timestamp, tz: &TimeZone) -> String {
-    let z = t.to_zoned(tz.clone());
+    let z = t.to_zoned_datetime(tz.clone());
     format!("{}:{:02}", z.hour(), z.minute())
 }
 
@@ -74,7 +74,7 @@ pub(crate) fn entry_day(e: &CalendarEntry, tz: &TimeZone) -> Option<Date> {
         e.start
             .parse::<Timestamp>()
             .ok()?
-            .to_zoned(tz.clone())
+            .to_zoned_datetime(tz.clone())
             .date(),
     )
 }
@@ -86,7 +86,11 @@ pub(crate) fn entry_end_day(e: &CalendarEntry, tz: &TimeZone) -> Option<Date> {
     let end = if e.all_day {
         e.end.get(..10)?.parse::<Date>().ok()?.yesterday().ok()?
     } else {
-        let z = e.end.parse::<Timestamp>().ok()?.to_zoned(tz.clone());
+        let z = e
+            .end
+            .parse::<Timestamp>()
+            .ok()?
+            .to_zoned_datetime(tz.clone());
         let at_midnight = z.hour() == 0 && z.minute() == 0 && z.second() == 0;
         if at_midnight {
             z.date().yesterday().ok()?
@@ -332,7 +336,7 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
     let now_ts = engine.clock_now();
     let now = fmt_ts(now_ts);
     let tz = engine.clock().tz();
-    let today = now_ts.to_zoned(tz.clone()).date().to_string();
+    let today = now_ts.to_zoned_datetime(tz.clone()).date().to_string();
     let window = (
         batch.window_from.parse::<Date>().ok(),
         batch.window_to.parse::<Date>().ok(),

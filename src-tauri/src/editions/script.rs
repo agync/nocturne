@@ -93,7 +93,7 @@ pub fn calendar_today(page: &PageView, tz: &TimeZone) -> String {
             }
             match l.start.parse::<jiff::Timestamp>() {
                 Ok(t) => {
-                    let z = t.to_zoned(tz.clone());
+                    let z = t.to_zoned_datetime(tz.clone());
                     format!("{title} at {}:{:02}", z.hour(), z.minute())
                 }
                 Err(_) => title,

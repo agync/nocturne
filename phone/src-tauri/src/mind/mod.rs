@@ -583,7 +583,7 @@ impl PhoneMind {
             return true;
         };
         let tz = clock.tz();
-        clock.now().to_zoned(tz.clone()).date() > since.to_zoned(tz).date()
+        clock.now().to_zoned_datetime(tz.clone()).date() > since.to_zoned_datetime(tz).date()
     }
 
     /// One pass: up to a few things read, then one look by the scheduler. Blocks on `rt`: call

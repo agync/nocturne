@@ -1051,7 +1051,7 @@ impl Reader {
         let cx = ExtractContext {
             item_kind: p.kind,
             kept_at: p.kept_at.parse().unwrap_or(now),
-            today: now.to_zoned(self.inner.clock.tz()).date(),
+            today: now.to_zoned_datetime(self.inner.clock.tz()).date(),
             known_entities: known,
         };
         let careful = reread && self.state().careful.contains(&id);

@@ -1128,7 +1128,7 @@ impl<R: Runtime> Call<R> {
     /// A phone reads today's page and the seven days before it, by the local date.
     fn in_window(&self, date: &str) -> bool {
         let state = self.app.state::<AppState>();
-        let today = state.now().to_zoned(state.clock.tz()).date();
+        let today = state.now().to_zoned_datetime(state.clock.tz()).date();
         let Ok(day) = date.parse::<jiff::civil::Date>() else {
             return false;
         };

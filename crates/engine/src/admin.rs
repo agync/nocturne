@@ -113,7 +113,11 @@ impl Engine {
     /// Counts for the status line. Counted in the store (no rows loaded, no cap), with the same
     /// predicates `needs_you()` uses: snoozed entries and anything in a forget are left out.
     pub fn status_counts(&self) -> Result<StatusCounts> {
-        let today = self.clock().now().to_zoned(self.clock().tz()).date();
+        let today = self
+            .clock()
+            .now()
+            .to_zoned_datetime(self.clock().tz())
+            .date();
         let today_s = today.to_string();
         let horizon = today
             .checked_add(jiff::Span::new().days(14))

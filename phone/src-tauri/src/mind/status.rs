@@ -160,7 +160,9 @@ pub(super) struct Month {
 }
 
 fn month_of(t: Timestamp, tz: &jiff::tz::TimeZone) -> String {
-    t.to_zoned(tz.clone()).strftime("%Y-%m").to_string()
+    t.to_zoned_datetime(tz.clone())
+        .strftime("%Y-%m")
+        .to_string()
 }
 
 impl PhoneMind {
@@ -249,7 +251,7 @@ impl PhoneMind {
         if !reached {
             return None;
         }
-        let today = self.clock.now().to_zoned(self.clock.tz()).date();
+        let today = self.clock.now().to_zoned_datetime(self.clock.tz()).date();
         today
             .first_of_month()
             .checked_add(1.month())
