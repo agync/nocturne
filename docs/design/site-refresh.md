@@ -1,9 +1,9 @@
 ---
 type: Design
 title: The site before the store launch
-description: "Proposal for what the landing, install and new support pages say once Nocturne is in Google Play and the App Store: a phone band with store badges, privacy words true for a computer and a phone, a signed Mac, phone downloads, links to the privacy policy and support, the claims checked against the code, the strings each language retranslates and the owner's questions."
-status: draft
-tags: [proposal, site, landing, install, support, copy, phone, localisation]
+description: "What the landing, install and new support pages say once Nocturne is in Google Play and the App Store: a phone band with store badges, privacy words true for a computer and a phone, a signed Mac, phone downloads, links to the privacy policy and support, the claims checked against the code, the strings each language retranslates and the owner's questions."
+status: stable
+tags: [approved, site, landing, install, support, copy, phone, localisation]
 ---
 
 # The site before the store launch
@@ -20,8 +20,8 @@ contact before a listing goes live, and the Mac download is about to be signed a
 
 This page decides what the site says at the store launch and after it, in which words, and when
 each part may go live. It carries forward what still holds of an unpublished draft of 17 November
-("Site and app, saying the same true thing"), each fact checked again against `main`. Nothing here
-is built.
+("Site and app, saying the same true thing"), each fact checked again against `main`. The Now stage
+is built; the rest waits for its event.
 
 **Not on this page: the privacy policy's text.** It has its own design,
 `docs/design/privacy-policy.md`, written separately with its own review. This page only decides
@@ -417,7 +417,7 @@ stay as they are on `main` until the phone release, because they are true for a 
 The five languages translate every new or changed key below, each with the new English in `from`;
 `make site/strings` refuses anything older. The rows in `site-copy/de.md`, `es.md`, `fr.md`,
 `it.md` and `nl.md` change with them, following each language's glossary ("AI chip", "keep" and
-"Online answers" as each glossary sets). Nothing here is translated yet.
+"Online answers" as each glossary sets). Nothing here is translated yet: the built stage's keys show as stale or missing until it is.
 
 | Group | Keys |
 |---|---|
@@ -462,6 +462,9 @@ Made with the build, not by this proposal.
 
 ## Questions for the owner
 
+Owner, 2026-11-24: all recommended. Each row's recommendation is the decision, and where a row
+says "settled" it already was.
+
 | # | Question | Options | Trade-offs | Recommendation |
 |---|---|---|---|---|
 | 1 | Where do phones go on the landing page? | A: a phone band after the journal, the phone picture moved into it. B: the band, and Privacy keeps its Away from home picture too. C: no band, only lines in Privacy and Requirements | A gives phones one clear place and keeps Privacy about promises. B shows two phones on one page. C hides the biggest change since launch in small print | **A** |
@@ -482,4 +485,22 @@ Made with the build, not by this proposal.
 
 ## Approval
 
-Not yet reviewed.
+The owner approved this design on 2026-11-24 with every recommended answer under [Questions for the
+owner](#questions-for-the-owner). The staged build follows [When each part goes
+live](#when-each-part-goes-live).
+
+| Stage | State |
+|---|---|
+| Now | Built: the five corrected lines and the support page with its footer link |
+| Before the first store submission | `/support` is built; `/privacy` and its footer link wait for the policy's review |
+| The other stages | Wait for what each names |
+
+Two choices made while building the support page, to settle with the stage that follows them:
+
+- The answer to "What does Nocturne collect?" does not name the privacy policy or link to it while
+  `/privacy` does not exist. It reads "Nothing. No account, no analytics, no crash reports. Only
+  what you turn on can leave your computer or phone." The words in [The support page
+  (new)](#the-support-page-new) return with the policy.
+- Question 7 chose a translated support page, so each language needs the new strings and the
+  five corrected lines. Until those are written, `make site/strings` fails by design, and the
+  strings list each language shows as missing or stale.
