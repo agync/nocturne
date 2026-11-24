@@ -359,6 +359,24 @@ fn load_nights(place: &dyn BackupPlace, key: &NightKey) -> NightResult<Vec<Night
     Ok(nights)
 }
 
+/// Whether the account holds a night `opened` does not: one of another backup, or one damaged.
+fn foreign_nights(place: &dyn BackupPlace, opened: &[Night]) -> NightResult<bool> {
+    let named = place
+        .list(NIGHT)?
+        .iter()
+        .filter(|e| parse_night(&e.name).is_some())
+        .count();
+    Ok(named != opened.len())
+}
+
+/// A night another phone wrote after this phone's newest.
+fn newer_from_another<'a>(nights: &'a [Night], state: &NightState) -> Option<&'a Night> {
+    nights
+        .iter()
+        .rev()
+        .find(|n| n.body.device != state.device && n.body.count > state.count)
+}
+
 /// Fetch one piece and prove it: its name is the hash of what came, the key opens it, and what
 /// it holds is what the night says.
 fn fetch_piece(place: &dyn BackupPlace, key: &NightKey, r: &PieceRef) -> NightResult<Vec<u8>> {
@@ -515,9 +533,33 @@ pub fn add_recovery_key(
     key: &NightKey,
     work_factor: Option<u8>,
 ) -> NightResult<String> {
+    Ok(add_recovery_key_locked(place, key, work_factor)?.0)
+}
+
+/// [`add_recovery_key`], with the lock it wrote, so the phone's copy of the locks follows what
+/// the account holds without reading it back.
+pub fn add_recovery_key_locked(
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    work_factor: Option<u8>,
+) -> NightResult<(String, Vec<u8>)> {
+    let (text, locked) = recovery_lock(key, work_factor)?;
+    place.put(KEY_RECOVERY, &locked)?;
+    Ok((text, locked))
+}
+
+/// A new recovery key and the key locked with it, written nowhere: for a backup starting afresh
+/// in an account that holds none of its locks yet.
+pub fn recovery_lock(key: &NightKey, work_factor: Option<u8>) -> NightResult<(String, Vec<u8>)> {
     let text = make_recovery_key();
-    place.put(KEY_RECOVERY, &lock::wrap(key, &text, work(work_factor))?)?;
-    Ok(text)
+    let locked = lock::wrap(key, &text, work(work_factor))?;
+    Ok((text, locked))
+}
+
+/// The key locked with `phrase`, written nowhere, as [`recovery_lock`].
+pub fn phrase_lock(key: &NightKey, phrase: &str, work_factor: Option<u8>) -> NightResult<Vec<u8>> {
+    let phrase = usable_phrase(phrase)?;
+    lock::wrap(key, &phrase, work(work_factor))
 }
 
 /// The recovery key no longer opens the backup.
@@ -533,6 +575,66 @@ pub fn has_recovery_key(place: &dyn BackupPlace) -> NightResult<bool> {
         .any(|e| e.name == KEY_RECOVERY))
 }
 
+/// The key as the account holds it, locked with the phrase and with the recovery key if one was
+/// made. The phone keeps a copy so the backup can start again in another account with the same
+/// phrase and recovery key, which it never holds itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyLocks {
+    pub phrase: Vec<u8>,
+    pub recovery: Option<Vec<u8>>,
+}
+
+/// The locks on the key in the account.
+pub fn key_locks(place: &dyn BackupPlace) -> NightResult<KeyLocks> {
+    Ok(KeyLocks {
+        phrase: place.get(KEY_PHRASE)?.ok_or(NightError::NoBackup)?,
+        recovery: place.get(KEY_RECOVERY)?,
+    })
+}
+
+/// Start the backup again in another account, with the same key, phrase and recovery key: the
+/// next night there is sent in full, and the account's locks become `locks`, so a recovery key
+/// they don't hold opens nothing there. An account whose nights all open with `key` (the person
+/// chose it again) keeps them, unless another phone wrote a newer one, which stops this phone
+/// before anything is written. An account holding anything else of a backup (a night the key
+/// doesn't open, or locks or pieces with no night of this backup) is refused, so nothing is
+/// written over it.
+///
+/// `tried` are the phrase locks earlier carries to this account may have left before a night was
+/// written there: the account holding one of them is this backup's too.
+pub fn carry_locks(
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    locks: &KeyLocks,
+    tried: &[Vec<u8>],
+    state: &NightState,
+) -> NightResult<()> {
+    let nights = load_nights(place, key)?;
+    if foreign_nights(place, &nights)? {
+        return Err(NightError::AlreadyThere);
+    }
+    if let Some(other) = newer_from_another(&nights, state) {
+        return Err(NightError::AnotherPhone {
+            made_at: other.body.made_at.clone(),
+        });
+    }
+    if nights.is_empty() {
+        let theirs = match place.get(KEY_PHRASE)? {
+            Some(phrase) => phrase != locks.phrase && !tried.contains(&phrase),
+            None => !place.list(KEY_RECOVERY)?.is_empty() || !place.list(PIECE)?.is_empty(),
+        };
+        if theirs {
+            return Err(NightError::AlreadyThere);
+        }
+    }
+    place.put(KEY_PHRASE, &locks.phrase)?;
+    match &locks.recovery {
+        Some(r) => place.put(KEY_RECOVERY, r)?,
+        None => place.delete(KEY_RECOVERY)?,
+    }
+    Ok(())
+}
+
 /// Lock the key with a new phrase. The old phrase stops opening the backup; a recovery key
 /// still does. The key must be the one the account's nights are locked with.
 pub fn change_phrase(
@@ -541,13 +643,24 @@ pub fn change_phrase(
     phrase: &str,
     work_factor: Option<u8>,
 ) -> NightResult<()> {
-    let phrase = usable_phrase(phrase)?;
+    change_phrase_locked(place, key, phrase, work_factor).map(drop)
+}
+
+/// [`change_phrase`], with the lock it wrote.
+pub fn change_phrase_locked(
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    phrase: &str,
+    work_factor: Option<u8>,
+) -> NightResult<Vec<u8>> {
+    usable_phrase(phrase)?;
     let nights = place.list(NIGHT)?;
     if !nights.is_empty() && load_nights(place, key)?.is_empty() {
         return Err(NightError::Damaged);
     }
-    place.put(KEY_PHRASE, &lock::wrap(key, &phrase, work(work_factor))?)?;
-    Ok(())
+    let locked = phrase_lock(key, phrase, work_factor)?;
+    place.put(KEY_PHRASE, &locked)?;
+    Ok(locked)
 }
 
 /// The key, from the phrase the person typed.
@@ -793,14 +906,15 @@ impl Engine {
             return Err(NightError::NotInUse);
         }
         let nights = load_nights(place, key)?;
-        if let Some(other) = nights
-            .iter()
-            .rev()
-            .find(|n| n.body.device != state.device && n.body.count > state.count)
-        {
+        if let Some(other) = newer_from_another(&nights, state) {
             return Err(NightError::AnotherPhone {
                 made_at: other.body.made_at.clone(),
             });
+        }
+        // A night the key doesn't open is another backup's, or damaged: the pieces it lists
+        // would go as ones no kept night lists.
+        if foreign_nights(place, &nights)? {
+            return Err(NightError::Damaged);
         }
 
         if !place.list(KEY_PHRASE)?.iter().any(|e| e.name == KEY_PHRASE) {
