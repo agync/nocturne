@@ -934,7 +934,10 @@ fn an_unreachable_service_is_looked_at_again_until_it_answers() {
 
 /// The stand-in reached by a name that is looked up only while `online` holds, judged as a
 /// service online (`public`) or on the person's own network, with what was kept read.
-fn by_name(w: &World, public: bool) -> (Arc<std::sync::atomic::AtomicBool>, ProviderSettings) {
+pub(super) fn by_name(
+    w: &World,
+    public: bool,
+) -> (Arc<std::sync::atomic::AtomicBool>, ProviderSettings) {
     use std::sync::atomic::{AtomicBool, Ordering};
     let online = Arc::new(AtomicBool::new(true));
     let lookup: nocturne_provider::address::Lookup = {
@@ -1549,4 +1552,43 @@ fn a_list_that_fails_says_why_and_is_listed() {
             problem: CheckOutcome::NotHttps
         }
     );
+}
+
+/// How many looks at the list the stand-in has had.
+fn looks(w: &World) -> usize {
+    w.stand_in
+        .seen()
+        .iter()
+        .filter(|s| s.path == "/v1/models")
+        .count()
+}
+
+#[test]
+fn the_list_is_used_only_while_fresh_and_for_the_same_address() {
+    let w = world();
+    let settings = w.settings();
+    w.rt.block_on(w.mind.list(&settings));
+    // After 15 minutes the check looks itself.
+    w.later(15);
+    w.rt.block_on(w.mind.check(&settings));
+    assert_eq!(looks(&w), 2);
+    // An address written another way is another address.
+    w.rt.block_on(w.mind.list(&settings));
+    let other = ProviderSettings {
+        url: format!("{}/", settings.url),
+        ..settings.clone()
+    };
+    w.rt.block_on(w.mind.check(&other));
+    assert_eq!(looks(&w), 4);
+}
+
+#[test]
+fn a_key_revoked_after_the_look_still_fails_at_the_question() {
+    let w = world();
+    let settings = w.settings();
+    w.rt.block_on(w.mind.list(&settings));
+    w.stand_in.always(Answer::Status(401, "{}".into()));
+    let outcome = w.rt.block_on(w.mind.check(&settings));
+    assert_eq!(outcome, CheckOutcome::KeyRefused);
+    assert_eq!(looks(&w), 1, "the question decided, with no second look");
 }
