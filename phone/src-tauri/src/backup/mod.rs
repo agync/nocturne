@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
-use nocturne_contract::{BackupPhase, BackupSummary, HomeError, KeptCounts};
+use nocturne_contract::{BackupPhase, BackupSummary, HomeError, KeptCounts, PhoneMode};
 use nocturne_engine::Clock;
 use nocturne_engine::nightly::{
     self, BackupPlace, ExposeSecret, NightError, NightKey, NightReport, NightRun, NightState,
@@ -141,6 +141,11 @@ struct Saved {
     trouble: Option<Trouble>,
     /// The person asked for the backup in the account to go; it goes once the account answers.
     delete_pending: bool,
+    /// The memory moved to a computer: no more nights, and the key stays only so the backup
+    /// can be deleted later (`docs/design/phone-backup.md`, "When the memory moves to a
+    /// computer").
+    #[serde(default)]
+    moved: bool,
 }
 
 /// How the backup stands, as This phone shows it.
@@ -174,6 +179,9 @@ pub struct BackupStatus {
     pub wifi_only: bool,
     pub last: Option<LastNight>,
     pub state: BackupState,
+    /// The memory moved to a computer; a backup kept in the account is "Your backup from
+    /// {day}", there only to be deleted.
+    pub moved: bool,
 }
 
 /// Why a backup call did not do what was asked, as the screens name it.
@@ -443,6 +451,7 @@ impl PhoneBackup {
             wifi_only: saved.wifi_only,
             last: saved.last,
             state,
+            moved: saved.moved,
         }
     }
 
@@ -466,6 +475,7 @@ impl PhoneBackup {
             s.last = None;
             s.trouble = None;
             s.delete_pending = false;
+            s.moved = false;
         });
         Ok(())
     }
@@ -532,7 +542,8 @@ impl PhoneBackup {
     pub fn turn_on_again(&self) -> Result<(), BackupProblem> {
         self.place()?;
         self.key()?;
-        if self.saved().state.is_none() {
+        let saved = self.saved();
+        if saved.state.is_none() || saved.moved {
             return Err(BackupProblem::Off);
         }
         self.update(|s| {
@@ -540,6 +551,31 @@ impl PhoneBackup {
             s.trouble = None;
         });
         Ok(())
+    }
+
+    /// The memory moved to a computer, or is put aside for the computer's: backup stops for good
+    /// (decision 19). A backup kept in the account stays as it was on the day of the move, and
+    /// the key stays only so This phone can delete it later; nothing runs, not even after a
+    /// forget, since the memory here is no longer the person's.
+    pub fn memory_moved(&self) {
+        self.update(|s| {
+            if s.state.is_some() || s.on {
+                s.on = false;
+                s.trouble = None;
+                s.moved = true;
+            }
+        });
+    }
+
+    /// Backup stops by itself once the phone works with a computer, whatever screen moved it.
+    fn follow(&self, home: &Home) {
+        let saved = self.saved();
+        if !saved.moved
+            && (saved.on || saved.state.is_some())
+            && home.mode(false) == Some(PhoneMode::Companion)
+        {
+            self.memory_moved();
+        }
     }
 
     /// Delete everything on this phone reaches the backup too: it is deleted from the account,
@@ -552,7 +588,7 @@ impl PhoneBackup {
 
     /// Whether a backup turned off was kept in the account with its key on this phone.
     fn kept_off(&self, saved: &Saved) -> bool {
-        !saved.on && saved.state.is_some() && self.keys.key().is_some()
+        !saved.on && !saved.moved && saved.state.is_some() && self.keys.key().is_some()
     }
 
     fn delete_pending(&self) -> Result<(), BackupProblem> {
@@ -582,6 +618,7 @@ impl PhoneBackup {
         over_mobile_data: bool,
         progress: &dyn Fn(BackupPhase, u64, u64),
     ) -> Result<LastNight, BackupProblem> {
+        self.follow(home);
         let saved = self.saved();
         if !saved.on {
             return Err(BackupProblem::Off);
@@ -748,6 +785,7 @@ impl PhoneBackup {
                 s.last = None;
                 s.trouble = None;
                 s.delete_pending = false;
+                s.moved = false;
             });
         }
         Ok(restored)
@@ -756,6 +794,10 @@ impl PhoneBackup {
     /// "Make this phone the one in use": backup is on, and its first night here is written at
     /// once, so it is the newest and another phone stops when it next looks.
     pub fn make_in_use(&self, home: &Home) -> Result<(), BackupProblem> {
+        self.follow(home);
+        if self.saved().moved {
+            return Err(BackupProblem::Off);
+        }
         let place = self.place()?;
         let key = self.key()?;
         let mut state = self.saved().state.unwrap_or_default();
@@ -773,6 +815,7 @@ impl PhoneBackup {
     /// with the backup kept. Returns whether a night was written; after one that was not, the
     /// next look waits.
     pub fn pass(&self, home: &Home, charging: bool) -> bool {
+        self.follow(home);
         let saved = self.saved();
         if saved.delete_pending && self.place().is_ok() {
             if let Err(e) = self.delete_pending() {

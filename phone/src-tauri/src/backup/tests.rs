@@ -350,3 +350,40 @@ fn a_backup_restored_onto_a_phone_with_a_memory_brings_its_things_in() {
     drop(open);
     assert_eq!(new.state(), BackupState::Off);
 }
+
+#[test]
+fn the_backup_stops_by_itself_once_the_memory_moves_to_a_computer() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("The plumber comes on Tuesday.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    let written = nights(&place);
+
+    // The person chose the computer's memory: the memory here is put aside.
+    p.home.use_computer().unwrap();
+    p.later(24);
+    assert!(!p.backup.pass(&p.home, true), "no night runs");
+    let status = p.backup.status();
+    assert!(!status.on && status.moved);
+    assert_eq!(p.now(), Err(BackupProblem::Off));
+    assert_eq!(p.backup.turn_on_again(), Err(BackupProblem::Off));
+    assert_eq!(nights(&place), written, "the backup stays as it was");
+    assert!(p.keys.key().is_some(), "kept only to delete it later");
+
+    p.backup.turn_off(true).unwrap();
+    assert!(place.names().is_empty(), "deleting it later still works");
+}
+
+#[test]
+fn a_move_says_so_and_nothing_runs_after_a_forget() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    p.backup.memory_moved();
+    assert!(p.backup.status().moved);
+    assert!(!p.backup.pass(&p.home, true));
+    assert_eq!(nights(&place), 1);
+}
