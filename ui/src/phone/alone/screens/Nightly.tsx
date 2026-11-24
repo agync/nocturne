@@ -41,6 +41,12 @@ export function backupHint(
     return s.last ? t("phone.backup.hint.running", values) : t("phone.backup.hint.first", values);
   }
   if (!s.on || s.state.state === "notInUse") {
+    if (s.deletePending && s.deleteElsewhere)
+      return onPhone(
+        ios,
+        "phone.backup.hint.offDeletingElsewhere.ios",
+        "phone.backup.hint.offDeletingElsewhere.android",
+      );
     if (s.deletePending)
       return onPhone(
         ios,

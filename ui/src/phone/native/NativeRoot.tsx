@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
-import { createBackupApi } from "../alone/nightly";
+import { createBackupApi, onPhone } from "../alone/nightly";
 import { Restore } from "../alone/screens/Backup";
 import { MoveFlow, nativeMoveApi } from "../alone/screens/MoveFlow";
 import { NightlyRestore } from "../alone/screens/NightlyRestore";
@@ -82,6 +82,29 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   shown.current = screen.name;
   // The phone holds its own memory: pairing is the way to move it.
   const [alone, setAlone] = useState(false);
+
+  // A deletion that waits for an account the phone no longer reaches says which one it waits for.
+  const welcomeDeleted = screen.name === "first" && deleted && deletedLine !== undefined;
+  useEffect(() => {
+    if (!welcomeDeleted) return;
+    let live = true;
+    void (services.backup ?? createBackupApi())
+      .status()
+      .then((s) => {
+        if (live && s.deletePending && s.deleteElsewhere)
+          setDeletedLine(
+            onPhone(
+              services.platform.ios,
+              "phone.backup.delete.elsewhere.ios",
+              "phone.backup.delete.elsewhere.android",
+            ),
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [welcomeDeleted, services]);
 
   useEffect(() => {
     void services.deviceName?.().then((own) => {

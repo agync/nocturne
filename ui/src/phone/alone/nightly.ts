@@ -42,6 +42,8 @@ export interface BackupStatus {
   moved: boolean;
   /** The backup in the account goes once the account answers. */
   deletePending: boolean;
+  /** That deletion is owed to the account the backup was in, not the one reached now. */
+  deleteElsewhere: boolean;
   /** Something forgotten for good is still in the backup until the account can be reached. */
   forgetWaiting: boolean;
 }
