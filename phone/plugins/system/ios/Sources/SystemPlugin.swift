@@ -175,15 +175,28 @@ class SystemPlugin: Plugin {
     Safe.forget(args.name) ? invoke.resolve() : invoke.reject("failed")
   }
 
-  /// Whether the phone charges, and whether a background window is open.
+  /// Whether the phone charges, its battery level and Low Power Mode, whether its network is
+  /// unmetered, and whether a background window is open.
   @objc public func power(_ invoke: Invoke) throws {
     DispatchQueue.main.async {
       let charging: Any = Power.charging().map { NSNumber(value: $0) } ?? NSNull()
       let unmetered: Any = NetworkCost.shared.unmetered.map { NSNumber(value: $0) } ?? NSNull()
+      let percent: Any = Power.percent().map { NSNumber(value: $0) } ?? NSNull()
       invoke.resolve([
-        "charging": charging, "window": Background.shared.isOpen, "unmetered": unmetered,
+        "charging": charging,
+        "window": Background.shared.isOpen,
+        "unmetered": unmetered,
+        "percent": percent,
+        "saver": Power.saver(),
       ])
     }
+  }
+
+  /// Read now while the person is away: the phone's own progress, or a short while in the
+  /// background, and the one line left when it ends.
+  @objc public func readingNow(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(ReadingArgs.self)
+    Reading.shared.handle(args) { answer in invoke.resolve(answer) }
   }
 
   /// Background windows while the mind or the backup is on; none while both are off. iOS has no
