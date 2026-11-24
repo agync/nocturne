@@ -757,12 +757,11 @@ div.ph-mind-sent,
   margin: 0;
 }
 
+/* Its size reads as the row's does ("1.9 kB"), so the heading keeps its own case. */
 .ph-mind-part-h {
   margin: 0;
   color: var(--ink2);
-  font: 500 0.75rem / 1.4 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 0.8125rem / 1.4 var(--font-mono);
 }
 
 .ph-mind-sent-meta {
