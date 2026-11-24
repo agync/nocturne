@@ -556,7 +556,7 @@ backup's settings: this phone's stay.
 |---|---|
 | The same thing on both | Kept once. The one on this phone stays, and when the backup's was kept on another device, its page adds under "Kept": "Also kept on {device} · {day}, {time}" |
 | Journal entries or check-ins for the same day | Both kept, each on its day in time order. Nothing is joined into one entry |
-| A page or reflection for the same day | Both kept. That day in Past pages lists both, the one that came in marked "From your backup" |
+| A page or reflection for the same day | This phone's is kept, and the backup's doesn't come. Keeping both, with two pages for one day, waits for a later release ([decision 6](#decisions)) |
 | Calendar entries and health readings on both | Kept once, by their own identity in the phone's calendar or Health; the newer version stays |
 | Private marks | Kept as they were. When the same thing is on both and either is private, it is private |
 | Something forgotten on either side | Stays forgotten. Something forgotten for good on this phone is not brought back from an older backup: the phone keeps a note of what it forgot for good, without the thing itself, for this |
@@ -673,3 +673,4 @@ Settled by the owner on 2026-11-24, each as recommended.
 | 3 | Delete everything while the phone is offline deletes the phone at once and the backup when next online. The line says what is left and how to remove it by hand | [Delete everything, with a backup](#forgetting-delete-everything-and-private) |
 | 4 | A backup that stops for something only the person can fix shows once on Today, with no system notification | [On Today](#on-today) |
 | 5 | A restore that brought things in has no undo. Nothing on the phone was lost, and anything that came in can be forgotten | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
+| 6 | Two pages for one day are deferred to a later release. When a bring in meets a page or reflection both sides have for the same day, this phone's stays and the backup's doesn't come | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
