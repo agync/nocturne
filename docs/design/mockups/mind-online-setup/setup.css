@@ -89,6 +89,8 @@ html[data-text="200"] .pick .pdot { margin-top: calc(0.7em - 3.5px); }
 .rn p.rnSaid { display: flex; align-items: flex-start; gap: 6px; color: var(--ink); font-size: 0.9375rem; }
 .rn p.rnSaid svg { flex: none; margin-top: 2px; }
 .rn .btn { height: 44px; }
+/* A quiet button in the block keeps the app's own outline, so it spans the block like the app's. */
+.rn .btn[data-kind="quiet"] { border-color: var(--rule); }
 html[data-text="200"] .rn .btn { height: auto; }
 svg.mark { background: none; }
 .osNote { margin: 0 0 12px 38px; padding: 8px 10px; border: 1px dashed var(--ink3); border-radius: 8px; text-align: left; letter-spacing: 0.04em; }
