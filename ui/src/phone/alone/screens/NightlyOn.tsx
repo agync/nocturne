@@ -185,10 +185,13 @@ export function BackupWhy({
     const front = () => {
       if (document.visibilityState === "visible") look();
     };
+    const online = () => look();
     document.addEventListener("visibilitychange", front);
+    window.addEventListener("online", online);
     return () => {
       gone = true;
       document.removeEventListener("visibilitychange", front);
+      window.removeEventListener("online", online);
     };
   }, [ios, connect, read]);
 
@@ -235,14 +238,16 @@ export function BackupWhy({
             <dt>{t("phone.backup.why.who.label")}</dt>
             <dd>{onPhone(ios, "phone.backup.why.who.ios", "phone.backup.why.who.android")}</dd>
           </div>
-          <div>
-            <dt>{t("phone.backup.why.need.label")}</dt>
-            <dd>
-              {onPhone(ios, "phone.backup.why.need.ios", "phone.backup.why.need.android", {
-                size: sized,
-              })}
-            </dd>
-          </div>
+          {size === null ? null : (
+            <div>
+              <dt>{t("phone.backup.why.need.label")}</dt>
+              <dd>
+                {onPhone(ios, "phone.backup.why.need.ios", "phone.backup.why.need.android", {
+                  size: sized,
+                })}
+              </dd>
+            </div>
+          )}
         </dl>
         {blocked ? (
           <p className="ph-limit" role="status">
@@ -590,7 +595,7 @@ export function KeyShown({
       <main className="ph-main" style={{ gap: 14 }}>
         <div className="ph-hero" style={{ paddingTop: 40 }}>
           <span className="ph-hero-icon">
-            <Icon name="lock" size={32} />
+            <Icon name="shield" size={32} />
           </span>
           <h1 className="ph-steph" tabIndex={-1} ref={heading}>
             {later ? t("phone.backup.newKey.title") : t("phone.backup.key.title")}
@@ -646,6 +651,7 @@ export function FirstBackup({
   const [progress, setProgress] = useState<BackupProgress | null>(null);
   const [done, setDone] = useState<LastNight | null>(null);
   const [wifi, setWifi] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const heading = useHeading(done ? "done" : "first");
   const started = useRef(false);
 
@@ -654,6 +660,9 @@ export function FirstBackup({
     started.current = true;
     void api.now(false, setProgress).then(setDone, (e: unknown) => {
       if (problemOf(e) === "waitingForWifi") setWifi(true);
+      // It carries on tonight, as the note says.
+      setProgress(null);
+      setWaiting(true);
     });
   }, [api]);
 
@@ -692,7 +701,7 @@ export function FirstBackup({
     : null;
   return (
     <Page bar={null}>
-      <main className="ph-main" aria-busy="true">
+      <main className="ph-main" aria-busy={waiting ? undefined : true}>
         <div className="ph-hero" style={{ paddingTop: 96 }}>
           <span className="ph-hero-icon">
             <Icon name="refresh" size={32} />
