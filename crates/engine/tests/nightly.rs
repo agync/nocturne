@@ -3,7 +3,7 @@ mod common;
 use std::sync::atomic::AtomicBool;
 
 use common::*;
-use nocturne_contract::{BackupPhase, Kept, Source};
+use nocturne_contract::{BackupPhase, Edition, Kept, Source};
 use nocturne_engine::nightly::{
     self, BackupPlace, FolderPlace, KEY_PHRASE, KEY_RECOVERY, MemoryPlace, NightError, NightKey,
     NightRun, NightState, PlaceError,
@@ -599,6 +599,120 @@ fn a_backup_brought_into_a_memory_adds_its_things_and_keeps_shared_ones_once() {
     assert_eq!(here.engine.find_items("plumber", 5).unwrap().len(), 1);
     assert_eq!(here.engine.find_items("Already", 5).unwrap().len(), 1);
     assert_eq!(here.engine.find_items("Both", 5).unwrap().len(), 1);
+}
+
+/// Restore the newest night and bring it into `engine`.
+fn bring_newest(
+    engine: &Engine,
+    place: &dyn BackupPlace,
+    key: &NightKey,
+) -> nocturne_engine::BroughtIn {
+    let (out, _, _) = restore(place, key).unwrap();
+    engine
+        .bring_in_backup(&out.path().join("stage/store"))
+        .unwrap()
+}
+
+#[test]
+fn a_backup_brought_in_comes_as_it_was_and_nothing_is_read_again() {
+    let old = fixture();
+    old.engine.ensure_local_device("Old phone").unwrap();
+    let (item, memory) = learn(
+        &old.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    old.engine.set_keep_forever(&memory, true).unwrap();
+    old.engine.set_private(&memory, true).unwrap();
+    let page = old
+        .engine
+        .compose_page(common::date("2026-11-13"), Edition::Screen)
+        .unwrap();
+    old.engine.save_page(&page).unwrap();
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+
+    let here = fixture();
+    here.engine.ensure_local_device("Pixel").unwrap();
+    keep(&here.engine, "Already on this phone.");
+    let waiting = here.engine.pending_items(10).unwrap().len();
+    let brought = bring_newest(&here.engine, &place, &key);
+    assert_eq!(brought.things, 1);
+
+    assert_eq!(
+        here.engine.pending_items(10).unwrap().len(),
+        waiting,
+        "nothing that came waits to be read"
+    );
+    assert_eq!(
+        here.engine.get_item(&item).unwrap().status,
+        old.engine.get_item(&item).unwrap().status
+    );
+    let came = here.engine.get_memory(&memory).unwrap();
+    assert!(came.private);
+    assert_eq!(came.sentence, "Zed knows x.");
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            &format!("SELECT keep_forever FROM memories WHERE id = '{memory}'")
+        ),
+        1
+    );
+    assert!(
+        here.engine
+            .page(Some(common::date("2026-11-13")))
+            .unwrap()
+            .is_some(),
+        "the day's page came with it"
+    );
+
+    // Brought in twice, nothing doubles.
+    let again = bring_newest(&here.engine, &place, &key);
+    assert_eq!((again.things, again.already), (0, 1));
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM memories"),
+        1
+    );
+}
+
+#[test]
+fn a_memory_read_here_from_a_thing_on_both_is_kept_once_with_both_marks() {
+    let old = fixture();
+    old.engine.ensure_local_device("Old phone").unwrap();
+    let (_, memory) = learn(
+        &old.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    old.engine.set_private(&memory, true).unwrap();
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+
+    let here = fixture();
+    here.engine.ensure_local_device("Pixel").unwrap();
+    let (_, mine) = learn(
+        &here.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    here.engine.set_keep_forever(&mine, true).unwrap();
+    let brought = bring_newest(&here.engine, &place, &key);
+    assert_eq!(brought.same, 1);
+    assert_eq!(
+        sql_count(here.dir.path(), "SELECT COUNT(*) FROM memories"),
+        1
+    );
+    let kept = here.engine.get_memory(&mine).unwrap();
+    assert!(kept.private, "the backup's mark holds");
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            &format!("SELECT keep_forever FROM memories WHERE id = '{mine}'")
+        ),
+        1
+    );
 }
 
 #[test]

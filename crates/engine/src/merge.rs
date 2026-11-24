@@ -26,6 +26,8 @@ use crate::carried::{self, Marks};
 use crate::error::{Error, Result};
 use crate::util::{new_id, random_hex};
 
+mod derived;
+
 /// What bringing a phone's things in added, and what it found already here.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BroughtIn {
@@ -41,13 +43,22 @@ pub struct BroughtIn {
     pub already: u32,
 }
 
+/// How the things arrive: a phone's memory moving here, which this store reads again as new, or
+/// a backup of a phone's own memory, which comes as it was: with what its mind worked out, read
+/// and sent online once already ([`derived`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Bring {
+    Move,
+    Backup,
+}
+
 /// Metadata that names another item by its id.
 const REFS: [&str; 3] = ["replaces", "about", "photo"];
 
 /// Kinds a phone sends again rather than bringing.
 const SENT_AGAIN: &str = "('calendar', 'reading')";
 
-/// Columns reset on arrival: the computer reads each thing as new.
+/// Columns reset on arrival from a move: the computer reads each thing as new.
 const FRESH: [&str; 13] = [
     "reason",
     "lease_until",
@@ -681,13 +692,15 @@ impl Engine {
                 .optional()?)
         })?;
         let name = name.ok_or_else(|| Error::not_found(format!("device {device}")))?;
-        self.bring_in_as(staged, device, &name)
+        self.bring_in_as(staged, device, &name, Bring::Move)
     }
 
-    /// Bring a nightly backup of this phone's own memory, unpacked in the store folder `staged`,
-    /// into the memory here, as [`Engine::bring_in`] brings a phone's: nothing here is put aside
-    /// or removed, and a thing on both is kept once. What comes in is kept through this phone's
-    /// own row.
+    /// Bring a backup of a phone's own memory, unpacked in the store folder `staged`, into the
+    /// memory here (`docs/design/phone-backup.md`, "Onto a phone that has a memory"): nothing here
+    /// is put aside or removed, and a thing on both is kept once. Unlike [`Engine::bring_in`],
+    /// what comes in comes as it was: each thing with its reading, the memories, pages and
+    /// reflections worked out from it and the names taught, so nothing is read or sent online
+    /// again. What comes in is kept through this phone's own row.
     pub fn bring_in_backup(&self, staged: &Path) -> Result<BroughtIn> {
         let db = staged.join(crate::DB_FILE);
         if !db.is_file() {
@@ -704,10 +717,16 @@ impl Engine {
                 .optional()?)
         })?;
         let (device, name) = own.ok_or_else(|| Error::not_found("this phone's own row"))?;
-        self.bring_in_as(staged, &device, &name)
+        self.bring_in_as(staged, &device, &name, Bring::Backup)
     }
 
-    fn bring_in_as(&self, staged: &Path, device: &str, name: &str) -> Result<BroughtIn> {
+    fn bring_in_as(
+        &self,
+        staged: &Path,
+        device: &str,
+        name: &str,
+        bring: Bring,
+    ) -> Result<BroughtIn> {
         let db = staged.join(crate::DB_FILE);
         let phone = crate::store::open_untrusted(&db)?;
         let here_cols = self.read(|conn| columns(conn, "main", "items"))?;
@@ -716,7 +735,14 @@ impl Engine {
             .filter(|c| here_cols.contains(c))
             .collect();
         let (arriving, again) = read_phone(&phone, &shared, name)?;
-        drop(phone);
+        // A move needs nothing more of the phone's store; a backup brings what was worked out.
+        let phone = match bring {
+            Bring::Move => {
+                drop(phone);
+                None
+            }
+            Bring::Backup => Some(phone),
+        };
 
         // The originals are copied first, outside the transaction, so the store is never held
         // while they are; they are put in place inside it. What the transaction then finds here
@@ -733,9 +759,12 @@ impl Engine {
         let mut copies = Staged::copy(&staged.join("originals"), &originals, &needed)?;
 
         let written = self.write(|tx| {
-            let (brought, mut files) =
-                self.add_arriving(tx, device, &arriving, &shared, &mut copies)?;
+            let (brought, placed, mut files) =
+                self.add_arriving(tx, device, &arriving, &shared, &mut copies, bring)?;
             files.extend(carry_resent(tx, device, &again)?);
+            if let Some(phone) = &phone {
+                files.extend(derived::bring(tx, phone, &placed)?);
+            }
             Ok((brought, files))
         });
         copies.drop_waiting();
@@ -743,6 +772,10 @@ impl Engine {
             Ok((brought, files)) => {
                 if !files.is_empty() {
                     self.bump_audio();
+                }
+                // Memories came with their vectors: finding by meaning sees them now.
+                if bring == Bring::Backup {
+                    self.invalidate_vectors();
                 }
                 crate::audio::shred_all(files);
                 Ok(brought)
@@ -776,7 +809,8 @@ impl Engine {
         arriving: &[Arriving],
         shared: &[String],
         copies: &mut Staged,
-    ) -> Result<(BroughtIn, Vec<PathBuf>)> {
+        bring: Bring,
+    ) -> Result<(BroughtIn, derived::Placed, Vec<PathBuf>)> {
         // A forget here that has not finished yet still removes its things and their originals:
         // a thing it names could swallow the phone's own copy of it, or lose the original an
         // arriving thing shares. Nothing is added until it is done; the phone carries on.
@@ -908,8 +942,9 @@ impl Engine {
             obj.remove("phone");
             // A thing the person forgot something from is never read again by itself, as here
             // (`Engine::queue_reread`): it arrives as read, so no mind gets a second chance to say
-            // what was forgotten. Only one not read yet waits to be read.
-            let fresh = p.readable && p.forgotten.is_empty();
+            // what was forgotten. Only one not read yet waits to be read. From a backup, every
+            // thing comes as it was.
+            let fresh = bring == Bring::Move && p.readable && p.forgotten.is_empty();
             if fresh {
                 obj.remove("read_at");
             }
@@ -925,15 +960,38 @@ impl Engine {
             if fresh {
                 set("status", Sql::Text("kept".into()));
             }
-            for c in FRESH {
-                set(
-                    c,
-                    match c {
-                        "attempts" | "failures" | "reread" | "priority" | "forget_epoch"
-                        | "lease_epoch" => Sql::Integer(0),
-                        _ => Sql::Null,
-                    },
-                );
+            match bring {
+                Bring::Move => {
+                    for c in FRESH {
+                        set(
+                            c,
+                            match c {
+                                "attempts" | "failures" | "reread" | "priority"
+                                | "forget_epoch" | "lease_epoch" => Sql::Integer(0),
+                                _ => Sql::Null,
+                            },
+                        );
+                    }
+                }
+                Bring::Backup => {
+                    // Only a read that was under way when the night was made starts again, as
+                    // after a restart (`capture::reset_all_leases`).
+                    let reading =
+                        at("status").is_some_and(|i| text(&p.row[i]).as_deref() == Some("reading"));
+                    if reading {
+                        let before = at("status_before")
+                            .and_then(|i| text(&p.row[i]))
+                            .unwrap_or_else(|| "kept".into());
+                        set("status", Sql::Text(before));
+                        set("status_before", Sql::Null);
+                    }
+                    for c in ["lease_until", "lease_token"] {
+                        set(c, Sql::Null);
+                    }
+                    for c in ["forget_epoch", "lease_epoch"] {
+                        set(c, Sql::Integer(0));
+                    }
+                }
             }
             tx.execute(&insert, params_from_iter(row.iter()))?;
             carry_forgotten(tx, id, p, true)?;
@@ -963,7 +1021,20 @@ impl Engine {
                 None => brought.things += 1,
             }
         }
-        Ok((brought, files))
+        let placed = derived::Placed {
+            items: arriving
+                .iter()
+                .zip(&fates)
+                .map(|(p, f)| (p.id.clone(), f.here().to_string()))
+                .collect(),
+            added: arriving
+                .iter()
+                .zip(&fates)
+                .filter(|(_, f)| matches!(f, Fate::Add(_)))
+                .map(|(p, _)| p.id.clone())
+                .collect(),
+        };
+        Ok((brought, placed, files))
     }
 }
 
