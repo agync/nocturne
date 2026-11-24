@@ -63,12 +63,18 @@ targets:
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # The nightly backup's own space in the person's iCloud (ADR 0019).
+        com.apple.developer.icloud-container-identifiers: [iCloud.is.nocturne.phone]
+        com.apple.developer.icloud-services: [CloudDocuments]
+        com.apple.developer.ubiquity-container-identifiers: [iCloud.is.nocturne.phone]
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
         RUST_LOG: info
     settings:
       base:
+        # The Apple team comes from the environment at build time, never from this file.
+        DEVELOPMENT_TEAM: $(APPLE_TEAM_ID)
         ENABLE_BITCODE: false
         TARGETED_DEVICE_FAMILY: 1
         ARCHS: [arm64]
