@@ -130,7 +130,7 @@
 
   "online.explain.title": "Have your answers written by an online service you choose.",
   "online.explain.short.sent.label": "Sent",
-  "online.explain.short.sent.body": "Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included.",
+  "online.explain.short.sent.body": "Your question and today’s date, with short lines from what you kept that help answer it, your journal entries, check-ins, good things and health readings included.",
   "online.explain.short.never.label": "Never sent",
   "online.explain.short.never.body": "Your photos, recordings and documents themselves, your check-ins, reflections and recaps, and anything you marked private.",
   "online.explain.short.needs.label": "You need",
@@ -215,7 +215,7 @@
   "online.consent.title": "Before you turn this on, here is exactly what happens.",
   "online.consent.lead": "While this is on, each question and the few lines that answer it leave this computer. Everything else you kept stays here.",
   "online.consent.sent.heading": "What is sent, for each question",
-  "online.consent.sent.body": "Your question, and the few things you kept that answer it, as short sentences, lines from your journal entries and good things included. At most 12, each with the day you kept it. For example:",
+  "online.consent.sent.body": "Your question and today’s date, and the things you kept that answer it, as short sentences, lines from your journal entries, check-ins, good things and health readings included. Each with the day you kept it. For example:",
   "online.consent.goes.heading": "Where it goes",
   "online.consent.goes.label": "On this computer, Nocturne finds the lines. Its engine sends them straight to {host}, which writes the answer. Back on this computer, Nocturne checks every receipt.",
   "online.consent.goes.here": "This computer",

@@ -232,7 +232,72 @@ export function writtenPage(): PageView {
   };
 }
 
+/** One question in three parts: the words find one line, the mind looks through the calendar,
+ * then for other words, which find nothing. */
+const ASK = "ask-haircut";
+const SENT_PARTS: MindSent[] = [
+  {
+    id: "s7",
+    at: `${HOME_DAY}T08:10:20.000Z`,
+    kind: "answer",
+    host: MIND_HOST,
+    bytes: 4_510,
+    said: [
+      { kind: "words", text: "You answer a person's question about their own life…" },
+      { kind: "words", text: "Facts: …" },
+      { kind: "words", text: "Nothing kept with these words." },
+    ],
+    forgotten: false,
+    nothing: true,
+    part: {
+      ask: ASK,
+      n: 3,
+      asked: [{ look: "search", words: "haircut hairdresser", lines: 0 }],
+      from: 2,
+    },
+  },
+  {
+    id: "s6",
+    at: `${HOME_DAY}T08:10:12.000Z`,
+    kind: "answer",
+    host: MIND_HOST,
+    bytes: 3_420,
+    said: [
+      { kind: "words", text: "You answer a person's question about their own life…" },
+      { kind: "words", text: "Facts: …" },
+      {
+        kind: "words",
+        text: "[m2] Leo’s football is on Saturday 21 November at 9:30. (learned Monday 16 November)\n[m3] Swimming lesson is on Sunday 22 November at 10:00, at the leisure centre. (learned Monday 16 November)",
+      },
+    ],
+    forgotten: false,
+    part: {
+      ask: ASK,
+      n: 2,
+      asked: [{ look: "calendar", from: "2026-11-21", to: "2026-11-22", lines: 2 }],
+      from: 2,
+    },
+  },
+  {
+    id: "s5",
+    at: `${HOME_DAY}T08:10:00.000Z`,
+    kind: "answer",
+    host: MIND_HOST,
+    bytes: 1_920,
+    said: [
+      { kind: "words", text: "You answer a person's question about their own life…" },
+      {
+        kind: "words",
+        text: "Facts:\n[m1] Gran’s birthday lunch is on Sunday 22 November at 13:00, at The Swan. (learned Friday 20 November)\n\nToday is Saturday 21 November 2026, 08:10, in the time zone Europe/London. The week starts on Monday.\nQuestion: Am I free for a haircut before Gran’s lunch?",
+      },
+    ],
+    forgotten: false,
+    part: { ask: ASK, n: 1, asked: [], from: 0 },
+  },
+];
+
 const SENT: MindSent[] = [
+  ...SENT_PARTS,
   {
     id: "s4",
     at: `${HOME_DAY}T07:40:00.000Z`,
@@ -660,6 +725,12 @@ export function homeState(scenario: HomeScenario) {
             : [],
       },
     });
+    // A question naming a day looks through the calendar first; `&look` holds it there.
+    if (question.includes("tomorrow")) {
+      void emit("home-ask-step", { ...delta, phase: "lookingCalendar", textDelta: null });
+      if (new URLSearchParams(location.search).has("look"))
+        return new Promise((done) => waiting.set(askId, () => done(ended("unavailable"))));
+    }
     if (question.includes("slowly"))
       return new Promise((done) => waiting.set(askId, () => done(ended("unavailable"))));
     if (question.includes("no answer")) return ended("unavailable");

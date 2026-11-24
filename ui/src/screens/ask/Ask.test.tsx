@@ -525,3 +525,27 @@ describe("a correction", () => {
     );
   });
 });
+
+describe("while the mind looks further", () => {
+  it("names the place in place of Reading them, then goes back", async () => {
+    const engine = new Scripted();
+    const swim = await memory(engine, "mem-swim");
+    engine.holdAfter = 2;
+    engine.steps = [
+      { phase: "reading", found: 1, receipts: swim.receipts, memoryIds: [swim.id] },
+      { phase: "lookingJournal" },
+      { phase: "lookingSeveral" },
+      { phase: "done", textDelta: "Mondays.", memoryIds: [swim.id], receipts: swim.receipts },
+    ];
+    await open({ engine, question: "How was Leo's parents' evening?" });
+    expect(await screen.findByText("Looking through your journal…")).toBeInTheDocument();
+    expect(screen.getByText(/Found 1 thing you kept about this/)).toBeInTheDocument();
+    expect(screen.queryByText(/Reading it…/)).toBeNull();
+    expect(
+      screen.getByText("Looking through your journal…").closest("[role=status]"),
+    ).not.toBeNull();
+    act(() => engine.release());
+    expect(await screen.findByText("Mondays.")).toBeInTheDocument();
+    expect(screen.queryByText(/Looking/)).toBeNull();
+  });
+});
