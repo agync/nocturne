@@ -107,6 +107,7 @@ export function Row({
   value,
   onPress,
   danger,
+  action = false,
 }: {
   icon?: IconName;
   label: string;
@@ -114,6 +115,8 @@ export function Row({
   value?: string;
   onPress?: () => void;
   danger?: boolean;
+  /** Does something here rather than opening more: no chevron. */
+  action?: boolean;
 }) {
   const inner = (
     <>
@@ -123,7 +126,7 @@ export function Row({
         {hint ? <span className="ph-srow-hint">{hint}</span> : null}
       </span>
       {value ? <span className="ph-srow-value">{value}</span> : null}
-      {onPress && !danger ? <Icon name="forward" size={18} /> : null}
+      {onPress && !danger && !action ? <Icon name="forward" size={18} /> : null}
     </>
   );
   return onPress ? (

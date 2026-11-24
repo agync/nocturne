@@ -10,6 +10,7 @@ import {
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
 import { t } from "../../copy/t";
 import type { FeelingPart, PeriodKind, Receipt, SameNameQuestion } from "../../engine/bindings";
+import { createBackupApi } from "../alone/nightly";
 import { nativeAsideApi } from "../alone/screens/MoveFlow";
 import type { Connection, PairedDevice } from "../engine";
 import { addressFromRelinkText, addressFromWords } from "../relink";
@@ -154,6 +155,10 @@ export function NativeApp({
   const address = useRef(initial.address);
   address.current = device.address;
   const engine = useMemo(() => services.engineFor(() => address.current), [services]);
+  const movedBackup = useMemo(
+    () => ({ api: services.backup ?? createBackupApi(), ios: services.platform.ios }),
+    [services],
+  );
   useEffect(() => () => engine.close(), [engine]);
   const conn = useSyncExternalStore(engine.subscribe, engine.connection);
   const removed = useRef(false);
@@ -341,6 +346,7 @@ export function NativeApp({
           version={services.version}
           waiting={waiting}
           aside={services.aside ?? nativeAsideApi}
+          backup={movedBackup}
           onBack={back}
           onCalendar={() => go({ name: "calendar" })}
           onHealth={() => go({ name: "health" })}

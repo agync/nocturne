@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { t } from "../../../copy/t";
 import { useHeading } from "../../native/screens/parts";
 import { Icon, Page } from "../../screens/ui";
+import { onPhone } from "../nightly";
 
 /** The words to type, as the computer's own check has them. */
 export const DELETE_PHRASE = "delete everything";
@@ -10,9 +11,12 @@ export const DELETE_PHRASE = "delete everything";
 export function DeleteEverything({
   onDelete,
   onKeep,
+  backup = null,
 }: {
   onDelete(phrase: string): Promise<void>;
   onKeep(): void;
+  /** A nightly backup is on or kept: it is deleted too. */
+  backup?: { ios: boolean } | null;
 }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +59,15 @@ export function DeleteEverything({
         <h1 className="ph-steph" tabIndex={-1} ref={heading}>
           {t("phone.alone.delete.title")}
         </h1>
-        <p className="ph-body ph-ink2">{t("phone.alone.delete.body")}</p>
+        <p className="ph-body ph-ink2">
+          {backup
+            ? onPhone(
+                backup.ios,
+                "phone.backup.delete.body.ios",
+                "phone.backup.delete.body.android",
+              )
+            : t("phone.alone.delete.body")}
+        </p>
         <div className="ph-field">
           <label htmlFor={id}>{t("phone.alone.delete.typed")}</label>
           <input

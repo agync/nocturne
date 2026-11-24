@@ -12,6 +12,8 @@ import { BottomSheet } from "../../screens/Dialog";
 import { BackBar, Button, Page } from "../../screens/ui";
 import type { VoiceAccess } from "../api";
 import type { MindChosen, MindLimit, MindMonth, MindReading } from "../mind";
+import type { BackupStatus } from "../nightly";
+import { backupRowHint } from "./Nightly";
 
 /** On a phone alone nothing is sent to a computer: the phone takes what it brings itself. */
 export function aloneSources(s: ThisPhoneSources): ThisPhoneSources {
@@ -187,7 +189,10 @@ export function HomeThisPhone({
   onPermissions,
   nearlyFull,
   mind,
+  backup,
 }: {
+  /** The nightly backup: how it stands, and its screen. */
+  backup?: { status(): Promise<BackupStatus>; ios: boolean; now(): number; onOpen(): void };
   /** The mind chosen, and its rows' ways out; none until it is known. */
   mind: {
     chosen: MindChosen | null;
@@ -232,6 +237,7 @@ export function HomeThisPhone({
   const [held, setHeld] = useState<HomeStats | null>(null);
   const [heard, setHeard] = useState<VoiceAccess | null>(null);
   const [aside, setAside] = useState<PutAsideMemory[]>([]);
+  const [nightly, setNightly] = useState<BackupStatus | null>(null);
   const heading = useHeading("thisPhone");
 
   useEffect(() => {
@@ -248,6 +254,10 @@ export function HomeThisPhone({
       (list) => !gone && setAside(list),
       () => undefined,
     );
+    backup?.status().then(
+      (b) => !gone && setNightly(b),
+      () => undefined,
+    );
     Promise.all([voice.access(), voice.asked()]).then(
       ([a, asked]) => !gone && setHeard(asked || a === "denied" ? a : "granted"),
       () => undefined,
@@ -255,7 +265,7 @@ export function HomeThisPhone({
     return () => {
       gone = true;
     };
-  }, [channel, stats, voice, putAside]);
+  }, [channel, stats, voice, putAside, backup]);
 
   const last = held?.lastBackup ?? null;
   return (
@@ -274,6 +284,14 @@ export function HomeThisPhone({
                 : undefined
             }
           />
+          {backup ? (
+            <Row
+              icon="refresh"
+              label={t("phone.backup.row")}
+              hint={backupRowHint(nightly, backup.ios, new Date(backup.now()))}
+              onPress={backup.onOpen}
+            />
+          ) : null}
           {nearlyFull ? (
             <p className="ph-srow-hint ph-full-line" role="status">
               {t("phone.alone.full.title")} {t("phone.alone.full.body")}
