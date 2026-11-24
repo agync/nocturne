@@ -593,7 +593,7 @@ async fn answer<R: Runtime>(
     };
     let (e, q, t, words) = (engine.clone(), question.clone(), today.clone(), hits);
     let tiny = state.services().and_then(|s| s.tier()) == Some(nocturne_contract::Tier::Tiny);
-    let hits = match blocking(move || dated(&e, &q, &t, words, public_only, tiny)).await {
+    let (hits, days) = match blocking(move || dated(&e, &q, &t, words, public_only, tiny)).await {
         Ok(h) => h,
         Err(err) => {
             tracing::error!("the date step failed: {:?}", err.code);
@@ -607,7 +607,7 @@ async fn answer<R: Runtime>(
     }
     let e = engine.clone();
     let (mut hits, found, facts, pairs) =
-        match blocking(move || with_disputes(&e, hits, public_only)).await {
+        match blocking(move || with_disputes(&e, hits, public_only, RETRIEVE_K + days)).await {
             Ok(v) => v,
             Err(err) => {
                 tracing::error!("could not read the open questions: {:?}", err.code);
@@ -731,9 +731,10 @@ async fn answer<R: Runtime>(
     conclude(sink, &engine, &hits, found, &meta, &said).await;
 }
 
-/// The date step's lines for `question` on `today`, then the words' `hits`, one copy of each:
-/// up to [`DATE_STEP_LINES`] of them, or, on the smallest size when a time is named, the
-/// words' first 6 and the date step's first 6. A phone's question gets only what may go to it.
+/// The date step's lines for `question` on `today`, then the words' `hits`, one copy of each,
+/// and how many the date step added: up to [`DATE_STEP_LINES`] beside the words' lines, never in
+/// their place, or, on the smallest size when a time is named, the words' first 6 and the date
+/// step's first 6. A phone's question gets only what may go to it.
 fn dated(
     engine: &Engine,
     question: &str,
@@ -741,10 +742,10 @@ fn dated(
     hits: Vec<Hit>,
     public_only: bool,
     tiny: bool,
-) -> nocturne_engine::Result<Vec<Hit>> {
+) -> nocturne_engine::Result<(Vec<Hit>, usize)> {
     let step = date_step(question, today.day, today.week_start);
     if !step.names_time() {
-        return Ok(hits);
+        return Ok((hits, 0));
     }
     let scope = if public_only {
         LookScope::COMPANION
@@ -763,8 +764,9 @@ fn dated(
         days.truncate(TINY_HALF);
     }
     words.retain(|w| !days.iter().any(|d| d.memory.id == w.memory.id));
+    let added = days.len();
     days.extend(words);
-    Ok(days)
+    Ok((days, added))
 }
 
 /// What one question found, for the online answer.
@@ -1118,7 +1120,8 @@ type Gathered = (Vec<Hit>, usize, Vec<Fact>, Vec<Sides>);
 ///
 /// Each hit then comes with the memories it disagrees with in an open which-is-right question.
 /// A side the search did not find is brought in, so the answer can give both and cite both: at
-/// most `MAX_SIDES` of them, with the facts kept to `RETRIEVE_K` by leaving out the lowest hits.
+/// most `MAX_SIDES` of them, with the facts kept to `cap` (`RETRIEVE_K`, and the date step's
+/// lines beside them) by leaving out the lowest hits.
 /// A side that can no longer be read (it is being forgotten), or a private one when
 /// `public_only`, is left out. Returns the facts' hits, how many of them the search found (they
 /// come first), the facts, and the pairs of sides.
@@ -1126,6 +1129,7 @@ fn with_disputes(
     engine: &Engine,
     mut hits: Vec<Hit>,
     public_only: bool,
+    cap: usize,
 ) -> nocturne_engine::Result<Gathered> {
     let mut pairs: Vec<Sides> = Vec::new();
     for (old, notice, mut side) in engine.later_moves(&hits)? {
@@ -1212,8 +1216,8 @@ fn with_disputes(
                 continue;
             }
             // The hit that asks for this side must stay among the facts once it is added.
-            let drops_hits = hits.len() + sides.len() + 1 > RETRIEVE_K;
-            if sides.len() == MAX_SIDES || (drops_hits && at + sides.len() + 1 >= RETRIEVE_K) {
+            let drops_hits = hits.len() + sides.len() + 1 > cap;
+            if sides.len() == MAX_SIDES || (drops_hits && at + sides.len() + 1 >= cap) {
                 break 'hits;
             }
             match engine.get_memory(other) {
@@ -1228,7 +1232,7 @@ fn with_disputes(
             }
         }
     }
-    hits.truncate(RETRIEVE_K - sides.len());
+    hits.truncate(cap - sides.len());
     let found = hits.len();
     hits.extend(sides);
     let facts = hits
@@ -1848,10 +1852,12 @@ mod tests {
             .retrieve("When is my dentist appointment?", None, 12)
             .unwrap();
         assert_eq!(engine.later_moves(&hits).unwrap().len(), 1);
-        let (_, _, facts, pairs) = super::with_disputes(&engine, hits.clone(), true).unwrap();
+        let (_, _, facts, pairs) =
+            super::with_disputes(&engine, hits.clone(), true, super::RETRIEVE_K).unwrap();
         assert_eq!(pairs.len(), 1, "the move stands");
         assert!(facts.iter().all(|f| f.memory.was.is_none()), "{facts:?}");
-        let (_, _, facts, _) = super::with_disputes(&engine, hits, false).unwrap();
+        let (_, _, facts, _) =
+            super::with_disputes(&engine, hits, false, super::RETRIEVE_K).unwrap();
         assert!(
             facts.iter().any(|f| f.memory.was.is_some()),
             "here it goes with it"
