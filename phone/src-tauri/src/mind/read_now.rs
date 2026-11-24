@@ -39,6 +39,10 @@ pub enum Stopped {
     Trouble,
     /// The person pressed Stop, here or where the phone shows the reading.
     Person,
+    /// The phone's own limit on such work ran out (Android's daily time for data sync).
+    Timeout,
+    /// The mind was turned off or replaced.
+    Off,
 }
 
 /// A stop and how many were read by then.
@@ -104,6 +108,19 @@ impl ReadNow {
     }
 }
 
+/// Where the phone shows such work and says its power: the system plugin on a phone, a stand-in
+/// in tests.
+pub trait PhoneSide: Send + Sync {
+    /// Whether it charges, its level in per cent and whether battery saving is on, each `None`
+    /// when the phone does not say.
+    fn power(&self) -> (Option<bool>, Option<u8>, Option<bool>);
+    /// Shows `note`, and says what the person did there since; `None` when it could not.
+    fn show(
+        &self,
+        note: &tauri_plugin_nocturne_system::ReadingNote,
+    ) -> Option<tauri_plugin_nocturne_system::ReadingAnswer>;
+}
+
 /// Whether the battery stops `kind`: at `percent` (unknown: no stop) with battery saving `saver`.
 pub fn battery_stop(kind: ReadKind, percent: Option<u8>, saver: bool) -> Option<Stopped> {
     match (kind, percent) {
@@ -154,8 +171,10 @@ pub fn ended_line(words: &ReadWords, why: Stopped, done: u32) -> Option<(String,
         Stopped::Low => (&words.low_title, &words.anyway_text),
         Stopped::Saver => (&words.saver_title, &words.anyway_text),
         Stopped::Floor => (&words.floor_title, &words.floor_text),
-        Stopped::Limit | Stopped::Trouble => (&words.stopped_title, &words.stopped_text),
-        Stopped::Charging | Stopped::Person => return None,
+        Stopped::Limit | Stopped::Trouble | Stopped::Timeout => {
+            (&words.stopped_title, &words.stopped_text)
+        }
+        Stopped::Charging | Stopped::Person | Stopped::Off => return None,
     };
     Some((fill(title, done, done), fill(text, done, done)))
 }
@@ -223,6 +242,11 @@ mod tests {
         );
         assert_eq!(ended_line(&words, Stopped::Person, 2), None);
         assert_eq!(ended_line(&words, Stopped::Charging, 2), None);
+        assert_eq!(ended_line(&words, Stopped::Off, 2), None);
+        assert_eq!(
+            ended_line(&words, Stopped::Timeout, 2).unwrap().0,
+            "Read now stopped"
+        );
         assert_eq!(fill("{done} of {count}", 12, 89), "12 of 89");
     }
 }

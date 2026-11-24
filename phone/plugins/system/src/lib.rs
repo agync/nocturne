@@ -251,12 +251,14 @@ pub enum ReadingNote {
     },
 }
 
-/// What the phone says back about the reading: Stop was pressed where the phone shows it,
-/// iPhone paused it, and whether notifications may show.
+/// What the phone says back about the reading: Stop was pressed where the phone shows it, the
+/// phone's own time limit for such work ran out, iPhone paused it, and whether notifications may
+/// show.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct ReadingAnswer {
     pub stop: bool,
+    pub timeout: bool,
     pub paused: bool,
     pub notes: bool,
 }
@@ -839,9 +841,14 @@ mod tests {
             answer,
             ReadingAnswer {
                 stop: true,
-                paused: false,
-                notes: true
+                notes: true,
+                ..ReadingAnswer::default()
             }
+        );
+        assert!(
+            serde_json::from_str::<ReadingAnswer>(r#"{"timeout":true}"#)
+                .unwrap()
+                .timeout
         );
         assert_eq!(
             serde_json::from_str::<ReadingAnswer>("{}").unwrap(),
