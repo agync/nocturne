@@ -35,7 +35,12 @@
 #   environment. The key reaches only the steps that need it, as step environment, never the job's
 #   or a file in the workspace, and the job checks out no write token. The build is not attached to
 #   the release: TestFlight is where the build goes, and without IOS_SIGNING nothing of iPhone is
-#   built here at all (ci.yml builds it for the Simulator).
+#   built here at all (ci.yml builds it for the Simulator). The npm packages (installed with
+#   scripts off), the interface and the crate sources are fetched and built before the key is
+#   written. What still runs with the key on disk is the archive itself: Xcode's build phase
+#   compiles the Rust crates, so their build scripts and procedural macros run then. The key's role
+#   is App Manager, the narrowest that uploads builds; Xcode creating the first cloud-managed
+#   distribution certificate may need Admin (see docs/contribution/release.md).
 # Version codes are derived from the release version, with no counter: see docs/contribution/release.md.
 name: release
 
@@ -659,6 +664,16 @@ jobs:
           set -euo pipefail
           version=$(node -p "require('./ui/package.json').version")
           [ "$TAG" = "v$version" ] || { echo "the tag $TAG is not the app version $version" >&2; exit 1; }
+      # Everything that installs or builds without the key comes first: the key is written only
+      # when the next step is the Xcode archive. Install scripts are off, so no dependency runs
+      # code at install time at all (the interface builds and the Tauri CLI runs without them).
+      - name: interface dependencies and the interface
+        run: |
+          set -euo pipefail
+          (cd ui && npm ci --ignore-scripts)
+          make phone/ui
+      - name: fetch the Rust crates
+        run: cargo fetch --locked
       # altool looks for the key in this folder, by the key's id; the Tauri CLI reads the same file.
       - name: App Store Connect key
         env:
@@ -676,7 +691,7 @@ jobs:
         run: |
           set -euo pipefail
           export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8"
-          make ui/install phone/ios-release
+          make -o phone/ui phone/ios-release
       - name: check the build number
         env:
           TAG: ${{ needs.plan.outputs.tag }}
