@@ -61,7 +61,7 @@ url.workspace = true
 
 # Core dumps off for the app and the engine, which may hold the Online answers key.
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", default-features = false, features = ["resource", "process"] }
+nix = { version = "0.32", default-features = false, features = ["resource", "process"] }
 
 # The flag that starts a program without a console window, in the type the job object takes. The
 # version moves with the one process-wrap uses.
