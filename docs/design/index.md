@@ -17,6 +17,7 @@ screen follows, the data model, and how quality is measured.
 - [Backup on a phone of its own](phone-backup.md) - Proposal for the nightly, locked backup of a phone that is its own home to the person's own iCloud or Google Drive, with turning it on, This phone, turning it off, restoring onto an empty phone or into a phone that holds a memory, and how forgetting and Delete everything reach it.
 - [A household computer](household-server.md) - Proposal for a computer at home that lends its mind or keeps memories for several people's phones, what the person who runs it can and cannot see, and the household screen.
 - [Moving your memory](moving-memory.md) - Proposal for moving a memory between a phone, a household computer and a computer of one's own, one home at a time.
+- [Privacy policy](privacy-policy.md) - Proposal for the public privacy policy at /privacy/ on the site: where it is linked, the full text, the evidence for each claim and what must change when features change.
 - [Back up and restore](backup-and-restore.md) - One file with everything, locked with a passphrase the person chooses, and the way back from it.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
