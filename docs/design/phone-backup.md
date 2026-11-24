@@ -313,6 +313,14 @@ under the switch group.
 | Permission taken back | "Stopped · last backup {day}, {time}" | iPhone: "iCloud is turned off for Nocturne, so the backup has stopped. Turn it on in Settings, under iCloud." with "Open Settings". Android: "Google no longer lets Nocturne back up. Choose the account again." with "Choose account" |
 | Another phone made a newer backup | "Stopped · last backup {day}, {time}" | [Below](#a-newer-backup-from-another-phone) |
 | A backup from a newer Nocturne in the account | "Stopped · last backup {day}, {time}" | "A newer Nocturne made the latest backup. Update Nocturne from {store} to carry on." with "Update". {store} is "the App Store" or "Google Play" |
+| Android, the account chosen already holds another backup | "Stopped · last backup {day}, {time}" | "This Google account’s Drive already holds another Nocturne backup, so the backup has stopped and nothing was written over it. Choose another account, or delete the Nocturne backup folder in that Drive and choose this account again." with "Choose account". Nocturne doesn't try again by itself |
+| Android, the phrase is needed again in the account chosen | "Stopped · last backup {day}, {time}" | "To carry on in this account, the backup needs its phrase set again. A recovery key you made before doesn’t open it there." with "Change the phrase…" |
+| No backup yet, after turning on or in an account chosen since | "No backup yet · next tonight while this phone charges"; waiting for Wi-Fi: "No backup yet · waiting for Wi-Fi"; not charged: "No backup yet · waits for this phone to charge"; stopped: "Stopped · no backup yet" | As the state's, and for no room only its first sentence: "There’s no room in your iCloud for tonight’s backup." or "in your Google Drive" |
+
+On an iPhone, Nocturne can open only its own page in Settings, so under the line it says where to
+go next. No room and iCloud off for Nocturne: "Settings opens on Nocturne’s page. Go back to the
+first page of Settings, then tap your name, then iCloud." Signed out: "Settings opens on Nocturne’s
+page. Go back to the first page of Settings to sign in."
 
 "Choose account" runs the picker and Google's permission again. When the person picks a different
 account than before, the backup starts afresh there and a line says: "Your earlier backup stays in
@@ -463,6 +471,7 @@ account.
 | Body | "Keep Nocturne open until this finishes. If it closes, nothing on this phone changes, and what has come down is kept, so starting again carries on." |
 | Button | "Stop" ("Stopped." / "Nothing on this phone changed.") |
 | On mobile data, before it starts | "This is about {size}. On mobile data, it may count against your plan." / "Go on" · "Wait for Wi-Fi" |
+| On mobile data, after "Wait for Wi-Fi" | "Waiting for Wi-Fi. It starts when this phone is on Wi-Fi." with "Stop"; it starts by itself |
 | Internet lost | "Waiting for the internet. This carries on when this phone is back online." |
 
 0013's checks run on the whole night before anything on the phone changes.
@@ -512,6 +521,10 @@ The words below follow that screen's.
 
 "Not now" leaves the phone exactly as it was.
 
+A backup from before Nocturne noted its first day, or a backup file, reads "In the backup: {count}
+things, up to {day} · about {size}". A phone with nothing dated yet reads "On this phone: {count}
+things".
+
 This is the one restore on a phone that has a memory, for a backup from the account and for a backup
 file alike. The first release's "Put aside" restore ends with the release that ships the nightly
 backup; what it already put aside stays as it is. Once the things are in, there is no undo: nothing
@@ -559,7 +572,8 @@ after the person says so, so two phones never both back up.
 | Buttons | "Back up from this phone" · "Not now" |
 | After the recovery key | Before this question: "Make a new phrase" / "You opened your backup with the recovery key. Make a new phrase now, so you have one." then steps 2 and 3 with "Save"; "Not now" keeps the old phrase, which the person no longer has, and the recovery key |
 
-"Not now" leaves the backup off; This phone's switch then turns it on with no steps.
+"Not now" leaves the backup off; This phone's switch then turns it on with no steps. Restoring
+this phone's own backup, turned off and kept, does not ask: it is still this phone's.
 
 ## Forgetting, Delete everything and private
 
