@@ -62,3 +62,44 @@ html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
 .rn .btn { height: 44px; }
 html[data-text="200"] .rn .btn { height: auto; }
 svg.mark { background: none; }
+.osNote { padding: 4px 0 12px; text-align: left; letter-spacing: 0.04em; }
+
+/* Away from Nocturne: Android's notification shade, iPhone's Lock Screen */
+.shade { display: flex; flex-direction: column; gap: 14px; min-height: 100%; margin: -20px -20px -24px; padding: 12px 12px 24px; background: color-mix(in srgb, var(--ink) 10%, var(--bg)); }
+.shadeTime { padding: 0 8px; font-size: 2rem; font-weight: 400; }
+.shadeTime span { margin-left: 8px; color: var(--ink2); font-size: 0.875rem; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0 4px; }
+.tiles span { height: 56px; border-radius: 28px; background: color-mix(in srgb, var(--ink) 12%, var(--sheet)); }
+.note2 { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 6px; border-radius: 24px; background: var(--sheet); }
+.noteApp { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 0.75rem; }
+.noteTitle { font-size: 0.9375rem; font-weight: 500; }
+.noteText { color: var(--ink2); font-size: 0.875rem; }
+.noteProg, .liveProg { height: 4px; margin: 6px 0 2px; border-radius: 2px; background: var(--rule); overflow: hidden; }
+.noteProg span, .liveProg span { display: block; height: 100%; background: var(--accent); }
+.noteActs { display: flex; gap: 20px; padding: 6px 0; }
+.noteActs span { padding: 8px 0; color: var(--accent); font-size: 0.875rem; font-weight: 500; }
+
+html[data-view="away"] .device[data-os="ios"] .screen,
+html[data-view="paused"] .device[data-os="ios"] .screen { background: linear-gradient(170deg, #2b3a55 0%, #4a3f5c 55%, #1d2433 100%); }
+html[data-view="away"] .device[data-os="ios"] .sys,
+html[data-view="paused"] .device[data-os="ios"] .sys { color: #fff; }
+.lock { display: flex; flex-direction: column; align-items: center; gap: 2px; color: #fff; }
+.lockDate { margin-top: 8px; font-size: 1.125rem; font-weight: 500; }
+.lockTime { font-size: 5.5rem; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em; }
+.live, .banner { align-self: stretch; display: flex; flex-direction: column; gap: 4px; margin-top: 28px; padding: 14px 16px; border-radius: 22px; background: rgba(18, 20, 26, 0.72); color: #fff; }
+.liveHead { display: flex; align-items: center; gap: 8px; }
+.liveTitle { flex: 1; font-size: 0.9375rem; font-weight: 600; }
+.liveStop { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.liveText { color: rgba(255, 255, 255, 0.75); font-size: 0.875rem; }
+.live .liveProg { background: rgba(255, 255, 255, 0.2); }
+.live .liveProg span { background: #fff; }
+.banner { background: rgba(245, 245, 247, 0.82); color: #111; }
+.bannerHead { display: flex; align-items: center; gap: 6px; color: #555; font-size: 0.75rem; letter-spacing: 0.04em; }
+.bannerWhen { margin-left: auto; letter-spacing: 0; }
+.bannerTitle { font-size: 0.9375rem; font-weight: 600; }
+.bannerText { font-size: 0.875rem; line-height: 1.4; }
+.lock svg.mark, .banner svg.mark { color: currentColor; }
+html[data-text="200"] .lockTime { font-size: 3rem; }
+.shade { flex: 1; }
+html[data-view="away"] .device[data-os="android"] .screen { background: color-mix(in srgb, var(--ink) 10%, var(--bg)); }
+.lock { text-align: center; } .live, .banner { text-align: left; }
