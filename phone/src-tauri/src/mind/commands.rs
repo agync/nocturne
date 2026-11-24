@@ -1,7 +1,7 @@
 //! The screens' way to a phone alone's mind: the check, turning on and off, and what is chosen.
 //! Each wraps [`PhoneMind`]; the key goes in once, with turning on, and never comes back out.
 
-use nocturne_contract::CheckOutcome;
+use nocturne_contract::{CheckOutcome, ModelList};
 use nocturne_provider::address::UrlProblem;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -71,6 +71,15 @@ pub async fn mind_check(
     form: ProviderForm,
 ) -> Result<CheckOutcome, String> {
     Ok(mind.check(&form.into()).await)
+}
+
+/// One look at the service's list with the form's address and key, at the person's request.
+#[tauri::command]
+pub async fn mind_list(
+    mind: State<'_, PhoneMind>,
+    form: ProviderForm,
+) -> Result<ModelList, String> {
+    Ok(mind.list(&form.into()).await)
 }
 
 /// Turns the mind on with the form, in place of any chosen before.
