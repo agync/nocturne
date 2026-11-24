@@ -26,7 +26,7 @@ the details step of both setups.
 
 ## The owner's decisions
 
-Settled on 2026-11-24, each as recommended.
+Settled on 2026-11-24: 1 to 4 as recommended, 5 and 6 as the owner chose for Read now.
 
 | # | Decision | Where it lands |
 |---|---|---|
@@ -34,6 +34,8 @@ Settled on 2026-11-24, each as recommended.
 | 2 | The list is fetched only when the person taps "Choose from {host}'s list…", never by itself | [The design](#the-design) |
 | 3 | The list is sorted A to Z, ignoring capitals, numbers in number order | [The list](#the-list) |
 | 4 | Online answers' Connect on the computer changes in the same release | [On the computer](#on-the-computer-same-form-same-change) |
+| 5 | Read now carries on after the person leaves Nocturne, as far as each phone allows: a foreground service with its notification on Android, iPhone's own progress or a short while then a pause on iPhone. Nothing keeps the screen on | [After the person leaves Nocturne](#after-the-person-leaves-nocturne) |
+| 6 | Read now stops at 20 per cent and when the phone's battery saving is on, and then offers "Read anyway", which runs until done or Stop, never below 5 per cent | [Battery](#battery) |
 
 ## Mockups
 
@@ -61,10 +63,13 @@ same parameters as `phone.html`; at 200 per cent each screen starts at the mind 
 | Online answers, Connect, the list | `desktop.html?state=list` | `desktop-list-light.png`, `desktop-list-dark.png` |
 | This phone, waiting to charge | `reading.html?state=waiting` | `reading-waiting-light.png`, `reading-waiting-dark.png`, `reading-waiting-200-light.png` |
 | This phone, reading now | `reading.html?state=now` | `reading-now-light.png`, `reading-now-dark.png`, `reading-now-200-light.png` |
-| This phone, stopped when the person left | `reading.html?state=left` | `reading-left-light.png` |
-| This phone, stopped at 20 per cent | `reading.html?state=low` | `reading-low-light.png` |
+| Away: Android's notification, iPhone's own progress | `reading.html?state=away` | `reading-away-light.png`, `reading-away-dark.png`, `reading-away-200-light.png` |
+| Away: iPhone paused it | `reading.html?state=paused` | `reading-paused-light.png`, `reading-paused-dark.png`, `reading-paused-200-light.png` |
+| This phone, back after iPhone paused it | `reading.html?state=back` | `reading-back-light.png` |
+| This phone, stopped at 20 per cent, Read anyway | `reading.html?state=low` | `reading-low-light.png`, `reading-low-dark.png`, `reading-low-200-light.png` |
+| This phone, reading anyway | `reading.html?state=anyway` | `reading-anyway-light.png` |
 | This phone, all read | `reading.html?state=done` | `reading-done-light.png` |
-| This phone, paused by the limit | `reading.html?state=paused` | `reading-paused-light.png` |
+| This phone, paused by the limit | `reading.html?state=limit` | `reading-limit-light.png` |
 | This phone, the service not answering | `reading.html?state=unreachable` | `reading-unreachable-light.png` |
 | Reading what you kept, on battery | `reading.html?state=first-waiting` | `reading-first-waiting-light.png`, `reading-first-waiting-dark.png` |
 | Reading what you kept, reading now | `reading.html?state=first-now` | `reading-first-now-light.png` |
@@ -365,57 +370,125 @@ saying so, and a way for the person to choose otherwise.
 
 - **Say what is happening.** On battery with things waiting, the status says "Waiting to charge ·
   89 to read", not "Reading · 0 of 89".
-- **Say why, once, where it shows.** "Nocturne reads what you keep while this phone charges, so it
+- **Say why, where it shows.** "Nocturne reads what you keep while this phone charges, so it
   doesn't run the battery down."
-- **Offer Read now.** "Read now reads while Nocturne stays open, and uses some battery." It is the
-  person's act: Nocturne offers it on This phone and on "Reading what you kept", and never starts
-  it, suggests it in a notification or puts it on Today.
-- **Stop plainly.** Read now ends when the person leaves Nocturne, when nothing is left, when the
-  battery reaches 20 per cent or the phone saves battery, when the service stops answering, the key
-  is refused or the month's limit is reached, or when the person presses Stop. Each says why.
+- **Offer Read now.** It reads straight away, uses some battery, and carries on after the person
+  leaves Nocturne as far as the phone allows (below). It is the person's act: Nocturne offers it on
+  This phone and on "Reading what you kept", and never starts it, suggests it in a notification or
+  puts it on Today.
+- **Protect the battery, and let the person overrule it.** Read now stops at 20 per cent or when
+  the phone's own battery saving turns on, and offers "Read anyway", which runs until everything is
+  read or the person stops it, never below 5 per cent.
+- **Stop plainly.** Every stop says why, in Nocturne, and in a quiet notification if the person
+  is elsewhere.
 
 ### Where the reading state shows
 
 | Place | Today | After |
 |---|---|---|
-| This phone, "Its mind" row | "{host}, online · Reading · {done} of {count}" whenever things wait | The row's words by state (below), and the Read now block under the row |
+| This phone, "Its mind" row | "{host}, online · Reading · {done} of {count}" whenever things wait | The row's words by state (below), and the block under the row |
 | "Reading what you kept", once after turning on | "{done} of {count} read" with a breathing dot, and the charging note | By state: waiting to charge, or reading now, with Read now or Stop |
+| Android's notifications | Nothing | While Read now runs, its progress and Stop; a quiet line when it ends while the person is elsewhere |
+| iPhone's Lock Screen and notifications | Nothing | From iOS 26, iPhone's own progress with its Stop; on any iPhone, a quiet line when iPhone pauses it |
 | Today | Nothing while reading (phone-first's states) | Unchanged. Nothing about charging, so Today never nags |
 | Ask | Finds by words while things wait to be read | Unchanged |
 
+### After the person leaves Nocturne
+
+Read now is the person's own act, so it carries on in the background as far as each phone allows.
+
+**Android.** Read now runs as a foreground service of the `dataSync` type, which Android describes
+for fetching data and moving it between the phone and a server, the closest fit for sending what
+was kept and keeping what comes back.
+
+| Part | Detail |
+|---|---|
+| The service | Started only from the person's tap, while Nocturne is in front, as Android requires. It ends itself when everything is read, at a battery stop, on a pause or trouble, or on Stop |
+| The notification | Ongoing and silent, in its own channel "Reading now": "Reading what you kept", "{done} of {count}", a progress bar and "Stop". Tapping it opens This phone |
+| The manifest | `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`, and the service declared with `android:foregroundServiceType="dataSync"`. The type is declared in Play Console too |
+| Notifications allowed | On Android 13 and later, the first Read now asks with Android's own question if Nocturne may not yet show notifications. Either answer starts reading. With no, progress shows in Nocturne and in Android's list of running apps, and This phone says so |
+| Its limit | From Android 15, `dataSync` services may run about 6 hours a day in all. Reading what is waiting takes minutes, so this never binds; if it did, the service would stop as on Stop and say so |
+
+The app targets SDK 37 (`compileSdk` and `targetSdk` 37, `minSdk` 26). One path serves every
+version from 26: Android 14 made the type and its permission required, and the type is still
+offered for this use at 37. Android also offers user-initiated data transfer jobs for transfers a
+person starts (Android 14 and later); they would need a second path for older phones and give the
+person nothing more, so they are not used. The build checks the foreground service rules of the
+SDK it targets before release.
+
+**iPhone.** iPhone decides how long an app may work once the person leaves it. The app supports
+iOS 17 and later.
+
+| iPhone | What happens after leaving Nocturne | What the person sees |
+|---|---|---|
+| iOS 26 and later | Read now runs as a continued processing task (`BGContinuedProcessingTask`), started by the person's tap. iPhone shows its progress itself, on the Lock Screen and at the top, with its own Stop. iPhone may end it early, more often while the phone is locked | "Reading what you kept · {done} of {count}" in iPhone's own progress. If iPhone ends it, the paused notification below |
+| iOS 17 to 25 | Reading carries on for the short while iPhone gives an app as it leaves, often under a minute, then pauses | The paused notification below |
+| Either | When reading pauses, one quiet notification if Nocturne may show them: "Reading paused" / "iPhone paused it when you left Nocturne, after {done} of {count}. Open Nocturne to carry on." It carries on by itself when the person opens Nocturne, since it is still their Read now, and on the charger in the background window iPhone already gives | Back in Nocturne: "iPhone paused reading while you were away, after {done}. It carries on now." |
+
+Nothing keeps the screen on: Android does not need it, and on iPhone it would help only while the
+person is looking at Nocturne, where reading carries on anyway.
+
+**The notifications' words.** They are the status of the person's own act, not reminders, so the
+rules about private things and reminders do not apply to them. They never name a kept thing, a
+title, a question or a host: only counts and what happened.
+
 ### Battery
 
-Read now cannot start, and stops, at 20 per cent battery or below, or while the phone's own battery
-saving is on (Battery Saver on Android, Low Power Mode on iPhone). 20 per cent is where iPhone first
-offers Low Power Mode, and leaves the person most of their battery's last stretch. The phone's own
-saving is the person's own choice to save battery, so Nocturne keeps to it. On the charger neither
-limit applies, as today.
+| Battery | Read now | Read anyway |
+|---|---|---|
+| On the charger | Not needed: reading runs by itself | Not needed |
+| Above 20 per cent, no battery saving | Starts; runs until everything is read, Stop, a pause or trouble | Not shown |
+| Reaches 20 per cent, or battery saving turns on | Stops, and says why | Offered: "Read anyway" |
+| 20 per cent or below, or battery saving on, before starting | Not offered | Offered in its place |
+| Above 5 per cent with Read anyway | | Runs until everything is read, Stop, a pause or trouble, battery saving or not |
+| 5 per cent | Stops | Stops, and is not offered again until the battery is above 5 per cent or the phone charges |
+
+**Why 20 per cent.** iPhone first offers Low Power Mode at 20 per cent; it is where a phone starts
+telling its person to save what is left. Battery Saver on Android and Low Power Mode on iPhone are
+the person's own wish to save battery, so Read now keeps to them unless told otherwise.
+
+**Why 5 per cent.** At 5 per cent a phone is minutes from switching itself off. What is left
+belongs to a call, a message or a map, not to reading that can wait for the charger. "Read anyway"
+lets the person spend their battery on reading, but not their last few minutes.
 
 ### States
 
 `{left}` is what still waits, `{count}` minus `{done}`. "The block" is the part under "Its mind".
+"Away" is what Android's notification or iPhone's own progress shows while the person is in
+another app.
 
-| State | When | "Its mind" row | The block | "Reading what you kept" |
+| State | When | "Its mind" row | The block | Away |
 |---|---|---|---|---|
-| Nothing waiting | All read | "{host}, online" | Nothing | Not shown |
-| Reading, charging | On the charger, things waiting | "{host}, online · Reading · {done} of {count}" (unchanged) | Nothing: there is nothing to do | Unchanged |
-| Waiting to charge | On battery, or the phone can't say, things waiting | "{host}, online · Waiting to charge · {left} to read" | The why line, the cost line, "Read now" | "Waiting to charge · {count} to read", the why and cost in one note, "OK" and "Read now" |
-| Reading now | The person pressed Read now | "{host}, online · Reading now · {done} of {count}" | A progress bar, "Keep Nocturne open. The screen stays on until it's done or you stop.", "Stop" | A progress bar, "Reading now · {done} of {count}" with the breathing dot, the same line, "OK" and "Stop". "OK" leaves the screen and reading carries on |
-| Left Nocturne | The person went to another app, locked the phone, or Nocturne closed | "{host}, online · Waiting to charge · {left} to read" | "Read now stopped when you left Nocturne, after {done}.", then as waiting | Not shown again |
-| All read | Nothing left while reading now | "{host}, online" | "Everything you kept is read.", until the person leaves This phone | "Everything you kept is read." and "OK" |
-| Low battery | 20 per cent or below, before or during | "{host}, online · Waiting to charge · {left} to read" | During: "Read now stopped at 20% battery, after {done}. The rest is read while this phone charges." Then the why line, "Read now" not pressable, "Read now works above 20% battery." | The same lines |
-| Battery saving on | Before or during | As waiting | During: "Read now stopped because Battery Saver is on, after {done}." (iPhone: "Low Power Mode") Then "Read now" not pressable, "Read now works when Battery Saver is off." | The same lines |
-| Charger plugged in | During Read now | "{host}, online · Reading · {done} of {count}" | "Charging, so reading carries on by itself.", then nothing | The charging words, unchanged |
-| Stopped by the person | "Stop" | As waiting | As waiting, with no stop line | As waiting |
-| Paused by the limit | The month's limit is reached, before or during | "{host}, online · Paused by your limit · {left} to read" | "You've reached this month's limit. The rest is read from {day}, or when you change the limit." with "Change limit". No Read now: the limit holds | The same, with "OK" |
-| Not answering | The service stopped answering, before or during | "{host}, online · Not answering · {left} to read" | "{host} hasn't answered since {time}. Nocturne looks again on its own." and "Read now looks once more, then reads while Nocturne stays open, and uses some battery." with "Read now" | The same |
-| Read now, still not answering | The person pressed Read now and the one look found nothing | As above | "{host} still isn't answering. Nocturne looks again on its own." with "Read now" | The same |
-| Not online | This phone can't reach the internet | "{host}, online · Not online · {left} to read" | "This phone isn't online. What you keep waits to be read." "Read now" not pressable, "Read now works once this phone is online." | The same |
-| Key refused, no credit | Before or during | "{host}, online · Stopped · {left} to read" | The problem's own words and action, as today ("Check the key…", "Check again"). No Read now | The same |
+| Nothing waiting | All read | "{host}, online" | Nothing | Nothing |
+| Reading, charging | On the charger, things waiting | "{host}, online · Reading · {done} of {count}" (unchanged) | Nothing: there is nothing to do | Nothing |
+| Waiting to charge | On battery, or the phone can't say, things waiting | "{host}, online · Waiting to charge · {left} to read" | The why line, the platform's cost line, "Read now" | Nothing |
+| Reading now | The person pressed Read now | "{host}, online · Reading now · {done} of {count}" | A progress bar, the platform's line about leaving, "Stop" | Android: the ongoing notification. iPhone on iOS 26 and later: iPhone's own progress |
+| Paused while away | iPhone only: iPhone paused it after the person left | Unchanged until they return | | "Reading paused" notification |
+| Back after a pause | iPhone only: the person opened Nocturne again | "{host}, online · Reading now · {done} of {count}" | "iPhone paused reading while you were away, after {done}. It carries on now.", then as reading now | Nothing |
+| All read | Nothing left | "{host}, online" | "Everything you kept is read.", until the person leaves This phone | Android: the ongoing notification becomes "Everything you kept is read." iPhone: its progress ends |
+| Stopped at 20 per cent | The battery reached 20 per cent | "{host}, online · Waiting to charge · {left} to read" | "Read now stopped at 20% battery, after {done}. The rest is read while this phone charges." then the Read anyway line and "Read anyway" | "Read now stopped at 20% battery" / "{done} read. Open Nocturne to read anyway." |
+| Low before starting | 20 per cent or below, not charging | "{host}, online · Waiting to charge · {left} to read" | "The battery is at {percent}%." then the why line, the Read anyway line and "Read anyway" | Nothing |
+| Stopped for battery saving | Battery Saver or Low Power Mode turned on | As waiting | "Read now stopped because Battery Saver is on, after {done}." (iPhone: "Low Power Mode") then the Read anyway line for battery saving and "Read anyway" | "Read now stopped: Battery Saver is on" / "{done} read. Open Nocturne to read anyway." |
+| Battery saving on before starting | Not charging | As waiting | "Battery Saver is on." (iPhone: "Low Power Mode is on.") then the why line, the Read anyway line for battery saving and "Read anyway" | Nothing |
+| Reading anyway | The person pressed Read anyway | "{host}, online · Reading now · {done} of {count}" | "Reading anyway, down to 5% battery.", a progress bar, the platform's line about leaving, "Stop" | As reading now |
+| Stopped at 5 per cent | The battery reached 5 per cent | As waiting | "Reading stopped at 5% battery, after {done}. The rest is read while this phone charges." No button; "Read now works above 5% battery, or while charging." | "Reading stopped at 5% battery" / "{done} read. The rest is read while this phone charges." |
+| Charger plugged in | During Read now | "{host}, online · Reading · {done} of {count}" | "Charging, so reading carries on by itself.", then nothing | The notification or iPhone's progress ends; reading goes on as on the charger |
+| Stopped by the person | "Stop" in Nocturne, the notification or iPhone's progress | As waiting | As waiting, with no stop line | Ends |
+| Paused by the limit | The month's limit is reached, before or during | "{host}, online · Paused by your limit · {left} to read" | "You've reached this month's limit. The rest is read from {day}, or when you change the limit." with "Change limit". No Read now: the limit holds | "Read now stopped" / "{done} read. Open Nocturne to see why." |
+| Not answering | The service stopped answering, before or during | "{host}, online · Not answering · {left} to read" | "{host} hasn't answered since {time}. Nocturne looks again on its own." and "Read now looks once more, then reads straight away, and uses some battery." with "Read now" | During: "Read now stopped" / "{done} read. Open Nocturne to see why." |
+| Read now, still not answering | The person pressed Read now and the one look found nothing | As above | "{host} still isn't answering. Nocturne looks again on its own." with "Read now" | Nothing |
+| Not online | This phone can't reach the internet | "{host}, online · Not online · {left} to read" | "This phone isn't online. What you keep waits to be read." "Read now" not pressable, "Read now works once this phone is online." | During: as not answering |
+| Key refused, no credit | Before or during | "{host}, online · Stopped · {left} to read" | The problem's own words and action, as today ("Check the key…", "Check again"). No Read now | During: as not answering |
+| Notifications off | Android: the person said no to notifications | As reading now | As reading now, with "Notifications are off for Nocturne, so its progress shows here." | Nothing in the notification shade; Android's list of running apps still shows Nocturne |
 
-Read now under "Not answering" takes one look at the service's list, the same look the phone
-already makes on its own schedule, listed in Sent online as a "Connection check". If it answers,
-reading now begins; if not, the line says so and nothing else is sent.
+"Reading what you kept" shows the same states in its own words: waiting to charge with "OK" and
+"Read now", reading now with "OK" and "Stop" ("OK" leaves the screen and reading carries on), and
+each stop line with "OK".
+
+A notification left after a stop goes away when the person opens Nocturne. Read now under "Not
+answering" takes one look at the service's list, the same look the phone already makes on its own
+schedule, listed in Sent online as a "Connection check". If it answers, reading now begins; if not,
+the line says so and nothing else is sent.
 
 Read now reads what was kept. Writing the morning page still waits for the charger, as today.
 
@@ -431,87 +504,111 @@ Read now reads what was kept. Writing the morning page still waits for the charg
 | `phone.mind.row.stopped` | "Stopped · {left} to read" |
 | `phone.mind.row.reading` (unchanged) | "Reading · {done} of {count}" |
 | `phone.mind.readNow` | "Read now" |
+| `phone.mind.readNow.anyway` | "Read anyway" |
 | `phone.mind.readNow.stop` | "Stop" |
 | `phone.mind.readNow.why` | "Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down." |
-| `phone.mind.readNow.cost` | "Read now reads while Nocturne stays open, and uses some battery." |
-| `phone.mind.readNow.keepOpen` | "Keep Nocturne open. The screen stays on until it’s done or you stop." |
-| `phone.mind.readNow.left` | "Read now stopped when you left Nocturne, after {done}." |
+| `phone.mind.readNow.cost` (Android) | "Read now reads straight away and uses some battery. It carries on if you leave Nocturne, with a notification to stop it." |
+| `phone.mind.readNow.cost` (iPhone) | "Read now reads straight away and uses some battery. iPhone may pause it when you leave Nocturne; it carries on when you come back." |
+| `phone.mind.readNow.leaving` (Android) | "You can leave Nocturne. Reading carries on, and the notification shows how far it has got." |
+| `phone.mind.readNow.leaving` (iPhone) | "If you leave Nocturne, iPhone may pause reading. It carries on when you come back." |
+| `phone.mind.readNow.back` (iPhone) | "iPhone paused reading while you were away, after {done}. It carries on now." |
+| `phone.mind.readNow.noNotes` (Android) | "Notifications are off for Nocturne, so its progress shows here." |
 | `phone.mind.readNow.done` | "Everything you kept is read." |
 | `phone.mind.readNow.low` | "Read now stopped at 20% battery, after {done}. The rest is read while this phone charges." |
-| `phone.mind.readNow.lowNeeds` | "Read now works above 20% battery." |
+| `phone.mind.readNow.lowNow` | "The battery is at {percent}%." |
 | `phone.mind.readNow.saver` (Android) | "Read now stopped because Battery Saver is on, after {done}." |
-| `phone.mind.readNow.saverNeeds` (Android) | "Read now works when Battery Saver is off." |
 | `phone.mind.readNow.saver` (iPhone) | "Read now stopped because Low Power Mode is on, after {done}." |
-| `phone.mind.readNow.saverNeeds` (iPhone) | "Read now works when Low Power Mode is off." |
+| `phone.mind.readNow.saverNow` (Android) | "Battery Saver is on." |
+| `phone.mind.readNow.saverNow` (iPhone) | "Low Power Mode is on." |
+| `phone.mind.readNow.anywayWhat` | "Read anyway reads until everything is read or you stop it, down to 5% battery." |
+| `phone.mind.readNow.anywayWhatSaver` (Android) | "Read anyway reads until everything is read or you stop it, even with Battery Saver on, down to 5% battery." |
+| `phone.mind.readNow.anywayWhatSaver` (iPhone) | "Read anyway reads until everything is read or you stop it, even with Low Power Mode on, down to 5% battery." |
+| `phone.mind.readNow.anywayOn` | "Reading anyway, down to 5% battery." |
+| `phone.mind.readNow.floor` | "Reading stopped at 5% battery, after {done}. The rest is read while this phone charges." |
+| `phone.mind.readNow.floorNeeds` | "Read now works above 5% battery, or while charging." |
 | `phone.mind.readNow.charging` | "Charging, so reading carries on by itself." |
 | `phone.mind.readNow.paused` | "You’ve reached this month’s limit. The rest is read from {day}, or when you change the limit." |
 | `phone.mind.readNow.changeLimit` | "Change limit" |
 | `phone.mind.readNow.notAnswering` | "{host} hasn’t answered since {time}. Nocturne looks again on its own." |
-| `phone.mind.readNow.lookAgain` | "Read now looks once more, then reads while Nocturne stays open, and uses some battery." |
+| `phone.mind.readNow.lookAgain` | "Read now looks once more, then reads straight away, and uses some battery." |
 | `phone.mind.readNow.stillNot` | "{host} still isn’t answering. Nocturne looks again on its own." |
 | `phone.mind.readNow.offline` | "This phone isn’t online. What you keep waits to be read." |
 | `phone.mind.readNow.offlineNeeds` | "Read now works once this phone is online." |
 | `phone.mind.reading.bodyWaiting` | "Nocturne reads the {count, plural, one {# thing} other {# things}} you kept while this phone charges, a few at a time. Your first page comes tomorrow morning." |
 | `phone.mind.reading.waiting` | "Waiting to charge · {count} to read" |
-| `phone.mind.reading.noteWaiting` | "Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down. Read now reads while Nocturne stays open, and uses some battery." |
+| `phone.mind.reading.noteWaiting` | The why line, then the platform's cost line, as one paragraph |
 
 "Reading what you kept" while charging keeps today's body, progress and note.
 
+**Notifications and iPhone's progress.** No kept thing, title, question or host, ever.
+
+| Key | Copy |
+|---|---|
+| `phone.notify.readNow.channel` (Android) | "Reading now" |
+| `phone.notify.readNow.channelAbout` (Android) | "Shows while Nocturne reads what you kept, because you chose Read now." |
+| `phone.notify.readNow.title` | "Reading what you kept" |
+| `phone.notify.readNow.progress` | "{done} of {count}" |
+| `phone.notify.readNow.stop` (Android) | "Stop" |
+| `phone.notify.readNow.done` (Android) | "Everything you kept is read." |
+| `phone.notify.readNow.low.title` | "Read now stopped at 20% battery" |
+| `phone.notify.readNow.saver.title` (Android) | "Read now stopped: Battery Saver is on" |
+| `phone.notify.readNow.saver.title` (iPhone) | "Read now stopped: Low Power Mode is on" |
+| `phone.notify.readNow.anyway.text` | "{done} read. Open Nocturne to read anyway." |
+| `phone.notify.readNow.floor.title` | "Reading stopped at 5% battery" |
+| `phone.notify.readNow.floor.text` | "{done} read. The rest is read while this phone charges." |
+| `phone.notify.readNow.stopped.title` | "Read now stopped" |
+| `phone.notify.readNow.stopped.text` | "{done} read. Open Nocturne to see why." |
+| `phone.notify.readNow.paused.title` (iPhone) | "Reading paused" |
+| `phone.notify.readNow.paused.text` (iPhone) | "iPhone paused it when you left Nocturne, after {done} of {count}. Open Nocturne to carry on." |
+
+On iPhone the stop notifications show only when iPhone has let Nocturne run until the stop; a stop
+while Nocturne is paused cannot happen, since nothing reads then.
+
 ### Accessibility
 
-- **Read now and Stop** are buttons of at least 44 pixels. Pressing Read now moves focus to Stop,
-  which takes its place; Stop moves it back to Read now.
-- **Not pressable** uses `aria-disabled`, so Read now stays focusable and its reason, joined with
+- **Read now, Read anyway and Stop** are buttons of at least 44 pixels. Pressing Read now or Read
+  anyway moves focus to Stop, which takes its place; Stop moves it back.
+- **Not pressable** uses `aria-disabled`, so the button stays focusable and its reason, joined with
   `aria-describedby`, is read with it.
 - **Progress.** The bar states "{done} of {count} read" to screen readers and is announced at most
   every ten seconds, as the backup's are. The row's words change without being announced.
 - **Why it stopped** is a polite status, read once.
-- **200 per cent text.** The block's lines wrap and the buttons grow, as `reading-waiting-200` and
-  `reading-now-200` show.
+- **The notification** is silent and low in importance, with no sound or vibration. Its Stop is a
+  real action, reachable with TalkBack, and its progress is read as "{done} of {count}". iPhone's
+  own progress is read by VoiceOver as iPhone gives it.
+- **200 per cent text.** The block's lines wrap and the buttons grow; the notification and Lock
+  Screen renders at 200 per cent show their words whole.
 - **Colour and motion.** No state is told by colour alone. With reduced motion the breathing dot is
   still.
-- **The screen stays on** only while Read now runs and Nocturne is in front, and the line says so.
 
 ### The code it implies
 
 Not written here; for the build.
 
 - **`pass()`** gains a "reading now" override: the charging gate returns `Pass::NotCharging` only
-  when the phone is not charging and the person has not chosen Read now. The override lets the
-  reader run; the scheduler's page and reflections keep waiting for the charger.
-- **The override is set** only by the person's Read now, and **cleared** when Nocturne leaves the
-  front, when a pass finds nothing left, at 20 per cent battery or with the phone's battery saving
-  on, on Stop, on a pause by the limit, on trouble (not answering, key refused, no credit, not
-  online), and when the mind is turned off. It is never kept across launches.
+  when the phone is not charging and the person has not chosen Read now or Read anyway. The override
+  lets the reader run; the scheduler's page and reflections keep waiting for the charger.
+- **The override is set** only by the person's Read now or Read anyway, and **cleared** when a pass
+  finds nothing left, at 20 per cent or with battery saving on (Read now), at 5 per cent (either), on
+  Stop from Nocturne, the notification or iPhone's progress, on a pause by the limit, on trouble
+  (not answering, key refused, no credit, not online), when the mind is turned off, and when
+  Nocturne is closed for good. On iPhone a pause keeps it, so reading carries on when the person
+  returns. It is never kept across launches.
+- **Android.** A foreground service of type `dataSync`, declared in the manifest with
+  `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`, started from the person's tap, running the
+  same passes as the app does in front, with a notification channel "Reading now" at low importance.
+  It handles `Service.onTimeout` by stopping as on Stop.
+- **iPhone.** On iOS 26 and later, a `BGContinuedProcessingTask` submitted from the person's tap,
+  reporting progress as things are read, with its identifier in `BGTaskSchedulerPermittedIdentifiers`.
+  On iOS 17 to 25, the time iPhone grants as the app leaves (`beginBackgroundTask`). On expiry,
+  either way, reading pauses cleanly after the thing being read and one local notification is
+  scheduled.
 - **The phone's power reading** (`Power` in the system plugin) gains the battery level and whether
   battery saving is on, and `PhoneHost::battery_percent` returns the level.
 - **The mind's status** tells the interface why reading waits (charging, on battery, reading now,
-  and why Read now stopped), so the words above are chosen from facts, never guessed.
-- **The screen** is kept on with the platform's own flag while Read now runs in front, and let go at
-  every stop.
+  reading anyway, paused while away, and why Read now stopped), so the words above are chosen from
+  facts, never guessed.
 - **Nothing new leaves the phone:** the same requests to the one chosen host, sooner.
-
-### Open questions for the owner
-
-#### 1. The screen while Read now runs
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. Keep it on | The screen stays on until Read now ends, and the line says so | Read now can finish: reading 89 things takes minutes, longer than most screens stay on. Uses more battery |
-| B. Let it sleep | The screen sleeps as usual; Read now stops when it does | Less battery. Read now usually stops after the first minute, and looks broken |
-
-**Recommendation: A.** The person chose to read now; letting the screen sleep would end it behind
-their back. The 20 per cent stop still protects the battery.
-
-#### 2. Where Read now stops for battery
-
-| Option | What happens | Trade-off |
-|---|---|---|
-| A. 20 per cent, and the phone's battery saving | As above | Matches where iPhone first offers Low Power Mode, and keeps to the person's own saving |
-| B. 20 per cent only | Battery saving doesn't stop it | One rule. Reads against a setting the person chose to save battery |
-| C. No limit | Read now runs to the end | Simplest. Can run a phone down |
-
-**Recommendation: A.**
 
 ## What this does not change
 
@@ -520,7 +617,8 @@ their back. The 20 per cent stop still protects the battery.
 - The words of steps 1, 3 and 4, and of every other screen named above. Only where the bar sits.
 - The labels "API URL", "API key", "Model name" on the phone, and Connect's on the computer.
 - Invariant 2: one look at the chosen service's list when it is checked, on the person's request.
-  Read now sends the same requests to the same host, sooner.
+  Read now sends the same requests to the same host, sooner, in the background only while the
+  person's Read now lasts.
 - When the phone reads on the charger, and that the page waits for it.
 
 ## Checks for the build
@@ -536,6 +634,12 @@ their back. The 20 per cent stop still protects the battery.
 - Changing the URL or key after a look drops the list.
 - No grouping or description of a name appears anywhere.
 - On battery with things waiting, This phone says "Waiting to charge" and nothing is read until Read
-  now. Read now reads with the app in front and stops on leaving it, on Stop, at 20 per cent, with
-  battery saving on, on a pause by the limit and on each trouble, saying why each time.
+  now. Read now stops on Stop, at 20 per cent, with battery saving on, on a pause by the limit and on
+  each trouble, saying why each time; Read anyway runs past 20 per cent and battery saving and stops
+  at 5.
+- On Android, Read now carries on with Nocturne in the background and the screen off, its
+  notification shows progress and Stop, and the service ends at every stop. On iPhone 26 and later
+  iPhone's own progress shows; on iPhone 17 to 25 reading pauses soon after leaving, the paused
+  notification shows, and reading carries on when Nocturne opens.
+- No notification names a kept thing, a question or a host.
 - After Read now ends, no pass reads until the charger or the next Read now.
