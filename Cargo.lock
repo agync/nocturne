@@ -3822,6 +3822,7 @@ dependencies = [
  "age",
  "dunce",
  "getrandom 0.4.3",
+ "hmac 0.13.0",
  "jiff 1.0.3",
  "nocturne-contract",
  "nocturne-engine",

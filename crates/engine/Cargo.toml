@@ -23,6 +23,7 @@ tokio = { workspace = true, features = ["sync", "time"] }
 getrandom = "0.4"
 unicode-normalization = "0.1"
 age = "0.12.1"
+hmac = "0.13"
 dunce.workspace = true
 tar = "0.4"
 

@@ -426,6 +426,7 @@ impl Engine {
                 ],
             )?;
             let job = tx.last_insert_rowid();
+            crate::nightly::note_forgot(tx)?;
             self.bump_audio();
             self.bump_forget();
             let mut touched = sources;
@@ -580,6 +581,7 @@ impl Engine {
                 ],
             )?;
             let job = tx.last_insert_rowid();
+            crate::nightly::note_forgot(tx)?;
             self.bump_audio();
             self.bump_forget();
             for id in &sole {
