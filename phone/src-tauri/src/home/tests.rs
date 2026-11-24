@@ -563,7 +563,7 @@ fn a_backup_comes_back_on_another_phone() {
             HomeCall::RestoreBackup {
                 file: file.to_string_lossy().into(),
                 passphrase: PASS.into(),
-                replace: false,
+                bring_in: false,
             },
             true,
             &no_progress
@@ -578,7 +578,7 @@ fn a_backup_comes_back_on_another_phone() {
             HomeCall::RestoreBackup {
                 file: file.to_string_lossy().into(),
                 passphrase: PASS.into(),
-                replace: false,
+                bring_in: false,
             }
         ),
         HomeAnswer::Restored
@@ -590,8 +590,8 @@ fn a_backup_comes_back_on_another_phone() {
     assert_eq!(found(&other, "giraffe").len(), 1);
     assert!(!two.path().join("restore-stage").exists());
 
-    // Over a memory that holds something: only when the person said so, and what was here is
-    // put aside.
+    // Over a memory that holds something: only when the person said so, and the backup's
+    // things join it. Nothing here is put aside, and what is on both is kept once.
     call(&other, note("Kept after the restore", "c-9"));
     assert_eq!(
         local(
@@ -599,27 +599,29 @@ fn a_backup_comes_back_on_another_phone() {
             HomeCall::RestoreBackup {
                 file: file.to_string_lossy().into(),
                 passphrase: PASS.into(),
-                replace: false,
+                bring_in: false,
             }
         ),
         HomeAnswer::Error {
             code: HomeError::Invalid
         }
     );
-    assert_eq!(
-        local(
-            &other,
-            HomeCall::RestoreBackup {
-                file: file.to_string_lossy().into(),
-                passphrase: PASS.into(),
-                replace: true,
-            }
-        ),
-        HomeAnswer::Restored
+    let brought = local(
+        &other,
+        HomeCall::RestoreBackup {
+            file: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+            bring_in: true,
+        },
     );
-    assert_eq!(other.put_aside_names().len(), 1);
-    assert!(found(&other, "restore").is_empty());
-    assert_eq!(stats(&other).counts, before.counts);
+    assert!(
+        matches!(brought, HomeAnswer::BroughtIn { things: 0, .. }),
+        "{brought:?}"
+    );
+    assert!(other.put_aside_names().is_empty());
+    assert_eq!(found(&other, "restore").len(), 1, "what was here stays");
+    assert_eq!(found(&other, "giraffe").len(), 1, "kept once");
+    assert!(!two.path().join("restore-stage").exists());
 
     // A second check says what is here in the same columns, and that something is put aside.
     let HomeAnswer::BackupChecked { check, here, .. } = local(
@@ -631,8 +633,8 @@ fn a_backup_comes_back_on_another_phone() {
     ) else {
         panic!("not checked")
     };
-    assert_eq!(here.map(|h| h.things), Some(3));
-    assert_eq!(check.put_aside.as_deref(), Some(NOW));
+    assert_eq!(here.map(|h| h.things), Some(4));
+    assert_eq!(check.put_aside, None);
 }
 
 #[test]
@@ -850,6 +852,14 @@ fn put_aside(home: &Home) -> Vec<nocturne_contract::PutAsideMemory> {
     }
 }
 
+/// What a restore over a memory did before decision 1, and a move still does: the memory here
+/// goes aside whole, and the phone is empty.
+fn put_aside_now(home: &Home) {
+    let _only = home.exclusive();
+    home.close();
+    home.put_aside_store().unwrap();
+}
+
 #[test]
 fn what_was_put_aside_is_listed_brought_back_and_deleted() {
     let one = tempfile::tempdir().unwrap();
@@ -869,17 +879,18 @@ fn what_was_put_aside_is_listed_brought_back_and_deleted() {
     call(&home, note("After the backup", "c-2"));
     assert!(put_aside(&home).is_empty());
 
-    let restore = |home: &Home| {
+    put_aside_now(&home);
+    assert_eq!(
         local(
-            home,
+            &home,
             HomeCall::RestoreBackup {
                 file: file.to_string_lossy().into(),
                 passphrase: PASS.into(),
-                replace: true,
+                bring_in: false,
             },
-        )
-    };
-    assert_eq!(restore(&home), HomeAnswer::Restored);
+        ),
+        HomeAnswer::Restored
+    );
     let listed = put_aside(&home);
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].at, NOW);
@@ -1434,18 +1445,22 @@ fn a_restore_waits_for_every_use_to_end() {
         ),
         HomeAnswer::BackupSaved { .. }
     ));
+    // Unpacked as a restore unpacks it, then put in the store's place.
+    let stage = home.stage_dir();
+    nocturne_engine::unpack_backup(
+        &file,
+        PASS,
+        &stage,
+        &|_, _, _| {},
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
     let done = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|s| {
         let (held, open) = home.using().unwrap();
         let restore = s.spawn(|| {
-            let answer = local(
-                &home,
-                HomeCall::RestoreBackup {
-                    file: file.to_string_lossy().into(),
-                    passphrase: PASS.into(),
-                    replace: true,
-                },
-            );
+            let _job = home.begin_job().unwrap();
+            let answer = home.put_in_place(&stage);
             done.store(true, std::sync::atomic::Ordering::SeqCst);
             answer
         });
@@ -1463,7 +1478,7 @@ fn a_restore_waits_for_every_use_to_end() {
         // held open cannot be moved on every system.
         drop(open);
         drop(held);
-        assert_eq!(restore.join().unwrap(), HomeAnswer::Restored);
+        assert_eq!(restore.join().unwrap(), Ok(HomeAnswer::Restored));
     });
     let aside = home.put_aside_names();
     assert_eq!(
@@ -1620,13 +1635,14 @@ fn a_restored_memory_has_its_own_days_for_fading() {
     };
     assert!(home.fade_if_due().is_some());
     assert_eq!(home.fade_if_due(), None);
+    put_aside_now(&home);
     assert_eq!(
         local(
             &home,
             HomeCall::RestoreBackup {
                 file: file.to_string_lossy().into(),
                 passphrase: PASS.into(),
-                replace: true,
+                bring_in: false,
             }
         ),
         HomeAnswer::Restored

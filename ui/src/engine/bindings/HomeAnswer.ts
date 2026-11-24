@@ -17,4 +17,8 @@ export type HomeAnswer = { "type": "found", items: Array<FoundItem>, } | { "type
 /**
  * The columns of the backup, and of this phone when it holds anything.
  */
-backup: KeptCounts, here: KeptCounts | null, } | { "type": "restored" } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "privateSet", item: PhoneItem, } | { "type": "putAside", memories: Array<PutAsideMemory>, } | { "type": "putAsideDeleted" } | { "type": "sourceDeletePreview", preview: PhoneDeletePreview, } | { "type": "sourceDeleted" } | { "type": "keptHowSet" } | { "type": "itemKept", kept: ItemKept, } | { "type": "error", code: HomeError, };
+backup: KeptCounts, here: KeptCounts | null, } | { "type": "restored" } | { "type": "broughtIn", things: number, entries: number, checkins: number, 
+/**
+ * On both, so kept once.
+ */
+same: number, } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "privateSet", item: PhoneItem, } | { "type": "putAside", memories: Array<PutAsideMemory>, } | { "type": "putAsideDeleted" } | { "type": "sourceDeletePreview", preview: PhoneDeletePreview, } | { "type": "sourceDeleted" } | { "type": "keptHowSet" } | { "type": "itemKept", kept: ItemKept, } | { "type": "error", code: HomeError, };

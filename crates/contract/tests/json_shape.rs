@@ -303,11 +303,11 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
     let call = HomeCall::RestoreBackup {
         file: "backup.nocturne".into(),
         passphrase: "p".into(),
-        replace: true,
+        bring_in: true,
     };
     assert_eq!(
         serde_json::to_string(&call).unwrap(),
-        r#"{"cmd":"restoreBackup","file":"backup.nocturne","passphrase":"p","replace":true}"#
+        r#"{"cmd":"restoreBackup","file":"backup.nocturne","passphrase":"p","bringIn":true}"#
     );
     assert_eq!(
         serde_json::to_string(&HomeAnswer::Error {

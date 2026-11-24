@@ -530,8 +530,10 @@ export function homeState(scenario: HomeScenario) {
               : null,
         };
       case "restoreBackup":
-        if (call.passphrase === "already here" && !call.replace)
-          return { type: "error", code: "invalid" };
+        if (call.passphrase === "already here")
+          return call.bringIn
+            ? { type: "broughtIn", things: 126, entries: 52, checkins: 6, same: 2 }
+            : { type: "error", code: "invalid" };
         mode = "alone";
         broken = false;
         damaged = false;

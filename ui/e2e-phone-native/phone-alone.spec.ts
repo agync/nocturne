@@ -311,7 +311,7 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-voice-ask-${scheme}`);
     });
 
-    test("Replace what's on this phone?", async ({ page }) => {
+    test("a backup file over a memory brings its things in", async ({ page }) => {
       await page.goto("/?m=first&s=welcome");
       await page.getByRole("button", { name: "I have a backup" }).click();
       await page.getByRole("radio", { name: /A backup file/ }).check();
@@ -320,10 +320,12 @@ for (const scheme of ["light", "dark"] as const) {
       await page.getByLabel("Passphrase for this backup").fill("already here");
       await page.getByRole("button", { name: "Bring it back" }).click();
       await expect(
-        page.getByRole("heading", { name: "Replace what’s on this phone?" }),
+        page.getByRole("heading", {
+          name: "Your backup has its own memory, and this phone has one too.",
+        }),
       ).toBeVisible();
       await clean(page);
-      await shot(page, `after-replace-${scheme}`);
+      await shot(page, `after-file-merge-${scheme}`);
     });
 
     test("the memory can't be opened, then bringing back a backup", async ({ page }) => {

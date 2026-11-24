@@ -248,6 +248,9 @@ pub async fn home_local<R: Runtime>(app: AppHandle<R>, call: HomeCall) -> HomeAn
     .unwrap_or(HomeAnswer::Error {
         code: HomeError::Failed,
     });
+    if restores && matches!(answer, HomeAnswer::BroughtIn { .. }) {
+        let_go_backup_file(app.clone());
+    }
     if matches!(answer, HomeAnswer::Restored) {
         if restores {
             let_go_backup_file(app.clone());

@@ -50,6 +50,11 @@ interface ChosenBackup {
   size: number;
 }
 
+/** What a backup file's restore did: the memory here now, or its things joined the one here. */
+export type FileRestored =
+  | { kind: "restored" }
+  | { kind: "broughtIn"; things: number; entries: number; checkins: number; same: number };
+
 /** A backup checked, with what it and this phone hold in the replace columns. */
 export interface Checked {
   check: RestoreCheck;
@@ -83,12 +88,16 @@ export interface HomeApi {
   /** The chosen file's copy goes, when the restore is left. */
   letGoBackupFile(): Promise<void>;
   checkBackup(file: string, passphrase: string, onProgress: Progress): Promise<Checked>;
+  /**
+   * Bring a backup file back: onto an empty phone as it was, or, with `bringIn`, its things into
+   * the memory on this phone.
+   */
   restoreBackup(
     file: string,
     passphrase: string,
-    replace: boolean,
+    bringIn: boolean,
     onProgress: Progress,
-  ): Promise<void>;
+  ): Promise<FileRestored>;
   putAside(): Promise<PutAsideMemory[]>;
   bringBack(id: string): Promise<void>;
   deletePutAside(id: string): Promise<void>;
@@ -212,12 +221,15 @@ export function createHomeApi(notes: NoteStore = idbNotes()): HomeApi {
       );
       return { check, backup, here };
     },
-    async restoreBackup(file, passphrase, replace, onProgress) {
-      expect(
-        await local({ cmd: "restoreBackup", file, passphrase, replace }, onProgress),
-        "restored",
-      );
+    async restoreBackup(file, passphrase, bringIn, onProgress) {
+      const answer = await local({ cmd: "restoreBackup", file, passphrase, bringIn }, onProgress);
+      if (answer.type === "broughtIn") {
+        const { type: _, ...counts } = answer;
+        return { kind: "broughtIn", ...counts };
+      }
+      expect(answer, "restored");
       set("alone");
+      return { kind: "restored" };
     },
     async putAside() {
       return expect(await local({ cmd: "putAside" }), "putAside").memories;
