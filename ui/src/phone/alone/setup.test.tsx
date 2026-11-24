@@ -85,6 +85,48 @@ describe("Step 2, the service's list", () => {
     expect(await screen.findByText("answers.example answered. It works.")).toBeInTheDocument();
   });
 
+  it("moves with the arrows, chooses on any activation, and gives focus back to the name", async () => {
+    await app("m=fresh");
+    await toDetails();
+    fill("https://answers.example/v1", "sk-1");
+    const pick = button("Choose from answers.example’s list…");
+    pick.focus();
+    fireEvent.click(pick);
+    // While it looks, focus stays on the one control, which says so.
+    expect(pick).toHaveFocus();
+    const sheet = await screen.findByRole("dialog", { name: "answers.example’s list" });
+    const first = within(sheet).getByRole("radio", { name: "reader-large" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(within(sheet).getByRole("radio", { name: "reader-large-2026-09" })).toHaveFocus();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // A screen reader's activation is a click with no pointer detail: it chooses.
+    fireEvent.click(within(sheet).getByRole("radio", { name: "reader-small" }), { detail: 0 });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const name = screen.getByLabelText("Model name");
+    expect(name).toHaveValue("reader-small");
+    await waitFor(() => expect(name).toHaveFocus());
+    // Opened again and closed, focus lands on the name field.
+    fireEvent.click(button("Choose from answers.example’s list…"));
+    const again = await screen.findByRole("dialog", { name: "answers.example’s list" });
+    fireEvent.click(within(again).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(name).toHaveFocus());
+  });
+
+  it("keeps focus on the list control after a look that failed", async () => {
+    await app("m=fresh");
+    await toDetails();
+    fill("https://answers.example/v1", "refused");
+    const pick = button("Choose from answers.example’s list…");
+    pick.focus();
+    fireEvent.click(pick);
+    await screen.findByRole("alert");
+    const again = button("Try the list again");
+    expect(again).toBe(pick);
+    expect(again).toHaveFocus();
+  });
+
   it("warns about a name not on the list, and offers the one that differs in capitals", async () => {
     await app("m=fresh");
     await toDetails();

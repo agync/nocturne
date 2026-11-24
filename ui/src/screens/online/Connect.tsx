@@ -333,36 +333,37 @@ export function Connect({
               </button>
             </>
           ) : null}
-          {looked.name === "looking" ? (
-            <p className={styles.pick} data-busy="" role="status">
+          <button
+            ref={pick}
+            type="button"
+            className={styles.pick}
+            data-busy={looked.name === "looking" ? "" : undefined}
+            aria-disabled={ready && !checking && looked.name !== "looking" ? undefined : true}
+            aria-describedby={ready ? undefined : `${id}-needs`}
+            onClick={() => void look()}
+          >
+            {looked.name === "looking" ? (
               <span className={styles.dot} aria-hidden="true" />
-              <span>{t("advanced.online.connect.list.looking", { host })}</span>
+            ) : (
+              <Icon name={listAgain ? "rotate-ccw" : "list"} size={16} />
+            )}
+            <span>
+              {looked.name === "looking"
+                ? t("advanced.online.connect.list.looking", { host })
+                : listAgain
+                  ? t("advanced.online.connect.list.again")
+                  : ready && host
+                    ? t("advanced.online.connect.list", { host })
+                    : t("advanced.online.connect.list.noHost")}
+            </span>
+          </button>
+          <span className="sr-only" role="status">
+            {looked.name === "looking" ? t("advanced.online.connect.list.looking", { host }) : ""}
+          </span>
+          {ready ? null : (
+            <p id={`${id}-needs`} className={styles.from}>
+              {t("advanced.online.connect.list.needs")}
             </p>
-          ) : (
-            <>
-              <button
-                ref={pick}
-                type="button"
-                className={styles.pick}
-                aria-disabled={ready && !checking ? undefined : true}
-                aria-describedby={ready ? undefined : `${id}-needs`}
-                onClick={() => void look()}
-              >
-                <Icon name={listAgain ? "rotate-ccw" : "list"} size={16} />
-                <span>
-                  {listAgain
-                    ? t("advanced.online.connect.list.again")
-                    : ready && host
-                      ? t("advanced.online.connect.list", { host })
-                      : t("advanced.online.connect.list.noHost")}
-                </span>
-              </button>
-              {ready ? null : (
-                <p id={`${id}-needs`} className={styles.from}>
-                  {t("advanced.online.connect.list.needs")}
-                </p>
-              )}
-            </>
           )}
           {looked.name === "failed" ? (
             <div className={styles.listProblem} role="alert">
@@ -470,7 +471,7 @@ export function Connect({
           onChoose={choose}
           onClose={() => {
             setListOpen(false);
-            pick.current?.focus();
+            nameField.current?.focus();
           }}
         />
       ) : null}

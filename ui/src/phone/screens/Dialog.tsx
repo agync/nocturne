@@ -35,7 +35,9 @@ export function useFocusTrap(box: RefObject<HTMLElement | null>) {
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      if (before?.isConnected) before.focus?.({ preventScroll: true });
+      const now = document.activeElement;
+      const taken = now && now !== document.body && !node.contains(now);
+      if (!taken && before?.isConnected) before.focus?.({ preventScroll: true });
     };
   }, [box]);
 }

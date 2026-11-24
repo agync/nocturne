@@ -482,38 +482,44 @@ export function MindDetails({
   const again = looked.name === "failed" || looked.name === "none" || looked.name === "error";
   let control: ReactNode = null;
   if (list) {
-    control =
-      looked.name === "looking" ? (
-        <p className="ph-mind-pick" data-busy="" role="status">
-          <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
-          <span>{t("phone.mind.details.list.looking", { host })}</span>
-        </p>
-      ) : (
-        <>
-          <button
-            ref={pick}
-            type="button"
-            className="ph-mind-pick"
-            aria-disabled={ready ? undefined : true}
-            aria-describedby={ready ? undefined : `${id}-needs`}
-            onClick={() => void look()}
-          >
+    // One button throughout, so focus stays on it while it looks and after a look that failed.
+    const busy = looked.name === "looking";
+    control = (
+      <>
+        <button
+          ref={pick}
+          type="button"
+          className="ph-mind-pick"
+          data-busy={busy ? "" : undefined}
+          aria-disabled={ready && !busy ? undefined : true}
+          aria-describedby={ready ? undefined : `${id}-needs`}
+          onClick={() => void look()}
+        >
+          {busy ? (
+            <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
+          ) : (
             <Icon name={again ? "refresh" : "list"} size={20} />
-            <span>
-              {again
+          )}
+          <span>
+            {busy
+              ? t("phone.mind.details.list.looking", { host })
+              : again
                 ? t("phone.mind.details.list.again")
                 : ready && host
                   ? t("phone.mind.details.list", { host })
                   : t("phone.mind.details.list.noHost")}
-            </span>
-          </button>
-          {ready ? null : (
-            <p id={`${id}-needs`} className="ph-mind-from">
-              {t("phone.mind.details.list.needs")}
-            </p>
-          )}
-        </>
-      );
+          </span>
+        </button>
+        <span className="sr-only" role="status">
+          {busy ? t("phone.mind.details.list.looking", { host }) : ""}
+        </span>
+        {ready ? null : (
+          <p id={`${id}-needs`} className="ph-mind-from">
+            {t("phone.mind.details.list.needs")}
+          </p>
+        )}
+      </>
+    );
   }
 
   return (
@@ -585,7 +591,7 @@ export function MindDetails({
           onChoose={choose}
           onClose={() => {
             setOpen(false);
-            pick.current?.focus();
+            nameField.current?.focus();
           }}
         />
       ) : null}

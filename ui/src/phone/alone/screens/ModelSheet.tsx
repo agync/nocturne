@@ -4,6 +4,9 @@ import { marked, matching, SEARCH_ABOVE } from "../../../screens/online/modelLis
 import { BottomSheet } from "../../screens/Dialog";
 import { Icon } from "../../screens/ui";
 
+/** How far each arrow key moves along the names. */
+const ARROWS: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+
 /** How long typing pauses before the match count is read out. */
 const SETTLE_MS = 600;
 
@@ -113,12 +116,20 @@ export function ModelSheet({
                   name={`${id}-name`}
                   checked={name === chosen}
                   readOnly
-                  // A tap, Space or Enter chooses; the arrow keys only move.
-                  onClick={(e) => {
-                    if (e.detail > 0) onChoose(name);
-                  }}
+                  // The arrow keys only move; a tap, a screen reader's activation, Space or
+                  // Enter chooses.
+                  onClick={() => onChoose(name)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    const by = ARROWS[e.key];
+                    if (by !== undefined) {
+                      e.preventDefault();
+                      const group = e.currentTarget.closest("fieldset");
+                      const rows = group
+                        ? [...group.querySelectorAll<HTMLInputElement>("input[type=radio]")]
+                        : [];
+                      const at = rows.indexOf(e.currentTarget);
+                      rows[Math.max(0, Math.min(rows.length - 1, at + by))]?.focus();
+                    } else if (e.key === "Enter") {
                       e.preventDefault();
                       onChoose(name);
                     }
