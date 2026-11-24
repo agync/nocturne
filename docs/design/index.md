@@ -28,3 +28,4 @@ screen follows, the data model, and how quality is measured.
 - [The site in five languages](site-localisation.md) - Addresses, language switch and upkeep for the site in German, French, Spanish, Italian and Dutch.
 - [Site copy](site-copy/index.md) - The approved words for the site in each language, with a glossary per language.
 - [The journal and the other capabilities on the site](site-capabilities.md) - The journal band beside the morning page, an honest line about Online answers, and the strings each language translates.
+- [The site before the store launch](site-refresh.md) - Proposal for the landing, install and new support pages once Nocturne is in Google Play and the App Store: a phone band with store badges, privacy words true for a computer and a phone, a signed Mac, the policy and support links, the strings to retranslate and the owner's questions.
