@@ -337,6 +337,13 @@ another account never drops it and never sends it there: it runs the next time N
 earlier account, when the person chooses it again. The phone notes each account by its address for
 this, and the change of account waits for a deletion already under way.
 
+On an iPhone there is no "Choose account": the backup goes to the iCloud the iPhone is signed in
+to. The phone notes an opaque mark of that iCloud account (a hash of what iOS gives to tell
+accounts apart, never the account's name) and looks at it before each night and each deletion.
+Another iCloud signed in is another account, exactly as another Google account is on Android: the
+backup starts afresh there, and a deletion owed to the earlier iCloud waits for the iPhone to be
+signed in to it again.
+
 ### On Today
 
 No system notifications about the backup. On Today, as one card, at most once for each cause:

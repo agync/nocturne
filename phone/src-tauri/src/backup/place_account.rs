@@ -191,6 +191,15 @@ pub fn attach<R: Runtime>(app: &AppHandle<R>, backup: &PhoneBackup) {
         )))),
         Err(e) => tracing::warn!("the backup has no staging folder: {e}"),
     }
+    // An iPhone can say which iCloud it is signed in to at any time: another one signed in is
+    // another account, as choosing another Google account is on Android.
+    #[cfg(target_os = "ios")]
+    {
+        let handle = app.clone();
+        backup.set_account_probe(Some(std::sync::Arc::new(move || {
+            handle.system().place_account().ok().flatten()
+        })));
+    }
     #[cfg(not(mobile))]
     let _ = (app, backup, STAGING);
 }

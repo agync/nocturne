@@ -444,6 +444,8 @@ pub struct PhoneBackup {
     locking: Mutex<()>,
     /// The passphrase work the locked key asks for; `None` is what Nocturne writes.
     work_factor: Option<u8>,
+    /// How the phone says which account it reaches, where it can without asking.
+    probe: RwLock<Option<AccountProbe>>,
     /// A recovery key's lock, made and shown but not yet saved by the person: nothing opens
     /// with it until it is kept, so "Cancel" leaves the earlier key working. It holds the key it
     /// locks and the account it was made for, and is kept only while both are still the backup's.
@@ -453,6 +455,9 @@ pub struct PhoneBackup {
     /// its place loses the mark on an iPhone.
     exclude: Option<crate::home::ExcludeFromBackup>,
 }
+
+/// Says which account the phone reaches now, as an opaque mark; `None` when it can't say.
+pub type AccountProbe = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
 /// A recovery key made and shown, waiting for the person to save it.
 struct NewKey {
@@ -497,6 +502,7 @@ impl PhoneBackup {
             saving: Mutex::new(()),
             locking: Mutex::new(()),
             work_factor: None,
+            probe: RwLock::new(None),
             new_key: Mutex::new(None),
             exclude: None,
         }
@@ -613,6 +619,28 @@ impl PhoneBackup {
         out
     }
 
+    /// Where the phone can say which account it reaches without asking the person (an iPhone's
+    /// iCloud), how it says so: an opaque mark that changes when another account signs in.
+    pub fn set_account_probe(&self, probe: Option<AccountProbe>) {
+        *self.probe.write().unwrap_or_else(|e| e.into_inner()) = probe;
+    }
+
+    /// Notes another account signed in since, with `locking` held, as choosing it would.
+    fn follow_account_held(&self) {
+        let probe = self.probe.read().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(now) = probe.and_then(|p| p()) {
+            let known = self.saved().account_name;
+            if known.as_deref() != Some(address(&now).as_str()) {
+                self.reconnected_held(Some(&now), None);
+            }
+        }
+    }
+
+    fn follow_account(&self) {
+        let _held = lock(&self.locking);
+        self.follow_account_held();
+    }
+
     /// Asks for the account through `ask`, the phone's own call, and notes what came of it
     /// ([`PhoneBackup::reconnected`]), with `locking` held throughout: a deletion owed to one
     /// account never runs while the phone moves to another.
@@ -644,8 +672,16 @@ impl PhoneBackup {
 
     fn reconnected_held(&self, account: Option<&str>, previous: Option<&str>) {
         *lock(&self.failed_at) = None;
-        let changed = previous.is_some();
         self.update(|s| {
+            // An account whose mark differs from the one noted is another account, also when
+            // the phone didn't say which came before (an iPhone signed in to another iCloud).
+            let switched = match (previous, account, &s.account_name) {
+                (None, Some(now), Some(before)) if address(now) != *before => Some(before.clone()),
+                _ => None,
+            };
+            let previous = previous.map(str::to_string).or(switched);
+            let previous = previous.as_deref();
+            let changed = previous.is_some();
             if matches!(
                 s.trouble,
                 Some(Trouble::SignedOut | Trouble::NoPermission | Trouble::OtherBackup)
@@ -1023,6 +1059,7 @@ impl PhoneBackup {
     /// change under it. One owed to another account waits for that account.
     fn delete_pending(&self) -> Result<(), BackupProblem> {
         let _held = lock(&self.locking);
+        self.follow_account_held();
         if !self.saved().owed_here() {
             return Ok(());
         }
@@ -1053,6 +1090,7 @@ impl PhoneBackup {
         progress: &dyn Fn(BackupPhase, u64, u64),
     ) -> Result<LastNight, BackupProblem> {
         self.follow(home);
+        self.follow_account();
         let saved = self.saved();
         if !saved.on {
             return Err(BackupProblem::Off);
@@ -1340,6 +1378,7 @@ impl PhoneBackup {
         progress: &dyn Fn(BackupPhase, u64, u64),
     ) -> bool {
         self.follow(home);
+        self.follow_account();
         if charging {
             self.note_charging();
         }

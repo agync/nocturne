@@ -97,7 +97,19 @@ class SystemPlugin: Plugin {
   /// the backup goes to the iCloud it is signed in to.
   @objc public func placeConnect(_ invoke: Invoke) throws {
     placeQueue.async {
-      invoke.resolve(["outcome": ICloudPlace.state()])
+      var answer: [String: Any] = ["outcome": ICloudPlace.state()]
+      if let account = ICloudPlace.account() { answer["account"] = account }
+      invoke.resolve(answer)
+    }
+  }
+
+  /// Which iCloud account this iPhone is signed in to, as an opaque mark, so the core sees when
+  /// another one signs in.
+  @objc public func placeAccount(_ invoke: Invoke) throws {
+    placeQueue.async {
+      var answer: [String: Any] = [:]
+      if let account = ICloudPlace.account() { answer["account"] = account }
+      invoke.resolve(answer)
     }
   }
 
