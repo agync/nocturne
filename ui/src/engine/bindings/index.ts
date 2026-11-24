@@ -125,6 +125,7 @@ export type { Mention } from "./Mention";
 export type { MentionState } from "./MentionState";
 export type { MergeOutcome } from "./MergeOutcome";
 export type { ModelChoice } from "./ModelChoice";
+export type { ModelList } from "./ModelList";
 export type { ModelsView } from "./ModelsView";
 export type { NameRef } from "./NameRef";
 export type { NearMatch } from "./NearMatch";

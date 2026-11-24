@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use nocturne_contract::{CheckOutcome, EntityKind, ItemKind, MemoryView, PageView};
+use nocturne_contract::{CheckOutcome, EntityKind, ItemKind, MemoryView, ModelList, PageView};
 use nocturne_engine::{ExtractContext, Fact, Mind, MindError, OnlineFailure};
 use nocturne_mind::{online, prompts, read};
 use nocturne_provider::address::{Lookup, OnlineKey, UrlProblem};
@@ -568,11 +568,18 @@ async fn the_check_looks_at_the_list_then_asks_one_short_question() {
     );
     assert_eq!(seen[1].body["max_tokens"], 8);
 
+    // A name not on the list is no reason to stop: the question decides.
     let missing = StandIn::start().await;
     missing.models(&["another-model"]);
-    let (outcome, _) = provider(&missing).check().await;
-    assert_eq!(outcome, CheckOutcome::ModelMissing);
-    assert_eq!(missing.chats().len(), 0);
+    let (outcome, made) = provider(&missing).check().await;
+    assert!(matches!(outcome, CheckOutcome::Works { .. }), "{outcome:?}");
+    assert_eq!(made.len(), 2);
+    assert_eq!(missing.chats().len(), 1);
+    missing.always(Answer::Status(404, "no such model".into()));
+    assert_eq!(
+        provider(&missing).check().await.0,
+        CheckOutcome::ModelMissing
+    );
 
     let refused = StandIn::start().await;
     refused.models_status(401);
@@ -582,6 +589,84 @@ async fn the_check_looks_at_the_list_then_asks_one_short_question() {
     unlisted.models_status(404);
     let (outcome, made) = provider(&unlisted).check().await;
     assert!(matches!(outcome, CheckOutcome::Works { .. }), "{outcome:?}");
+    assert_eq!(made.len(), 2);
+}
+
+#[tokio::test]
+async fn one_look_at_the_list_says_what_it_found() {
+    let stand_in = StandIn::start().await;
+    stand_in.models(&["reader-small", "Reader-Large"]);
+    let look = provider(&stand_in).list().await;
+    assert_eq!(
+        look.list,
+        ModelList::Listed {
+            names: vec!["reader-small".into(), "Reader-Large".into()]
+        }
+    );
+    assert!(look.exchange.is_some());
+    assert_eq!(stand_in.seen().len(), 1);
+    assert!(stand_in.chats().is_empty());
+
+    let empty = StandIn::start().await;
+    empty.models(&[]);
+    assert_eq!(provider(&empty).list().await.list, ModelList::None);
+
+    let unlisted = StandIn::start().await;
+    unlisted.models_status(404);
+    let look = provider(&unlisted).list().await;
+    assert_eq!(look.list, ModelList::None);
+    assert!(look.exchange.is_some());
+
+    for (status, problem) in [
+        (401, CheckOutcome::KeyRefused),
+        (402, CheckOutcome::NoCredit),
+        (429, CheckOutcome::Busy),
+        (503, CheckOutcome::ServerError),
+    ] {
+        let failing = StandIn::start().await;
+        failing.models_status(status);
+        assert_eq!(
+            provider(&failing).list().await.list,
+            ModelList::Failed { problem },
+            "{status}"
+        );
+    }
+
+    let failing: Lookup = Arc::new(|_: String, _: u16| {
+        Box::pin(async { Err(std::io::Error::other("no such name")) })
+    });
+    let url = format!("http://gpubox:{}/v1", stand_in.addr.port());
+    let nowhere = Provider::new(&url, MODEL, OnlineKey::new(KEY.into()))
+        .unwrap()
+        .with_lookup(failing);
+    let look = nowhere.list().await;
+    assert_eq!(
+        look.list,
+        ModelList::Failed {
+            problem: CheckOutcome::NoInternet
+        }
+    );
+    assert!(look.exchange.is_none());
+}
+
+#[tokio::test]
+async fn a_check_after_a_look_uses_its_list() {
+    let stand_in = StandIn::start().await;
+    let p = provider(&stand_in);
+    let look = p.list().await;
+    let (outcome, made) = p.check_with(Some(&look.list)).await;
+    assert!(matches!(outcome, CheckOutcome::Works { .. }), "{outcome:?}");
+    assert_eq!(made.len(), 1);
+    let seen = stand_in.seen();
+    assert_eq!(seen.len(), 2, "one look, one question");
+    assert_eq!(seen[1].path, "/v1/chat/completions");
+
+    // A look that failed is not reused: the check looks itself.
+    let busy = StandIn::start().await;
+    let failed = ModelList::Failed {
+        problem: CheckOutcome::Busy,
+    };
+    let (_, made) = provider(&busy).check_with(Some(&failed)).await;
     assert_eq!(made.len(), 2);
 }
 
