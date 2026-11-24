@@ -353,41 +353,34 @@ fn dentist_and_pills(l: &Lab) -> String {
     id
 }
 
+/// A private line goes with the question like any other, so a provider that is not sure has
+/// had everything this computer has, and the question is not handed back.
 #[test]
-fn not_sure_online_without_what_stayed_here_is_answered_here() {
+fn not_sure_online_with_a_private_line_sent_stays_not_sure() {
     let mind = TestMind::new(AnswerMode::Normal);
     let l = lab(mind.clone());
-    let pills = dentist_and_pills(&l);
+    dentist_and_pills(&l);
     l.turn_on();
     l.script(json!({"reply": "NOT_SURE"}));
     let d = ask(&l.h, "What did the dentist give me?");
     let done = d.last().unwrap();
-    assert_eq!(done.phase, AskPhase::Done);
-    assert_eq!(done.answered_by, here(LocalReason::NotSureOnline));
-    assert_eq!(done.left_out, None, "said only of an answer written online");
-    assert!(done.memory_ids.contains(&pills));
-    let phases: Vec<AskPhase> = d.iter().map(|x| x.phase).collect();
-    let online = phases.iter().position(|p| *p == AskPhase::AskingOnline);
-    let switched = phases
-        .iter()
-        .position(|p| *p == AskPhase::SwitchingToComputer);
-    assert!(online.is_some() && switched > online, "{phases:?}");
+    assert_eq!(done.phase, AskPhase::NotSure);
+    assert_eq!(
+        done.answered_by,
+        Some(AnsweredBy::Online {
+            host: "api.example.com".into()
+        })
+    );
+    assert_eq!(done.left_out, None);
     let questions = l.questions();
     assert_eq!(questions.len(), 1, "asked online once, never again");
     assert!(
-        !serde_json::to_string(&questions)
+        serde_json::to_string(&questions)
             .unwrap()
-            .contains("PILLMARK")
+            .contains("PILLMARK"),
+        "the private line went with the question"
     );
-    assert_eq!(mind.answered_from.lock().unwrap().len(), 1);
-    let sends =
-        l.h.ok("list_online_sends", json!({"limit": 10, "before": null}));
-    assert_eq!(sends[0]["result"], json!({"type": "notSure"}));
-    assert_eq!(
-        done.send_id,
-        sends[0]["id"].as_f64(),
-        "the mark still leads to what was sent"
-    );
+    assert!(mind.answered_from.lock().unwrap().is_empty());
 }
 
 #[test]

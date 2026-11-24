@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import { askPlace } from "../../components/KeepAskBar/askPlace";
-import type { AnsweredBy, LeftOut, LocalReason, OnlineView } from "../../engine/bindings";
+import type { AnsweredBy, LocalReason, OnlineView } from "../../engine/bindings";
 import { onlineViewOn } from "../../engine/mock/onlineAsk";
 import { renderApp, setViewport } from "../../test/render";
 import { askSession } from "./session";
@@ -123,22 +123,14 @@ describe("the mark on an answer", () => {
 });
 
 describe("what was left out of an online question", () => {
-  const NOTES: Array<[LeftOut, string]> = [
-    [
-      "private",
-      "Some things you marked private were left out. Ask on this computer to include them.",
-    ],
-    // Written only by earlier versions: said without naming what kind of thing it was.
-    ["sensitive", "Some things were left out. Ask on this computer to include them."],
-    ["both", "Some things were left out. Ask on this computer to include them."],
-  ];
-
-  it.each(NOTES)("says so for %s and offers to ask here", async (leftOut, words) => {
+  it("says so for added lines and offers to ask here", async () => {
     const engine = await open(
       onlineViewOn(),
-      finished({ type: "online", host: HOST }, { leftOut }),
+      finished({ type: "online", host: HOST }, { leftOut: "lines" }),
     );
-    expect(await screen.findByText(words)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Some things were left out. Ask on this computer to include them."),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ask on this computer" }));
     await waitFor(() => expect(engine.asked).toHaveLength(2));
     expect(engine.asked[1]).toEqual({
@@ -150,7 +142,7 @@ describe("what was left out of an online question", () => {
   it("says nothing, and offers nothing, when the answer was written here and kept here", async () => {
     await open(
       onlineViewOn(),
-      finished({ type: "computer", reason: "keptHere" }, { leftOut: "private" }),
+      finished({ type: "computer", reason: "keptHere" }, { leftOut: "lines" }),
     );
     await screen.findByText(/these stay on this computer/);
     expect(screen.queryByText(/were left out/)).toBeNull();
@@ -160,9 +152,9 @@ describe("what was left out of an online question", () => {
   it("keeps an online answer that landed, in Earlier, when it is asked again here", async () => {
     const engine = await open(
       onlineViewOn(),
-      finished({ type: "online", host: HOST }, { leftOut: "private" }),
+      finished({ type: "online", host: HOST }, { leftOut: "lines" }),
     );
-    await screen.findByText(/Some things you marked private/);
+    await screen.findByText(/Some things were left out/);
     await userEvent.click(screen.getByRole("button", { name: "Ask on this computer" }));
     await waitFor(() => expect(engine.asked).toHaveLength(2));
     const earlier = await screen.findByRole("region", { name: "Earlier" });
@@ -174,7 +166,7 @@ describe("what was left out of an online question", () => {
   });
 
   it("moves focus to the question when the buttons go", async () => {
-    await open(onlineViewOn(), finished({ type: "online", host: HOST }, { leftOut: "private" }));
+    await open(onlineViewOn(), finished({ type: "online", host: HOST }, { leftOut: "lines" }));
     await userEvent.click(await screen.findByRole("button", { name: "Ask on this computer" }));
     await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
   });

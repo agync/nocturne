@@ -10,7 +10,7 @@ use std::time::Duration;
 use common::*;
 use nocturne_app_lib::ask::{self, AskLane, AskOptions, AskSink};
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
-use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, AskPlace, HelpKind, LeftOut, LocalReason};
+use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, AskPlace, HelpKind, LocalReason};
 use nocturne_engine::{FakeMind, Mind};
 use serde_json::{Value, json};
 use tauri::async_runtime::block_on;
@@ -374,10 +374,11 @@ fn phones_follow_the_setting() {
     assert_eq!(l.questions().len(), 1, "a phone question stays here");
 }
 
-/// Only what is marked private stays here: a medicine, a bank detail and a passport number go
-/// with the question like any other line, and the notes they were read from never do.
+/// A private mark keeps nothing out of an answer (decision 0011, amended 2026-11-23): a private
+/// memory goes with the question like a medicine, a bank detail or a passport number. The notes
+/// they were read from never do.
 #[test]
-fn only_private_is_kept_out_of_the_payload() {
+fn a_private_memory_goes_with_the_question_and_its_note_does_not() {
     let l = lab();
     let e = l.h.engine();
     let open = dentist(&l);
@@ -388,6 +389,14 @@ fn only_private_is_kept_out_of_the_payload() {
         "4411",
     );
     e.set_private(&private, true).unwrap();
+    let (kept_note, kept) = l.h.learn(
+        "PRIVITEMNOTE the dentist parking",
+        "The dentist parking PRIVITEMMARK is bay 9.",
+        "Dentist",
+        "bay 9",
+    );
+    e.set_item_private(&kept_note, true).unwrap();
+    assert!(l.h.memory(&kept).private);
     medicine(&l, "HEALTHNOTE", "The dentist said HEALTHMARK take pills.");
     l.h.learn(
         "BANKNOTE the dentist bill",
@@ -405,31 +414,34 @@ fn only_private_is_kept_out_of_the_payload() {
     let d = l.ask("What about the dentist?", None);
     let recorded = serde_json::to_string(&l.chats()).unwrap();
     for marker in [
-        "PRIVMARK",
-        "NOTEMARK",
         "PRIVNOTE",
+        "PRIVITEMNOTE",
+        "NOTEMARK",
         "HEALTHNOTE",
         "BANKNOTE",
         "PASSNOTE",
         &private,
+        &kept,
         &open,
     ] {
         assert!(!recorded.contains(marker), "{marker} left the computer");
     }
     for marker in [
         "The dentist is on Thursday.",
+        "PRIVMARK",
+        "PRIVITEMMARK",
         "HEALTHMARK",
         "BANKMARK",
         "PASSMARK",
     ] {
         assert!(recorded.contains(marker), "{marker} was kept back");
     }
-    assert_eq!(last(&d).left_out, Some(LeftOut::Private));
+    assert_eq!(last(&d).left_out, None, "nothing was kept back");
     assert_eq!(last(&d).answered_by, online());
 }
 
 #[test]
-fn left_out_says_private_or_nothing() {
+fn nothing_is_marked_left_out_for_a_private_line() {
     for private in [true, false] {
         let l = lab();
         dentist(&l);
@@ -441,47 +453,9 @@ fn left_out_says_private_or_nothing() {
         }
         l.turn_on(true, 200);
         let d = l.ask("What about the dentist?", None);
-        let want = private.then_some(LeftOut::Private);
-        assert_eq!(last(&d).left_out, want, "{private}");
+        assert_eq!(last(&d).left_out, None, "{private}");
         assert_eq!(last(&d).answered_by, online());
     }
-}
-
-#[test]
-fn nothing_sendable_answers_here() {
-    let l = lab();
-    let (_, p) = l.h.learn("p", "The safe code is 9911.", "Safe", "9911");
-    l.h.engine().set_private(&p, true).unwrap();
-    l.turn_on(true, 200);
-    let d = l.ask("What is the safe code?", None);
-    assert_eq!(last(&d).answered_by, here(LocalReason::KeptHere));
-    assert_eq!(
-        last(&d).left_out,
-        None,
-        "said only of an answer written online"
-    );
-    assert!(!phases(&d).contains(&AskPhase::AskingOnline));
-    assert!(l.questions().is_empty());
-    let sends =
-        l.h.ok("list_online_sends", json!({"limit": 10, "before": null}));
-    let sends = sends.as_array().unwrap();
-    assert_eq!(
-        sends.len(),
-        2,
-        "the check, and the question that never left"
-    );
-    assert_eq!(
-        sends[0]["result"],
-        json!({"type": "notSent", "reason": "keptHere"})
-    );
-    assert_eq!(sends[0]["reached"], false);
-    assert_eq!(sends[0]["bytesUp"], 0.0);
-    assert!(sends[0]["lines"].as_array().unwrap().is_empty());
-    assert_eq!(
-        l.h.ok("get_online", json!({}))["questionsThisMonth"],
-        0,
-        "not counted"
-    );
 }
 
 /// One fallback: the stand-in fails as scripted, this computer answers, and the mark says why.

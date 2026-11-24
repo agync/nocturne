@@ -383,10 +383,10 @@ mod online {
         }
     }
 
-    /// With the other side private and kept back, the provider's answer gives one side and this
-    /// computer adds the other. What was kept back never goes out.
+    /// The provider's answer gives one side and this computer adds the other. The other side was
+    /// private, which keeps nothing back, so it went with the question and nothing is marked.
     #[test]
-    fn an_online_answer_gets_the_side_kept_back_added_here() {
+    fn a_private_side_goes_online_and_the_answer_is_not_marked() {
         let h = harness();
         let ((_, a), (_, b)) = book_club(&h);
         h.engine().set_private(&b, true).unwrap();
@@ -403,13 +403,10 @@ mod online {
         );
         assert_eq!(done.memory_ids, [a, b]);
         assert_eq!(
-            done.left_out,
-            Some(nocturne_contract::LeftOut::Private),
-            "the mark says part stayed here"
+            done.left_out, None,
+            "both sides went, so nothing stayed here"
         );
-        assert!(!online.sent().contains("community hall"));
-        let log = h.ok("list_online_sends", json!({"limit": 10, "before": null}));
-        assert!(!log.to_string().contains("community hall"), "{log}");
+        assert!(online.sent().contains("community hall"));
     }
 
     /// The line of a note that says where the appointment went stays here; the provider's
@@ -426,7 +423,7 @@ mod online {
             Some(nocturne_contract::AnsweredBy::Online { .. })
         ));
         assert!(text.ends_with(NEW_LINE), "{text}");
-        assert_eq!(done.left_out, Some(nocturne_contract::LeftOut::Private));
+        assert_eq!(done.left_out, Some(nocturne_contract::LeftOut::Lines));
         assert!(!online.sent().contains("14:30"));
         let log = h.ok("list_online_sends", json!({"limit": 10, "before": null}));
         assert!(!log.to_string().contains("14:30"), "{log}");

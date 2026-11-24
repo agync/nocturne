@@ -16,9 +16,9 @@
 //! seconds, and `switchingToComputer` when the provider fails, takes twenty seconds or Online
 //! answers is turned off. Falling back to this computer is automatic and marked on the
 //! terminal delta; nothing here ever goes online after something failed on this computer. A
-//! provider that is not sure, when something private or a line of an original was kept back
-//! from it, also hands the question to this computer, which has what was kept back
-//! (`notSureOnline`, still linked to what was sent).
+//! provider that is not sure, when a line of an original was kept back from it, also hands
+//! the question to this computer, which has what was kept back (`notSureOnline`, still linked
+//! to what was sent).
 //!
 //! The windows' questions are also matched against the Nocturne guide (`crate::help`). A
 //! confident match on a size of computer that writes help joins the guide's sections to the
@@ -808,7 +808,7 @@ async fn ask_online<R: Runtime>(
         .collect();
     let ids: Vec<String> = facts.iter().map(|f| f.memory.id.clone()).collect();
     let e = asked.engine.clone();
-    let verdicts = match blocking(move || e.online_verdicts(&ids)).await {
+    let sendable_now = match blocking(move || e.sendable(&ids)).await {
         Ok(v) => v,
         Err(err) => {
             tracing::warn!("could not check what may go online: {:?}", err.code);
@@ -817,33 +817,23 @@ async fn ask_online<R: Runtime>(
             return Online::Here(LocalReason::Problem);
         }
     };
-    let mut private = false;
     let mut sendable: Vec<Fact> = Vec::new();
-    for (fact, verdict) in facts.iter().zip(&verdicts) {
-        match verdict {
-            None => {
-                // A move goes out as the memory is kept: the old value it carries here is
-                // another memory's, judged for this computer only, and the Sent log shows
-                // exactly the memory's own words.
-                let mut fact = (*fact).clone();
-                if let Some(p) = asked
-                    .pairs
-                    .iter()
-                    .find(|p| p.moved && p.newer.id == fact.memory.id)
-                {
-                    fact.memory.was = p.newer_was.clone();
-                }
-                sendable.push(fact);
-            }
-            Some(_) => private = true,
+    for (fact, _) in facts.iter().zip(&sendable_now).filter(|(_, ok)| **ok) {
+        // A move goes out as the memory is kept: the old value it carries here is
+        // another memory's, judged for this computer only, and the Sent log shows
+        // exactly the memory's own words.
+        let mut fact = (*fact).clone();
+        if let Some(p) = asked
+            .pairs
+            .iter()
+            .find(|p| p.moved && p.newer.id == fact.memory.id)
+        {
+            fact.memory.was = p.newer_was.clone();
         }
+        sendable.push(fact);
     }
     sendable.truncate(MAX_FACTS + DATE_STEP_LINES);
     let prepared = mind.prepare(asked.question, &sendable, asked.today);
-    if prepared.as_ref().is_some_and(|p| p.dropped > 0) {
-        private = true;
-    }
-    let left_out = private.then_some(LeftOut::Private);
     let Some(prepared) = prepared else {
         hub.record_not_sent(asked.question, host, LocalReason::KeptHere)
             .await;
@@ -950,25 +940,26 @@ async fn ask_online<R: Runtime>(
         SendResult::NotSure
     };
     let send_id = hub.record(outcome(receipt, result, None, true)).await;
-    // The provider was not sure without what was kept back (something private, or lines of
-    // originals): this computer, which has it, answers instead, and the mark still
-    // leads to what was sent.
-    if !stands && (left_out.is_some() || lines_held) {
+    // The provider was not sure without the lines of originals that stay here: this computer,
+    // which has them, answers instead, and the mark still leads to what was sent.
+    if !stands && lines_held {
         sink.mark(|m| m.send_id = send_id.map(|id| id as f64));
         sink.phase(AskPhase::SwitchingToComputer);
         return Online::Here(LocalReason::NotSureOnline);
     }
-    // What was left out is said only of an answer written online.
-    // A side kept back from the provider (a line of an original, something private) that the
-    // answer needed is added here, from this computer; it never goes out, the Sent log keeps
-    // only what came back, and the mark says something stayed here.
+    // A side the provider's answer lacked is added here from this computer. When it is one that
+    // never goes online (a line of an original) it stays out of the request and the Sent log,
+    // and the mark says something was added from what stayed here; a side that was sent is
+    // only added, with no mark.
     let mut meta = meta;
-    let mut left_out = left_out;
+    let mut left_out = None;
     let known: Vec<String> = asked.hits.iter().map(|h| h.memory.id.clone()).collect();
     if stands && let Some((extra, ids)) = settle(asked.pairs, &meta, &said, &known) {
         said.push_str(&extra);
+        if ids.iter().any(|id| !prepared.receipt.sent_ids.contains(id)) {
+            left_out = Some(LeftOut::Lines);
+        }
         meta.cited.extend(ids);
-        left_out = Some(LeftOut::Private);
     }
     sink.mark(|m| {
         m.answered_by = Some(AnsweredBy::Online {

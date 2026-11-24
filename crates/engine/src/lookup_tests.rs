@@ -509,9 +509,9 @@ fn a_kept_line_goes_only_while_its_item_is_kept() {
     let id = found.hits[0].memory.id.clone();
     let item = super::kept_line_item(&id).unwrap().to_string();
     let goes = |f: &Fx| {
-        let verdict = f.engine.online_verdicts(std::slice::from_ref(&id)).unwrap()[0];
+        let online = f.engine.sendable(std::slice::from_ref(&id)).unwrap()[0];
         let may = f.engine.mind_may_read(std::slice::from_ref(&id)).unwrap()[0];
-        assert_eq!(verdict.is_none(), may, "both gates agree");
+        assert_eq!(online, may, "both gates agree");
         may
     };
     assert!(goes(&f), "a kept line goes");
@@ -525,6 +525,10 @@ fn a_kept_line_goes_only_while_its_item_is_kept() {
             })
             .unwrap();
     };
+    // A private mark does not keep it: private decides only what comes up on its own.
+    sql(&f, "UPDATE items SET private = 1 WHERE id = ?1");
+    assert!(goes(&f), "a private kept line goes");
+    sql(&f, "UPDATE items SET private = 0 WHERE id = ?1");
     for (break_it, mend) in [
         (
             "UPDATE items SET forget_epoch = 1 WHERE id = ?1",
@@ -579,7 +583,7 @@ fn a_kept_line_goes_only_while_its_item_is_kept() {
     // An id that is no line of anything kept never goes.
     let gone = format!("{}missing", super::KEPT_LINE);
     assert!(!f.engine.mind_may_read(std::slice::from_ref(&gone)).unwrap()[0]);
-    assert!(f.engine.online_verdicts(&[gone]).unwrap()[0].is_some());
+    assert!(!f.engine.sendable(&[gone]).unwrap()[0]);
 }
 
 /// Ask with no mind on a phone alone still runs the date step: tomorrow's appointments are found
