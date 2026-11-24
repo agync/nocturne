@@ -1,14 +1,18 @@
 package app.nocturne.system
 
 import android.accounts.AccountManager
+import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
 import android.net.Uri
+import android.os.PowerManager
 import android.os.StatFs
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -17,6 +21,9 @@ import android.text.format.DateFormat
 import android.webkit.WebView
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.IntentSenderRequest
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -76,6 +83,21 @@ class ConnectArgs {
     var choose: Boolean = false
 }
 
+@InvokeArg
+class ReadingArgs {
+    var state: String? = null
+    var channel: String = ""
+    var channelAbout: String = ""
+    var title: String? = null
+    var text: String? = null
+    var stop: String = ""
+    var done: Int = 0
+    var count: Int = 0
+    var pausedTitle: String = ""
+    var pausedText: String = ""
+    var why: String? = null
+}
+
 /**
  * The app draws edge to edge, and the web view reports no safe area for the system bars. This
  * puts the bars, cut-outs and keyboard on the page as CSS variables each time they change. It
@@ -97,7 +119,11 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         /** The most files and bytes kept from one share. */
         const val MAX_FILES = 10
         const val MAX_TOTAL = 4 * MAX_FILE
+        private const val NOTES_REQUEST = 4101
     }
+
+    @Volatile private var lastNote: ReadingNote? = null
+    private var askedForNotes = false
 
     private val safe by lazy { Safe(File(activity.noBackupFilesDir, "safe")) }
 
@@ -109,6 +135,7 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
         super.load(webView)
         Window.coreRunning = true
+        Reading.inFront = true
         ViewCompat.setOnApplyWindowInsetsListener(webView) { view, all ->
             val bars = all.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -125,6 +152,15 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         // Shares from an earlier run that were never kept.
         File(activity.cacheDir, "shared").deleteRecursively()
         take(activity.intent)
+    }
+
+    override fun onResume() {
+        Reading.inFront = true
+        ReadingService.clearLeftover(activity.applicationContext)
+    }
+
+    override fun onPause() {
+        Reading.inFront = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -344,11 +380,81 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
                 it.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             )
         }
+        val percent = battery?.let {
+            Power.percent(
+                it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                it.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            )
+        }
+        val saver = activity.getSystemService(PowerManager::class.java)?.isPowerSaveMode
         invoke.resolve(
             JSObject()
                 .put("charging", charging)
                 .put("window", Window.isOpen)
                 .put("unmetered", unmetered())
+                .put("percent", percent)
+                .put("saver", saver)
+        )
+    }
+
+    /**
+     * Read now while the person is away: the notification that keeps the app running and shows
+     * the progress, and the one line left after a stop. The core calls it from the person's tap
+     * and again between passes.
+     */
+    @Command
+    fun readingNow(invoke: Invoke) {
+        val args = invoke.parseArgs(ReadingArgs::class.java)
+        val context = activity.applicationContext
+        when (Reading.state(args.state)) {
+            Reading.State.Reading -> reading(context, args)
+            Reading.State.Ended -> ended(context, args)
+            null -> return invoke.reject("invalid")
+        }
+        val notes = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val answer = Reading.answer(notes)
+        invoke.resolve(
+            JSObject().put("stop", answer.stop).put("paused", false).put("notes", answer.notes)
+        )
+    }
+
+    private fun reading(context: Context, args: ReadingArgs) {
+        val note = ReadingNote(
+            args.channel, args.channelAbout, args.title ?: "", args.text ?: "", args.stop,
+            args.done, args.count
+        )
+        lastNote = note
+        if (Reading.running) {
+            ReadingService.show(context, ReadingService.ID, ReadingService.note(context, note))
+            return
+        }
+        if (!Reading.inFront) return
+        askForNotes()
+        try {
+            ContextCompat.startForegroundService(
+                context, ReadingService.extras(Intent(context, ReadingService::class.java), note)
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun ended(context: Context, args: ReadingArgs) {
+        context.stopService(Intent(context, ReadingService::class.java))
+        val title = args.title
+        val note = lastNote
+        if (title != null && note != null && Reading.leaveLine(title, Reading.inFront)) {
+            ReadingService.leftover(context, note, title, args.text ?: "")
+        }
+    }
+
+    private fun askForNotes() {
+        val granted = ContextCompat.checkSelfPermission(
+            activity, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!Reading.shouldAsk(Build.VERSION.SDK_INT, granted, askedForNotes)) return
+        askedForNotes = true
+        ActivityCompat.requestPermissions(
+            activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTES_REQUEST
         )
     }
 
