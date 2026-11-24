@@ -3963,6 +3963,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "image",
+ "jiff 1.0.3",
  "nocturne-contract",
  "nocturne-engine",
  "nocturne-mind",

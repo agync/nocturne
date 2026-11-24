@@ -90,6 +90,12 @@ pub struct MindSent {
     pub said: Vec<nocturne_provider::Said>,
     /// Its words were removed when something it carried was forgotten.
     pub forgotten: bool,
+    /// For a question sent in parts: which part, what the provider asked to look up in the
+    /// part before, and where the words new to this part begin in `said`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part: Option<nocturne_provider::lookup::Part>,
+    /// The question ended with nothing found.
+    pub nothing: bool,
 }
 
 impl From<Sent> for MindSent {
@@ -107,6 +113,8 @@ impl From<Sent> for MindSent {
             bytes: s.bytes_up,
             said: s.said,
             forgotten: s.forgotten,
+            part: s.part,
+            nothing: s.nothing,
         }
     }
 }

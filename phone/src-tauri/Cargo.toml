@@ -23,6 +23,7 @@ nocturne-channel = { workspace = true, features = ["client"] }
 nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 nocturne-intelligence.workspace = true
+nocturne-mind.workspace = true
 nocturne-provider.workspace = true
 rusqlite.workspace = true
 dunce.workspace = true
@@ -45,7 +46,6 @@ tauri-plugin-barcode-scanner = "2"
 [dev-dependencies]
 nocturne-engine = { workspace = true, features = ["fake"] }
 nocturne-provider = { workspace = true, features = ["stand-in"] }
-nocturne-mind.workspace = true
 tempfile.workspace = true
 
 [features]
