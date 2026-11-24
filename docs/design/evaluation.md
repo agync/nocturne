@@ -51,7 +51,7 @@ before building more.
 | Away from home off: listeners, helper processes and outbound traffic | None; no helper file unless a download was agreed to |
 | Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale helper |
 | Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored |
-| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off (`online` mode of the network check) |
+| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most 4 times per question ([Ask with tools](ask-with-tools.md)); never from the app, never while idle, never after turning off (`online` mode of the network check) |
 | Private markers in captured online traffic | 0 |
 | Online answer accuracy against the Tiny tier on the same questions | Measured (S1b), see below; no target is set |
 | Plaintext in a relay recording after a scanned pairing | 0 bytes |
@@ -106,6 +106,19 @@ written three times. `cargo test -p nocturne-app --test journal` runs it on a sc
 checks the wiring and the scoring, not a size. A run on the real models of each size is not wired
 yet; it will follow the help check's `make e2e-help`. No size has passed, so every size shows "At a
 glance" and the line "On this computer, Nocturne lists the day rather than writing about it."
+
+## The look-up check
+
+Whether a size of computer may let its own mind look things up while it answers
+([Ask with tools](ask-with-tools.md#checks-before-it-ships)), as the help check decides help: the
+design's examples and 20 more questions, three runs each, on a size's preset models. A size passes
+when every answer is right and cited, it never asks for more than 2 look-ups where 0 were needed,
+and the first useful sentence stays under 6 seconds at the 95th percentile. A size that fails uses
+the date step path. The scripted checks run now: the date step's table at a week's, a month's and a
+year's turn (`cargo test -p nocturne-engine --test date_step`), the look-ups and what they never give
+(`lookup::` in `nocturne-engine`), and the examples, the limits, refusals and counting against the
+stand-in provider (`cargo test -p nocturne-provider --test lookups`). A run on the real models of each
+size is not wired yet, so no size has passed.
 
 ## The decision check
 
