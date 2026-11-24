@@ -223,6 +223,38 @@ describe("Backup in This phone", () => {
     expect(await nightly()).toHaveTextContent(hint);
   });
 
+  it.each([
+    ["none", "No backup yet · next tonight while this phone charges", null],
+    [
+      "noRoomNone",
+      "Stopped · no backup yet",
+      "There’s no room in your Google Drive for tonight’s backup.",
+    ],
+    [
+      "otherBackup",
+      "Stopped · no backup yet",
+      "This Google account’s Drive already holds another Nocturne backup, so the backup has stopped and nothing was written over it. Choose another account, or delete the Nocturne backup folder in that Drive and choose this account again.",
+    ],
+    [
+      "needsPhrase",
+      "Stopped · no backup yet",
+      "To carry on in this account, the backup needs its phrase set again. A recovery key you made before doesn’t open it there.",
+    ],
+  ])("with no backup yet (%s), says so with no empty day", async (state, hint, line) => {
+    await app(`m=kept&v=nightly&b=${state}`);
+    expect(await nightly()).toHaveTextContent(hint);
+    if (line) expect(screen.getByText(line)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/from \./);
+  });
+
+  it("leads to Change the phrase when the new account needs it", async () => {
+    await app("m=kept&v=nightly&b=needsPhrase");
+    const say = (await screen.findByText(/needs its phrase set again/))
+      .parentElement as HTMLElement;
+    fireEvent.click(within(say).getByRole("button", { name: "Change the phrase…" }));
+    expect(await screen.findByRole("dialog", { name: "Change the phrase?" })).toBeInTheDocument();
+  });
+
   it("says a forget waits for the account", async () => {
     await app("m=kept&v=nightly&b=forgot");
     expect(

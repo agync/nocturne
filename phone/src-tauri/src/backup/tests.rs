@@ -513,9 +513,23 @@ fn a_new_account_holding_another_backup_is_not_written_over() {
     p.backup.set_place(Some(theirs.clone()));
     p.backup.reconnected(true);
     assert!(p.now().is_err());
-    assert_eq!(p.state(), BackupState::Failed);
+    assert_eq!(p.state(), BackupState::OtherBackup);
     assert_eq!(nights(&theirs), 1);
     assert!(p.backup.saved().fresh, "tries again only as a fresh start");
+    p.later(24);
+    assert!(
+        !p.backup.pass(&p.home, true),
+        "waits for the person, not the hour"
+    );
+    assert_eq!(nights(&theirs), 1);
+
+    // Choosing an account again lets it try; an empty one takes the backup.
+    let empty = Arc::new(MemoryPlace::new());
+    p.backup.set_place(Some(empty.clone()));
+    p.backup.reconnected(true);
+    assert_eq!(p.state(), BackupState::Waiting);
+    assert!(p.backup.pass(&p.home, true));
+    assert_eq!(nights(&empty), 1);
 }
 
 /// An account whose reads fail while `reads_fail` is set, and whose pieces can't be written
@@ -632,7 +646,9 @@ fn locks_the_phone_could_not_read_back_are_never_carried() {
     assert_eq!(p.backup.saved().locks, None);
 
     let new = new_account(&p);
-    assert_eq!(p.now(), Err(BackupProblem::Damaged));
+    assert_eq!(p.now(), Err(BackupProblem::NoPhrase));
+    assert_eq!(p.state(), BackupState::NeedsPhrase);
+    assert!(!p.backup.pass(&p.home, true), "waits for the phrase");
     assert!(new.names().is_empty(), "nothing is carried");
     p.backup.recovery_key().unwrap();
     assert_eq!(
@@ -644,6 +660,7 @@ fn locks_the_phone_could_not_read_back_are_never_carried() {
 
     // "Change the phrase" makes a new copy, and the backup starts afresh with it.
     p.backup.change_phrase("lantern copper meadow").unwrap();
+    assert_ne!(p.state(), BackupState::NeedsPhrase);
     assert!(
         new.names().is_empty(),
         "nothing goes before the first night"

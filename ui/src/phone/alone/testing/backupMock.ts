@@ -1,6 +1,7 @@
 // The nightly backup as the scripted phone answers it. `&b=` names how it stands: `off` (the
 // default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `another`, `newer`, `kept`,
-// `late`, `notCharged`, `forgot`, `deleting` or `moved`. `&found=none` finds no backup,
+// `late`, `notCharged`, `forgot`, `deleting`, `moved`, or with no backup yet `none`,
+// `noRoomNone`, `otherBackup` or `needsPhrase`. `&found=none` finds no backup,
 // `&found=offline` no internet, `&connect=` what asking for the account answers (`refused`,
 // `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting,
 // `&restore=slow` holds a restore part way until it is stopped (`&checking` once it checks,
@@ -55,7 +56,7 @@ function first(): BackupStatus {
   const b = new URLSearchParams(location.search).get("b") ?? "off";
   const last = { at: at(13, "03:12"), bytes: 1.4 * GB };
   const stopped = { at: at(9, "03:05"), bytes: 1.3 * GB };
-  const on = (state: BackupStatus["state"], l = last): BackupStatus => ({
+  const on = (state: BackupStatus["state"], l: BackupStatus["last"] = last): BackupStatus => ({
     ...OFF,
     on: true,
     last: l,
@@ -79,6 +80,14 @@ function first(): BackupStatus {
       return on({ state: "anotherPhone", madeAt: at(12, "22:10") }, stopped);
     case "newer":
       return on({ state: "newer" }, stopped);
+    case "otherBackup":
+      return on({ state: "otherBackup" }, null);
+    case "needsPhrase":
+      return on({ state: "needsPhrase" }, null);
+    case "noRoomNone":
+      return on({ state: "noRoom" }, null);
+    case "none":
+      return on({ state: "waiting" }, null);
     case "late":
       return on({ state: "waiting" }, { at: at(4, "03:00"), bytes: 1.3 * GB });
     case "notCharged":

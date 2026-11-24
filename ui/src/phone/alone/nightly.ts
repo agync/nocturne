@@ -28,6 +28,8 @@ export type BackupState =
   | { state: "noPermission" }
   | { state: "anotherPhone"; madeAt: string }
   | { state: "newer" }
+  | { state: "otherBackup" }
+  | { state: "needsPhrase" }
   | { state: "damaged" }
   | { state: "failed" };
 
@@ -266,7 +268,14 @@ export const versionsOf = (e: unknown): Versions | null =>
   e instanceof BackupError ? e.versions : null;
 
 /** Stopped for something only the person can fix. */
-export type StopCause = "noRoom" | "signedOut" | "noPermission" | "anotherPhone" | "newer";
+export type StopCause =
+  | "noRoom"
+  | "signedOut"
+  | "noPermission"
+  | "anotherPhone"
+  | "newer"
+  | "otherBackup"
+  | "needsPhrase";
 
 export function stopCause(s: BackupStatus | null): StopCause | null {
   if (!s?.on) return null;
@@ -276,6 +285,8 @@ export function stopCause(s: BackupStatus | null): StopCause | null {
     case "noPermission":
     case "anotherPhone":
     case "newer":
+    case "otherBackup":
+    case "needsPhrase":
       return s.state.state;
     default:
       return null;
