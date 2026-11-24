@@ -9,7 +9,10 @@
 #
 # Run by hand (workflow_dispatch) with an existing release tag (vX.Y.Z) in `tag` to build that
 # tag and attach the files to its release. With `tag` empty it builds the chosen commit unsigned
-# and keeps the files as workflow artifacts only; any other value fails.
+# and keeps the files as workflow artifacts only; any other value fails. With `tag` empty and `sign`
+# on it also runs the macOS signing jobs (in the protected release-signing environment, whatever
+# MACOS_SIGNING says) and keeps the signed disk image as a workflow artifact: a dry run that
+# touches no release.
 #
 # The GitHub App of release-please.yml also reads the release and uploads to it here: the
 # RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY secrets.
@@ -31,6 +34,11 @@ on:
         required: false
         type: string
         default: ""
+      sign:
+        description: "With no tag: also sign, notarise and check the macOS disk image, and keep it as an artifact (touches no release)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -51,6 +59,7 @@ jobs:
       ref: ${{ steps.plan.outputs.ref }}
       tag: ${{ steps.plan.outputs.tag }}
       helper: ${{ steps.plan.outputs.helper }}
+      sign: ${{ steps.plan.outputs.sign }}
     steps:
       # A draft release is visible only to a token with write access, so this one needs contents
       # write. The job runs no code from the repository.
@@ -70,6 +79,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           PUSHED_TAG: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
+          INPUT_SIGN: ${{ inputs.sign }}
         run: |
           set -euo pipefail
           tag=""
@@ -79,8 +89,8 @@ jobs:
             tag=$PUSHED_TAG
           fi
           if [ -z "$tag" ]; then
-            echo "no tag: building $GITHUB_SHA unsigned, attaching nothing"
-            { echo "build=true"; echo "ref=$GITHUB_SHA"; echo "tag="; } >> "$GITHUB_OUTPUT"
+            echo "no tag: building $GITHUB_SHA, attaching nothing (signing dry run: ${INPUT_SIGN:-false})"
+            { echo "build=true"; echo "ref=$GITHUB_SHA"; echo "tag="; echo "sign=${INPUT_SIGN:-false}"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -196,7 +206,7 @@ jobs:
           set -euo pipefail
           mkdir -p target/sign
           tar -C target/package/macos -cf target/sign/Nocturne.app.tar Nocturne.app
-          cp src-tauri/macos/Entitlements.plist target/sign/
+          cp src-tauri/macos/Entitlements.plist src-tauri/macos/Engine.entitlements.plist target/sign/
           basename target/package/*.dmg > target/sign/dmg-name
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -211,67 +221,142 @@ jobs:
           if-no-files-found: error
           path: target/sign
 
-  # Only the downloaded app and the signing tools run here: no checkout, no build.
+  # Only the downloaded app and the signing tools run here: no checkout, no build. A release tag
+  # signs when MACOS_SIGNING is `true`; a hand run with no tag signs when `sign` is on (a dry
+  # run: the signed image is kept as an artifact and no release is touched).
   sign-macos:
     needs: [plan, macos]
     if: >-
-      ${{ !cancelled() && needs.macos.result == 'success' && needs.plan.outputs.tag != ''
-      && vars.MACOS_SIGNING == 'true' }}
+      ${{ !cancelled() && needs.macos.result == 'success'
+      && ((needs.plan.outputs.tag != '' && vars.MACOS_SIGNING == 'true')
+      || (needs.plan.outputs.tag == '' && needs.plan.outputs.sign == 'true')) }}
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     environment: release-signing
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-unsigned-app
           path: in
+      # Notarises with an App Store Connect API key when MACOS_NOTARY_API_KEY is set, otherwise
+      # with an Apple ID and an app-specific password; with neither the job fails.
       - name: sign with the Developer ID and notarise
         env:
           DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
           DEVELOPER_ID_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_PASSWORD }}
           DEVELOPER_ID_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_IDENTITY }}
+          NOTARY_API_KEY: ${{ secrets.MACOS_NOTARY_API_KEY }}
+          NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.MACOS_NOTARY_API_ISSUER_ID }}
           NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          keychain="$RUNNER_TEMP/build.keychain"
-          security create-keychain -p "$DEVELOPER_ID_PASSWORD" "$keychain"
-          security default-keychain -s "$keychain"
-          security unlock-keychain -p "$DEVELOPER_ID_PASSWORD" "$keychain"
+          for need in DEVELOPER_ID_CERTIFICATE DEVELOPER_ID_PASSWORD DEVELOPER_ID_IDENTITY; do
+            [ -n "${!need}" ] || { echo "MACOS_$need is not set" >&2; exit 1; }
+          done
+          keychain="$RUNNER_TEMP/build.keychain-db"
+          keypass=$(openssl rand -hex 24)
+          cleanup() {
+            security delete-keychain "$keychain" 2> /dev/null || true
+            rm -f "$RUNNER_TEMP/id.p12" "$RUNNER_TEMP/AuthKey.p8"
+          }
+          trap cleanup EXIT
+
+          # The notary credentials: an API key, or an Apple ID as the fallback.
+          if [ -n "$NOTARY_API_KEY" ]; then
+            [ -n "$NOTARY_API_KEY_ID" ] && [ -n "$NOTARY_API_ISSUER_ID" ] \
+              || { echo "MACOS_NOTARY_API_KEY needs MACOS_NOTARY_API_KEY_ID and MACOS_NOTARY_API_ISSUER_ID" >&2; exit 1; }
+            (umask 077; printf '%s' "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8")
+            auth=(--key "$RUNNER_TEMP/AuthKey.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID")
+            echo "notarising with an App Store Connect API key"
+          elif [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
+            auth=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD")
+            echo "notarising with an Apple ID and an app-specific password"
+          else
+            echo "no notary credentials: set MACOS_NOTARY_API_KEY (with _KEY_ID and _ISSUER_ID), or MACOS_NOTARY_APPLE_ID, _TEAM_ID and _APP_PASSWORD" >&2
+            exit 1
+          fi
+
+          # A keychain of its own, on the search list so codesign finds the identity.
+          security create-keychain -p "$keypass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keypass" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           printf '%s' "$DEVELOPER_ID_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
           security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
-          rm "$RUNNER_TEMP/id.p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$DEVELOPER_ID_PASSWORD" "$keychain"
-          xcrun notarytool store-credentials nocturne-notary --apple-id "$NOTARY_APPLE_ID" \
-            --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --keychain "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keypass" "$keychain" > /dev/null
+          security find-identity -v -p codesigning "$keychain" | grep -qF -- "$DEVELOPER_ID_IDENTITY" \
+            || { echo "the certificate has no identity named like MACOS_DEVELOPER_ID_IDENTITY" >&2; exit 1; }
+
+          # Submit a file, wait, and print the log of anything that is not accepted.
+          notarise() {
+            local result id status
+            result=$(xcrun notarytool submit "$1" "${auth[@]}" --wait --timeout 60m --output-format json) || true
+            echo "$result"
+            id=$(jq -r '.id // empty' <<< "$result")
+            status=$(jq -r '.status // empty' <<< "$result")
+            if [ "$status" != Accepted ]; then
+              echo "notarisation of $1 ended as '${status:-unknown}'" >&2
+              [ -z "$id" ] || xcrun notarytool log "$id" "${auth[@]}" >&2 || true
+              exit 1
+            fi
+          }
 
           mkdir -p work out
           tar -C work -xf in/Nocturne.app.tar
           app=work/Nocturne.app
           dmg=$(cat in/dmg-name)
+          # Hardened runtime and a secure timestamp on everything, as notarisation requires.
           sign() { codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" "$@"; }
-          # The engine's executables and libraries first, then the app around them.
-          find "$app/Contents/Resources/lemonade" -type f -print0 | while IFS= read -r -d '' f; do
-            if file -b "$f" | grep -q 'Mach-O'; then sign "$f"; fi
-          done
+          is_macho() { file -b "$1" | grep -q 'Mach-O'; }
+
+          # Inside out: libraries and executables first, then the nested bundles they sit in,
+          # deepest first, then the app. The engine's executables get the entitlement that lets
+          # them load the backend libraries they fetch later, which carry another signature.
+          while IFS= read -r -d '' f; do
+            is_macho "$f" || continue
+            if file -b "$f" | grep -q 'executable'; then
+              sign --entitlements in/Engine.entitlements.plist "$f"
+            else
+              sign "$f"
+            fi
+          done < <(find "$app/Contents" -type f ! -path "$app/Contents/MacOS/*" -print0)
+          while IFS= read -r -d '' b; do sign "$b"; done \
+            < <(find "$app/Contents" -depth -type d \( -name '*.framework' -o -name '*.app' -o -name '*.xpc' \) -print0)
+          # Other helpers beside the main program in Contents/MacOS.
+          main=$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")
+          while IFS= read -r -d '' f; do
+            if is_macho "$f"; then sign --entitlements in/Engine.entitlements.plist "$f"; fi
+          done < <(find "$app/Contents/MacOS" -type f ! -name "$main" -print0)
           sign --entitlements in/Entitlements.plist "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -d --entitlements - "$app" 2>&1 | grep -q 'audio-input' \
+            || { echo "the app lost its entitlements" >&2; exit 1; }
+
+          # The app is notarised and stapled on its own, so it still opens offline once dragged
+          # out of the image; the image is notarised after.
+          ditto -c -k --keepParent "$app" work/Nocturne.zip
+          notarise work/Nocturne.zip
+          xcrun stapler staple "$app"
+          spctl --assess --type execute -vv "$app"
 
           stage=$(mktemp -d)
           cp -R "$app" "$stage/"
           ln -s /Applications "$stage/Applications"
           hdiutil create -quiet -volname Nocturne -srcfolder "$stage" -ov -format UDZO "out/$dmg"
           sign "out/$dmg"
-          xcrun notarytool submit "out/$dmg" --keychain-profile nocturne-notary --keychain "$keychain" --wait
+          notarise "out/$dmg"
           xcrun stapler staple "out/$dmg"
           xcrun stapler validate "out/$dmg"
-          security delete-keychain "$keychain"
+          spctl --assess --type open --context context:primary-signature -vv "out/$dmg"
           (cd out && shasum -a 256 -- *.dmg > SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-macos-signed
           if-no-files-found: error
+          retention-days: ${{ needs.plan.outputs.tag == '' && 7 || 90 }}
           path: out
 
   # The signed image is checked again outside the signing environment.
@@ -296,7 +381,15 @@ jobs:
           set -euo pipefail
           (cd signed && shasum -a 256 -c SHA256SUMS)
           scripts/check-package.sh --no-manifest signed/*.dmg
-          spctl --assess --type open --context context:primary-signature -v signed/*.dmg
+          xcrun stapler validate signed/*.dmg
+          spctl --assess --type open --context context:primary-signature -vv signed/*.dmg
+          # The app inside the image must pass Gatekeeper as the person's Mac will see it.
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" signed/*.dmg
+          trap 'hdiutil detach "$mnt" -quiet || true' EXIT
+          spctl --assess --type execute -vv "$mnt"/Nocturne.app
+          xcrun stapler validate "$mnt"/Nocturne.app
+          codesign --verify --deep --strict --verbose=2 "$mnt"/Nocturne.app
 
   windows:
     needs: plan
