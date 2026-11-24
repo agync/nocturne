@@ -10,7 +10,9 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "https://nocturne.is/*" },
-        { "url": "https://play.google.com/store/apps/details?id=is.nocturne.phone" }
+        { "url": "https://play.google.com/store/apps/details?id=is.nocturne.phone" },
+        { "url": "itms-apps://search.itunes.apple.com/*" },
+        { "url": "https://drive.google.com/*" }
       ]
     }
   ],
