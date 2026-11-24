@@ -1309,7 +1309,7 @@
               "items": [
                 [
                   {
-                    "text": "Anything marked private.",
+                    "text": "Things you let go, or are forgetting.",
                     "type": "text"
                   }
                 ],
@@ -1355,7 +1355,7 @@
             {
               "parts": [
                 {
-                  "text": "Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a question it helps answer like any other. Mark anything you never want sent as private. Journal entries, check-ins and good things can't be marked private, so while Online answers is on, a line from one can go with a question it helps answer.",
+                  "text": "Nocturne doesn't decide for you what is private: a line about health, money or ID can go with a question it helps answer like any other, and so can a line you marked private. Marking something private keeps it from coming up on its own, in reminders and notifications. It still helps answer what you ask. Journal entries, check-ins and good things go the same way: a line from one can go with a question it helps answer.",
                   "type": "text"
                 }
               ],
@@ -1382,7 +1382,7 @@
             {
               "parts": [
                 {
-                  "text": "When Nocturne leaves something out, the answer says so, and you can ask again on this computer to include it.",
+                  "text": "When part of an answer comes from a line of an original, which never goes online, Nocturne adds it on this computer and the answer says so. You can ask again on this computer to see it all in one place.",
                   "type": "text"
                 }
               ],

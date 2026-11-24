@@ -73,7 +73,7 @@ Both are off until you turn them on.
   connection's company still sees that traffic exists. See the
   [guide](docs/guide/away-from-home.md).
 - **Online answers** lets one service you choose write answers. It receives the question and the few
-  remembered sentences it needs, never anything marked private. See the
+  remembered sentences it needs. See the
   [guide](docs/guide/online-answers.md).
 
 ## Development

@@ -103,7 +103,8 @@ bump re-checks them.
 - The engine's environment, which system crash records can hold, never holds the key; it is in the
   engine's memory only. Rotate the key at the provider if you think it was exposed.
 - Anything the person kept may go when it answers a question, whatever it is about and whether or
-  not it is marked private (since 2026-11-23).
+  not it is marked private (since 2026-11-23). Only memories the person let go or is forgetting,
+  and ones the store does not know, are held back.
   Until 2026-11-22 a check left out memories that looked like health, money or ID details unless
   the person allowed them; it was removed because it judged the person's data, and a best effort
   that could miss some promised more than it held.

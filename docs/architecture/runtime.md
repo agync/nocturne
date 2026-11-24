@@ -316,8 +316,8 @@ the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home
 
 The second exception is Online answers, which is also off until the person turns it on, and only
 after a passed check and consent. While it is on, the engine, not the app, reaches the one address
-the person entered, with a question and the few remembered sentences needed to answer it, never
-anything marked private, and for the connection check, which sends one fixed test question and no
+the person entered, with a question and the few remembered sentences needed to answer it, private
+ones included, and for the connection check, which sends one fixed test question and no
 memories. The app has no connection to the provider. The key is never in the engine's environment:
 after each engine start Nocturne loads the online entry and hands the key over in memory on
 loopback, and the engine makes one request to the provider's list of models at that moment. Turning
