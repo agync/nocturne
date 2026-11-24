@@ -648,6 +648,10 @@ Not written here; for the build.
 
 Where the page left a choice, the build reads it this way:
 
+- **Owner decisions, 2026-11-25.** The computer's own look at the list when the person asks to
+  choose from it is allowed: invariant 2 in `AGENTS.md` now names it, on the computer and on the
+  phone. A phone that cannot tell its battery level carries on with Read now as if the level were
+  fine; it still stops when the phone's battery saving is on.
 - **The look on the computer.** The computer's check goes through its own engine, which reads the
   service's list itself each time it is given an address. "Choose from {host}'s list…" takes its
   look with the same client the phone uses, listed in Sent online as a connection check, so a

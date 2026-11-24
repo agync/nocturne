@@ -27,16 +27,17 @@ is not built or a build that is not designed.
    servers and relays to stay connected; while the person has turned on Online answers, the
    embedded engine's requests to the one provider they chose for answers, online or on their own
    network (each question with what a good answer to it needs), plus one look at that provider's
-   list of models each time the engine starts; while a phone that is its own home has backup turned
-   on, that phone's nightly copy of its memory, locked with a phrase only the person holds, to the
-   person's own iCloud or Google Drive account that the phone is signed in to, plus the sign-in,
-   listing and removal that account needs; after the person turns backup off or deletes everything,
-   only the removals they asked for in that account (a forget for good, or deleting the backup),
-   with the same sign-in and listing; and, while a phone that is its own home has an online
-   mind the person chose, that phone's requests to the one provider they chose, online or on their
-   own network (what each reading, page or answer needs to be done well), plus one look at that
-   provider's list of models when it is checked. The embedded `lemond` binds loopback with a
-   per-launch key.
+   list of models each time the engine starts and one each time the person asks to choose from it;
+   while a phone that is its own home has backup turned on, that phone's nightly copy of its
+   memory, locked with a phrase only the person holds, to the person's own iCloud or Google Drive
+   account that the phone is signed in to, plus the sign-in, listing and removal that account
+   needs; after the person turns backup off or deletes everything, only the removals they asked
+   for in that account (a forget for good, or deleting the backup), with the same sign-in and
+   listing; and, while a phone that is its own home has an online mind the person chose, that
+   phone's requests to the one provider they chose, online or on their own network (what each
+   reading, page or answer needs to be done well), plus one look at that provider's list of
+   models when it is checked or the person asks to choose from it. The embedded `lemond` binds
+   loopback with a per-launch key.
 3. **No jargon in the interface.** Model, inference, token, NPU, GPU, embedding and graph appear only
    in advanced details views. See `docs/design/experience-principles.md`.
 4. **Receipts or it did not happen.** Every answer and page line cites the original it came from.
