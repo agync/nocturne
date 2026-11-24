@@ -57,8 +57,10 @@ const lostOr = (p: string): "lost" | "failed" =>
 
 /** Wrong this many times, the line points to the password manager and the recovery key. */
 const WRONG_AGAIN = 3;
-/** How often a wait for Wi-Fi or the internet looks again. */
+/** How often a wait for Wi-Fi looks again, and how soon a wait for the internet first tries. */
 const LOOK_AGAIN_MS = 5_000;
+/** A wait for the internet tries again less often each time, down to this. */
+const LONGEST_WAIT_MS = 120_000;
 
 function Hero({
   icon,
@@ -209,6 +211,10 @@ export function NightlyRestore({
   const adding = useRef(false);
   // The backup restored was this phone's own.
   const ownBackup = useRef(false);
+  // "Go on" over mobile data: not asked again during this restore.
+  const overMobile = useRef(false);
+  // Tries since the internet went: each waits longer.
+  const tries = useRef(0);
   const stopped = useRef(false);
   const name = useId();
   const field = useId();
@@ -305,7 +311,8 @@ export function NightlyRestore({
 
   /** Over mobile data the person is asked first. */
   const begin = async () => {
-    if ((await api.onWifi().catch(() => null)) === false) return setStep({ name: "mobile" });
+    if (!overMobile.current && (await api.onWifi().catch(() => null)) === false)
+      return setStep({ name: "mobile" });
     await restore();
   };
 
@@ -319,6 +326,7 @@ export function NightlyRestore({
         setProgress(p);
         if (p.phase === "checking" && p.total > 0 && p.done >= p.total) adding.current = true;
       });
+      tries.current = 0;
       if (done.kind === "replaced") setStep({ name: "restored", restored: done });
       else setStep({ name: "merged", restored: done });
     } catch (e) {
@@ -342,26 +350,40 @@ export function NightlyRestore({
   };
 
   // Waiting for Wi-Fi or for the internet: it starts again by itself once the phone is there.
+  // Back online, it asks again before coming down over mobile data, unless the person said to.
+  // A phone that says it is online but reaches nothing tries less often each time.
   const waiting = step.name === "getting" ? step.wait : undefined;
-  const again = useRef(restore);
-  again.current = restore;
+  const again = useRef({ restore, begin });
+  again.current = { restore, begin };
   useEffect(() => {
     if (!waiting) return;
     let gone = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const look = async () => {
       if (gone) return;
+      clearTimeout(timer);
       const ready =
         waiting === "wifi" ? (await api.onWifi().catch(() => null)) === true : navigator.onLine;
-      if (ready && !gone) {
-        gone = true;
-        void again.current();
+      if (gone) return;
+      if (!ready) {
+        timer = setTimeout(() => void look(), LOOK_AGAIN_MS);
+        return;
       }
+      gone = true;
+      if (waiting === "wifi") return void again.current.restore();
+      tries.current += 1;
+      void again.current.begin();
     };
-    const timer = setInterval(() => void look(), LOOK_AGAIN_MS);
+    timer = setTimeout(
+      () => void look(),
+      waiting === "wifi"
+        ? LOOK_AGAIN_MS
+        : Math.min(LOOK_AGAIN_MS * 2 ** tries.current, LONGEST_WAIT_MS),
+    );
     window.addEventListener("online", look);
     return () => {
       gone = true;
-      clearInterval(timer);
+      clearTimeout(timer);
       window.removeEventListener("online", look);
     };
   }, [waiting, api]);
@@ -740,9 +762,16 @@ export function NightlyRestore({
     case "mobile":
       return (
         <Screen
+          bar={<BackOnly onBack={() => setStep({ name: "found" })} />}
           foot={
             <>
-              <Button kind="primary" onClick={() => void restore()}>
+              <Button
+                kind="primary"
+                onClick={() => {
+                  overMobile.current = true;
+                  void restore();
+                }}
+              >
                 {t("phone.backup.mobile.go")}
               </Button>
               <button
