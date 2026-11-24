@@ -226,9 +226,23 @@ describe("Backup in This phone", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Print or save…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(scriptedBackup.key).toBe(NEW_KEY);
     expect(
       await screen.findByRole("button", { name: /Make a recovery key….*Made today/ }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the earlier recovery key when the new one is cancelled", async () => {
+    await app("m=kept&v=nightly&b=on");
+    scriptedBackup.key = null;
+    fireEvent.click(await screen.findByRole("button", { name: /Make a recovery key…/ }));
+    const ask = await screen.findByRole("dialog", { name: "Make a recovery key?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Make it" }));
+    await screen.findByRole("heading", { name: "Your new recovery key" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(scriptedBackup.calls).toContain("backup_drop_recovery_key"));
+    expect(scriptedBackup.calls).not.toContain("backup_keep_recovery_key");
+    expect(scriptedBackup.key).toBeNull();
   });
 
   it("changes the phrase after asking, with steps 2 and 3 and Save", async () => {

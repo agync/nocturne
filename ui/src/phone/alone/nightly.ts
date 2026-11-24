@@ -112,7 +112,11 @@ export interface BackupApi {
   newPhrase(): Promise<string>;
   connect(choose?: boolean): Promise<Connection>;
   turnOn(phrase: string): Promise<void>;
+  /** A new recovery key, shown once. It opens nothing until it is kept. */
   recoveryKey(): Promise<string>;
+  /** The key just made was saved: it opens the backup, in place of any before. */
+  keepRecoveryKey(): Promise<void>;
+  /** The key just made was not saved: any made before still works. */
   dropRecoveryKey(): Promise<void>;
   changePhrase(phrase: string): Promise<void>;
   setWifiOnly(on: boolean): Promise<void>;
@@ -189,6 +193,7 @@ export function createBackupApi(): BackupApi {
     connect: (choose) => call("backup_connect", { choose: choose ?? false }),
     turnOn: (phrase) => call("backup_turn_on", { phrase }),
     recoveryKey: () => call("backup_recovery_key"),
+    keepRecoveryKey: () => call("backup_keep_recovery_key"),
     dropRecoveryKey: () => call("backup_drop_recovery_key"),
     changePhrase: (phrase) => call("backup_change_phrase", { phrase }),
     setWifiOnly: (on) => call("backup_set_wifi_only", { on }),

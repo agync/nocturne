@@ -40,16 +40,22 @@ pub async fn backup_turn_on<R: Runtime>(
     blocking(app, move |app| app.state::<PhoneBackup>().turn_on(&phrase)).await
 }
 
-/// A recovery key, made now and returned this once.
+/// A recovery key, made now and returned this once. It opens nothing until it is kept.
 #[tauri::command]
 pub async fn backup_recovery_key<R: Runtime>(app: AppHandle<R>) -> Result<String, BackupProblem> {
     blocking(app, |app| app.state::<PhoneBackup>().recovery_key()).await
 }
 
-/// The recovery key made last stops opening the backup.
+/// "Print or save…" went through: the key just made opens the backup, in place of any before.
 #[tauri::command]
-pub async fn backup_drop_recovery_key<R: Runtime>(app: AppHandle<R>) -> Result<(), BackupProblem> {
-    blocking(app, |app| app.state::<PhoneBackup>().drop_recovery_key()).await
+pub async fn backup_keep_recovery_key<R: Runtime>(app: AppHandle<R>) -> Result<(), BackupProblem> {
+    blocking(app, |app| app.state::<PhoneBackup>().keep_recovery_key()).await
+}
+
+/// "Not now" or "Cancel" before the key was saved: it never opens the backup.
+#[tauri::command]
+pub fn backup_drop_recovery_key(backup: State<'_, PhoneBackup>) {
+    backup.drop_recovery_key();
 }
 
 /// "Change the phrase…", then step 2's phrase and "Save".

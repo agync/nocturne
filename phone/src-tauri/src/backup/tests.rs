@@ -83,6 +83,13 @@ impl Phone {
         self.backup.back_up_now(&self.home, false, &|_, _, _| {})
     }
 
+    /// A recovery key made and saved, so it opens the backup.
+    fn made_key(&self) -> String {
+        let text = self.backup.recovery_key().unwrap();
+        self.backup.keep_recovery_key().unwrap();
+        text
+    }
+
     fn state(&self) -> BackupState {
         self.backup.status().state
     }
@@ -126,7 +133,7 @@ fn a_backup_turned_on_runs_its_first_night_and_comes_back_on_a_new_phone() {
     assert_eq!(old.state(), BackupState::UpToDate);
     assert_eq!(old.backup.status().last, Some(last));
     assert_eq!(old.backup.turn_on(PHRASE), Err(BackupProblem::AlreadyThere));
-    let recovery = old.backup.recovery_key().unwrap();
+    let recovery = old.made_key();
 
     let new = phone(&place, false);
     assert!(new.backup.found().unwrap().is_some());
@@ -419,7 +426,7 @@ fn choosing_the_account_again_carries_on_and_another_starts_afresh() {
     let p = phone(&old, true);
     p.keep("Something to keep.");
     p.backup.turn_on(PHRASE).unwrap();
-    let recovery = p.backup.recovery_key().unwrap();
+    let recovery = p.made_key();
     p.now().unwrap();
 
     old.fail_with(Some(PlaceError::NoPermission));
@@ -530,18 +537,49 @@ fn opens(place: &Arc<MemoryPlace>, opening: Opening) -> bool {
 }
 
 #[test]
-fn a_dropped_recovery_key_never_opens_the_backup_on_a_new_account() {
+fn a_replaced_recovery_key_never_opens_the_backup_on_a_new_account() {
     let (p, old) = flaky_phone();
     p.backup.turn_on(PHRASE).unwrap();
-    let recovery = p.backup.recovery_key().unwrap();
+    let recovery = p.made_key();
     reads_fail(&old, true);
-    p.backup.drop_recovery_key().unwrap();
+    let replaced = p.made_key();
     reads_fail(&old, false);
 
     let new = new_account(&p);
     p.now().unwrap();
     assert!(!opens(&new, Opening::RecoveryKey(recovery)));
+    assert!(opens(&new, Opening::RecoveryKey(replaced)));
     assert!(opens(&new, Opening::Phrase(PHRASE.into())));
+}
+
+#[test]
+fn a_recovery_key_not_saved_opens_nothing_and_the_earlier_one_still_does() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    let saved = p.made_key();
+    let shown = p.backup.recovery_key().unwrap();
+    p.backup.drop_recovery_key();
+    assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::NotReady));
+    p.now().unwrap();
+    assert!(opens(&place, Opening::RecoveryKey(saved)));
+    assert!(!opens(&place, Opening::RecoveryKey(shown)));
+}
+
+#[test]
+fn a_recovery_key_the_account_did_not_take_can_be_kept_again() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    let shown = p.backup.recovery_key().unwrap();
+    place.fail_with(Some(PlaceError::Offline));
+    assert_eq!(p.backup.keep_recovery_key(), Err(BackupProblem::Offline));
+    place.fail_with(None);
+    p.backup.keep_recovery_key().unwrap();
+    p.now().unwrap();
+    assert!(opens(&place, Opening::RecoveryKey(shown)));
 }
 
 #[test]
@@ -549,19 +587,20 @@ fn locks_the_phone_could_not_read_back_are_never_carried() {
     let (p, old) = flaky_phone();
     reads_fail(&old, true);
     p.backup.turn_on(PHRASE).unwrap();
-    let recovery = p.backup.recovery_key().unwrap();
-    p.backup.drop_recovery_key().unwrap();
+    let recovery = p.made_key();
     reads_fail(&old, false);
     assert_eq!(p.backup.saved().locks, None);
 
     let new = new_account(&p);
     assert_eq!(p.now(), Err(BackupProblem::Damaged));
     assert!(new.names().is_empty(), "nothing is carried");
+    p.backup.recovery_key().unwrap();
     assert_eq!(
-        p.backup.recovery_key(),
+        p.backup.keep_recovery_key(),
         Err(BackupProblem::Damaged),
-        "no recovery key is made for locks the phone doesn't know"
+        "no recovery key is kept for locks the phone doesn't know"
     );
+    p.backup.drop_recovery_key();
 
     // "Change the phrase" makes a new copy, and the backup starts afresh with it.
     p.backup.change_phrase("lantern copper meadow").unwrap();
@@ -594,11 +633,11 @@ fn lock_changes_before_the_first_night_on_a_new_account_wait_for_it() {
     let p = phone(&Arc::new(MemoryPlace::new()), true);
     p.keep("Something to keep.");
     p.backup.turn_on(PHRASE).unwrap();
-    let kept = p.backup.recovery_key().unwrap();
+    let kept = p.made_key();
     p.now().unwrap();
 
     let new = new_account(&p);
-    let made = p.backup.recovery_key().unwrap();
+    let made = p.made_key();
     p.backup.change_phrase("lantern copper meadow").unwrap();
     assert!(
         new.names().is_empty(),
@@ -615,7 +654,7 @@ fn lock_changes_before_the_first_night_on_a_new_account_wait_for_it() {
 fn a_recovery_lock_a_cut_short_start_left_goes_with_the_next_night() {
     let (p, _) = flaky_phone();
     p.backup.turn_on(PHRASE).unwrap();
-    let recovery = p.backup.recovery_key().unwrap();
+    let recovery = p.made_key();
     p.now().unwrap();
 
     let new = Arc::new(Flaky::default());
@@ -625,25 +664,16 @@ fn a_recovery_lock_a_cut_short_start_left_goes_with_the_next_night() {
     assert!(p.now().is_err());
     assert!(new.inner.names().contains(&"key-recovery".to_string()));
 
-    p.backup.drop_recovery_key().unwrap();
+    let replaced = p.made_key();
     p.backup.change_phrase("lantern copper meadow").unwrap();
     new.pieces_fail.store(false, Ordering::SeqCst);
     p.now().unwrap();
-    assert!(!new.inner.names().contains(&"key-recovery".to_string()));
     let other = phone(&Arc::new(MemoryPlace::new()), true);
     other.backup.set_place(Some(new.clone()));
-    assert!(
-        other
-            .backup
-            .nights(&Opening::RecoveryKey(recovery))
-            .is_err()
-    );
-    assert!(
-        !other
-            .backup
-            .nights(&Opening::Phrase(PHRASE.into()))
-            .is_ok_and(|n| !n.is_empty())
-    );
+    let opens = |opening| other.backup.nights(&opening).is_ok_and(|n| !n.is_empty());
+    assert!(opens(Opening::RecoveryKey(replaced)));
+    assert!(!opens(Opening::RecoveryKey(recovery)));
+    assert!(!opens(Opening::Phrase(PHRASE.into())));
 }
 
 #[test]

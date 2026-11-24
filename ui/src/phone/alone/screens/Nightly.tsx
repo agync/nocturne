@@ -237,19 +237,15 @@ export function NightlyBackup({
         text={key}
         later
         save={api.saveKey}
+        keep={api.keepRecoveryKey}
         onSaved={() => {
           const at = new Date(now()).toISOString();
           setKeyMade(at);
           void notes.set(KEY_MADE, at).catch(() => undefined);
         }}
         onClose={(saved) => {
-          // A key that was never saved must not open the backup.
-          if (!saved) {
-            void api.dropRecoveryKey().catch(() => undefined);
-            // The earlier key stopped working when this one was made.
-            setKeyMade(null);
-            void notes.set(KEY_MADE, "").catch(() => undefined);
-          }
+          // A key that was never saved opens nothing; an earlier one still works.
+          if (!saved) void api.dropRecoveryKey().catch(() => undefined);
           setKey(null);
         }}
       />
