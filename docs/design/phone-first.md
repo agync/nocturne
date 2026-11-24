@@ -175,9 +175,9 @@ aside on the same day, each label adds its time: "Put aside {day}, {time}…".
 | | Buttons | "Delete" (careful) · "Keep it" |
 
 When the nightly backup ships, "I have a backup" opens [Where is your
-backup?](phone-backup.md#where-is-your-backup), and restoring onto a phone that holds a memory may
-bring the backup's things in instead of putting the memory aside ([open question
-1](phone-backup.md#open-questions-for-the-owner)).
+backup?](phone-backup.md#where-is-your-backup), and restoring onto a phone that holds a memory
+brings the backup's things in instead of putting the memory aside ([decision
+1](phone-backup.md#decisions)).
 
 ### Behaviour
 

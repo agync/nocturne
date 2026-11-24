@@ -36,7 +36,7 @@ apps, and a backup that needs the person to set up a folder is not automatic. Th
   locks them; it is kept locked with the person's phrase and, if they made one, with a recovery key.
   Nocturne offers a random phrase of six everyday words by default; the person may type their own
   and is warned only when it is easy to guess, with no rules about symbols, capitals or length. The
-  recovery key is offered once, to print or save. The key itself is kept in the phone's own safe
+  recovery key is offered once, to print or save, and can be made later in This phone. The key itself is kept in the phone's own safe
   place, so nightly backups need no phrase. Neither the account's company nor Nocturne's makers can
   open a backup.
 - **Seven nights, and forgetting reaches it.** Seven nightly indexes are kept; a piece no kept index

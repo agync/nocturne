@@ -16,12 +16,14 @@
   "wifi": { "title": "Backup", "back": "This phone" },
   "stopped": { "title": "Backup", "back": "This phone" },
   "off": { "title": "Backup", "back": "This phone" },
+  "makekey": { "title": "Backup", "back": "This phone" },
+  "newkey": { "bar": "none" },
   "today": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
   "delete": { "bar": "modal", "title": "Delete everything", "back": "Cancel" }
 }
 </script>
 </head>
-<body data-frame="duo" data-states="why blocked passphrase own check key first done on wifi stopped today off delete">
+<body data-frame="duo" data-states="why blocked passphrase own check key first done on wifi stopped today off makekey newkey delete">
 <main id="content">
 
   <!-- Step 1: why, and when it can't go on -->
@@ -109,11 +111,11 @@
   <div class="foot plain" data-state="done"><span class="btn" data-kind="primary">OK</span></div>
 
   <!-- This phone: Backup -->
-  <div class="group" data-state="on wifi stopped off">
+  <div class="group" data-state="on wifi stopped off makekey">
     <div class="rows">
       <div class="row"><span class="rowText"><span class="rowLabel">Back up every night</span>
-        <span class="rowHint" data-state="on off" data-os="ios">Last backup today, 3:12 am · 1.4 GB in your iCloud</span>
-        <span class="rowHint" data-state="on off" data-os="android">Last backup today, 3:12 am · 1.4 GB in your Google Drive</span>
+        <span class="rowHint" data-state="on off makekey" data-os="ios">Last backup today, 3:12 am · 1.4 GB in your iCloud</span>
+        <span class="rowHint" data-state="on off makekey" data-os="android">Last backup today, 3:12 am · 1.4 GB in your Google Drive</span>
         <span class="rowHint" data-state="wifi">Last backup Sunday, 2:40 am · waiting for Wi-Fi</span>
         <span class="rowHint" data-state="stopped">Stopped · last backup Friday, 3:05 am</span>
       </span><span class="sw"></span></div>
@@ -122,11 +124,12 @@
     <div class="say" data-state="stopped" data-os="ios">There’s no room in your iCloud for tonight’s backup. Your last backup from Friday is still there. <span class="link2">Open iCloud settings</span></div>
     <div class="say" data-state="stopped" data-os="android">The Google account your backup uses isn’t on this phone any more, so the backup has stopped. <span class="link2">Choose account</span></div>
   </div>
-  <div class="group" data-state="on wifi stopped off">
+  <div class="group" data-state="on wifi stopped off makekey">
     <div class="rows">
-      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span></span><span class="sw off" data-state="on stopped off"></span><span class="sw" data-state="wifi"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Wi-Fi only</span></span><span class="sw off" data-state="on stopped off makekey"></span><span class="sw" data-state="wifi"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Back up now</span></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Change the phrase…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Make a recovery key…</span><span class="rowHint">None made yet</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">Turn off…</span></span></div>
     </div>
   </div>
@@ -151,6 +154,24 @@
       <div class="btns"><span class="btn" data-kind="primary">Turn off</span><span class="btn" data-kind="quiet">Keep it on</span></div>
     </div>
   </div>
+
+  <!-- Make a recovery key -->
+  <div class="over" data-state="makekey">
+    <div class="sheetCard">
+      <h2>Make a recovery key?</h2>
+      <p>A recovery key opens your backup if you lose your phrase. It is shown once. If you made one before, it stops working.</p>
+      <div class="btns"><span class="btn" data-kind="primary">Make it</span><span class="btn" data-kind="quiet">Cancel</span></div>
+    </div>
+  </div>
+
+  <!-- A recovery key, made later -->
+  <div class="hero" data-state="newkey" style="padding-top: 40px">
+    <span data-icon="shield" data-size="32"></span>
+    <h1 class="stepH">Your new recovery key</h1>
+    <p class="plead">It opens your backup if you lose your phrase. Print it or save it, and keep it away from this phone. An earlier key no longer works.</p>
+  </div>
+  <p class="rkey" data-state="newkey"><span>M3TD</span> <span>7KWQ</span> <span>4HXN</span> <span>R9CP</span> <span>2BZL</span> <span>8VFG</span></p>
+  <div class="foot plain" data-state="newkey"><span class="btn" data-kind="primary">Print or save…</span><span class="btn" data-kind="quiet">Cancel</span><p class="barLine">Nocturne shows this only once.</p></div>
 
   <!-- Today: the backup has stopped -->
   <p class="pstatus" data-state="today"><span class="pdot"></span>Your memory is on this phone</p>
