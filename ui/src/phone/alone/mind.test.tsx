@@ -261,7 +261,7 @@ describe("The mind in This phone", () => {
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     const group = await screen.findByRole("region", { name: "Nocturne’s mind online" });
     expect(
-      within(group).getByText("answers.example, online · Reading · 12 of 46"),
+      await within(group).findByText("answers.example, online · Reading · 12 of 46"),
     ).toBeInTheDocument();
     expect(within(group).getByText("What you keep, and questions")).toBeInTheDocument();
     expect(
