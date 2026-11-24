@@ -1,8 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nocturne_contract::{RemoteAnswer, RemoteCall};
-use nocturne_engine::nightly::{MemoryPlace, PlaceError};
+use nocturne_engine::nightly::{BackupPlace, MemoryPlace, PlaceEntry, PlaceError};
 use nocturne_engine::{Clock, ManualClock};
 
 use super::{
@@ -410,4 +411,324 @@ fn a_move_says_so_and_nothing_runs_after_a_forget() {
     assert!(p.backup.status().moved);
     assert!(!p.backup.pass(&p.home, true));
     assert_eq!(nights(&place), 1);
+}
+
+#[test]
+fn choosing_the_account_again_carries_on_and_another_starts_afresh() {
+    let old = Arc::new(MemoryPlace::new());
+    let p = phone(&old, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    let recovery = p.backup.recovery_key().unwrap();
+    p.now().unwrap();
+
+    old.fail_with(Some(PlaceError::NoPermission));
+    p.later(21);
+    assert!(!p.backup.pass(&p.home, true));
+    assert_eq!(p.state(), BackupState::NoPermission);
+    old.fail_with(None);
+    p.backup.reconnected(false);
+    assert_eq!(p.state(), BackupState::Waiting);
+    assert!(p.backup.pass(&p.home, true), "carries on at once");
+    assert_eq!(nights(&old), 2);
+
+    let new = Arc::new(MemoryPlace::new());
+    p.backup.set_place(Some(new.clone()));
+    p.backup.reconnected(true);
+    assert!(p.backup.saved().fresh);
+    assert_eq!(p.backup.status().last, None);
+    p.now().unwrap();
+    assert!(!p.backup.saved().fresh);
+    assert_eq!(nights(&new), 1);
+    assert_eq!(nights(&old), 2, "the earlier account is left as it was");
+
+    let other = phone(&new, true);
+    let opening = Opening::Phrase(PHRASE.into());
+    assert_eq!(other.backup.nights(&opening).unwrap().len(), 1);
+    let by_key = Opening::RecoveryKey(recovery);
+    assert_eq!(other.backup.nights(&by_key).unwrap().len(), 1);
+}
+
+#[test]
+fn a_new_account_holding_another_backup_is_not_written_over() {
+    let place = Arc::new(MemoryPlace::new());
+    let p = phone(&place, true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+
+    let theirs = Arc::new(MemoryPlace::new());
+    let someone = phone(&theirs, true);
+    someone.keep("Someone else's.");
+    someone.backup.turn_on("a phrase of their own").unwrap();
+    someone.now().unwrap();
+
+    p.backup.set_place(Some(theirs.clone()));
+    p.backup.reconnected(true);
+    assert!(p.now().is_err());
+    assert_eq!(p.state(), BackupState::Failed);
+    assert_eq!(nights(&theirs), 1);
+    assert!(p.backup.saved().fresh, "tries again only as a fresh start");
+}
+
+/// An account whose reads fail while `reads_fail` is set, and whose pieces can't be written
+/// while `pieces_fail` is; everything else works.
+#[derive(Default)]
+struct Flaky {
+    inner: MemoryPlace,
+    reads_fail: AtomicBool,
+    pieces_fail: AtomicBool,
+}
+
+impl BackupPlace for Flaky {
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), PlaceError> {
+        if name.starts_with("piece-") && self.pieces_fail.load(Ordering::SeqCst) {
+            return Err(PlaceError::Offline);
+        }
+        self.inner.put(name, bytes)
+    }
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, PlaceError> {
+        if self.reads_fail.load(Ordering::SeqCst) {
+            return Err(PlaceError::Offline);
+        }
+        self.inner.get(name)
+    }
+    fn list(&self, prefix: &str) -> Result<Vec<PlaceEntry>, PlaceError> {
+        self.inner.list(prefix)
+    }
+    fn delete(&self, name: &str) -> Result<(), PlaceError> {
+        self.inner.delete(name)
+    }
+}
+
+fn reads_fail(place: &Flaky, on: bool) {
+    place.reads_fail.store(on, Ordering::SeqCst);
+}
+
+/// A phone backing up to a `Flaky` account, with one night there.
+fn flaky_phone() -> (Phone, Arc<Flaky>) {
+    let old = Arc::new(Flaky::default());
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.backup.set_place(Some(old.clone()));
+    p.keep("Something to keep.");
+    (p, old)
+}
+
+/// Moves `p` to a new, empty account and answers it.
+fn new_account(p: &Phone) -> Arc<MemoryPlace> {
+    let new = Arc::new(MemoryPlace::new());
+    p.backup.set_place(Some(new.clone()));
+    p.backup.reconnected(true);
+    new
+}
+
+fn opens(place: &Arc<MemoryPlace>, opening: Opening) -> bool {
+    phone(place, true)
+        .backup
+        .nights(&opening)
+        .is_ok_and(|n| !n.is_empty())
+}
+
+#[test]
+fn a_dropped_recovery_key_never_opens_the_backup_on_a_new_account() {
+    let (p, old) = flaky_phone();
+    p.backup.turn_on(PHRASE).unwrap();
+    let recovery = p.backup.recovery_key().unwrap();
+    reads_fail(&old, true);
+    p.backup.drop_recovery_key().unwrap();
+    reads_fail(&old, false);
+
+    let new = new_account(&p);
+    p.now().unwrap();
+    assert!(!opens(&new, Opening::RecoveryKey(recovery)));
+    assert!(opens(&new, Opening::Phrase(PHRASE.into())));
+}
+
+#[test]
+fn locks_the_phone_could_not_read_back_are_never_carried() {
+    let (p, old) = flaky_phone();
+    reads_fail(&old, true);
+    p.backup.turn_on(PHRASE).unwrap();
+    let recovery = p.backup.recovery_key().unwrap();
+    p.backup.drop_recovery_key().unwrap();
+    reads_fail(&old, false);
+    assert_eq!(p.backup.saved().locks, None);
+
+    let new = new_account(&p);
+    assert_eq!(p.now(), Err(BackupProblem::Damaged));
+    assert!(new.names().is_empty(), "nothing is carried");
+    assert_eq!(
+        p.backup.recovery_key(),
+        Err(BackupProblem::Damaged),
+        "no recovery key is made for locks the phone doesn't know"
+    );
+
+    // "Change the phrase" makes a new copy, and the backup starts afresh with it.
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    assert!(
+        new.names().is_empty(),
+        "nothing goes before the first night"
+    );
+    p.now().unwrap();
+    assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
+    assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
+    assert!(!opens(&new, Opening::RecoveryKey(recovery)));
+}
+
+#[test]
+fn an_old_phrase_never_opens_the_backup_on_a_new_account() {
+    let (p, old) = flaky_phone();
+    p.backup.turn_on(PHRASE).unwrap();
+    reads_fail(&old, true);
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    reads_fail(&old, false);
+
+    let new = new_account(&p);
+    p.now().unwrap();
+    assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
+    assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
+}
+
+#[test]
+fn lock_changes_before_the_first_night_on_a_new_account_wait_for_it() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    let kept = p.backup.recovery_key().unwrap();
+    p.now().unwrap();
+
+    let new = new_account(&p);
+    let made = p.backup.recovery_key().unwrap();
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    assert!(
+        new.names().is_empty(),
+        "nothing goes before the first night"
+    );
+    p.now().unwrap();
+    assert!(opens(&new, Opening::RecoveryKey(made)), "the key made last");
+    assert!(!opens(&new, Opening::RecoveryKey(kept)));
+    assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
+    assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
+}
+
+#[test]
+fn a_recovery_lock_a_cut_short_start_left_goes_with_the_next_night() {
+    let (p, _) = flaky_phone();
+    p.backup.turn_on(PHRASE).unwrap();
+    let recovery = p.backup.recovery_key().unwrap();
+    p.now().unwrap();
+
+    let new = Arc::new(Flaky::default());
+    p.backup.set_place(Some(new.clone()));
+    p.backup.reconnected(true);
+    new.pieces_fail.store(true, Ordering::SeqCst);
+    assert!(p.now().is_err());
+    assert!(new.inner.names().contains(&"key-recovery".to_string()));
+
+    p.backup.drop_recovery_key().unwrap();
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    new.pieces_fail.store(false, Ordering::SeqCst);
+    p.now().unwrap();
+    assert!(!new.inner.names().contains(&"key-recovery".to_string()));
+    let other = phone(&Arc::new(MemoryPlace::new()), true);
+    other.backup.set_place(Some(new.clone()));
+    assert!(
+        other
+            .backup
+            .nights(&Opening::RecoveryKey(recovery))
+            .is_err()
+    );
+    assert!(
+        !other
+            .backup
+            .nights(&Opening::Phrase(PHRASE.into()))
+            .is_ok_and(|n| !n.is_empty())
+    );
+}
+
+#[test]
+fn a_night_across_an_account_change_notes_nothing() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    let state = p.backup.saved().state.unwrap();
+    let account = p.backup.saved().account;
+    new_account(&p);
+    let ran = p.backup.note(
+        state,
+        Err(nocturne_engine::nightly::NightError::Cancelled),
+        account,
+        None,
+    );
+    assert!(ran.is_err());
+    let saved = p.backup.saved();
+    assert!(saved.fresh, "the new account still starts afresh");
+    assert_eq!(saved.last, None);
+}
+
+#[test]
+fn a_forget_with_backup_off_never_starts_a_new_account() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    let id = p.keep("Something to forget.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    p.backup.turn_off(false).unwrap();
+    let new = new_account(&p);
+    p.home.open_store().unwrap().engine.unkeep(&id).unwrap();
+    assert!(!p.backup.pass(&p.home, true));
+    assert!(new.names().is_empty());
+}
+
+#[test]
+fn a_phrase_changed_during_the_first_night_on_a_new_account_goes_with_the_next() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    let new = new_account(&p);
+
+    // The first night carries the locks; the phrase changes before it is noted.
+    let saved = p.backup.saved();
+    let key = p.backup.key().unwrap();
+    let mut state = saved.state.clone().unwrap();
+    let carried = p.backup.start_afresh(new.as_ref(), &key, &state).unwrap();
+    let night = p.home.open_store().unwrap().engine.back_up_night(
+        new.as_ref(),
+        &key,
+        &mut state,
+        &nocturne_engine::nightly::NightRun {
+            progress: &|_, _, _| {},
+            cancel: &AtomicBool::new(false),
+            check: false,
+        },
+    );
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    {
+        let _held = lock(&p.backup.locking);
+        p.backup.note(state, night, saved.account, carried).unwrap();
+    }
+    assert!(
+        p.backup.saved().fresh,
+        "the changed copy is still to be carried"
+    );
+    assert!(opens(&new, Opening::Phrase(PHRASE.into())));
+
+    p.later(21);
+    p.now().unwrap();
+    assert!(!p.backup.saved().fresh);
+    assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
+    assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
+}
+
+#[test]
+fn a_phrase_changed_after_the_first_night_on_a_new_account_goes_there_at_once() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    let new = new_account(&p);
+    p.now().unwrap();
+    p.backup.change_phrase("lantern copper meadow").unwrap();
+    assert!(opens(&new, Opening::Phrase("lantern copper meadow".into())));
+    assert!(!opens(&new, Opening::Phrase(PHRASE.into())));
 }

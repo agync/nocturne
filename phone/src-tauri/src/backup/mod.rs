@@ -22,8 +22,8 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use nocturne_contract::{BackupPhase, BackupSummary, HomeError, KeptCounts, PhoneMode};
 use nocturne_engine::Clock;
 use nocturne_engine::nightly::{
-    self, BackupPlace, ExposeSecret, NightError, NightKey, NightReport, NightRun, NightState,
-    PlaceError,
+    self, BackupPlace, ExposeSecret, KeyLocks, NightError, NightKey, NightReport, NightRun,
+    NightState, PlaceError,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
@@ -150,6 +150,20 @@ struct Saved {
     /// computer").
     #[serde(default)]
     moved: bool,
+    /// The key as the account holds it, locked, so a new account can take the same phrase and
+    /// recovery key.
+    #[serde(default)]
+    locks: Option<KeyLocks>,
+    /// The person chose another account: the next night starts the backup there afresh.
+    #[serde(default)]
+    fresh: bool,
+    /// The phrase locks carries to the account chosen last may have written before its first
+    /// night there.
+    #[serde(default)]
+    carried: Vec<Vec<u8>>,
+    /// Counts the accounts chosen, so a night that ran across a change notes nothing.
+    #[serde(default)]
+    account: u64,
 }
 
 /// How the backup stands, as This phone shows it.
@@ -314,6 +328,11 @@ pub struct PhoneBackup {
     failed_at: Mutex<Option<(jiff::Timestamp, i64)>>,
     /// Held while the saved file is read and written.
     saving: Mutex<()>,
+    /// Held whenever `Saved::fresh`, `Saved::locks` or `Saved::carried` is decided on or changed:
+    /// a fresh start on another account, its carry and the note that ends it, and every lock
+    /// change. So a lock change lands either before the carry is noted, and the next night
+    /// carries it, or after, and goes to the account itself.
+    locking: Mutex<()>,
     /// The passphrase work the locked key asks for; `None` is what Nocturne writes.
     work_factor: Option<u8>,
 }
@@ -338,6 +357,7 @@ impl PhoneBackup {
             running: AtomicBool::new(false),
             failed_at: Mutex::new(None),
             saving: Mutex::new(()),
+            locking: Mutex::new(()),
             work_factor: None,
         }
     }
@@ -404,6 +424,66 @@ impl PhoneBackup {
         } else {
             Err(BackupProblem::NoSafePlace)
         }
+    }
+
+    /// Reads the key's locks back from the account, with `locking` held. When that fails the
+    /// copy stays unknown, and an unknown copy is never carried to another account. Never on an
+    /// account the backup is starting afresh on: what it holds is not this backup's yet.
+    fn remember_locks(&self, place: &dyn BackupPlace) {
+        if self.saved().fresh {
+            return;
+        }
+        match nightly::key_locks(place) {
+            Ok(locks) => self.update(|s| s.locks = Some(locks)),
+            Err(e) => tracing::warn!("the backup's locks could not be read back: {e}"),
+        }
+    }
+
+    /// Changes a lock in the account, and the phone's copy with it, with `locking` held. The copy is unknown while the
+    /// change runs, so a change that half happened never leaves an old phrase's or a dropped
+    /// recovery key's lock to be carried; it follows the lock written when one was known before,
+    /// and is read back otherwise.
+    fn relock<T>(
+        &self,
+        place: &dyn BackupPlace,
+        change: impl FnOnce() -> Result<T, BackupProblem>,
+        apply: impl FnOnce(&T, &mut KeyLocks),
+    ) -> Result<T, BackupProblem> {
+        let before = self.update(|s| s.locks.take());
+        let out = change();
+        match (&out, before) {
+            (Ok(done), Some(mut locks)) => {
+                apply(done, &mut locks);
+                self.update(|s| s.locks = Some(locks));
+            }
+            _ => self.remember_locks(place),
+        }
+        out
+    }
+
+    /// The person chose the account again after Google's screen, or picked another. Signed out
+    /// or no permission is over; on another account the backup starts there afresh, with the
+    /// same phrase and recovery key, and its first night goes in full. The earlier account
+    /// can't be reached any more, so a deletion owed to it is dropped.
+    pub fn reconnected(&self, changed: bool) {
+        *lock(&self.failed_at) = None;
+        let _held = lock(&self.locking);
+        self.update(|s| {
+            if matches!(s.trouble, Some(Trouble::SignedOut | Trouble::NoPermission)) {
+                s.trouble = None;
+            }
+            if !changed {
+                return;
+            }
+            s.delete_pending = false;
+            s.account += 1;
+            s.carried.clear();
+            if s.state.is_some() && !s.moved {
+                s.fresh = true;
+                s.last = None;
+                s.trouble = None;
+            }
+        });
     }
 
     /// Whether backup is on, so the phone asks for time in the background.
@@ -484,6 +564,7 @@ impl PhoneBackup {
             let _ = place.delete(nightly::KEY_PHRASE);
             return Err(problem);
         }
+        let _held = lock(&self.locking);
         self.update(|s| {
             s.on = true;
             s.state = Some(NightState::new());
@@ -491,7 +572,10 @@ impl PhoneBackup {
             s.trouble = None;
             s.delete_pending = false;
             s.moved = false;
+            s.fresh = false;
+            s.locks = None;
         });
+        self.remember_locks(place.as_ref());
         Ok(())
     }
 
@@ -499,29 +583,88 @@ impl PhoneBackup {
     pub fn recovery_key(&self) -> Result<String, BackupProblem> {
         let place = self.place()?;
         let key = self.key()?;
-        Ok(nightly::add_recovery_key(
+        let _held = lock(&self.locking);
+        if self.saved().fresh {
+            // Nothing goes to an account the backup is starting afresh on before its first
+            // night carries the copy there.
+            let (text, locked) = nightly::recovery_lock(&key, self.work_factor)?;
+            let known = self.update(|s| match s.locks.as_mut() {
+                Some(locks) => {
+                    locks.recovery = Some(locked);
+                    true
+                }
+                None => false,
+            });
+            return if known {
+                Ok(text)
+            } else {
+                Err(BackupProblem::Damaged)
+            };
+        }
+        let (text, _) = self.relock(
             place.as_ref(),
-            &key,
-            self.work_factor,
-        )?)
+            || {
+                Ok(nightly::add_recovery_key_locked(
+                    place.as_ref(),
+                    &key,
+                    self.work_factor,
+                )?)
+            },
+            |(_, locked), locks| locks.recovery = Some(locked.clone()),
+        )?;
+        Ok(text)
     }
 
     /// The recovery key no longer opens the backup.
     pub fn drop_recovery_key(&self) -> Result<(), BackupProblem> {
         let place = self.place()?;
-        Ok(nightly::remove_recovery_key(place.as_ref())?)
+        let _held = lock(&self.locking);
+        if self.saved().fresh {
+            self.update(|s| {
+                if let Some(locks) = s.locks.as_mut() {
+                    locks.recovery = None;
+                }
+            });
+            return Ok(());
+        }
+        self.relock(
+            place.as_ref(),
+            || Ok(nightly::remove_recovery_key(place.as_ref())?),
+            |(), locks| locks.recovery = None,
+        )
     }
 
     /// "Change the phrase…": the old phrase stops opening the backup.
     pub fn change_phrase(&self, phrase: &str) -> Result<(), BackupProblem> {
         let place = self.place()?;
         let key = self.key()?;
-        Ok(nightly::change_phrase(
+        let _held = lock(&self.locking);
+        if self.saved().fresh {
+            let locked = nightly::phrase_lock(&key, phrase, self.work_factor)?;
+            self.update(|s| match s.locks.as_mut() {
+                Some(locks) => locks.phrase = locked,
+                None => {
+                    s.locks = Some(KeyLocks {
+                        phrase: locked,
+                        recovery: None,
+                    })
+                }
+            });
+            return Ok(());
+        }
+        self.relock(
             place.as_ref(),
-            &key,
-            phrase,
-            self.work_factor,
-        )?)
+            || {
+                Ok(nightly::change_phrase_locked(
+                    place.as_ref(),
+                    &key,
+                    phrase,
+                    self.work_factor,
+                )?)
+            },
+            |locked, locks| locks.phrase = locked.clone(),
+        )?;
+        Ok(())
     }
 
     pub fn set_wifi_only(&self, on: bool) {
@@ -536,6 +679,7 @@ impl PhoneBackup {
         if also_delete {
             self.keys.forget();
         }
+        let held = lock(&self.locking);
         self.update(|s| {
             s.on = false;
             s.trouble = None;
@@ -543,10 +687,12 @@ impl PhoneBackup {
                 *s = Saved {
                     wifi_only: s.wifi_only,
                     delete_pending: true,
+                    account: s.account,
                     ..Saved::default()
                 };
             }
         });
+        drop(held);
         if also_delete {
             self.delete_pending()?;
         }
@@ -602,8 +748,13 @@ impl PhoneBackup {
     }
 
     /// Whether a backup turned off was kept in the account with its key on this phone.
+    /// Not on an account chosen since: the backup kept is in the earlier one.
     fn kept_off(&self, saved: &Saved) -> bool {
-        !saved.on && !saved.moved && saved.state.is_some() && self.keys.key().is_some()
+        !saved.on
+            && !saved.moved
+            && !saved.fresh
+            && saved.state.is_some()
+            && self.keys.key().is_some()
     }
 
     fn delete_pending(&self) -> Result<(), BackupProblem> {
@@ -665,10 +816,20 @@ impl PhoneBackup {
             cancel: &home.stop,
             check,
         };
-        let result = open
-            .engine
-            .back_up_night(place.as_ref(), &key, &mut state, &run);
-        let noted = self.note(state, result);
+        let (result, carried) = match self.start_afresh(place.as_ref(), &key, &state) {
+            Ok(carried) => (
+                open.engine
+                    .back_up_night(place.as_ref(), &key, &mut state, &run),
+                carried,
+            ),
+            Err(e) => (Err(e), None),
+        };
+        let held = lock(&self.locking);
+        let noted = self.note(state, result, saved.account, carried);
+        if noted.is_ok() && self.saved().locks.is_none() {
+            self.remember_locks(place.as_ref());
+        }
+        drop(held);
         // "Turn off" with delete may have come while this night was written: what it wrote goes
         // too.
         if let Err(e) = self.delete_pending() {
@@ -677,10 +838,40 @@ impl PhoneBackup {
         noted
     }
 
+    /// On another account, the locks go there before its first night; answers the copy carried.
+    fn start_afresh(
+        &self,
+        place: &dyn BackupPlace,
+        key: &NightKey,
+        state: &NightState,
+    ) -> Result<Option<KeyLocks>, NightError> {
+        let _held = lock(&self.locking);
+        let saved = self.saved();
+        if !saved.fresh {
+            return Ok(None);
+        }
+        // Without a copy the phone can trust, nothing is carried: "Change the phrase" makes a
+        // new one.
+        let locks = saved.locks.ok_or(NightError::Damaged)?;
+        self.update(|s| {
+            if !s.carried.contains(&locks.phrase) {
+                s.carried.push(locks.phrase.clone());
+            }
+        });
+        nightly::carry_locks(place, key, &locks, &saved.carried, state)?;
+        Ok(Some(locks))
+    }
+
+    /// Notes how a night ended, with `locking` held, unless another account was chosen while it
+    /// ran. The fresh start
+    /// is over only once the copy it carried is still the phone's: a lock changed meanwhile is
+    /// carried at the next night.
     fn note(
         &self,
         state: NightState,
         result: Result<NightReport, NightError>,
+        account: u64,
+        carried: Option<KeyLocks>,
     ) -> Result<LastNight, BackupProblem> {
         let trouble = match &result {
             Ok(_) => None,
@@ -692,9 +883,11 @@ impl PhoneBackup {
             Err(NightError::Place(PlaceError::NoRoom)) => Some(Trouble::NoRoom),
             Err(NightError::Place(PlaceError::SignedOut)) => Some(Trouble::SignedOut),
             Err(NightError::Place(PlaceError::NoPermission)) => Some(Trouble::NoPermission),
-            Err(NightError::Place(PlaceError::Failed(_)) | NightError::Failed(_)) => {
-                Some(Trouble::Failed)
-            }
+            Err(
+                NightError::Place(PlaceError::Failed(_))
+                | NightError::Failed(_)
+                | NightError::AlreadyThere,
+            ) => Some(Trouble::Failed),
             Err(_) => None,
         };
         let last = result.as_ref().ok().map(|r| LastNight {
@@ -702,13 +895,17 @@ impl PhoneBackup {
             bytes: r.bytes,
         });
         self.update(|s| {
-            if s.state.is_none() {
+            if s.state.is_none() || s.account != account {
                 return;
             }
             s.state = Some(state);
             s.trouble = trouble;
             if let Some(last) = &last {
                 s.last = Some(last.clone());
+                if carried.is_none() || carried == s.locks {
+                    s.fresh = false;
+                    s.carried.clear();
+                }
             }
         });
         match result {
@@ -795,6 +992,7 @@ impl PhoneBackup {
                 .is_some_and(|s| s.device == unpacked.night.device);
         if !own {
             self.keep_key(&key)?;
+            let _held = lock(&self.locking);
             self.update(|s| {
                 s.on = false;
                 s.state = Some(unpacked.state);
@@ -802,7 +1000,10 @@ impl PhoneBackup {
                 s.trouble = None;
                 s.delete_pending = false;
                 s.moved = false;
+                s.fresh = false;
+                s.locks = None;
             });
+            self.remember_locks(place.as_ref());
         }
         Ok(restored)
     }
