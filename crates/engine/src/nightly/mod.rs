@@ -17,7 +17,9 @@
 //! A night is written only after every piece it lists is in the account, so a stopped run leaves
 //! the nights before it whole. Seven nights are kept. A forget for good marks the store
 //! ([`FORGOT`]); the next night is written at once and every older night goes, with the pieces only
-//! they listed. A restore brings back the newest night into a staging folder and checks it the way
+//! they listed. While backup is off with the backup kept, that night is the newest kept one without
+//! what was forgotten ([`Engine::forget_in_kept_backup`]): nothing kept or changed since goes. A
+//! restore brings back the newest night into a staging folder and checks it the way
 //! a backup file is checked.
 
 mod lock;
@@ -1011,6 +1013,147 @@ pub fn restore_night(
     })
 }
 
+/// Notes of what was forgotten or declined: they hold nothing of the person's, and a night
+/// carries the phone's own so what it names stays gone.
+const NOTES: [&str; 3] = [
+    "forgotten_for_good",
+    "forgotten_claims",
+    "reflections_declined",
+];
+
+fn quoted(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// Leave in the snapshot only what the night `base` holds: every row of the phone's store that
+/// `base`'s store does not have, by its key, goes. What both have stays as the phone has it now,
+/// so what a forget took out of a page or a memory stays out. The notes of what was forgotten
+/// stay whole.
+fn keep_only_base(
+    place: &dyn BackupPlace,
+    key: &NightKey,
+    base: &Night,
+    scratch: &Path,
+    snapshot: &Path,
+    run: &NightRun,
+) -> NightResult<()> {
+    let dir = scratch.join("base");
+    crate::private::create_dir_new(&dir)?;
+    let db = dir.join(crate::DB_FILE);
+    {
+        let mut out = fsutil::create_private_file_new(&db)?;
+        for r in &base.body.store {
+            std::io::Write::write_all(&mut out, &fetch_piece(place, key, r)?)?;
+            if run.cancel.load(Ordering::SeqCst) {
+                return Err(NightError::Cancelled);
+            }
+        }
+        out.sync_all()?;
+    }
+    // Checked and brought up to date as a backup file is, so its tables are the phone's.
+    crate::backup::check_unpacked(&dir, false)?;
+
+    let conn = Connection::open(snapshot).map_err(Error::from)?;
+    let filtered = (|| -> rusqlite::Result<()> {
+        crate::store::lock_down(&conn)?;
+        conn.pragma_update(None, "secure_delete", "ON")?;
+        conn.execute(
+            "ATTACH DATABASE ?1 AS base",
+            [db.to_string_lossy().as_ref()],
+        )?;
+        let virtuals: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM main.sqlite_schema WHERE type = 'table' \
+                 AND sql LIKE 'CREATE VIRTUAL TABLE%'",
+            )?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        let tables: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM main.sqlite_schema WHERE type = 'table' \
+                 AND name NOT LIKE 'sqlite_%' AND sql NOT LIKE 'CREATE VIRTUAL TABLE%'",
+            )?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        for table in &tables {
+            // A full-text index's own tables follow its triggers.
+            if NOTES.contains(&table.as_str())
+                || virtuals.iter().any(|v| table.starts_with(&format!("{v}_")))
+            {
+                continue;
+            }
+            let mut columns: Vec<(i64, String)> = conn
+                .prepare(&format!("PRAGMA main.table_info({})", quoted(table)))?
+                .query_map([], |r| Ok((r.get::<_, i64>(5)?, r.get::<_, String>(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            if columns.iter().any(|(pk, _)| *pk > 0) {
+                columns.retain(|(pk, _)| *pk > 0);
+                columns.sort();
+            }
+            let there: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM base.sqlite_schema WHERE type = 'table' AND name = ?1)",
+                [table],
+                |r| r.get(0),
+            )?;
+            let t = quoted(table);
+            if !there {
+                conn.execute(&format!("DELETE FROM main.{t}"), [])?;
+                continue;
+            }
+            let same = columns
+                .iter()
+                .map(|(_, c)| format!("b.{c} IS {t}.{c}", c = quoted(c)))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            conn.execute(
+                &format!(
+                    "DELETE FROM main.{t} WHERE NOT EXISTS (SELECT 1 FROM base.{t} b WHERE {same})"
+                ),
+                [],
+            )?;
+        }
+        conn.execute_batch("COMMIT")?;
+        conn.execute_batch("DETACH DATABASE base")?;
+        conn.execute_batch("VACUUM")?;
+        Ok(())
+    })();
+    drop(conn);
+    fsutil::shred_tree(&dir);
+    filtered.map_err(|e| NightError::Failed(format!("the kept night could not be made: {e}")))
+}
+
+/// The snapshot's counts and originals again, once [`keep_only_base`] took rows out: only the
+/// originals `base` lists, which the account holds already.
+fn recount(snapshot: &Path, snap: &mut crate::backup::Snapshot, base: &Night) -> NightResult<()> {
+    let conn = Connection::open(snapshot).map_err(Error::from)?;
+    let counted = (|| -> rusqlite::Result<_> {
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0));
+        let memories = count("SELECT COUNT(*) FROM memories WHERE superseded_at IS NULL")?;
+        let items = count("SELECT COUNT(*) FROM items")?;
+        let pages = count("SELECT COUNT(*) FROM pages")?;
+        let first: Option<String> =
+            conn.query_row("SELECT MIN(kept_at) FROM items", [], |r| r.get(0))?;
+        let shas: BTreeSet<String> = conn
+            .prepare("SELECT sha256 FROM items WHERE file_name IS NOT NULL")?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok((memories, items, pages, first, shas))
+    })()
+    .map_err(Error::from)?;
+    drop(conn);
+    let (memories, items, pages, first, shas) = counted;
+    let listed: BTreeSet<&str> = base.body.files.iter().map(|f| f.sha.as_str()).collect();
+    snap.originals
+        .retain(|o| shas.contains(&o.sha) && listed.contains(o.sha.as_str()));
+    snap.memories = memories as u32;
+    snap.items = items as u32;
+    snap.pages = pages as u32;
+    snap.first = first;
+    snap.size = std::fs::metadata(snapshot)?.len();
+    Ok(())
+}
+
 impl Engine {
     /// Write tonight's night: what changed goes as locked pieces, then the night that lists
     /// them all, then nights past the seventh, or every older one after a forget, go with the
@@ -1021,6 +1164,32 @@ impl Engine {
         key: &NightKey,
         state: &mut NightState,
         run: &NightRun,
+    ) -> NightResult<NightReport> {
+        self.write_night(place, key, state, run, false)
+    }
+
+    /// While backup is off with the backup kept, a forget for good still reaches it: a night is
+    /// written that holds the newest kept night without what was forgotten, dated as that night,
+    /// and every older night goes, with the pieces only they listed. Nothing kept or changed
+    /// since that night goes to the account. With no night there, nothing does, and the mark
+    /// clears ([`NightError::NoBackup`]).
+    pub fn forget_in_kept_backup(
+        &self,
+        place: &dyn BackupPlace,
+        key: &NightKey,
+        state: &mut NightState,
+        run: &NightRun,
+    ) -> NightResult<NightReport> {
+        self.write_night(place, key, state, run, true)
+    }
+
+    fn write_night(
+        &self,
+        place: &dyn BackupPlace,
+        key: &NightKey,
+        state: &mut NightState,
+        run: &NightRun,
+        kept_only: bool,
     ) -> NightResult<NightReport> {
         if !state.in_use {
             return Err(NightError::NotInUse);
@@ -1051,11 +1220,26 @@ impl Engine {
         }
         // Read before the snapshot: a forget after it marks the store again and stays marked.
         let forgot = self.read(forgot_mark)?;
+        let base = match (kept_only, nights.last()) {
+            (false, _) => None,
+            (true, Some(newest)) => Some(newest),
+            (true, None) => {
+                // Nothing in the account lists what was forgotten.
+                if let Some(mark) = &forgot {
+                    self.clear_forgot(mark)?;
+                }
+                return Err(NightError::NoBackup);
+            }
+        };
         let generation = self.inner.forget_gen.load(Ordering::SeqCst);
         let scratch = Scratch::new(&self.inner.dir.join(SCRATCH));
         fsutil::shred_tree(&scratch.dir);
         fsutil::create_private_dir(&scratch.dir)?;
-        let (snapshot, snap) = self.take_snapshot(&scratch.dir)?;
+        let (snapshot, mut snap) = self.take_snapshot(&scratch.dir)?;
+        if let Some(base) = base {
+            keep_only_base(place, key, base, &scratch.dir, &snapshot, run)?;
+            recount(&snapshot, &mut snap, base)?;
+        }
 
         let held: BTreeSet<String> = place
             .list(PIECE)?
@@ -1149,7 +1333,11 @@ impl Engine {
             .max()
             .unwrap_or(0)
             + 1;
-        let made = self.clock().now();
+        // The night without what was forgotten is dated as the night it came from: it holds
+        // nothing newer.
+        let made = base
+            .and_then(|b| crate::util::parse_ts(&b.body.made_at).ok())
+            .unwrap_or_else(|| self.clock().now());
         let body = Body {
             format: FORMAT,
             device: state.device.clone(),
@@ -1231,16 +1419,22 @@ impl Engine {
             return Ok(Self::report(&night, sender.sent, false));
         }
         if let Some(mark) = &forgot {
-            self.write(|tx| {
-                tx.execute(
-                    "DELETE FROM settings WHERE key = ?1 AND value = ?2",
-                    [FORGOT, mark.as_str()],
-                )?;
-                Ok(())
-            })?;
+            self.clear_forgot(mark)?;
         }
 
         Ok(Self::report(&night, sender.sent, carried_forget))
+    }
+
+    /// Clear the forget mark, unless another forget marked the store since it was read.
+    fn clear_forgot(&self, mark: &str) -> NightResult<()> {
+        self.write(|tx| {
+            tx.execute(
+                "DELETE FROM settings WHERE key = ?1 AND value = ?2",
+                [FORGOT, mark],
+            )?;
+            Ok(())
+        })?;
+        Ok(())
     }
 
     fn report(night: &Night, sent: u64, carried_forget: bool) -> NightReport {
