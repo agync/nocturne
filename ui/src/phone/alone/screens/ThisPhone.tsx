@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, PutAsideMemory } from "../../../engine/bindings";
@@ -9,10 +9,11 @@ import { calendarValue, healthValue } from "../../native/screens/Offer";
 import { openPolicy, useHeading } from "../../native/screens/parts";
 import { openAppSettings } from "../../native/sources";
 import { BottomSheet } from "../../screens/Dialog";
-import { BackBar, Button, Page } from "../../screens/ui";
+import { BackBar, Button, Icon, Page } from "../../screens/ui";
 import type { VoiceAccess } from "../api";
-import type { MindChosen, MindLimit, MindMonth, MindReading } from "../mind";
+import type { MindChosen, MindLimit, MindMonth, MindReading, MindStatus, ReadKind } from "../mind";
 import type { BackupStatus } from "../nightly";
+import { type ReadAction, type ReadBlock, readBlock, rowState } from "../readNow";
 import { backupRowHint } from "./Nightly";
 
 /** On a phone alone nothing is sent to a computer: the phone takes what it brings itself. */
@@ -46,6 +47,72 @@ function limitValue(limit: MindLimit): string {
     : t("phone.mind.row.limitThings", { count: limit.kind === "things" ? limit.count : 0 });
 }
 
+/** The block under "Its mind": why reading waits, its progress, and Read now, Read anyway or Stop. */
+function ReadBlockView({
+  block,
+  onAction,
+  busy,
+  stopRef,
+  goRef,
+}: {
+  block: ReadBlock;
+  onAction(action: ReadAction): void;
+  busy: boolean;
+  stopRef: RefObject<HTMLButtonElement | null>;
+  goRef: RefObject<HTMLButtonElement | null>;
+}) {
+  const id = useId();
+  const button = block.button;
+  const stop = button?.action === "stop";
+  return (
+    <div className="ph-mind-rn">
+      {block.said ? (
+        <p className="ph-mind-rn-said" role="status">
+          {block.tick ? <Icon name="check" size={18} /> : null}
+          {block.said}
+        </p>
+      ) : null}
+      {block.progress ? (
+        <div
+          className="ph-progress"
+          role="progressbar"
+          aria-label={t("phone.mind.reading.title")}
+          aria-valuemin={0}
+          aria-valuemax={block.progress.count}
+          aria-valuenow={block.progress.done}
+          aria-valuetext={t("phone.mind.reading.progress", block.progress)}
+        >
+          <span
+            style={{
+              width: `${Math.round((100 * block.progress.done) / Math.max(1, block.progress.count))}%`,
+            }}
+          />
+        </div>
+      ) : null}
+      {block.lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+      {button ? (
+        <>
+          <button
+            type="button"
+            ref={stop ? stopRef : goRef}
+            className={`ph-btn ${stop ? "ph-btn--quiet" : "ph-btn--tonal"} ph-mind-rn-btn`}
+            aria-disabled={button.needs || busy ? true : undefined}
+            aria-describedby={button.needs ? `${id}-needs` : undefined}
+            onClick={() => {
+              if (!button.needs && !busy) onAction(button.action);
+            }}
+          >
+            {button.label}
+          </button>
+          {button.needs ? <p id={`${id}-needs`}>{button.needs}</p> : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** "Nocturne's mind online": the chosen service, what goes, what was sent, and turning off. */
 export function MindGroup({
   chosen,
@@ -56,6 +123,11 @@ export function MindGroup({
   onChange,
   onCheckKey,
   onTurnOff,
+  status,
+  readNow,
+  readStop,
+  onLimit = () => undefined,
+  ios = false,
 }: {
   chosen: Exclude<MindChosen, { state: "off" }>;
   month(): Promise<MindMonth | null>;
@@ -66,9 +138,17 @@ export function MindGroup({
   onChange(): void;
   onCheckKey(): void;
   onTurnOff(): Promise<void>;
+  status?(): Promise<MindStatus>;
+  /** Read now or Read anyway, from the person's tap. */
+  readNow?(kind: ReadKind): Promise<MindReading>;
+  readStop?(): Promise<MindReading | null>;
+  /** "Change limit", when the month's limit holds reading. */
+  onLimit?(): void;
+  ios?: boolean;
 }) {
   const [counted, setCounted] = useState<MindMonth | null>(null);
   const [read, setRead] = useState<MindReading | null>(null);
+  const [now, setNow] = useState<MindStatus | null>(null);
   const [asking, setAsking] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,10 +163,62 @@ export function MindGroup({
       (r) => !gone && setRead(r),
       () => undefined,
     );
+    (status ? status() : Promise.resolve<MindStatus>({ state: "fine", host: chosen.host })).then(
+      (s) => !gone && setNow(s),
+      () => undefined,
+    );
     return () => {
       gone = true;
     };
-  }, [month, reading, fresh]);
+  }, [month, reading, status, fresh, chosen.host]);
+
+  // While Read now lasts, its progress is looked at again every few seconds.
+  const readingNow = read?.now ?? null;
+  useEffect(() => {
+    if (!readingNow) return;
+    let gone = false;
+    const timer = setInterval(() => {
+      reading().then(
+        (r) => !gone && setRead(r),
+        () => undefined,
+      );
+    }, 5000);
+    return () => {
+      gone = true;
+      clearInterval(timer);
+    };
+  }, [readingNow, reading]);
+
+  // Pressing Read now or Read anyway moves focus to Stop, which takes its place; Stop moves it back.
+  const stopRef = useRef<HTMLButtonElement>(null);
+  const goRef = useRef<HTMLButtonElement>(null);
+  const [acting, setActing] = useState(false);
+  const [moveTo, setMoveTo] = useState<"stop" | "go" | null>(null);
+  useEffect(() => {
+    if (moveTo === "stop") stopRef.current?.focus();
+    if (moveTo === "go") goRef.current?.focus();
+  }, [moveTo, read]);
+  const act = async (action: ReadAction) => {
+    if (acting) return;
+    if (action === "changeLimit") return onLimit();
+    if (!readNow || !readStop) return;
+    setActing(true);
+    try {
+      if (action === "stop") {
+        const after = await readStop();
+        if (after) setRead(after);
+        setMoveTo("go");
+      } else {
+        setRead(await readNow(action === "anyway" ? "anyway" : "now"));
+        setMoveTo("stop");
+      }
+    } catch {
+      reading().then(setRead, () => undefined);
+      status?.().then(setNow, () => undefined);
+    } finally {
+      setActing(false);
+    }
+  };
 
   const turnOff = async () => {
     if (busy) return;
@@ -103,7 +235,8 @@ export function MindGroup({
   };
 
   const host = chosen.host;
-  const underWay = read && read.count > 0 && read.done < read.count ? read : null;
+  const said = chosen.state === "on" ? rowState(now ?? { state: "fine", host }, read) : null;
+  const block = chosen.state === "on" && now ? readBlock(now, read, ios) : null;
   return (
     <Group title={t("phone.mind.group")}>
       {chosen.state === "needsKey" ? (
@@ -118,15 +251,11 @@ export function MindGroup({
       <Row
         icon="moon"
         label={t("phone.mind.row.mind")}
-        hint={[
-          t("phone.mind.row.mindValue", { host }),
-          underWay
-            ? t("phone.mind.row.reading", { done: underWay.done, count: underWay.count })
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        hint={[t("phone.mind.row.mindValue", { host }), said].filter(Boolean).join(" · ")}
       />
+      {block ? (
+        <ReadBlockView block={block} onAction={act} busy={acting} stopRef={stopRef} goRef={goRef} />
+      ) : null}
       <Row label={t("phone.mind.row.goes")} hint={t("phone.mind.row.goesValue")} />
       <Row label={t("phone.mind.row.sent")} onPress={onSent} />
       {counted ? (
@@ -203,6 +332,10 @@ export function HomeThisPhone({
     onSent(): void;
     onCheckKey(): void;
     onTurnOff(): Promise<void>;
+    status?(): Promise<MindStatus>;
+    readNow?(kind: ReadKind): Promise<MindReading>;
+    readStop?(): Promise<MindReading | null>;
+    ios?: boolean;
   };
   channel: NativeChannel;
   stats(): Promise<HomeStats>;
@@ -323,6 +456,11 @@ export function HomeThisPhone({
             onChange={onMind}
             onCheckKey={mind.onCheckKey}
             onTurnOff={mind.onTurnOff}
+            status={mind.status}
+            readNow={mind.readNow}
+            readStop={mind.readStop}
+            onLimit={onMind}
+            ios={mind.ios}
           />
         ) : null}
         {sources ? (

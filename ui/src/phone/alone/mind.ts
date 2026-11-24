@@ -29,10 +29,79 @@ export interface MindMonth {
   limit: MindLimit;
 }
 
-/** What was kept before turning on, being read a few at a time. */
+/** Read now, down to 20% battery and never with battery saving on; or Read anyway, down to 5%. */
+export type ReadKind = "now" | "anyway";
+
+/** Why reading on battery ended. */
+export type ReadStopped =
+  | "done"
+  | "charging"
+  | "low"
+  | "saver"
+  | "floor"
+  | "limit"
+  | "trouble"
+  | "person";
+
+/** Why Read now or Read anyway did not start. */
+export type ReadRefused =
+  | "off"
+  | "floor"
+  | "low"
+  | "saver"
+  | "limit"
+  | "trouble"
+  | "offline"
+  | "notAnswering";
+
+/**
+ * What was kept, being read a few at a time, and the facts the words about it are chosen from:
+ * the phone's power, the person's Read now and why it last stopped.
+ */
 export interface MindReading {
   done: number;
   count: number;
+  /** Known to charge. */
+  charging?: boolean;
+  percent?: number | null;
+  /** Battery saving is on. */
+  saver?: boolean;
+  now?: ReadKind | null;
+  stopped?: { why: ReadStopped; done: number } | null;
+  /** iPhone paused it while the person was away, after this many. */
+  away?: number | null;
+  /** The last Read now looked once more and the service was still not answering. */
+  stillNot?: boolean;
+  /** Android shows no notifications for Nocturne. */
+  quiet?: boolean;
+}
+
+/** The words the phone shows the reading with, away from Nocturne: counts only, never a kept thing. */
+export interface ReadWords {
+  channel: string;
+  channelAbout: string;
+  title: string;
+  progress: string;
+  stop: string;
+  done: string;
+  lowTitle: string;
+  saverTitle: string;
+  anywayText: string;
+  floorTitle: string;
+  floorText: string;
+  stoppedTitle: string;
+  stoppedText: string;
+  pausedTitle: string;
+  pausedText: string;
+}
+
+export class ReadNowError extends Error {
+  readonly refused: ReadRefused;
+  constructor(refused: ReadRefused) {
+    super(refused);
+    this.name = "ReadNowError";
+    this.refused = refused;
+  }
 }
 
 /** A part of what a request carried: its words as they left, or which photo or recording. */
@@ -111,6 +180,9 @@ export interface MindApi {
   /** One look at the service's list with the form's address and key. */
   list(form: ProviderForm): Promise<ModelList>;
   turnOn(form: ProviderForm): Promise<void>;
+  /** Read now or Read anyway, from the person's tap; refused with a {@link ReadNowError}. */
+  readNow(kind: ReadKind, words: ReadWords): Promise<MindReading>;
+  readStop(): Promise<MindReading | null>;
   turnOff(): Promise<void>;
   setLimit(limit: MindLimit): Promise<void>;
   month(): Promise<MindMonth | null>;
@@ -125,6 +197,15 @@ export function createMindApi(): MindApi {
     chosen: () => invoke<MindChosen>("mind_chosen"),
     check: (form) => invoke<CheckOutcome>("mind_check", { form }),
     list: (form) => invoke<ModelList>("mind_list", { form }),
+    async readNow(kind, words) {
+      try {
+        return await invoke<MindReading>("mind_read_now", { kind, words });
+      } catch (e) {
+        if (typeof e === "string") throw new ReadNowError(e as ReadRefused);
+        throw e;
+      }
+    },
+    readStop: () => invoke<MindReading | null>("mind_read_stop"),
     async turnOn(form) {
       try {
         await invoke("mind_turn_on", { form });
