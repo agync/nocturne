@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Backup on a phone of its own
-description: Proposal for the nightly backup of a phone that is its own home, to the person's own iCloud or Google Drive, locked with a phrase only they hold, with every screen and state of turning it on, This phone, turning it off, restoring onto an empty phone or bringing a backup into a phone that already holds a memory, forgetting and Delete everything, copy, behaviour and open questions.
+description: Proposal for the nightly backup of a phone that is its own home, to the person's own iCloud or Google Drive, locked with a phrase only they hold, with every screen and state of turning it on, This phone, turning it off, restoring onto an empty phone or bringing a backup into a phone that already holds a memory, forgetting and Delete everything, copy, behaviour and the owner's decisions.
 status: draft
 tags: [proposal, ux, phone, backup, privacy, copy]
 ---
@@ -24,7 +24,7 @@ its own action.
 | "Wi-Fi only" is a setting, off by default | [Step 3](#step-3-check-the-phrase), [This phone](#backup-in-this-phone) |
 | The phone's own account: the app's own iCloud space on iPhone; the person's Google Drive, only the files Nocturne makes, on Android, with Google's one-time permission | [Where it goes](#where-it-goes) |
 | A random phrase of six words, or the person's own, shown once and confirmed | [Step 2](#step-2-the-phrase), [Step 3](#step-3-check-the-phrase) |
-| An optional recovery key | [A recovery key](#a-recovery-key-offered-once) |
+| An optional recovery key, offered at turn on and made later in This phone | [A recovery key](#a-recovery-key-offered-once), [Make a recovery key](#make-a-recovery-key) |
 | Export is separate | [Backups to a file](phone-first.md#backups-to-a-file), unchanged |
 | Restore onto a new or reset phone | [Onto an empty phone](#onto-an-empty-phone) |
 | Restore onto a phone that already holds a memory brings the backup's things in, as a move into a computer that holds one does | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
@@ -53,6 +53,8 @@ cent, the screen grown to show all of it) work on every state.
 | This phone, stopped: no room; signed out | `copy-online.html?state=stopped` | `copy-online-stopped-light.png` |
 | Today, the backup has stopped | `copy-online.html?state=today` | `copy-online-today-light.png` |
 | Turn off backup? | `copy-online.html?state=off` | `copy-online-off-light.png` |
+| Make a recovery key? | `copy-online.html?state=makekey` | `copy-online-makekey-light.png` |
+| Your new recovery key | `copy-online.html?state=newkey` | `copy-online-newkey-light.png` |
 | Delete everything, with a backup | `copy-online.html?state=delete` | `copy-online-delete-light.png` |
 | Where is your backup? | `copy-online-restore.html?state=where` | `copy-online-restore-where-light.png` |
 | Found: type the phrase | `copy-online-restore.html?state=found` | `copy-online-restore-found-light.png`, `copy-online-restore-found-dark.png`, `copy-online-restore-found-200-light.png` |
@@ -233,7 +235,8 @@ again: it is not kept on the phone in a form that can be shown.
 
 ### A recovery key, offered once
 
-Straight after "Turn on", once, and never again unprompted:
+Straight after "Turn on", once, and never again unprompted. A person who says "Not now" can make one
+later with [Make a recovery key](#make-a-recovery-key):
 
 | Part | Copy |
 |---|---|
@@ -284,6 +287,7 @@ Under Your memory, the row "Backup" shows "Off" or the up to date line, and open
 | Row | "Wi-Fi only" (switch) |
 | Row | "Back up now" / while it runs: "Backing up · {done} of {size}" |
 | Row | "Change the phrase…" |
+| Row | "Make a recovery key…" / hint "None made yet", or "Made {day}" |
 | Row | "Turn off…" |
 | About heading | "About the backup", then the expander's labels and lines from "Where" to "A phone that already has a memory" |
 
@@ -331,6 +335,26 @@ No system notifications about the backup. On Today, as one card, at most once fo
 recovery key you saved still works." / "Change it" · "Cancel". Then steps 2 and 3, with "Save" for
 "Turn on". The key is locked again with the new phrase in the next backup; nothing else is sent
 again.
+
+### Make a recovery key
+
+"Make a recovery key…" is for a person who said "Not now" when it was offered, or who lost a key
+they made. It asks first, then shows the key once, as at turn on.
+
+| Part | Copy |
+|---|---|
+| Ask, title | "Make a recovery key?" |
+| Ask, body | "A recovery key opens your backup if you lose your phrase. It is shown once. If you made one before, it stops working." |
+| Ask, buttons | "Make it" · "Cancel" |
+| Title | "Your new recovery key" |
+| Body | "It opens your backup if you lose your phrase. Print it or save it, and keep it away from this phone. An earlier key no longer works." |
+| Key | Six groups of four letters and numbers, in large type |
+| Buttons | "Print or save…" (the phone's own print and share sheet) · "Cancel" |
+| Foot | "Nocturne shows this only once." |
+
+The new key locks the same backup key as the phrase does, in the next backup; nothing else is sent
+again. "Cancel" before "Print or save…" keeps the earlier key, if any. After it the button reads
+"Done". The row's hint reads "None made yet" until a key is made, then "Made {day}".
 
 ### Turn off
 
@@ -488,6 +512,11 @@ The words below follow that screen's.
 
 "Not now" leaves the phone exactly as it was.
 
+This is the one restore on a phone that has a memory, for a backup from the account and for a backup
+file alike. The first release's "Put aside" restore ends with the release that ships the nightly
+backup; what it already put aside stays as it is. Once the things are in, there is no undo: nothing
+that was on the phone is lost, and anything that came in can be forgotten like any other thing.
+
 | Stage | Copy |
 |---|---|
 | Preparing | "Bringing in your backup" / "Getting your things ready…" with a moving bar and "Stop" |
@@ -616,12 +645,14 @@ When the nightly backup ships, these first release screens change; nothing chang
 | This phone, "Restore a backup…" | Hint "A backup’s things join what’s on this phone. Nothing here is deleted." |
 | Delete everything | [As above](#forgetting-delete-everything-and-private) |
 
-## Open questions for the owner
+## Decisions
 
-| # | Question | Options | Recommendation |
-|---|---|---|---|
-| 1 | A backup file restored onto a phone that has a memory: the first release puts what is there aside (0013's replace) | A: switch it to the same bringing in, so a phone has one restore. B: keep replace for files | **A**, from the release that ships this backup; "Put aside" screens stay for what was put aside before |
-| 2 | A person who said "Not now" to the recovery key | A: "Make a recovery key…" in This phone, which replaces any earlier key, shown once. B: offered only at turn on | **A**: losing the phrase should not depend on one tap months earlier |
-| 3 | Delete everything while the phone is offline | A: delete the phone at once, the backup when next online, as designed. B: ask the person to go online first | **A**: Delete everything never waits; the line says what is left and how to remove it by hand |
-| 4 | A backup that stops for something only the person can fix | A: once on Today, no system notification, as designed. B: also a system notification | **A**, the calm presence principle |
-| 5 | Undoing a restore that brought things in | A: not offered, as with a computer bringing a phone's things in. B: put a copy of the phone aside first | **A**: nothing on the phone is lost, and anything that came in can be forgotten |
+Settled by the owner on 2026-11-24, each as recommended.
+
+| # | Decision | Where it lands |
+|---|---|---|
+| 1 | A backup file restored onto a phone that has a memory brings its things in, as a backup from the account does, from the release that ships the nightly backup. A phone has one restore. "Put aside" screens stay for what was put aside before | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
+| 2 | A person who said "Not now" to the recovery key can make one later with "Make a recovery key…" in This phone. It replaces any earlier key and is shown once | [Make a recovery key](#make-a-recovery-key) |
+| 3 | Delete everything while the phone is offline deletes the phone at once and the backup when next online. The line says what is left and how to remove it by hand | [Delete everything, with a backup](#forgetting-delete-everything-and-private) |
+| 4 | A backup that stops for something only the person can fix shows once on Today, with no system notification | [On Today](#on-today) |
+| 5 | A restore that brought things in has no undo. Nothing on the phone was lost, and anything that came in can be forgotten | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
