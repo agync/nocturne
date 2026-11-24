@@ -1,0 +1,170 @@
+/* Mockup only, for docs/design/site-refresh.md. Loaded after site/assets/css/site.css: the rules
+   the phone band, the store badges and the support page add. */
+
+/* Changed words carry a soft marker so a reviewer finds them. Not part of the design. */
+mark.chg {
+  background: color-mix(in srgb, var(--marker) 70%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* The phone band: intro and promises in one column, the phone beside them. */
+#phone .phone {
+  justify-self: center;
+}
+
+@media (min-width: 824px) {
+  #phone {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+
+  #phone .phone {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    justify-self: end;
+    width: 240px;
+  }
+}
+
+/* With the phone gone from Privacy, the promises sit beside the intro. */
+@media (min-width: 824px) {
+  #privacy .promises {
+    grid-row: 1;
+  }
+}
+
+/* Store badges. In the build these are the official badges, self-hosted. Here they are
+   stand-ins of the same size and shape. */
+.stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px 0 10px;
+  border-radius: 8px;
+  background: #000;
+  color: #fff;
+  border: 1px solid #a6a6a6;
+  text-decoration: none;
+  font-family: system-ui, sans-serif;
+  line-height: 1.05;
+}
+
+.badge svg {
+  flex: none;
+}
+
+.badge small {
+  display: block;
+  font-size: 0.625rem;
+  letter-spacing: 0.02em;
+}
+
+.badge b {
+  display: block;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.badge-note,
+.intro p.badge-note {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--ink3);
+}
+
+.stores-line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Support page */
+.support {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 56px 0 40px;
+  max-width: 720px;
+}
+
+.support h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.5rem, 5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.help-ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+.help-ways > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+}
+
+.help-ways h3 {
+  font-family: var(--serif);
+  font-size: 1.375rem;
+  line-height: 1.2;
+}
+
+.help-ways p,
+.qa dd {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+
+.help-ways a,
+.qa a,
+.contact a {
+  color: var(--accent);
+}
+
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.contact p {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+
+.contact .address {
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  color: var(--ink);
+}
+
+.placeholder {
+  outline: 1px dashed var(--ember);
+  outline-offset: 2px;
+}
+
+.contact h2 {
+  font-family: var(--serif);
+  font-size: clamp(2.25rem, 4.4vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}

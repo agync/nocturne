@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!-- Mockup for docs/design/site-refresh.md: the new support page, /support. Serve the repository root over HTTP.
+     The dashed outline marks the support address, a placeholder until the owner chooses it. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support · Nocturne</title>
+<meta name="description" content="Help with Nocturne on a computer or a phone: answers from its own guide, what to try first, and how to reach the people who make it.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://nocturne.is/install">
+<link rel="alternate" hreflang="de" href="https://nocturne.is/de/support">
+<link rel="alternate" hreflang="en" href="https://nocturne.is/install">
+<link rel="alternate" hreflang="es" href="https://nocturne.is/es/install">
+<link rel="alternate" hreflang="fr" href="https://nocturne.is/fr/install">
+<link rel="alternate" hreflang="it" href="https://nocturne.is/it/install">
+<link rel="alternate" hreflang="nl" href="https://nocturne.is/nl/install">
+<link rel="alternate" hreflang="x-default" href="https://nocturne.is/install">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="nl_NL">
+<meta property="og:title" content="Get Nocturne · Download for Mac, Windows and Linux">
+<meta property="og:description" content="Free and open source, with no account. The first time it opens, Nocturne sets itself up for the computer it is on.">
+<meta property="og:url" content="https://nocturne.is/install">
+<meta property="og:image" content="https://nocturne.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://nocturne.is/assets/img/og.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../../site/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="../../../../site/favicon.svg">
+<link rel="apple-touch-icon" href="../../../../site/apple-touch-icon.png">
+<link rel="preload" href="../../../../site/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../../../../site/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../../../../site/assets/css/site.css">
+<link rel="stylesheet" href="site-refresh.css">
+<script src="../../../../site/assets/js/theme.js"></script>
+<script src="../../../../site/assets/js/lang.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Nocturne, home">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a class="nav-section" href="/#how">How it works</a>
+    <a class="nav-section" href="/#privacy">Privacy</a>
+    <a class="nav-section" href="#needs">Requirements</a>
+    <a href="/install">Download</a>
+    <a href="/docs/">Docs</a>
+  </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="System"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">System</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">Light</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">Dark</span></button>
+    </div>
+    <details class="lang">
+      <summary>
+        <svg class="lang-globe" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M1.75 8h12.5M8 1.75c-1.9 1.8-2.75 3.9-2.75 6.25S6.1 12.45 8 14.25M8 1.75c1.9 1.8 2.75 3.9 2.75 6.25S9.9 12.45 8 14.25" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>
+        <span class="visually-hidden">Language: </span><span class="lang-name">English</span><span class="lang-code" aria-hidden="true">EN</span>
+      </summary>
+      <ul>
+        <li><a href="/de/support" lang="de" hreflang="de">Deutsch</a></li>
+        <li><a href="/support" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+        <li><a href="/es/support" lang="es" hreflang="es">Español</a></li>
+        <li><a href="/fr/support" lang="fr" hreflang="fr">Français</a></li>
+        <li><a href="/it/support" lang="it" hreflang="it">Italiano</a></li>
+        <li><a href="/nl/support" lang="nl" hreflang="nl">Nederlands</a></li>
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="support" aria-labelledby="support-title">
+  <h1 id="support-title">Help with Nocturne.</h1>
+  <p class="lede">Nocturne keeps everything on your own computer or phone, so no help desk can see your memory. Help starts with Nocturne itself and its guide, and the people who make it are a message away.</p>
+</section>
+
+<section class="band" aria-labelledby="first-title">
+  <div class="intro">
+    <h2 id="first-title">Start here.</h2>
+  </div>
+  <div class="help-ways">
+    <div>
+      <h3>Ask Nocturne</h3>
+      <p>On a computer, type your question in the ask box, like <q>how do I add a phone</q>. Nocturne answers from the guide that comes with it and shows the part it used.</p>
+    </div>
+    <div>
+      <h3>On your phone</h3>
+      <p>Open <b>This phone</b>, then <b>Help</b>: what this phone can do, its permissions with a way to change them, and the privacy policy.</p>
+    </div>
+    <div>
+      <h3>Read the guide</h3>
+      <p><a href="/docs/guide/install.html">Installing</a>, <a href="/docs/guide/desktops.html">your computer’s desktop</a>, <a href="/docs/guide/away-from-home.html">Away from home</a>, <a href="/docs/guide/online-answers.html">Online answers</a> and <a href="/docs/guide/your-data.html">your data</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="qa-title">
+  <div class="intro">
+    <h2 id="qa-title">Common questions.</h2>
+  </div>
+  <dl class="promises needs qa">
+    <div><dt>My page didn’t come</dt><dd>Nocturne writes it in the hours before your page time, while the computer is on, plugged in and not in use. If it was off or asleep, Nocturne catches up when it wakes. <a href="/docs/guide/desktops.html">The guide</a> explains each desktop.</dd></div>
+    <div><dt>I lost my phone</dt><dd>If it was paired with your computer, your memory is on the computer: open <b>Away from home</b> there, choose <b>See phones</b>, then <b>Remove</b> beside it. If the phone kept your memory on its own, install Nocturne on the new phone and choose <b>I have a backup</b>.</dd></div>
+    <div><dt>I forgot my passphrase</dt><dd>No one can open a locked backup without its passphrase or recovery key, not even the people who make Nocturne. Make a new backup with a passphrase you can keep.</dd></div>
+    <div><dt>How do I delete everything?</dt><dd>Choose <b>Delete everything…</b> in <b>Privacy</b> on a computer, or in <b>This phone</b> on a phone that keeps your memory itself. Nocturne’s makers hold nothing of yours, so there is nothing else to ask for. A service you chose for answers keeps what it received under its own rules.</dd></div>
+    <div><dt>What does Nocturne collect?</dt><dd>Nothing. No account, no analytics, no crash reports. The <a href="/privacy">privacy policy</a> says exactly what can leave your computer or phone, and only when you turn it on.</dd></div>
+  </dl>
+</section>
+
+<section class="band" aria-labelledby="contact-title">
+  <div class="contact">
+    <h2 id="contact-title" class="intro-h">Write to us.</h2>
+    <p>Something not working, or a word that reads wrong? Email <span class="address placeholder">support@&lt;domain&gt;</span>. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key.</p>
+    <p>Or open an issue on <a href="https://github.com/agync/nocturne/issues">GitHub</a>. Issues are public, so leave out anything personal.</p>
+    <p>To report a security problem, use <a href="https://github.com/agync/nocturne/security">GitHub’s private reporting</a>, not a public issue.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    Nocturne · engine by Lemonade · Apache 2.0
+  </p>
+  <nav aria-label="Footer">
+    <a href="/docs/">Docs</a>
+    <a href="/docs/guide/your-data.html">Your data</a>
+    <a href="/docs/guide/install.html">Install guide</a>
+    <a href="/privacy"><mark class="chg">Privacy policy</mark></a>
+    <a href="/support"><mark class="chg">Support</mark></a>
+    <a href="../../../../site/assets/fonts/OFL.txt">Font licence</a>
+  </nav>
+  <ul class="foot-langs" aria-label="Language">
+    <li><a href="/de/install" lang="de" hreflang="de">Deutsch</a></li>
+    <li><a href="/install" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+    <li><a href="/es/install" lang="es" hreflang="es">Español</a></li>
+    <li><a href="/fr/install" lang="fr" hreflang="fr">Français</a></li>
+    <li><a href="/it/install" lang="it" hreflang="it">Italiano</a></li>
+    <li><a href="/nl/install" lang="nl" hreflang="nl">Nederlands</a></li>
+  </ul>
+</footer>
+
+</div>
+</body>
+</html>
