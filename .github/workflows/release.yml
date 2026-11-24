@@ -1,4 +1,4 @@
-# Builds the desktop packages for a release and publishes it.
+# Builds the desktop packages and the phone apps for a release and publishes it.
 #
 # release-please.yml opens the release pull request and, when it is merged, tags the release and
 # creates its page as a draft. The tag push (vX.Y.Z) starts this workflow: it builds the packages
@@ -22,6 +22,21 @@
 # when the MACOS_SIGNING or WINDOWS_SIGNING repository variable is `true`. Without them the
 # release carries the unsigned files (macOS signed ad hoc), as the local builds are. The Flatpak
 # key is in that environment too. See docs/contribution/release.md for every secret and variable.
+#
+# The phone apps follow the same split as far as the platform allows.
+#   Android: `android` builds the release APK and bundle for arm64, armv7 and x86_64, unsigned and
+#   without a secret. `sign-android` (ANDROID_SIGNING) only signs the downloaded files with the
+#   upload key and they go on the release. An unsigned APK cannot be installed, so without signing
+#   nothing of Android goes on the release; the unsigned build stays as a workflow artifact.
+#   iPhone: this is the one deviation. An iPhone build cannot be signed afterwards: Xcode makes the
+#   certificate and the provisioning profile while it archives, with an App Store Connect API key,
+#   and the profile carries the HealthKit entitlement. So `ios-testflight` (IOS_SIGNING) checks out
+#   the tagged commit, builds, signs and uploads to TestFlight in one job of the release-signing
+#   environment. The key reaches only the steps that need it, as step environment, never the job's
+#   or a file in the workspace, and the job checks out no write token. The build is not attached to
+#   the release: TestFlight is where the build goes, and without IOS_SIGNING nothing of iPhone is
+#   built here at all (ci.yml builds it for the Simulator).
+# Version codes are derived from the release version, with no counter: see docs/contribution/release.md.
 name: release
 
 on:
@@ -486,6 +501,208 @@ jobs:
           if-no-files-found: error
           path: out
 
+  # The phone app for Android, unsigned: the APK and the bundle for arm64, armv7 and x86_64
+  # (`make phone/android-release`, which refuses a dev-loopback build). It sees no secret.
+  android:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Rust
+        run: |
+          set -euo pipefail
+          rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: build the release APK and bundle
+        run: make ui/install phone/android-release
+      # The version code is the release version's, by the formula Tauri documents:
+      # major * 1000000 + minor * 1000 + patch. A tag that is not the app's version fails here.
+      - name: the files for signing
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./ui/package.json').version")
+          if [ -n "$TAG" ] && [ "$TAG" != "v$version" ]; then
+            echo "the tag $TAG is not the app version $version" >&2
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$version"
+          expected=$((major * 1000000 + minor * 1000 + patch))
+          code=$(sed -n 's/^tauri\.android\.versionCode=//p' phone/src-tauri/gen/android/app/tauri.properties)
+          [ "$code" = "$expected" ] || { echo "version code $code, expected $expected" >&2; exit 1; }
+          echo "version $version, version code $code"
+          one() {
+            local found=()
+            mapfile -t found < <(find phone/src-tauri/gen/android/app/build/outputs -name "$1")
+            [ "${#found[@]}" -eq 1 ] || { echo "expected one $1, found ${#found[@]}" >&2; exit 1; }
+            cp -- "${found[0]}" "$2"
+          }
+          mkdir -p target/android
+          one '*-release-unsigned.apk' "target/android/Nocturne_${version}_android-unsigned.apk"
+          one '*-release.aab' "target/android/Nocturne_${version}_android-unsigned.aab"
+          (cd target/android && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phone-android-unsigned
+          if-no-files-found: error
+          path: target/android
+
+  # Only the downloaded files, the runner's Android build tools and the JDK run here: no checkout,
+  # no build. The upload key is RSA; the APK gets an APK signature (apksigner) and the bundle a
+  # jar signature (jarsigner), which is what Google Play takes.
+  sign-android:
+    needs: [plan, android]
+    if: >-
+      ${{ !cancelled() && needs.android.result == 'success' && needs.plan.outputs.tag != ''
+      && vars.ANDROID_SIGNING == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release-signing
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: phone-android-unsigned
+          path: in
+      - name: sign with the upload key
+        env:
+          UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          (cd in && sha256sum -c SHA256SUMS)
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          [ -x "$apksigner" ] || { echo "no apksigner in the runner's build tools" >&2; exit 1; }
+          keystore="$RUNNER_TEMP/upload.jks"
+          printf '%s' "$UPLOAD_KEYSTORE" | base64 --decode > "$keystore"
+          mkdir out
+          for f in in/*-unsigned.apk in/*-unsigned.aab; do
+            name=$(basename "$f" | sed 's/-unsigned//')
+            case "$name" in
+              "Nocturne_${TAG#v}_android."*) ;;
+              *) echo "$name is not the release $TAG" >&2; exit 1 ;;
+            esac
+            case "$f" in
+              *.apk)
+                "$apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+                  --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --v4-signing-enabled false \
+                  --out "out/$name" "$f"
+                "$apksigner" verify --verbose --print-certs "out/$name"
+                ;;
+              *.aab)
+                cp -- "$f" "out/$name"
+                jarsigner -keystore "$keystore" -storepass:env KEYSTORE_PASSWORD \
+                  -keypass:env KEY_PASSWORD "out/$name" "$KEY_ALIAS"
+                verdict=$(jarsigner -verify "out/$name")
+                grep -q 'jar verified' <<< "$verdict" || { echo "$verdict" >&2; exit 1; }
+                ;;
+            esac
+          done
+          rm -f "$keystore"
+          (cd out && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phone-android-signed
+          if-no-files-found: error
+          path: out
+
+  # The iPhone app, built, signed and uploaded to TestFlight in one job: see the header for why
+  # this one cannot be split. Xcode's automatic signing makes the distribution certificate and the
+  # profile through the App Store Connect API key (`-allowProvisioningUpdates` with the key, which
+  # the Tauri CLI passes on when APPLE_API_* are set). The key file is written for the steps that
+  # use it and removed at the end. The build number is the release version (CFBundleVersion in
+  # Info.plist, which release-please moves), so a rerun of a tag already uploaded is refused by
+  # App Store Connect as a duplicate rather than adding a second build.
+  ios-testflight:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.tag != '' && vars.IOS_SIGNING == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release-signing
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Rust
+        run: |
+          set -euo pipefail
+          rustup toolchain install
+          rustup target add aarch64-apple-ios
+      - name: the tag is the app version
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./ui/package.json').version")
+          [ "$TAG" = "v$version" ] || { echo "the tag $TAG is not the app version $version" >&2; exit 1; }
+      # altool looks for the key in this folder, by the key's id; the Tauri CLI reads the same file.
+      - name: App Store Connect key
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$API_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
+      - name: build and sign the app
+        env:
+          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          set -euo pipefail
+          export APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8"
+          make ui/install phone/ios-release
+      - name: check the build number
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ipa=$(find phone/src-tauri/gen/apple/build -name '*.ipa')
+          [ "$(wc -l <<< "$ipa")" -eq 1 ] && [ -n "$ipa" ] || { echo "expected one ipa, found: $ipa" >&2; exit 1; }
+          echo "ipa=$ipa" >> "$GITHUB_ENV"
+          unzip -p "$ipa" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            value=$(/usr/libexec/PlistBuddy -c "Print :$key" "$RUNNER_TEMP/Info.plist")
+            echo "$key $value"
+            [ "$value" = "${TAG#v}" ] || { echo "$key is not ${TAG#v}" >&2; exit 1; }
+          done
+          rm "$RUNNER_TEMP/Info.plist"
+      - name: upload to TestFlight
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+      - name: remove the key
+        if: always()
+        run: rm -rf "$HOME/.appstoreconnect"
+
   # The Most private helper ships beside the app, never inside a package. It signs, so it runs
   # only for a release tag.
   tailnet:
@@ -519,12 +736,25 @@ jobs:
   # A signing job that was asked for must have succeeded; one that was not runs as skipped, and the
   # unsigned files go up instead.
   publish:
-    needs: [plan, linux, macos, sign-macos, check-macos, windows, sign-windows]
+    needs:
+      - plan
+      - linux
+      - macos
+      - sign-macos
+      - check-macos
+      - windows
+      - sign-windows
+      - android
+      - sign-android
+      - ios-testflight
     if: >-
       ${{ !cancelled() && needs.plan.outputs.tag != ''
       && needs.linux.result == 'success' && needs.macos.result == 'success' && needs.windows.result == 'success'
+      && needs.android.result == 'success'
       && (vars.MACOS_SIGNING != 'true' || needs.check-macos.result == 'success')
-      && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success') }}
+      && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success')
+      && (vars.ANDROID_SIGNING != 'true' || needs.sign-android.result == 'success')
+      && (vars.IOS_SIGNING != 'true' || needs.ios-testflight.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: release-app
@@ -535,6 +765,12 @@ jobs:
         with:
           pattern: desktop-*
           path: desktop
+      # The signed Android files, only when signing is on: the unsigned ones are never attached.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ vars.ANDROID_SIGNING == 'true' }}
+        with:
+          name: phone-android-signed
+          path: phone/android
       - name: one SHA256SUMS for every package
         run: |
           set -euo pipefail
@@ -558,6 +794,11 @@ jobs:
             [ "${#found[@]}" -eq 1 ] || { echo "$name: expected one $pattern, found ${#found[@]}" >&2; exit 1; }
             cp -- "${found[0]}" "out/$name"
           }
+          # The signed phone files keep their versioned names; there is no fixed name for them yet.
+          if [ -d phone/android ]; then
+            (cd phone/android && sha256sum -c SHA256SUMS)
+            find phone/android -type f ! -name SHA256SUMS -exec cp {} out/ \;
+          fi
           one Nocturne-macos-arm64.dmg '*.dmg'
           one Nocturne-windows-x64-setup.exe '*-setup.exe'
           one Nocturne-windows-x64.msi '*.msi'
