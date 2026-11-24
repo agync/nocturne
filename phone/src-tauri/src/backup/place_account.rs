@@ -238,24 +238,22 @@ impl From<Connected> for Connection {
 /// picker and its one-time permission (with `choose`, the picker always); on an iPhone, whether
 /// its iCloud can be reached. `unavailable` on a computer. Once connected, a backup stopped for
 /// being signed out or for permission carries on, and one moved to another account starts
-/// afresh there ([`PhoneBackup::reconnected`]).
+/// afresh there ([`PhoneBackup::connect`]).
 #[tauri::command]
 pub async fn backup_connect<R: Runtime>(
     app: AppHandle<R>,
     choose: Option<bool>,
 ) -> Result<Connection, BackupProblem> {
     let choose = choose.unwrap_or(false);
-    tauri::async_runtime::spawn_blocking(move || match app.system().place_connect(choose) {
-        Ok(Some(c)) => {
-            if let Connected::Connected { previous, .. } = &c {
-                tauri::Manager::state::<PhoneBackup>(&app).reconnected(previous.is_some());
+    tauri::async_runtime::spawn_blocking(move || {
+        let backup = tauri::Manager::state::<PhoneBackup>(&app);
+        match backup.connect(|| app.system().place_connect(choose)) {
+            Ok(Some(c)) => Ok(c.into()),
+            Ok(None) => Err(BackupProblem::Unavailable),
+            Err(e) => {
+                tracing::warn!("the account could not be asked for: {e:?}");
+                Ok(Connection::Failed)
             }
-            Ok(c.into())
-        }
-        Ok(None) => Err(BackupProblem::Unavailable),
-        Err(e) => {
-            tracing::warn!("the account could not be asked for: {e:?}");
-            Ok(Connection::Failed)
         }
     })
     .await

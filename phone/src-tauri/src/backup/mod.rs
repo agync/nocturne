@@ -28,7 +28,7 @@ use nocturne_engine::nightly::{
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_nocturne_system::SystemExt;
+use tauri_plugin_nocturne_system::{Connected, SystemExt};
 
 use crate::home::Home;
 use crate::sync::ledger::write_private;
@@ -144,6 +144,28 @@ pub enum Trouble {
     Failed,
 }
 
+/// The whole backup in one account, which the person asked to delete: it goes once that account
+/// answers, and never from another.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Owed {
+    /// The account, as `Saved::account` counted it when the person asked.
+    account: u64,
+    /// Its address, when the phone knows it, so choosing that account again finds it.
+    name: Option<String>,
+}
+
+impl Owed {
+    fn is_for(&self, account: u64, name: &Option<String>) -> bool {
+        self.account == account || (self.name.is_some() && self.name == *name)
+    }
+}
+
+/// An account's address as it is compared: Google treats it without regard to case.
+fn address(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Saved {
@@ -152,8 +174,10 @@ struct Saved {
     state: Option<NightState>,
     last: Option<LastNight>,
     trouble: Option<Trouble>,
-    /// The person asked for the backup in the account to go; it goes once the account answers.
-    delete_pending: bool,
+    /// Deletions the person asked for, each tied to the account it is owed to. A change of
+    /// account never drops one or moves it to the new account.
+    #[serde(default)]
+    delete_owed: Vec<Owed>,
     /// The memory moved to a computer: no more nights, and the key stays only so the backup
     /// can be deleted later (`docs/design/phone-backup.md`, "When the memory moves to a
     /// computer").
@@ -173,6 +197,9 @@ struct Saved {
     /// Counts the accounts chosen, so a night that ran across a change notes nothing.
     #[serde(default)]
     account: u64,
+    /// The address of the account the phone reaches now, when the phone says it.
+    #[serde(default)]
+    account_name: Option<String>,
     /// When a look last found the phone charging.
     #[serde(default)]
     charged_at: Option<String>,
@@ -205,6 +232,15 @@ pub enum BackupState {
     NeedsPhrase,
     Damaged,
     Failed,
+}
+
+impl Saved {
+    /// Whether a deletion is owed to the account the phone reaches now.
+    fn owed_here(&self) -> bool {
+        self.delete_owed
+            .iter()
+            .any(|o| o.is_for(self.account, &self.account_name))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -376,10 +412,12 @@ pub struct PhoneBackup {
     failed_at: Mutex<Option<(jiff::Timestamp, i64)>>,
     /// Held while the saved file is read and written.
     saving: Mutex<()>,
-    /// Held whenever `Saved::fresh`, `Saved::locks` or `Saved::carried` is decided on or changed:
-    /// a fresh start on another account, its carry and the note that ends it, and every lock
-    /// change. So a lock change lands either before the carry is noted, and the next night
-    /// carries it, or after, and goes to the account itself.
+    /// Held whenever `Saved::fresh`, `Saved::locks`, `Saved::carried`, the account or a deletion
+    /// owed to one is decided on or changed: a fresh start on another account, its carry and the
+    /// note that ends it, every lock change, a change of account with the phone's own call that
+    /// makes it, and a deletion while it runs. So a lock change lands either before the carry is
+    /// noted, and the next night carries it, or after, and goes to the account itself; and a
+    /// deletion runs wholly in the account it is owed to, never across a change.
     locking: Mutex<()>,
     /// The passphrase work the locked key asks for; `None` is what Nocturne writes.
     work_factor: Option<u8>,
@@ -552,13 +590,38 @@ impl PhoneBackup {
         out
     }
 
-    /// The person chose the account again after Google's screen, or picked another. Signed out
-    /// or no permission is over; on another account the backup starts there afresh, with the
-    /// same phrase and recovery key, and its first night goes in full. The earlier account
-    /// can't be reached any more, so a deletion owed to it is dropped.
-    pub fn reconnected(&self, changed: bool) {
-        *lock(&self.failed_at) = None;
+    /// Asks for the account through `ask`, the phone's own call, and notes what came of it
+    /// ([`PhoneBackup::reconnected`]), with `locking` held throughout: a deletion owed to one
+    /// account never runs while the phone moves to another.
+    pub fn connect<E>(
+        &self,
+        ask: impl FnOnce() -> Result<Option<Connected>, E>,
+    ) -> Result<Option<Connected>, E> {
         let _held = lock(&self.locking);
+        let answer = ask();
+        if let Ok(Some(Connected::Connected {
+            account, previous, ..
+        })) = &answer
+        {
+            self.reconnected_held(account.as_deref(), previous.as_deref());
+        }
+        answer
+    }
+
+    /// The person chose the account again after Google's screen, or picked another:
+    /// `account` is the one reached now and `previous` the one before when it changed. Signed
+    /// out or no permission is over; on another account the backup starts there afresh, with
+    /// the same phrase and recovery key, and its first night goes in full. A deletion owed to
+    /// the earlier account stays owed to it: it runs when the phone reaches that account again,
+    /// and never in this one.
+    pub fn reconnected(&self, account: Option<&str>, previous: Option<&str>) {
+        let _held = lock(&self.locking);
+        self.reconnected_held(account, previous);
+    }
+
+    fn reconnected_held(&self, account: Option<&str>, previous: Option<&str>) {
+        *lock(&self.failed_at) = None;
+        let changed = previous.is_some();
         self.update(|s| {
             if matches!(
                 s.trouble,
@@ -566,10 +629,23 @@ impl PhoneBackup {
             ) {
                 s.trouble = None;
             }
+            // A deletion owed before the phone knew the account's address learns it now, so
+            // choosing that account again finds it.
+            let named = if changed { previous } else { account };
+            let (here, known) = (s.account, s.account_name.clone());
+            for owed in s.delete_owed.iter_mut() {
+                if owed.account == here && owed.name.is_none() {
+                    owed.name = known.clone().or(named.map(address));
+                }
+            }
+            if let Some(account) = account {
+                s.account_name = Some(address(account));
+            } else if changed {
+                s.account_name = None;
+            }
             if !changed {
                 return;
             }
-            s.delete_pending = false;
             s.account += 1;
             s.carried.clear();
             if s.state.is_some() && !s.moved {
@@ -580,17 +656,18 @@ impl PhoneBackup {
         });
     }
 
-    /// Whether backup is on, so the phone asks for time in the background.
+    /// Whether backup is on, or a deletion is owed to the account reached now, so the phone asks
+    /// for time in the background.
     pub fn is_on(&self) -> bool {
         let saved = self.saved();
-        saved.on || saved.delete_pending
+        saved.on || saved.owed_here()
     }
 
     /// Whether the nights wait for Wi-Fi, so the phone opens their background windows only there.
     /// A deletion still owed to the account goes on any network.
     pub fn wifi_only(&self) -> bool {
         let saved = self.saved();
-        saved.on && saved.wifi_only && !saved.delete_pending
+        saved.on && saved.wifi_only && !saved.owed_here()
     }
 
     fn waits_for_wifi(&self, saved: &Saved) -> bool {
@@ -645,7 +722,7 @@ impl PhoneBackup {
             last: saved.last,
             state,
             moved: saved.moved,
-            delete_pending: saved.delete_pending,
+            delete_pending: !saved.delete_owed.is_empty(),
             forget_waiting: false,
         }
     }
@@ -696,6 +773,8 @@ impl PhoneBackup {
     /// ([`PhoneBackup::back_up_now`]).
     pub fn turn_on(&self, phrase: &str) -> Result<(), BackupProblem> {
         let place = self.place()?;
+        // A deletion still owed to this account goes first, so it never takes the new backup.
+        self.delete_pending()?;
         let key = nightly::turn_on(place.as_ref(), phrase, self.work_factor)?;
         if let Err(problem) = self.keep_key(&key) {
             let _ = place.delete(nightly::KEY_PHRASE);
@@ -707,7 +786,6 @@ impl PhoneBackup {
             s.state = Some(NightState::new());
             s.last = None;
             s.trouble = None;
-            s.delete_pending = false;
             s.moved = false;
             s.fresh = false;
             s.locks = None;
@@ -836,10 +914,19 @@ impl PhoneBackup {
             s.on = false;
             s.trouble = None;
             if also_delete {
+                let here = s.owed_here();
+                let mut owed = std::mem::take(&mut s.delete_owed);
+                if !here {
+                    owed.push(Owed {
+                        account: s.account,
+                        name: s.account_name.clone(),
+                    });
+                }
                 *s = Saved {
                     wifi_only: s.wifi_only,
-                    delete_pending: true,
+                    delete_owed: owed,
                     account: s.account,
+                    account_name: s.account_name.clone(),
                     ..Saved::default()
                 };
             }
@@ -909,13 +996,19 @@ impl PhoneBackup {
             && self.keys.key().is_some()
     }
 
+    /// Runs a deletion owed to the account reached now, with `locking` held so the account can't
+    /// change under it. One owed to another account waits for that account.
     fn delete_pending(&self) -> Result<(), BackupProblem> {
-        if !self.saved().delete_pending {
+        let _held = lock(&self.locking);
+        if !self.saved().owed_here() {
             return Ok(());
         }
         let place = self.place()?;
         nightly::delete_all(place.as_ref())?;
-        self.update(|s| s.delete_pending = false);
+        self.update(|s| {
+            let (account, name) = (s.account, s.account_name.clone());
+            s.delete_owed.retain(|o| !o.is_for(account, &name));
+        });
         Ok(())
     }
 
@@ -1160,7 +1253,10 @@ impl PhoneBackup {
                 s.state = Some(unpacked.state);
                 s.last = None;
                 s.trouble = None;
-                s.delete_pending = false;
+                // Restored from this account by the person's choice: a deletion owed to it is
+                // over. One owed to another account still waits for it.
+                let (account, name) = (s.account, s.account_name.clone());
+                s.delete_owed.retain(|o| !o.is_for(account, &name));
                 s.moved = false;
                 s.fresh = false;
                 s.locks = None;
@@ -1209,7 +1305,7 @@ impl PhoneBackup {
             self.note_charging();
         }
         let saved = self.saved();
-        if saved.delete_pending && self.place().is_ok() {
+        if saved.owed_here() && self.place().is_ok() {
             if let Err(e) = self.delete_pending() {
                 tracing::warn!("the backup in the account could not be deleted yet: {e:?}");
             }
