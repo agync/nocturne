@@ -251,7 +251,7 @@ export function MindGroup({
       <Row
         icon="moon"
         label={t("phone.mind.row.mind")}
-        hint={[t("phone.mind.row.mindValue", { host }), said].filter(Boolean).join(" · ")}
+        hint={[t("phone.mind.row.mindValue", { host }), said].filter(Boolean).join("\u00a0· ")}
       />
       {block ? (
         <ReadBlockView block={block} onAction={act} busy={acting} stopRef={stopRef} goRef={goRef} />
