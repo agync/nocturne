@@ -960,7 +960,7 @@ pub(crate) fn redact_line(line: &mut nocturne_contract::PageLine) {
 
 /// `item` also redacts every line whose receipts name that item (the lines of memories that
 /// outlive an undone keep still must not name it).
-fn redact_pages(
+pub(crate) fn redact_pages(
     tx: &Transaction<'_>,
     ids: &[String],
     pages: &[String],

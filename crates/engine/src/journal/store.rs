@@ -282,6 +282,16 @@ pub(crate) fn scrub_items(tx: &Transaction<'_>, items: &[String]) -> Result<u32>
         return Ok(0);
     }
     crate::nightly::note_forgot(tx)?;
+    scrub_cites(tx, items)
+}
+
+/// Take every line that cites `items` out of every stored reflection and recap, and the sentence
+/// a journal question quoted from them, as [`scrub_items`] does, for items that are not here:
+/// what a backup brought in that cites something forgotten for good.
+pub(crate) fn scrub_cites(tx: &Transaction<'_>, items: &[String]) -> Result<u32> {
+    if items.is_empty() {
+        return Ok(0);
+    }
     let gone: BTreeSet<&str> = items.iter().map(String::as_str).collect();
     let mut total = 0;
     for (id, kind, body, removed) in citing(tx, items)? {
