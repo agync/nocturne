@@ -77,7 +77,8 @@ export function Dialog({
         root?.removeAttribute("inert");
         document.body.style.overflow = savedOverflow;
       }
-      opener?.focus?.();
+      const now = document.activeElement;
+      if (!now || now === document.body || mine.contains(now)) opener?.focus?.();
     };
   }, [initialFocus]);
 
