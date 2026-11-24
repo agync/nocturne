@@ -39,6 +39,7 @@ const TABLES: &[&str] = &[
     "reflections",
     "reflection_cites",
     "name_questions",
+    "forgotten_for_good",
 ];
 
 #[test]

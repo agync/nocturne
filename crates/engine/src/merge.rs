@@ -54,10 +54,11 @@ enum Bring {
 }
 
 /// How the things arrive, and what a backup holds beside them: the records of its calendar
-/// entries and health readings. A move brings none.
+/// entries and health readings, and its notes of what it forgot for good. A move brings neither.
 struct Notes {
     bring: Bring,
     records: Vec<entries::Record>,
+    forgot: Vec<String>,
 }
 
 impl Notes {
@@ -65,6 +66,7 @@ impl Notes {
         Notes {
             bring,
             records: Vec::new(),
+            forgot: Vec::new(),
         }
     }
 }
@@ -194,6 +196,17 @@ fn forgetting(phone: &Connection) -> Result<HashSet<String>> {
         gone.insert(item);
     }
     Ok(gone)
+}
+
+/// The phone's notes of what it forgot for good.
+fn forgotten_for_good(phone: &Connection) -> Result<Vec<String>> {
+    // Content the phone holds again is not forgotten, whatever an older note says.
+    let mut stmt = phone.prepare(
+        "SELECT key FROM forgotten_for_good \
+         WHERE key NOT IN (SELECT 'sha:' || sha256 FROM items)",
+    )?;
+    let keys = stmt.query_map([], |r| r.get(0))?;
+    Ok(keys.collect::<rusqlite::Result<_>>()?)
 }
 
 /// What the person forgot on the phone, as the claims kept for each item that said them, so the
@@ -772,6 +785,7 @@ impl Engine {
             Bring::Backup => {
                 let notes = Notes {
                     records: entries::records(&phone)?,
+                    forgot: forgotten_for_good(&phone)?,
                     ..Notes::of(bring)
                 };
                 (Some(phone), notes)
@@ -856,18 +870,33 @@ impl Engine {
         let originals = self.originals_dir();
         let mut brought = BroughtIn::default();
         let mut files = Vec::new();
-        // An entry version the plan leaves out comes only when it is here already.
+        // What either side forgot for good stays forgotten: the notes of the phone that made the
+        // backup are kept here too, and nothing they or this phone's own notes name comes.
+        for key in &notes.forgot {
+            tx.execute(
+                "INSERT OR IGNORE INTO forgotten_for_good(key) SELECT ?1 \
+                 WHERE NOT EXISTS(SELECT 1 FROM items WHERE sha256 = substr(?1, 5))",
+                [key],
+            )?;
+        }
         let bring = notes.bring;
         let plan = entries::plan(tx, device, &notes.records, arriving)?;
         let mut kept: Vec<&Arriving> = Vec::with_capacity(arriving.len());
         for p in arriving {
-            let comes = !entries::is_entry(&p.kind)
-                || plan.keep.contains(&p.id)
-                || tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM items WHERE sha256 = ?1)",
-                    [&p.sha],
+            let held: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM items WHERE sha256 = ?1)",
+                [&p.sha],
+                |r| r.get(0),
+            )?;
+            let gone = bring == Bring::Backup
+                && tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM forgotten_for_good WHERE key IN (?1, ?2))",
+                    [format!("item:{}", p.id), format!("sha:{}", p.sha)],
                     |r| r.get(0),
                 )?;
+            // An entry version the plan leaves out comes only when it is here already.
+            let comes =
+                held || (!gone && (!entries::is_entry(&p.kind) || plan.keep.contains(&p.id)));
             if comes {
                 kept.push(p);
             }

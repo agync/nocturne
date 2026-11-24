@@ -408,3 +408,16 @@ CREATE TABLE carried_phone(
   forgotten INTEGER NOT NULL DEFAULT 0, private INTEGER NOT NULL DEFAULT 0,
   done INTEGER NOT NULL DEFAULT 0, keep_forever INTEGER NOT NULL DEFAULT 0,
   tags TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(device_id, source, phone_id, claim));
+
+-- migration 19
+-- What was forgotten for good, without the thing itself: each removed item's id and the hash of
+-- its content, so bringing in a backup made before brings none of it back
+-- (docs/design/phone-backup.md, "Onto a phone that has a memory"). Delete everything empties it.
+CREATE TABLE forgotten_for_good(key TEXT PRIMARY KEY);
+CREATE TRIGGER items_forgotten_for_good AFTER DELETE ON items BEGIN
+  INSERT OR IGNORE INTO forgotten_for_good(key) VALUES ('item:' || old.id), ('sha:' || old.sha256);
+END;
+-- The same content kept again is the person's again.
+CREATE TRIGGER items_kept_again AFTER INSERT ON items BEGIN
+  DELETE FROM forgotten_for_good WHERE key = 'sha:' || new.sha256;
+END;
