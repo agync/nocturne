@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: Releasing
-description: How release-please cuts a release, what the release workflow builds for each platform, the secrets it needs, and the checklist a human runs before merging the release pull request.
+description: How release-please cuts a release, what the release workflow builds for each platform including the phone apps, the secrets and variables it needs, and the checklist a human runs before merging the release pull request.
 status: draft
 tags: [contribution, release, checklist, ci]
 ---
@@ -85,6 +85,8 @@ because release-please rewrites the body on every push. `CHANGELOG.md` keeps the
 | Linux aarch64 | Ubuntu 24.04 on Arm (`ubuntu-24.04-arm`) | `scripts/package.sh`, built natively | AppImage, deb, rpm, `SOURCES.txt` | `scripts/check-package.sh` on each |
 | macOS Apple Silicon | macOS 15 | `scripts/package.sh --config macos` | `.dmg` | `scripts/check-package.sh` on the ad hoc image (engine manifest); after a Developer ID signature, with `--no-manifest` and `spctl` in a job of its own |
 | Windows x86_64 | Windows Server 2022 | `scripts/package.sh --config windows` under Git Bash | NSIS `.exe`, `.msi` | the sums, and `signtool verify` when signed (`scripts/check-package.sh` does not read installers) |
+| Android phone app | Ubuntu 24.04 | `make phone/android-release`, in the `android` job | unsigned APK and bundle for arm64, armv7 and x86_64, kept as a workflow artifact; signed copies on the release only with `ANDROID_SIGNING` | `phone/check-release.sh` on each (no `dev-loopback` build, no debug-only probe); the sums and `apksigner verify` and `jarsigner -verify` when signed |
+| iPhone app | macOS 15 | `make phone/ios-release`, in `ios-testflight` | a signed build uploaded to TestFlight, nothing on the release; the job runs only with `IOS_SIGNING` | the version in the build's `Info.plist` against the tag, and App Store Connect's own checks on upload |
 | Most private helper | `tailnet.yml` | `scripts/build-tailnet.sh`, built twice | four binaries and the licence report | the two builds agree byte for byte |
 | Flatpak | `flatpak.yml` | AetherPak | the Flatpak repository | AetherPak's own checks |
 
@@ -125,10 +127,11 @@ Each build fetches the engine pinned for its platform in `lemonade.lock` and che
 the local build does. There is no Intel Mac build, because `lemonade.lock` pins no Intel Mac engine.
 The helper is never inside a package; it is attached beside them.
 
-No build job sees a signing secret. The builds upload unsigned files (the Mac app signed ad hoc).
-For a release tag, `sign-macos` and `sign-windows` run in the `release-signing` environment: they
-download those files, check out nothing and run no build, sign them (and notarise and staple the
-Mac image), and upload the signed copies, which the release then carries instead. A separate job
+No desktop build job and no Android build job sees a signing secret. The builds upload unsigned
+files (the Mac app signed ad hoc). For a release tag, `sign-macos`, `sign-windows` and
+`sign-android` run in the `release-signing` environment: they download those files, check out
+nothing and run no build, sign them (and notarise and staple the Mac image), and upload the signed
+copies, which the release then carries instead. The one exception is the iPhone app, below. A separate job
 checks the signed Mac image again. The Windows installers are signed, the program inside them is
 not, because signing it would mean building in the signing job.
 
@@ -136,12 +139,63 @@ Set the repository variable `NOCTURNE_RELEASE_STRICT` to `true` to run the packa
 `NOCTURNE_RELEASE=1`, which refuses a placeholder helper pin or one older than 183 days. Leave it
 unset until the Most private helper is pinned.
 
+## The phone apps
+
+Both phone apps are built from `phone/` and carry the version of the desktop app: `ui/package.json`
+(which release-please moves), read by `phone/src-tauri/tauri.conf.json`. A release tag that is not
+that version fails both phone jobs before anything is built or signed.
+
+| | Android | iPhone |
+|---|---|---|
+| Job | `android`, then `sign-android` | `ios-testflight` |
+| Runs when | the build always; signing for a release tag with the repository variable `ANDROID_SIGNING` set to `true` | a release tag, with the repository variable `IOS_SIGNING` set to `true` |
+| Result | `Nocturne_<version>_android.apk` and `.aab` on the release, signed with the upload key, and in `SHA256SUMS` | a build in TestFlight; nothing on the release |
+| Without signing | the unsigned APK and bundle are the workflow artifact `phone-android-unsigned`; nothing of Android goes on the release, since an unsigned APK cannot be installed | nothing is built: the iPhone app cannot be distributed unsigned, and `ci.yml` builds it for the Simulator on every change |
+| Version code | `major * 1000000 + minor * 1000 + patch`, which Tauri writes to `tauri.properties` and the build checks (0.7.2 is 7002) | the build number is the version itself (`CFBundleVersion` in `gen/apple/nocturne-phone_iOS/Info.plist`, moved by release-please), checked against the tag |
+
+The Android version code only grows with the version, so a release can never go backwards, and one
+version has one code: a rebuild of the same tag is the same version code. Google Play refuses a
+second upload of the same code, and App Store Connect refuses a second upload of the same build
+number, so a rerun after a successful upload fails at the upload instead of adding a duplicate.
+Fix a bad build by releasing the next version.
+
+Android is split as the desktop is. The `android` job builds with no secret and uploads
+`phone-android-unsigned`. `sign-android` downloads it, checks the sums, signs the APK with
+`apksigner` and the bundle with `jarsigner` using the upload key, verifies both and uploads
+`phone-android-signed`, which `publish` attaches. The upload key is the key Google Play knows; with
+Play App Signing, Play signs what users get with its own key. An APK from the release page is
+signed with the upload key, so a phone that has the app from Play cannot update it from the release
+page, nor the other way round: remove one before installing the other. Keep the keystore and its
+passwords somewhere safe outside GitHub too: losing the upload key means asking Google to reset it.
+
+The iPhone app cannot be split that way. An archive is signed while it is built: Xcode creates the
+distribution certificate and the provisioning profile (which carries the HealthKit entitlement)
+with an App Store Connect API key. So `ios-testflight` builds, signs and uploads in one job, still
+in the `release-signing` environment. Its limits: it builds only the commit the plan job resolved,
+the key and the team reach only the steps that use them, the key file is removed when the job ends,
+the checkout keeps no token, and the job never publishes anything to the release. Before the first
+run, the app must exist in App Store Connect with the bundle identifier `is.nocturne.phone`, and
+the key's role must be Admin, so Xcode may create the certificate and the profile. The build then
+appears in TestFlight after Apple has processed it, by email to the key's owner; a person adds it
+to a test group and, for the store, submits it for review in App Store Connect. The release
+workflow does neither.
+
 ## Secrets
 
 Add these in the repository settings. The signing secrets belong in the protected
 `release-signing` environment, which needs a maintainer's approval for each run. Signing is turned
-on by repository variables, not by the presence of a secret: `MACOS_SIGNING` and `WINDOWS_SIGNING`
-set to `true`. When one is on, its signing job must succeed or nothing is attached.
+on by repository variables, not by the presence of a secret: `MACOS_SIGNING`, `WINDOWS_SIGNING`,
+`ANDROID_SIGNING` and `IOS_SIGNING` set to `true`. When one is on, its signing job must succeed or
+nothing is attached (and the release is not published).
+
+| Variable | Needed for | Without it |
+|---|---|---|
+| `MACOS_SIGNING` | the Developer ID signature and notarisation of the Mac image | the Mac image is signed ad hoc, with first-open steps in the notes |
+| `WINDOWS_SIGNING` | the Authenticode signature of the installers | unsigned installers, with first-open steps in the notes |
+| `ANDROID_SIGNING` | signing the Android APK and bundle with the upload key and attaching them | no Android file on the release; the unsigned build stays a workflow artifact |
+| `IOS_SIGNING` | building, signing and uploading the iPhone app to TestFlight | no iPhone build in the release |
+| `NOCTURNE_RELEASE_STRICT` | the strict package checks (see First-open notes) | the checks accept a placeholder helper pin |
+
 
 | Secret | Where | Needed for | Without it |
 |---|---|---|---|
@@ -160,7 +214,21 @@ set to `true`. When one is on, its signing job must succeed or nothing is attach
 | `MACOS_NOTARY_APP_PASSWORD` | `release-signing` | fallback: an app-specific password for that Apple ID | as above |
 | `WINDOWS_CODE_SIGNING_CERTIFICATE` | `release-signing` | the code signing certificate, a base64 `.pfx` | with `WINDOWS_SIGNING` on, the signing job fails |
 | `WINDOWS_CODE_SIGNING_PASSWORD` | `release-signing` | the `.pfx` password | as above |
+| `ANDROID_UPLOAD_KEYSTORE` | `release-signing` | the upload keystore (an RSA key), a base64 file: `base64 -w0 upload.jks` | with `ANDROID_SIGNING` on, the signing job fails |
+| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | `release-signing` | the keystore's password | as above |
+| `ANDROID_UPLOAD_KEY_ALIAS` | `release-signing` | the key's alias in that keystore | as above |
+| `ANDROID_UPLOAD_KEY_PASSWORD` | `release-signing` | the key's password (the keystore's, if they are the same) | as above |
+| `APP_STORE_CONNECT_API_KEY` | `release-signing` | the App Store Connect API key, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8` | with `IOS_SIGNING` on, the iPhone job fails |
+| `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | the key's id, shown beside it in App Store Connect | as above |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | the issuer id, shown above the list of keys | as above |
+| `APPLE_DEVELOPMENT_TEAM` | `release-signing` | the ten-character team id of the Apple Developer account | as above |
 
+To get them: make the Android upload key once with
+`keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`
+and enrol it in Google Play when the app is created there (Play App Signing). Create the App Store
+Connect API key under Users and Access, Integrations, App Store Connect API, as a team key with the
+Admin role: the `.p8` can be downloaded once. The team id is under Membership details in the Apple
+Developer account.
 The GitHub App needs read and write access to contents (branches, tags, releases and their files)
 and to pull requests (the release pull request and its labels) on this repository. The helper
 workflow uses the same signing secrets, and its macOS and Windows jobs fail without them; its
@@ -215,6 +283,10 @@ scripts/check-package.sh --no-manifest <scratch>/Nocturne_<version>_amd64.AppIma
 
 Do the same for the deb and the rpm. To compare the engine byte for byte as well, drop
 `--no-manifest` after a `make package` of the same tag, which writes the manifest.
+
+For the Android files, `apksigner verify --print-certs Nocturne_<version>_android.apk` and
+`jarsigner -verify Nocturne_<version>_android.aab` show the signing key; its fingerprint must be the
+upload key's. The iPhone build is checked in TestFlight, not on the release page.
 
 On a Mac, `scripts/check-package.sh --no-manifest` on the `.dmg` verifies the signature, and
 `spctl --assess --type open --context context:primary-signature -v` on it shows whether Gatekeeper
