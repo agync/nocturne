@@ -314,6 +314,8 @@ for (const scheme of ["light", "dark"] as const) {
     test("Replace what's on this phone?", async ({ page }) => {
       await page.goto("/?m=first&s=welcome");
       await page.getByRole("button", { name: "I have a backup" }).click();
+      await page.getByRole("radio", { name: /A backup file/ }).check();
+      await page.getByRole("button", { name: "Continue" }).click();
       await page.getByRole("button", { name: "Choose the file" }).click();
       await page.getByLabel("Passphrase for this backup").fill("already here");
       await page.getByRole("button", { name: "Bring it back" }).click();
@@ -332,6 +334,8 @@ for (const scheme of ["light", "dark"] as const) {
       await clean(page);
       await shot(page, `after-damaged-${scheme}`);
       await page.getByRole("button", { name: "I have a backup" }).click();
+      await page.getByRole("radio", { name: /A backup file/ }).check();
+      await page.getByRole("button", { name: "Continue" }).click();
       await page.getByRole("button", { name: "Choose the file" }).click();
       await page.getByLabel("Passphrase for this backup").fill("correct horse battery");
       await clean(page);
