@@ -871,6 +871,10 @@
   outline: none;
 }
 
+.listSearch input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .listRows {
   display: flex;
   flex-direction: column;
