@@ -162,6 +162,53 @@ for (const scheme of ["light", "dark"] as const) {
       await look(page, `backup-newkey-${scheme}`);
     });
 
+    test("This phone: what waits, and what stops a new account", async ({ page }) => {
+      test.setTimeout(90_000);
+      await page.goto("/?m=kept&v=nightly&b=forgot");
+      await expect(page.getByText(/Something you forgot is still in your backup/)).toBeVisible();
+      await look(page, `backup-forgot-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=notCharged");
+      await expect(page.getByText(/waits for this phone to charge/)).toBeVisible();
+      await look(page, `backup-not-charged-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=deleting");
+      await expect(page.getByText(/the next time this phone is online/)).toBeVisible();
+      await look(page, `backup-deleting-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=otherBackup");
+      await expect(page.getByText(/already holds another Nocturne backup/)).toBeVisible();
+      await look(page, `backup-other-backup-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=needsPhrase");
+      await expect(page.getByText(/needs its phrase set again/)).toBeVisible();
+      await look(page, `backup-needs-phrase-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=noRoomNone");
+      await expect(page.getByText("Stopped · no backup yet")).toBeVisible();
+      await look(page, `backup-stopped-none-${scheme}`);
+      await page.goto("/?m=kept&v=nightly&b=signedOut&os=ios");
+      await expect(page.getByText(/Settings opens on Nocturne’s page/)).toBeVisible();
+      await look(page, `backup-signed-out-ios-${scheme}`);
+    });
+
+    test("restoring: mobile data, checking, a newer Nocturne", async ({ page }) => {
+      await toFound(page, "&net=mobile");
+      await bring(page);
+      await expect(page.getByText(/On mobile data, it may count against your plan/)).toBeVisible();
+      await look(page, `backup-restore-mobile-${scheme}`);
+      await page.getByRole("button", { name: "Wait for Wi-Fi" }).click();
+      await expect(page.getByText(/Waiting for Wi-Fi/)).toBeVisible();
+      await look(page, `backup-restore-wait-wifi-${scheme}`);
+      await toFound(page, "&restore=slow&checking");
+      await bring(page);
+      await expect(page.getByText("Checking the backup")).toBeVisible();
+      await look(page, `backup-restore-checking-${scheme}`);
+      await toFound(page, "&restore=slow&adding");
+      await bring(page);
+      await expect(page.getByText(/Almost done/)).toBeVisible();
+      await look(page, `backup-restore-almost-${scheme}`);
+      await toFound(page, "&restore=newer");
+      await bring(page);
+      await expect(page.getByText(/It was made with Nocturne 0.9.0/)).toBeVisible();
+      await look(page, `backup-restore-newer-${scheme}`);
+    });
+
     test("Today, and Delete everything with a backup", async ({ page }) => {
       await page.goto("/?m=kept&b=noRoom");
       await expect(page.getByText("Your backup has stopped.")).toBeVisible();
