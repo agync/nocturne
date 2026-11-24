@@ -1,0 +1,55 @@
+/* Parts of docs/design/mind-online-setup.md, on top of the phone parity kit: the step's bar pinned
+   with its fade, the name field with the service's list, the list sheet and its search. */
+
+/* The bar, pinned. While there is more to read below, the last lines fade into it. */
+.foot { z-index: 2; }
+.foot::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; background: linear-gradient(to bottom, transparent, var(--bg)); opacity: 0; pointer-events: none; }
+.foot[data-more="true"]::before { opacity: 1; }
+
+/* ?text=200 here keeps the phone's real height, to show the bar still pinned at 200 per cent. */
+html[data-text="200"] .device[data-os="android"] .screen { height: 892px; }
+html[data-text="200"] .device[data-os="ios"] .screen { height: 852px; }
+html[data-text="200"] .scroll { overflow: hidden; }
+html[data-text="200"] .foot { position: sticky; gap: 4px; padding-top: 8px; padding-bottom: 20px; }
+html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
+
+/* The name field and its list */
+.nfield { display: flex; flex-direction: column; gap: 6px; }
+.nfield .fieldInput { min-height: 52px; border-color: var(--rule2); }
+.nfield .fieldInput[data-focus] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.nfield .fieldInput .ph { color: var(--ink3); }
+.mono { font-family: var(--font-mono); font-size: 0.9375rem; }
+.pick { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 2px; color: var(--accent); font-size: 0.9375rem; font-weight: 500; }
+.pick span { flex: 1; }
+.pick[data-off] { color: var(--ink3); }
+.pick[data-busy] { color: var(--ink2); }
+.pick .pdot { flex: none; margin: 0 5px; }
+.from { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
+.why { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+.prob { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--ember-soft); }
+.prob strong { color: var(--ink); font-weight: 500; font-size: 0.9375rem; line-height: 1.45; }
+.prob span { color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+.prob.calm { background: var(--accent-soft); }
+.works { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; }
+
+/* The list sheet */
+.over .sheetUp { max-height: 86%; gap: 12px; padding-bottom: 28px; }
+.device[data-os="ios"] .over .sheetUp { padding-bottom: 42px; }
+.grip { align-self: center; width: 36px; height: 4px; border-radius: 2px; background: var(--rule2); }
+.sheetHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sheetHead h2 { font: 400 1.375rem / 1.25 var(--font-serif); }
+.sheetHead .count { display: block; margin-top: 2px; color: var(--ink2); font: 400 0.875rem / 1.4 var(--font-sans); }
+.close { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; margin: -6px -10px 0 0; color: var(--ink); }
+.search { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--ink); border-radius: 12px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--ink); font-size: 1rem; }
+.search svg { flex: none; color: var(--ink2); }
+.search .caret { margin-left: -9px; }
+.names { display: flex; flex-direction: column; margin: 0 -4px; padding: 0; list-style: none; overflow: hidden; }
+.names li { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 4px; border-bottom: 1px solid var(--rule); }
+.names li:last-child { border-bottom: 0; }
+.names .rad { flex: none; width: 20px; height: 20px; border: 1.5px solid var(--ink3); border-radius: 50%; }
+.names li[data-on] .rad { border: 6px solid var(--ink); }
+.names .mono { overflow-wrap: anywhere; }
+.names mark { border-radius: 3px; background: var(--accent-soft); color: inherit; }
+.sheetNote { color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
+.none { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+.none p { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
