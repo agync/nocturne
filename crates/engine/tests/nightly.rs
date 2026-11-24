@@ -306,6 +306,56 @@ fn the_old_phrase_stops_opening_only_once_the_place_drops_earlier_versions() {
     assert!(place.phrase_opens_a_version("lantern copper meadow"));
 }
 
+/// A place that keeps a damaged copy of each piece it is given while `spoil` is set.
+#[derive(Default)]
+struct Spoiling {
+    inner: MemoryPlace,
+    spoil: AtomicBool,
+}
+
+impl BackupPlace for Spoiling {
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), PlaceError> {
+        let mut bytes = bytes.to_vec();
+        if name.starts_with("piece-") && self.spoil.load(std::sync::atomic::Ordering::SeqCst) {
+            let last = bytes.len() - 1;
+            bytes[last] ^= 1;
+        }
+        self.inner.put(name, &bytes)
+    }
+    fn get(&self, name: &str) -> Result<Option<Vec<u8>>, PlaceError> {
+        self.inner.get(name)
+    }
+    fn list(&self, prefix: &str) -> Result<Vec<nightly::PlaceEntry>, PlaceError> {
+        self.inner.list(prefix)
+    }
+    fn delete(&self, name: &str) -> Result<(), PlaceError> {
+        self.inner.delete(name)
+    }
+}
+
+#[test]
+fn a_later_night_is_not_written_when_a_piece_it_sent_does_not_read_back() {
+    let f = fixture();
+    keep(&f.engine, "Something to keep.");
+    let place = Spoiling::default();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let mut state = NightState::new();
+    night(&f.engine, &place, &key, &mut state).unwrap();
+    keep(&f.engine, "Something new tonight.");
+    place.spoil.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(matches!(
+        night(&f.engine, &place, &key, &mut state),
+        Err(NightError::Damaged)
+    ));
+    assert_eq!(names(&place.inner, "night-").len(), 1, "no night lists it");
+    assert_eq!(state.count, 1);
+    place
+        .spoil
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    night(&f.engine, &place, &key, &mut state).unwrap();
+    assert_eq!(nightly::nights(&place, &key).unwrap().len(), 2);
+}
+
 #[test]
 fn another_key_cannot_take_over_the_phrase() {
     let f = fixture();
