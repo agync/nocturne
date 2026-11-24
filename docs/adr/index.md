@@ -24,3 +24,4 @@ not deleted.
 - [0019 A locked copy online](0019-a-locked-copy-online.md) - Accepted: a phone backs up its memory each night while it charges, in locked pieces, to the person's own iCloud or Google Drive, opened with a phrase only they hold.
 - [0020 An online mind on a phone](0020-an-online-mind-on-a-phone.md) - Accepted: a service with the person's own key reads the words of what a phone keeps, writes its page and answers, Android first; Apple's servers later, after a trial.
 - [0021 A household mind for invited phones](0021-a-household-mind-for-invited-phones.md) - Proposed: a computer lends its mind to any phone holding its one household code, keeping nothing about them.
+- [0022 Ask looks things up](0022-ask-looks-things-up.md) - Accepted: today's date in every answer, a date step for the days a question names, and read-only look-ups a mind may ask for, each request counted.

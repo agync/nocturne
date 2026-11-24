@@ -16,7 +16,7 @@ reasons are in [decision 0011](/adr/0011-online-answers.md).
 
 ```mermaid
 flowchart LR
-    Ask[Ask] -- question and at most 12 sentences --> LD[lemond]
+    Ask[Ask] -- question, today's date and at most 24 lines --> LD[lemond]
     LD -- HTTPS, one request --> P[The address the person entered]
     Key[(Key: keychain or owner-only file)] -. handed over at run time .-> LD
 ```
@@ -107,21 +107,30 @@ Otherwise the question is answered on this computer, and the answer says why.
 
 ## What is sent
 
-Only the question and the memories needed to answer it, at most 12, as plain sentences. The
+Only the question, today's date, time and time zone, and the lines needed to answer it, as plain
+sentences: at most 12 found by the question's words, and at most 12 more from the
+[date step](/design/ask-with-tools.md#the-date-step) for the days the question names, check-ins and
+health readings among them, each as one line in the person's own words or the health wording. The
 originals, transcripts, pages and everything else stay here. Before the request is built:
 
 - memories marked private, in any version, memories being forgotten or let go, and any memory the
   store does not know, are dropped;
 - nothing else drops a memory: its words, labels and subject are not judged ([only what is marked
   private is held back](/design/only-marked-private.md));
-- the first 12 left are kept, and that exact set is checked again against the store just before the
-  request is built; any memory that fails is dropped.
+- the first 24 left are kept, and that exact set is checked again against the store just before the
+  request is built; any line that fails is dropped. A check-in, an entry or a reading goes only while
+  it, and every earlier version it replaced, is kept: nothing of it forgotten or being forgotten, not
+  replaced, not removed in Health.
 
 When something was left out, an answer written online says so, with "Ask on this computer". When
 nothing is left to send, the question is answered here and the sent log lists it as not sent. Reading, the overnight tidy and the page have no way
 to reach the route: only Ask holds it.
 
 Request: one non-streaming chat request per question with a short reply limit. No tools, no retry.
+[Ask with tools](/design/ask-with-tools.md) lets a mind look further, up to 4 requests per question,
+each counted; on the computer that waits until the pinned `lemond` is confirmed to pass the look-up
+descriptions on and the provider's look-up requests back, and until then Online answers takes the
+date step path in one request ([decision 0022](/adr/0022-ask-looks-things-up.md)).
 The reply is checked on this computer like a local one: the same fences around memories, the same
 check that every cited memory was sent, and "I am not sure" when the reply does not hold up. An
 answer that came back not sure is never sent again automatically.
