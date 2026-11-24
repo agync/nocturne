@@ -635,6 +635,9 @@ Behind the expander: step 4's sections, in the same order, with its example.
 the check, and "Continue works once the check passes." The key is kept in the phone's own safe
 place.
 
+Proposed in [Setting up Nocturne's mind online](mind-online-setup.md): the model name chosen from
+the service's own list, with typing kept, and the bar pinned in view on every step.
+
 | Part | Copy |
 |---|---|
 | Step label | "Nocturne’s mind online · step 2 of 4" |

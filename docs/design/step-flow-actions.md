@@ -117,6 +117,11 @@ with the button even when the field it is about has scrolled away.
 | Make a backup (exists) | Choose a passphrase, type it again and tick the box to go on. |
 | Online answers step 5 while turning on | None: the button reads "Turning on…" |
 
+### On the phone
+
+[Setting up Nocturne's mind online](mind-online-setup.md#problem-1-buttons-out-of-reach) proposes
+the same bar for every phone step flow, at phone sizes and at 200 per cent text.
+
 ## Online answers step 1
 
 ### Before: today's words

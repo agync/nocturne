@@ -23,6 +23,7 @@ screen follows, the data model, and how quality is measured.
 - [Landing page, trust and timing copy](landing-trust-copy.md) - The approved words that tell a first reader it works on any schedule, never edits what they kept, and needs no tidying.
 - [Control chips and easier reading in setup](control-chips.md) - A named place or control shown in the copy with its own icon and words, a chevron on buttons that open more, and measurable reading rules for setup.
 - [Keeping the next step in view](step-flow-actions.md) - The approved bar that keeps a step flow's main button in view, and lighter first steps for Online answers and Away from home.
+- [Setting up Nocturne's mind online](mind-online-setup.md) - Proposal for the phone's online mind setup and Online answers' Connect: the step's buttons pinned in view on every phone step flow, and the model name chosen from the service's own list, with typing kept.
 - [Help with Nocturne, from the ask box](in-app-help.md) - The approved design for answering "how do I" questions from the guide that ships with Nocturne, with guide receipts, a Settings entry and a gate for each size of computer.
 - [Advanced details](advanced-details.md) - The words the advanced details view uses where they have been designed and approved.
 - [The site in five languages](site-localisation.md) - Addresses, language switch and upkeep for the site in German, French, Spanish, Italian and Dutch.
