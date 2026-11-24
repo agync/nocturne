@@ -960,9 +960,17 @@ fn leave_out_health(db: &Path) -> NightResult<Option<String>> {
             conn.execute_batch(&format!("DROP TRIGGER {NOTE}"))?;
         }
         conn.execute_batch(
-            "DELETE FROM phone_records WHERE source = 'health' \
-               OR item_id IN (SELECT id FROM items WHERE kind = 'reading');
-             DELETE FROM items WHERE kind = 'reading';",
+            "CREATE TEMP TABLE gone AS SELECT id FROM items WHERE kind = 'reading';
+             DELETE FROM phone_records WHERE source = 'health' OR item_id IN (SELECT id FROM gone);
+             DELETE FROM remote_keeps WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM memory_sources WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM mentions WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM name_questions WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM decision_items WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM decisions WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM carried_marks WHERE item_id IN (SELECT id FROM gone);
+             DELETE FROM items WHERE id IN (SELECT id FROM gone);
+             DROP TABLE gone;",
         )?;
         if let Some(sql) = &note {
             conn.execute_batch(sql)?;
