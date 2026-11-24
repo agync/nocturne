@@ -386,6 +386,10 @@ pub struct PhoneBackup {
     /// A recovery key's lock, made and shown but not yet saved by the person: nothing opens
     /// with it until it is kept, so "Cancel" leaves the earlier key working.
     new_key: Mutex<Option<Vec<u8>>>,
+    /// Keeps what the phone notes of the backup out of the phone's own device backup, as the
+    /// memory is: it holds the key's locks. Run after each write, since a file written again in
+    /// its place loses the mark on an iPhone.
+    exclude: Option<crate::home::ExcludeFromBackup>,
 }
 
 /// Whether the phone was found charging since the last night finished.
@@ -425,7 +429,14 @@ impl PhoneBackup {
             locking: Mutex::new(()),
             work_factor: None,
             new_key: Mutex::new(None),
+            exclude: None,
         }
+    }
+
+    /// The way to keep its notes out of the phone's own device backup.
+    pub fn with_exclude(mut self, exclude: crate::home::ExcludeFromBackup) -> Self {
+        self.exclude = Some(exclude);
+        self
     }
 
     #[cfg(test)]
@@ -473,8 +484,13 @@ impl PhoneBackup {
         let mut saved = self.saved();
         let out = f(&mut saved);
         let json = serde_json::to_vec(&saved).expect("the backup's state serialises");
-        if let Err(e) = write_private(&self.path(), &json) {
-            tracing::warn!("the backup's state could not be saved: {e}");
+        match write_private(&self.path(), &json) {
+            Ok(()) => {
+                if let Some(exclude) = &self.exclude {
+                    exclude(&self.path());
+                }
+            }
+            Err(e) => tracing::warn!("the backup's state could not be saved: {e}"),
         }
         out
     }
