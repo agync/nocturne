@@ -1160,6 +1160,71 @@ fn titles_by_entry(f: &Fixture) -> Vec<(String, String)> {
 }
 
 #[test]
+fn health_readings_never_go_into_a_night_and_a_restore_says_how_far_back_to_read() {
+    let old = fixture_at("2026-11-20T05:00:00Z", "Europe/London");
+    let phone = old.engine.ensure_local_device("Old phone").unwrap();
+    old.engine
+        .take_calendar(
+            &phone,
+            calendar_batch("s1", &[("ev1", "Dentist", "2026-11-25T09:00:00Z")]),
+        )
+        .unwrap();
+    old.engine
+        .take_readings(&phone, sleep_batch("r1", "sleep1"))
+        .unwrap();
+    assert_eq!(
+        sql_count(
+            old.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE kind = 'reading'"
+        ),
+        1
+    );
+    let place = MemoryPlace::new();
+    let key = nightly::turn_on(&place, PHRASE, WORK).unwrap();
+    let report = night(&old.engine, &place, &key, &mut NightState::new()).unwrap();
+    assert_eq!(report.items, 1, "the calendar entry only");
+    assert_eq!(
+        sql_count(
+            old.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE kind = 'reading'"
+        ),
+        1,
+        "the phone keeps its readings"
+    );
+
+    let out = tempfile::tempdir().unwrap();
+    let stage = out.path().join("stage");
+    let mut unpacked = None;
+    run_with(false, |run| {
+        unpacked = Some(nightly::restore_night(&place, &key, None, &stage, run).unwrap());
+    });
+    let unpacked = unpacked.unwrap();
+    assert_eq!(unpacked.health_since.as_deref(), Some("2026-11-19"));
+    assert_eq!(unpacked.summary.items, 1);
+    let store = stage.join("store");
+    for (what, sql) in [
+        (
+            "readings",
+            "SELECT COUNT(*) FROM items WHERE kind = 'reading'",
+        ),
+        (
+            "records",
+            "SELECT COUNT(*) FROM phone_records WHERE source = 'health'",
+        ),
+        (
+            "notes",
+            "SELECT COUNT(*) FROM forgotten_for_good WHERE key LIKE 'item:%'",
+        ),
+    ] {
+        assert_eq!(sql_count(&store, sql), 0, "{what}");
+    }
+    assert_eq!(
+        sql_count(&store, "SELECT COUNT(*) FROM items WHERE kind = 'calendar'"),
+        1
+    );
+}
+
+#[test]
 fn calendar_entries_and_health_readings_come_once_and_the_newer_version_stays() {
     let old = fixture_at("2026-11-20T05:00:00Z", "Europe/London");
     let phone = old.engine.ensure_local_device("Old phone").unwrap();

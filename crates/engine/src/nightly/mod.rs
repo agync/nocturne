@@ -55,6 +55,9 @@ use pieces::{Cutter, MAX_PIECE};
 pub(crate) const FORGOT: &str = "_forgotSinceNight";
 /// The scratch folder under the store, holding the snapshot while a night is written.
 pub(crate) const SCRATCH: &str = "night-tmp";
+/// The store's setting a night notes the first day of the health readings it leaves out under,
+/// so a phone restored from it reads them again from the phone's own health app as far back.
+pub const HEALTH_SINCE: &str = "_healthSince";
 /// How many nights the account keeps.
 pub const NIGHTS_KEPT: usize = 7;
 /// The Nocturne that writes and reads nights here, as a night names the one that made it.
@@ -914,6 +917,74 @@ pub struct Unpacked {
     /// The state a phone restored from it starts with: a phone of its own, not in use until the
     /// person says.
     pub state: NightState,
+    /// The first day of the health readings the phone it came from held, which the backup leaves
+    /// out: the phone reads them again from its own health app back to this day.
+    pub health_since: Option<String>,
+}
+
+/// Leave the raw health readings out of the store file `db`, noting the first day they began on
+/// ([`HEALTH_SINCE`]). A backup in the person's iCloud or Google Drive holds none (App Store
+/// guideline 5.1.3, and Android alike); pages, reflections and day lines that speak of them
+/// stay. Taking them out notes nothing as forgotten, since they come back from the phone's
+/// health app. Returns the day noted.
+fn leave_out_health(db: &Path) -> NightResult<Option<String>> {
+    const NOTE: &str = "items_forgotten_for_good";
+    let conn = Connection::open(db).map_err(Error::from)?;
+    let since = (|| -> rusqlite::Result<Option<String>> {
+        crate::store::lock_down(&conn)?;
+        conn.pragma_update(None, "journal_mode", "DELETE")?;
+        conn.pragma_update(None, "secure_delete", "ON")?;
+        // Rows go table by table, each on its own key: nothing cascades.
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let first: Option<String> = conn.query_row(
+            "SELECT MIN(json_extract(metadata, '$.day')) FROM items WHERE kind = 'reading'",
+            [],
+            |r| r.get(0),
+        )?;
+        if let Some(day) = &first {
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES (?1, ?2) \
+                 ON CONFLICT(key) DO UPDATE SET value = MIN(value, excluded.value)",
+                [HEALTH_SINCE, day.as_str()],
+            )?;
+        }
+        let note: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE type = 'trigger' AND name = ?1",
+                [NOTE],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if note.is_some() {
+            conn.execute_batch(&format!("DROP TRIGGER {NOTE}"))?;
+        }
+        conn.execute_batch(
+            "DELETE FROM phone_records WHERE source = 'health' \
+               OR item_id IN (SELECT id FROM items WHERE kind = 'reading');
+             DELETE FROM items WHERE kind = 'reading';",
+        )?;
+        if let Some(sql) = &note {
+            conn.execute_batch(sql)?;
+        }
+        if first.is_some() {
+            optimize(&conn)?;
+        }
+        let since: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                [HEALTH_SINCE],
+                |r| r.get(0),
+            )
+            .optional()?;
+        conn.execute_batch("COMMIT")?;
+        if first.is_some() {
+            conn.execute_batch("VACUUM")?;
+        }
+        Ok(since)
+    })();
+    drop(conn);
+    since.map_err(|e| NightError::Failed(format!("the health readings could not be left out: {e}")))
 }
 
 /// Bring back the night of `count`, or the newest when `None`, into `stage` (a folder that must
@@ -982,7 +1053,12 @@ pub fn restore_night(
     }
     // The whole night is checked as a backup file is before anything on the phone changes.
     (run.progress)(BackupPhase::Checking, 0, total);
-    let (memories, items, pages, kept) = crate::backup::check_unpacked(&store_dir, true)?;
+    let (memories, _, pages, kept) = crate::backup::check_unpacked(&store_dir, true)?;
+    // A night written before readings were left out still holds them: they don't come back.
+    let health_since = leave_out_health(&store_dir.join(crate::DB_FILE))?;
+    let items: u32 = Connection::open(store_dir.join(crate::DB_FILE))
+        .and_then(|c| c.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)))
+        .map_err(Error::from)?;
     if run.cancel.load(Ordering::SeqCst) {
         return Err(NightError::Cancelled);
     }
@@ -1010,6 +1086,7 @@ pub fn restore_night(
         kept,
         night: night.summary(),
         state,
+        health_since,
     })
 }
 
@@ -1300,9 +1377,8 @@ impl Engine {
         if let Some(base) = base {
             snapshot = keep_only_base(place, key, base, &scratch.dir, &snapshot, run)?;
         }
-        if base.is_some() {
-            recount(&snapshot, &mut snap, base)?;
-        }
+        leave_out_health(&snapshot)?;
+        recount(&snapshot, &mut snap, base)?;
 
         let held: BTreeSet<String> = place
             .list(PIECE)?
