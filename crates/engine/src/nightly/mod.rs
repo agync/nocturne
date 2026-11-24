@@ -7,9 +7,12 @@
 //!   phrase or the recovery key ([`lock`]).
 //! - `piece-<sha256 of the locked bytes>`: one locked piece of the store or of an original, cut
 //!   where its content says ([`pieces`]). A piece no kept night lists is removed.
-//! - `night-<count>-<phone>`: one locked night, listing the pieces of the store snapshot and of
-//!   every original by the hash of their plain bytes. Its name says, unlocked, which phone wrote it
-//!   and its count, so a phone sees a newer night from another phone without the key and stops.
+//! - `night-<count>-<phone>-<made>-<bytes>`: one locked night, listing the pieces of the store
+//!   snapshot and of every original by the hash of their plain bytes. Its name says, unlocked,
+//!   which phone wrote it and its count, so a phone sees a newer night from another phone without
+//!   the key and stops, and when it was made (seconds since 1970) and what its pieces take, so
+//!   "Which night?" lists the nights before the phrase. Nights named before the last two parts
+//!   were added read as they were.
 //!
 //! A night is written only after every piece it lists is in the account, so a stopped run leaves
 //! the nights before it whole. Seven nights are kept. A forget for good marks the store
@@ -192,6 +195,20 @@ pub struct NightSummary {
     pub count: u64,
     pub device: String,
     pub bytes: u64,
+    /// The things it holds.
+    pub items: u32,
+    /// When the first of them was kept; `None` for a night written before this was noted.
+    pub first: Option<String>,
+}
+
+/// A night as the account lists it, before any phrase: what its name and the account's record
+/// say.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedNight {
+    pub count: u64,
+    pub made_at: Option<jiff::Timestamp>,
+    /// What the night and its pieces take; `None` for a night named before its size was.
+    pub bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,6 +247,9 @@ struct Body {
     memories: u32,
     items: u32,
     pages: u32,
+    /// When the first thing was kept. Nights written before it was noted have none.
+    #[serde(default)]
+    first: Option<String>,
     store: Vec<PieceRef>,
     files: Vec<FileRef>,
 }
@@ -251,14 +271,7 @@ struct Night {
 
 impl Night {
     fn bytes(&self) -> u64 {
-        let mut seen = BTreeSet::new();
-        self.locked
-            + self
-                .body
-                .pieces()
-                .filter(|p| seen.insert(p.piece.as_str()))
-                .map(|p| p.locked)
-                .sum::<u64>()
+        self.locked + self.body.pieces_bytes()
     }
 
     fn summary(&self) -> NightSummary {
@@ -267,25 +280,67 @@ impl Night {
             count: self.body.count,
             device: self.body.device.clone(),
             bytes: self.bytes(),
+            items: self.body.items,
+            first: self.body.first.clone(),
         }
     }
 }
 
-fn night_name(count: u64, device: &str) -> String {
-    format!("{NIGHT}{count:012}-{device}")
+impl Body {
+    /// What the pieces it lists take in the account, each counted once.
+    fn pieces_bytes(&self) -> u64 {
+        let mut seen = BTreeSet::new();
+        self.pieces()
+            .filter(|p| seen.insert(p.piece.as_str()))
+            .map(|p| p.locked)
+            .sum()
+    }
 }
 
-/// The count and phone a night's name gives, unlocked.
-fn parse_night(name: &str) -> Option<(u64, &str)> {
+fn night_name(count: u64, device: &str, made: i64, bytes: u64) -> String {
+    format!("{NIGHT}{count:012}-{device}-{made}-{bytes}")
+}
+
+/// What a night's name says, unlocked.
+struct NightName<'a> {
+    count: u64,
+    device: &'a str,
+    /// Seconds since 1970; not in a name written before it was added.
+    made: Option<i64>,
+    /// What its pieces take; not in a name written before it was added.
+    bytes: Option<u64>,
+}
+
+fn read_night_name(name: &str) -> Option<NightName<'_>> {
+    let digits = |s: &str| !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_digit());
     let rest = name.strip_prefix(NIGHT)?;
-    let (count, device) = rest.split_once('-')?;
+    let mut parts = rest.split('-');
+    let count = parts.next()?;
+    let device = parts.next()?;
     if count.len() != 12 || !count.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     if device.len() != 16 || !device.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    Some((count.parse().ok()?, device))
+    let (made, bytes) = match (parts.next(), parts.next(), parts.next()) {
+        (None, None, None) => (None, None),
+        (Some(made), Some(bytes), None) if digits(made) && digits(bytes) => {
+            (Some(made.parse().ok()?), Some(bytes.parse().ok()?))
+        }
+        _ => return None,
+    };
+    Some(NightName {
+        count: count.parse().ok()?,
+        device,
+        made,
+        bytes,
+    })
+}
+
+/// The count and phone a night's name gives, unlocked.
+fn parse_night(name: &str) -> Option<(u64, &str)> {
+    read_night_name(name).map(|n| (n.count, n.device))
 }
 
 fn sha(bytes: &[u8]) -> String {
@@ -707,6 +762,31 @@ pub fn found(place: &dyn BackupPlace) -> NightResult<Option<Found>> {
     }))
 }
 
+/// The nights in the account as its listing shows them, newest first, before any phrase: their
+/// count, when each was made and what each takes. Empty when the account holds no backup.
+pub fn listed_nights(place: &dyn BackupPlace) -> NightResult<Vec<ListedNight>> {
+    let all = place.list("")?;
+    if !all.iter().any(|e| e.name == KEY_PHRASE) {
+        return Ok(Vec::new());
+    }
+    let mut nights: Vec<ListedNight> = all
+        .iter()
+        .filter_map(|e| {
+            let n = read_night_name(&e.name)?;
+            Some(ListedNight {
+                count: n.count,
+                made_at: n
+                    .made
+                    .and_then(|s| jiff::Timestamp::from_second(s).ok())
+                    .or(e.modified),
+                bytes: n.bytes.map(|b| b + e.size),
+            })
+        })
+        .collect();
+    nights.sort_by_key(|n| std::cmp::Reverse(n.count));
+    Ok(nights)
+}
+
 /// Every night the key opens, newest first, for "Which night?".
 pub fn nights(place: &dyn BackupPlace, key: &NightKey) -> NightResult<Vec<NightSummary>> {
     Ok(load_nights(place, key)?
@@ -870,7 +950,13 @@ pub fn restore_night(
             Some((f.sha.as_str(), f.size)),
         )?;
     }
+    // The whole night is checked as a backup file is before anything on the phone changes.
+    (run.progress)(BackupPhase::Checking, 0, total);
     let (memories, items, pages, kept) = crate::backup::check_unpacked(&store_dir, true)?;
+    if run.cancel.load(Ordering::SeqCst) {
+        return Err(NightError::Cancelled);
+    }
+    (run.progress)(BackupPhase::Checking, total, total);
     guard.keep = true;
     let summary = BackupSummary {
         made_at: body.made_at.clone(),
@@ -1035,16 +1121,18 @@ impl Engine {
             .max()
             .unwrap_or(0)
             + 1;
+        let made = self.clock().now();
         let body = Body {
             format: FORMAT,
             device: state.device.clone(),
             count,
-            made_at: fmt_ts(self.clock().now()),
+            made_at: fmt_ts(made),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             store_version: snap.version,
             memories: snap.memories,
             items: snap.items,
             pages: snap.pages,
+            first: snap.first.clone(),
             store,
             files,
         };
@@ -1060,7 +1148,7 @@ impl Engine {
                 }
             }
         }
-        let name = night_name(count, &state.device);
+        let name = night_name(count, &state.device, made.as_second(), body.pieces_bytes());
         let locked = seal_night(key, &name, &body)?;
         // A forget began while the pieces were made: they may hold what the person just removed,
         // so no night lists them, and the next prune takes them.
@@ -1145,5 +1233,63 @@ impl Engine {
     /// run at once.
     pub fn forgot_since_night(&self) -> crate::Result<bool> {
         Ok(self.read(forgot_mark)?.is_some())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_says_its_count_phone_day_and_size() {
+        let name = night_name(12, "0123456789abcdef", 1_763_003_520, 4_096);
+        let n = read_night_name(&name).unwrap();
+        assert_eq!(n.count, 12);
+        assert_eq!(n.device, "0123456789abcdef");
+        assert_eq!(n.made, Some(1_763_003_520));
+        assert_eq!(n.bytes, Some(4_096));
+        let old = read_night_name("night-000000000003-0123456789abcdef").unwrap();
+        assert_eq!((old.count, old.made, old.bytes), (3, None, None));
+        for bad in [
+            "night-000000000003-0123456789abcdef-12",
+            "night-000000000003-0123456789abcdef-12-x",
+            "night-000000000003-0123456789abcdef-1-2-3",
+            "night-3-0123456789abcdef",
+            "night-000000000003-0123456789abcdeg",
+        ] {
+            assert!(read_night_name(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_night_named_and_written_before_its_day_and_size_still_reads() {
+        let place = MemoryPlace::new();
+        let key = NightKey::generate();
+        let name = "night-000000000001-0123456789abcdef";
+        // A night as the first build wrote it: no first day in the body, none in the name.
+        let body: Body = serde_json::from_value(serde_json::json!({
+            "format": 1,
+            "device": "0123456789abcdef",
+            "count": 1,
+            "madeAt": "2026-11-20T03:00:00Z",
+            "appVersion": "0.8.0",
+            "storeVersion": 1,
+            "memories": 0,
+            "items": 3,
+            "pages": 0,
+            "store": [],
+            "files": []
+        }))
+        .unwrap();
+        place
+            .put(name, &seal_night(&key, name, &body).unwrap())
+            .unwrap();
+        place.put(KEY_PHRASE, b"locked").unwrap();
+        let opened = nights(&place, &key).unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!((opened[0].items, opened[0].first.clone()), (3, None));
+        let listed = listed_nights(&place).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!((listed[0].count, listed[0].bytes), (1, None));
     }
 }

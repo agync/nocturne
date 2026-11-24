@@ -144,6 +144,8 @@ pub fn run() {
             backup::commands::backup_turn_off,
             backup::commands::backup_turn_on_again,
             backup::commands::backup_nights,
+            backup::commands::backup_here,
+            backup::commands::backup_on_wifi,
             backup::commands::backup_found,
             backup::commands::backup_restore,
             backup::commands::backup_make_in_use,

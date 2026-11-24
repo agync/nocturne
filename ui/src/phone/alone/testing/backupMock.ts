@@ -2,8 +2,10 @@
 // default), `on`, `wifi`, `noRoom`, `signedOut`, `noPermission`, `another`, `newer`, `kept`,
 // `late`, `notCharged`, `forgot`, `deleting` or `moved`. `&found=none` finds no backup,
 // `&found=offline` no internet, `&connect=` what asking for the account answers (`refused`,
-// `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting, and
-// `&restore=slow` holds a restore part way until it is stopped.
+// `noAccount`, `turnedOff`, `offline`, `full`), `&delete=offline` keeps a deletion waiting,
+// `&restore=slow` holds a restore part way until it is stopped (`&checking` once it checks,
+// `&adding` once it is checked), `&restore=offline` loses the internet until
+// `scriptedBackup.wifi`, and `&net=mobile` is on mobile data until `scriptedBackup.wifi`.
 // The phrase "wrong words" and any recovery key but the one below open nothing.
 
 import { emit } from "@tauri-apps/api/event";
@@ -18,14 +20,23 @@ const MB = 1_000_000;
 /** The scripted clock reads 13 November, 14:05. */
 const at = (day: number, time: string) => `2026-11-${String(day).padStart(2, "0")}T${time}:00Z`;
 
+/** The kept things grow by twenty each night from 1,980. */
+const night = (count: number, madeAt: string, bytes: number): NightView => ({
+  count,
+  madeAt,
+  bytes,
+  items: 1980 + count * 20,
+  first: "2025-03-02T09:14:00Z",
+});
+
 const NIGHTS: NightView[] = [
-  { count: 7, madeAt: at(13, "03:12"), bytes: 1.4 * GB },
-  { count: 6, madeAt: at(12, "02:58"), bytes: 1.4 * GB },
-  { count: 5, madeAt: at(11, "02:40"), bytes: 1.4 * GB },
-  { count: 4, madeAt: at(10, "03:21"), bytes: 1.3 * GB },
-  { count: 3, madeAt: at(9, "03:05"), bytes: 1.3 * GB },
-  { count: 2, madeAt: at(8, "02:47"), bytes: 1.3 * GB },
-  { count: 1, madeAt: at(7, "03:30"), bytes: 1.3 * GB },
+  night(7, at(13, "03:12"), 1.4 * GB),
+  night(6, at(12, "02:58"), 1.4 * GB),
+  night(5, at(11, "02:40"), 1.4 * GB),
+  night(4, at(10, "03:21"), 1.3 * GB),
+  night(3, at(9, "03:05"), 1.3 * GB),
+  night(2, at(8, "02:47"), 1.3 * GB),
+  night(1, at(7, "03:30"), 1.3 * GB),
 ];
 
 /** Off, with nothing kept. */
@@ -89,6 +100,9 @@ export const scriptedBackup = {
   calls: [] as string[],
   phrase: null as string | null,
   key: null as string | null,
+  /** With `&net=mobile`, whether the phone has come onto Wi-Fi; with `&restore=offline`,
+   * whether the internet came back. */
+  wifi: false,
 };
 
 export function backupState(phone: {
@@ -105,6 +119,7 @@ export function backupState(phone: {
   let shown: string | null = null;
   let stopRestore: (() => void) | null = null;
   scriptedBackup.calls = [];
+  scriptedBackup.wifi = false;
 
   const opens = (opening: { with: string; text: string }) => {
     const text = opening.text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -113,8 +128,8 @@ export function backupState(phone: {
     return text === SCRIPTED_PHRASE;
   };
 
-  const progress = (done: number, total: number) =>
-    void emit("backup-progress", { phase: "restoring", done, total });
+  const progress = (phase: "restoring" | "checking", done: number, total: number) =>
+    void emit("backup-progress", { phase, done, total });
 
   function answer(cmd: string, args: Record<string, unknown>): unknown {
     if (cmd.startsWith("backup_")) scriptedBackup.calls.push(cmd);
@@ -195,12 +210,19 @@ export function backupState(phone: {
         return { at: NIGHTS[0]?.madeAt ?? null, bytes: 1.4 * GB };
       }
       case "backup_nights":
+        // Before the phrase, only what the account's listing says.
+        if (!args.opening) return NIGHTS.map((n) => ({ ...n, items: null, first: null }));
         if (!opens(args.opening as { with: string; text: string })) throw "wrongPhrase";
         return NIGHTS;
+      case "backup_here":
+        return { things: 412, first: "2026-06-20T08:00:00Z" };
+      case "backup_on_wifi":
+        return params.get("net") === "mobile" ? scriptedBackup.wifi : true;
       case "backup_restore": {
         if (!opens(args.opening as { with: string; text: string })) throw "wrongPhrase";
         if (params.get("restore") === "missing" && args.night === null) throw "damaged";
-        progress(650 * MB, 1.4 * GB);
+        if (params.get("restore") === "offline" && !scriptedBackup.wifi) throw "offline";
+        progress("restoring", 650 * MB, 1.4 * GB);
         const summary = {
           madeAt: NIGHTS[0]?.madeAt ?? "",
           appVersion: "0.8.0",
@@ -231,7 +253,8 @@ export function backupState(phone: {
         if (params.get("restore") === "slow")
           return new Promise((resolve, reject) => {
             stopRestore = () => reject("stopped");
-            if (params.has("adding")) progress(1.4 * GB, 1.4 * GB);
+            if (params.has("checking")) progress("checking", 0.4 * GB, 1.4 * GB);
+            if (params.has("adding")) progress("checking", 1.4 * GB, 1.4 * GB);
             void resolve;
           });
         status = OFF;
@@ -242,7 +265,7 @@ export function backupState(phone: {
         status = {
           ...status,
           on: true,
-          last: NIGHTS[0] ? { at: NIGHTS[0].madeAt, bytes: 1.4 * GB } : null,
+          last: { at: at(13, "03:12"), bytes: 1.4 * GB },
           state: { state: "upToDate" },
         };
         return null;

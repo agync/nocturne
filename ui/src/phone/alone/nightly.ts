@@ -89,11 +89,22 @@ export interface FoundBackup {
   bytes: number;
 }
 
-/** One night "Which night?" lists. `count` names it to `restore`. */
+/**
+ * One night "Which night?" lists. `count` names it to `restore`. Before the phrase only what the
+ * account's listing says is known; `items` and `first` come once the phrase opens it.
+ */
 export interface NightView {
   count: number;
-  madeAt: string;
-  bytes: number;
+  madeAt: string | null;
+  bytes: number | null;
+  items: number | null;
+  first: string | null;
+}
+
+/** This phone's side before a backup's things come in. */
+export interface Here {
+  things: number;
+  first: string | null;
 }
 
 export type Opening = { with: "phrase"; text: string } | { with: "recoveryKey"; text: string };
@@ -129,7 +140,11 @@ export interface BackupApi {
   turnOff(alsoDelete: boolean): Promise<void>;
   turnOnAgain(): Promise<void>;
   found(): Promise<FoundBackup | null>;
-  nights(opening: Opening): Promise<NightView[]>;
+  /** The nights, before the phrase (`null`) or opened with it. */
+  nights(opening: Opening | null): Promise<NightView[]>;
+  here(): Promise<Here>;
+  /** Whether the phone is on Wi-Fi: `false` on mobile data, `null` when it can't say. */
+  onWifi(): Promise<boolean | null>;
   restore(
     opening: Opening,
     night: number | null,
@@ -187,7 +202,9 @@ async function following<T>(
   try {
     return await run();
   } finally {
-    stop();
+    void Promise.resolve()
+      .then(stop)
+      .catch(() => undefined);
   }
 }
 
@@ -208,6 +225,8 @@ export function createBackupApi(): BackupApi {
     turnOnAgain: () => call("backup_turn_on_again"),
     found: () => call("backup_found"),
     nights: (opening) => call("backup_nights", { opening }),
+    here: () => call("backup_here"),
+    onWifi: () => call<boolean | null>("backup_on_wifi").catch(() => null),
     restore: (opening, night, onProgress) =>
       following(onProgress, () => call("backup_restore", { opening, night })),
     makeInUse: () => call("backup_make_in_use"),

@@ -882,7 +882,6 @@ export function HomeApp({
           api={nightly}
           ios={ios}
           holds
-          things={async () => (await home.stats()).counts.items}
           freeSpace={home.freeSpace}
           onFile={() => replace({ name: "restore" })}
           now={services.now}

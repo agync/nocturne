@@ -370,6 +370,11 @@ impl Engine {
         }))
     }
 
+    /// When the first thing this store holds was kept, or `None` when it holds none.
+    pub fn first_kept(&self) -> Result<Option<String>> {
+        self.read(|conn| Ok(conn.query_row("SELECT MIN(kept_at) FROM items", [], |r| r.get(0))?))
+    }
+
     /// What this store holds, in the columns a phone shows before a restore.
     pub fn kept_counts(&self) -> Result<KeptCounts> {
         self.read(kept_counts_in)
@@ -632,6 +637,8 @@ impl Engine {
         }
 
         let version: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        let first: Option<String> =
+            conn.query_row("SELECT MIN(kept_at) FROM items", [], |r| r.get(0))?;
         drop(conn);
         let size = std::fs::metadata(snapshot)?.len();
         Ok(Snapshot {
@@ -640,6 +647,7 @@ impl Engine {
             memories,
             items,
             pages,
+            first,
             online_used,
             away_used,
             originals,
@@ -768,6 +776,8 @@ pub(crate) struct Snapshot {
     pub online_used: bool,
     pub away_used: bool,
     pub originals: Vec<Original>,
+    /// When the first thing it holds was kept.
+    pub first: Option<String>,
 }
 
 fn count(conn: &Connection, sql: &str) -> Result<u32> {
