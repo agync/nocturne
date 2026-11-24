@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Online answers, connect · Nocturne</title>
+<!-- The app's own tokens and fonts. Serve the repository root over HTTP after make ui/install. -->
+<link rel="stylesheet" href="../../../../ui/src/design/global.css">
+<style>
+/* Matched to ui/src: Shell, ScreenSheet, Button, Online.module.css, Away.module.css, Setup.module.css. */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.shell { display: flex; height: 100vh; background: var(--bg); color: var(--ink); }
+.rail { display: flex; flex: none; flex-direction: column; gap: var(--s-5); width: var(--size-rail); padding: 20px 14px; border-right: 1px solid var(--rule); overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 var(--s-2); }
+.wordmark { font: 500 1.375rem / 1.2 var(--font-serif); letter-spacing: -0.02em; }
+.links { display: flex; flex-direction: column; gap: 2px; }
+.link { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); min-height: var(--size-control); padding: var(--s-2) 10px; border-radius: 6px; color: var(--ink2); font-size: 0.875rem; line-height: 1.3; text-decoration: none; }
+.link[aria-current="page"] { background: var(--sheet); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--rule); }
+.link .mono { color: var(--ink3); font: 400 0.75rem / 1.33 var(--font-mono); }
+.link .count { color: var(--ember); font: 400 0.75rem / 1.33 var(--font-mono); }
+.railFoot { display: flex; flex-direction: column; gap: 14px; margin-top: auto; font-size: 0.8125rem; }
+.status { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-md); }
+.statusState { display: flex; align-items: center; gap: var(--s-2); color: var(--ink2); }
+.statusLabel { color: var(--ink3); font: 400 0.6875rem / 1.3 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.statusValue { font-weight: 500; }
+.secondary { display: flex; justify-content: space-between; gap: var(--s-2); padding: 0 6px; }
+.secondary .link { padding: 0 var(--s-2); }
+.bodyCol { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.topbar { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) 28px; border-bottom: 1px solid var(--rule); }
+.keepbar { display: flex; flex: 1; align-items: center; gap: var(--s-2); max-width: 680px; min-height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--ink3); border-radius: var(--r-md); background: var(--raised); color: var(--ink3); }
+.keepbar > span:first-child { flex: 1; }
+.kbd { padding: 1px 6px; border: 1px solid var(--ink3); border-radius: var(--r-xs); color: var(--ink2); font: 400 0.6875rem / 1.4 var(--font-mono); }
+.round { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--rule2); border-radius: 50%; color: var(--ink); }
+.dropHint { color: var(--ink3); font-size: 0.8125rem; }
+.narrowHeader { display: none; align-items: center; gap: var(--s-2); min-height: calc(var(--size-touch) + var(--s-4)); padding: var(--s-2) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--bg); font-weight: 500; }
+.narrowHeader .chevron { display: inline-flex; color: var(--ink3); }
+.scroller { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; scroll-padding-bottom: 88px; }
+.frame { display: flex; flex: 1; flex-direction: column; padding: var(--s-5) var(--size-gutter) 0; }
+.sheet { display: flex; flex: 1; flex-direction: column; min-height: 36rem; padding: var(--s-6) var(--s-6) 0; border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.back { display: inline-flex; align-self: flex-start; gap: var(--s-1); margin-bottom: var(--s-4); color: var(--ink2); font: 500 0.875rem / 1.4 var(--font-sans); text-decoration: none; }
+.columns { display: flex; gap: 48px; align-items: flex-start; }
+.columns[data-away] { gap: 56px; }
+.mainCol { display: flex; flex: 1; flex-direction: column; gap: var(--s-5); min-width: 0; max-width: 680px; }
+.asideCol { display: flex; flex: none; flex-direction: column; gap: var(--s-3); width: 260px; padding-top: 6px; }
+.label { margin: 0; color: var(--ink3); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.stepTitle { margin: 0; color: var(--ink); font: 400 1.875rem / 1.18 var(--font-serif); letter-spacing: -0.01em; }
+h1:focus { outline: none; }
+.bodyText { margin: 0; color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.strong { color: var(--ink); }
+.sub { margin: 0; color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+.lede { margin: 0; color: var(--ink2); font: italic 400 1.25rem / 1.5 var(--font-serif); }
+.dl { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.dl > div { display: flex; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.dl dt { flex: none; width: 8rem; color: var(--ink); font-weight: 500; }
+.dl dd { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.short dd { color: var(--ink); }
+.toggleLink { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 24px; padding: 0; border: 0; background: none; color: var(--accent); font: 500 0.875rem / 1.4 var(--font-sans); cursor: pointer; }
+.chev { display: inline-flex; transform: rotate(-90deg); }
+.toggleLink[aria-expanded="true"] .chev { transform: none; }
+.more { display: flex; flex-direction: column; gap: var(--s-4); }
+.more[hidden], .why[hidden] { display: none; }
+.rules { margin: 0; padding: 0; border-top: 1px solid var(--rule); list-style: none; }
+.rules li { padding: 11px 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.875rem; }
+.example { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); font: 400 0.8125rem / 1.6 var(--font-mono); }
+.example ol { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.example li { display: flex; gap: 12px; }
+.example li b { flex: none; width: 14px; color: var(--ink2); font-weight: 500; }
+.exampleNote { color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleHead { color: var(--ink); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleFoot { padding-top: 8px; border-top: 1px solid var(--rule); color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.sec h2 { margin: 0; color: var(--ink); font: 500 1.0625rem / 1.4 var(--font-sans); }
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.node { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 9rem; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink2); font-size: 0.8125rem; line-height: 1.4; }
+.node[data-out="true"] { border-color: var(--ink); }
+.nodeName { color: var(--ink); font-weight: 500; font-size: 0.875rem; }
+.arrow { display: flex; align-items: center; color: var(--ink3); }
+.never { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.never li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink2); font-size: 0.9375rem; line-height: 1.5; }
+.never svg { flex: none; margin-top: 3px; }
+.sum { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.sum div { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.sum dt { color: var(--ink2); font-size: 0.75rem; }
+.sum dd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0; color: var(--ink); font-size: 0.875rem; font-weight: 500; }
+.linkButton { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.monoText { font: 400 0.8125rem / 1.5 var(--font-mono); }
+.choices { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.legend { margin-bottom: var(--s-3); padding: 0; color: var(--ink); font: 500 1rem / 1.4 var(--font-sans); }
+.choice { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-md); background: var(--sheet); cursor: pointer; }
+.choice[data-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.choice input { flex: none; width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); }
+.choiceText { display: flex; flex-direction: column; gap: var(--s-2); color: var(--ink2); font-size: 0.875rem; line-height: 1.5; }
+.choiceText b { color: var(--ink); font-weight: 600; }
+.choiceName { color: var(--ink); font: 500 0.9375rem / 1.4 var(--font-sans); }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); min-height: var(--size-control); padding: 0 var(--s-4); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--ink); font: 500 0.875rem / 1.3 var(--font-sans); cursor: pointer; }
+.button[data-variant="primary"] { background: var(--ink); color: var(--sheet); }
+.button[data-variant="quiet"] { padding: 0 var(--s-3); color: var(--accent); }
+.button:focus-visible, .toggleLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.note { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+
+/* The step's bar: pinned to the bottom of the window on every step. */
+.actionBar { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); margin: auto calc(-1 * var(--s-6)) 0; padding: var(--s-4) var(--s-6); border-top: 1px solid var(--rule); background: var(--sheet); }
+.actionBar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; background: linear-gradient(to bottom, transparent, var(--sheet)); opacity: 0; pointer-events: none; }
+.actionBar[data-more="true"]::before { opacity: 1; }
+.buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.spacer { flex: none; height: var(--s-6); }
+
+/* Connect's fields, and the service's list in a dialog. */
+.fields { display: flex; flex-direction: column; gap: var(--s-5); }
+.dfield { display: flex; flex-direction: column; gap: 6px; }
+.fieldLabel { color: var(--ink); font: 500 0.9375rem / 1.4 var(--font-sans); }
+.fieldLabel small { margin-left: 6px; color: var(--ink3); font: 400 0.75rem / 1.4 var(--font-mono); }
+.fieldRow { display: flex; gap: var(--s-2); }
+.fieldRow .input { flex: 1; }
+.input { display: flex; align-items: center; gap: 10px; min-height: var(--size-control); padding: 0 var(--s-3); border: 1px solid var(--rule2); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); font-size: 0.9375rem; }
+.input .ph { color: var(--ink3); }
+.button[data-variant="secondary"] { border-color: var(--rule2); }
+.button:disabled { opacity: 0.45; }
+.pickLink { min-height: var(--size-control); }
+.asideH { margin: 0; color: var(--ink); font: 500 0.9375rem / 1.4 var(--font-sans); }
+.lockNote { display: flex; gap: 8px; }
+.lockNote svg { flex: none; margin-top: 2px; }
+.scrim { position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: var(--s-6); background: rgba(23, 24, 28, 0.42); }
+.dialog { display: flex; flex-direction: column; gap: var(--s-3); width: min(100%, 520px); max-height: 100%; padding: var(--s-5) var(--s-6) var(--s-6); border-radius: var(--r-lg); background: var(--raised); box-shadow: var(--e2); }
+.dialogHead { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.dialogHead h2 { margin: 0; font: 400 1.5rem / 1.25 var(--font-serif); }
+.searchInput { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.searchInput svg { color: var(--ink2); }
+.caret { display: inline-block; width: 1px; height: 1.2em; margin-left: -9px; background: var(--ink); }
+.names { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.names li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--s-3); border-bottom: 1px solid var(--rule); font: 400 0.875rem / 1.4 var(--font-mono); }
+.names li[aria-checked="true"] { background: var(--accent-soft); font-weight: 500; }
+.names mark { border-radius: 3px; background: var(--accent-soft); color: inherit; }
+.names li[aria-checked="true"] mark { background: transparent; text-decoration: underline; }
+
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="rail" aria-label="Main">
+  <div class="brand"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="wordmark">Nocturne</span></div>
+  <div class="links">
+    <a class="link" href="#"><span>Today</span><span class="mono">Mon</span></a>
+    <a class="link" href="#"><span>Needs you</span><span class="count">2</span></a>
+    <a class="link" href="#"><span>What Nocturne remembers</span></a>
+    <a class="link" href="#"><span>Recently kept</span></a>
+    <a class="link" href="#"><span>Fading &amp; let go</span></a>
+    <a class="link" href="#"><span>Past pages</span></a>
+  </div>
+  <div class="railFoot">
+    <div class="status">
+      <span class="statusState"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2.5714285714285716"/></svg> Resting</span>
+      <span><span class="statusLabel">Uses the internet for</span><br><span class="statusValue">Downloads you agreed to</span></span>
+    </div>
+    <div class="secondary"><a class="link" href="#">Privacy</a><a class="link" href="#" aria-current="page">Settings</a></div>
+  </div>
+</nav>
+<div class="bodyCol">
+
+<div class="topbar">
+  <div class="keepbar"><span>Keep something, or ask…</span><span class="kbd">Ctrl Shift Space</span><span class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span></div>
+  <span class="dropHint">or drop files anywhere</span>
+</div>
+<header class="narrowHeader"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Settings</span><span class="chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></header>
+<main class="scroller" id="main" tabindex="-1" aria-label="Connect to the service you chose">
+<div class="frame">
+<div class="sheet">
+<a class="back" href="#"><span aria-hidden="true">←</span> Online answers</a>
+<div class="columns"><section class="mainCol">
+<h1 class="stepTitle" tabindex="-1">Connect to the service you chose.</h1>
+<p class="bodyText">Copy three things from its website. They’re usually on a page about keys, or in its quick start guide.</p>
+<div class="fields">
+  <div class="dfield">
+    <span class="fieldLabel">Address <small>API URL</small></span>
+    <span class="input">https://api.example.com/v1</span>
+    <span class="sub">Starts with https://, or http:// for a server on this computer or your own network. Copy all of it.</span>
+  </div>
+  <div class="dfield">
+    <span class="fieldLabel">Key <small>API key</small></span>
+    <span class="fieldRow"><span class="input">••••••••••••••••••••••••</span><button type="button" class="button" data-variant="secondary">Show</button></span>
+    <span class="sub">A long code the service gives you. It stays on this computer, locked away.</span>
+  </div>
+  <div class="dfield">
+    <span class="fieldLabel">Which one to use <small>model name</small></span>
+    <span class="input monoText" data-state="picked">reader-small</span>
+    <span class="input" data-state="list"><span class="ph">Type it, or choose from the list</span></span>
+    <span class="sub" data-state="picked">On api.example.com’s list.</span>
+    <button type="button" class="toggleLink pickLink"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>Choose from api.example.com’s list…</button>
+  </div>
+</div>
+</section>
+<aside class="asideCol">
+  <h2 class="asideH">Which service?</h2>
+  <p class="sub">Any service that answers the way OpenAI’s does. For example OpenAI, OpenRouter, Mistral, Groq or DeepInfra.</p>
+  <p class="sub">Nocturne doesn’t recommend one. Each has its own prices, and its own page about what it keeps. Read that before you choose.</p>
+  <p class="sub lockNote"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Nocturne gives the key only to its own engine on this computer, which uses it to reach that address and nowhere else.</p>
+</aside></div>
+<div class="spacer"></div>
+<div class="actionBar"><div class="buttons"><button type="button" class="button" data-variant="primary" disabled>Continue</button><button type="button" class="button" data-variant="secondary">Check</button><button type="button" class="button" data-variant="quiet">Not now</button></div><span class="note">Continue works once the check passes.</span></div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+<div class="scrim" data-state="list">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="list-title">
+    <div class="dialogHead"><h2 id="list-title">api.example.com’s list</h2><button type="button" class="button" data-variant="quiet">Close</button></div>
+    <p class="sub">214 names, A to Z</p>
+    <span class="input searchInput"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>small<span class="caret"></span></span>
+    <p class="sub" role="status">7 of 214 have “small” in them.</p>
+    <ul class="names" role="radiogroup" aria-labelledby="list-title">
+      <li role="radio" aria-checked="false">open-reader-<mark>small</mark></li>
+      <li role="radio" aria-checked="false">open-reader-<mark>small</mark>-instruct</li>
+      <li role="radio" aria-checked="true">reader-<mark>small</mark></li>
+      <li role="radio" aria-checked="false">reader-<mark>small</mark>-2026-05</li>
+      <li role="radio" aria-checked="false">reader-<mark>small</mark>-2026-10</li>
+      <li role="radio" aria-checked="false">sight-reader-<mark>small</mark></li>
+      <li role="radio" aria-checked="false">writer-<mark>small</mark>-fast</li>
+    </ul>
+    <p class="sub">Not here? Close the list and type the name from the service’s website.</p>
+  </div>
+</div>
+
+<script>
+// ?theme=dark|light picks the theme; ?state=picked|list picks the state.
+const params = new URLSearchParams(location.search);
+const theme = params.get("theme");
+if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+const state = params.get("state") || "picked";
+for (const el of document.querySelectorAll("[data-state]")) if (el.dataset.state !== state) el.remove();
+const scroller = document.querySelector(".scroller");
+const bar = document.querySelector(".actionBar");
+bar.dataset.more = String(scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1);
+</script>
+</body>
+</html>
