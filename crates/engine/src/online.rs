@@ -189,6 +189,18 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
 /// memory here: marked private in any version, being forgotten or let go. Nothing about its
 /// words or labels does. Fails closed: a memory the store does not know counts as private.
 fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
+    // A check-in, an entry or a reading kept as it is goes like a memory, unless it is private.
+    if let Some(item) = crate::lookup::kept_line_item(id) {
+        let private: Option<bool> = conn
+            .query_row("SELECT private FROM items WHERE id = ?1", [item], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        return Ok(match private {
+            Some(false) => None,
+            _ => Some(LeftOut::Private),
+        });
+    }
     let row: Option<(bool, Option<String>)> = conn
         .query_row(
             "SELECT forgetting, let_go_at FROM memories WHERE id = ?1",
@@ -234,7 +246,17 @@ struct Current {
     superseded: bool,
 }
 
-fn current(conn: &Connection, id: &str) -> Result<Option<Current>> {
+/// Rebuilds a kept line (a check-in, an entry or a reading) as it reads now.
+pub(crate) type KeptNow<'a> = &'a dyn Fn(&Connection, &str) -> Result<Option<String>>;
+
+fn current(conn: &Connection, id: &str, kept: KeptNow<'_>) -> Result<Option<Current>> {
+    if crate::lookup::is_kept_line(id) {
+        return Ok(kept(conn, id)?.map(|sentence| Current {
+            sentence,
+            was: None,
+            superseded: false,
+        }));
+    }
     let row: Option<(String, bool, Option<String>)> = conn
         .query_row(
             "SELECT sentence, forgetting, superseded_at FROM memories WHERE id = ?1",
@@ -270,6 +292,7 @@ fn rebuild(
     conn: &Connection,
     line: SentLine,
     memory_lines: &[(String, String)],
+    kept: KeptNow<'_>,
 ) -> Result<SentLine> {
     let SentLine::Memory { n, text, .. } = line else {
         return Ok(line);
@@ -278,7 +301,7 @@ fn rebuild(
     let Some((id, hash)) = memory_lines.get((n as usize).saturating_sub(1)) else {
         return Ok(shown(None, SentMemory::Deleted));
     };
-    let Some(now) = current(conn, id)? else {
+    let Some(now) = current(conn, id, kept)? else {
         return Ok(shown(None, SentMemory::Deleted));
     };
     let mut line = text
@@ -341,7 +364,7 @@ fn memory_lines_of(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn send_view(conn: &Connection, raw: SendRaw) -> Result<OnlineSend> {
+fn send_view(conn: &Connection, raw: SendRaw, kept: KeptNow<'_>) -> Result<OnlineSend> {
     let (id, at, kind, host, model, question, template, memory_lines, up, down, cost, result) = raw;
     let template: Value = serde_json::from_str(&template).unwrap_or(Value::Null);
     let stored: Vec<SentLine> =
@@ -349,7 +372,7 @@ fn send_view(conn: &Connection, raw: SendRaw) -> Result<OnlineSend> {
     let memory_lines = memory_lines_of(&memory_lines);
     let lines = stored
         .into_iter()
-        .map(|l| rebuild(conn, l, &memory_lines))
+        .map(|l| rebuild(conn, l, &memory_lines, kept))
         .collect::<Result<Vec<_>>>()?;
     Ok(OnlineSend {
         id: id as f64,
@@ -462,6 +485,14 @@ impl Engine {
         self.read(|conn| {
             ids.iter()
                 .map(|id| {
+                    if let Some(item) = crate::lookup::kept_line_item(id) {
+                        let known: bool = conn.query_row(
+                            "SELECT EXISTS (SELECT 1 FROM items WHERE id = ?1 AND forget_epoch = 0)",
+                            [item],
+                            |r| r.get(0),
+                        )?;
+                        return Ok(known);
+                    }
                     let row: Option<(bool, Option<String>, String)> = conn
                         .query_row(
                             "SELECT forgetting, let_go_at, status FROM memories WHERE id = ?1",
@@ -522,7 +553,13 @@ impl Engine {
                 ))?
                 .query_map(params![before, limit], send_raw)?
                 .collect::<rusqlite::Result<_>>()?;
-            raws.into_iter().map(|raw| send_view(conn, raw)).collect()
+            let originals = self.originals_dir();
+            let kept = |conn: &Connection, id: &str| {
+                crate::lookup::kept_line_now(conn, self.clock(), &originals, id)
+            };
+            raws.into_iter()
+                .map(|raw| send_view(conn, raw, &kept))
+                .collect()
         })
     }
 
@@ -673,7 +710,7 @@ pub(crate) fn scrub_memory(conn: &Connection, id: &str) -> Result<()> {
 
 /// The export's part for Online answers: `online/sent.md`, what was sent and when, readable,
 /// with lines rebuilt as the sent log shows them. Never the key, which the store never holds.
-pub(crate) fn export_section(conn: &Connection, dir: &Path) -> Result<()> {
+pub(crate) fn export_section(conn: &Connection, dir: &Path, kept: KeptNow<'_>) -> Result<()> {
     let raws: Vec<SendRaw> = conn
         .prepare(&format!("SELECT {SEND_COLS} FROM online_sends ORDER BY id"))?
         .query_map([], send_raw)?
@@ -683,7 +720,7 @@ pub(crate) fn export_section(conn: &Connection, dir: &Path) -> Result<()> {
     }
     let mut out = String::from("# What Online answers sent\n");
     for raw in raws {
-        let send = send_view(conn, raw)?;
+        let send = send_view(conn, raw, kept)?;
         let what = match send.kind {
             SendKind::Question => "Question",
             SendKind::Check => "Connection check",

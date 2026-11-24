@@ -15,6 +15,7 @@ mod backup;
 mod capture;
 mod carried;
 mod clock;
+mod datestep;
 mod entity;
 mod error;
 mod export;
@@ -24,6 +25,7 @@ mod fsutil;
 pub mod guide;
 mod journal;
 mod lifecycle;
+mod lookup;
 mod memory;
 mod merge;
 mod mind;
@@ -52,11 +54,17 @@ pub use backup::{
 };
 pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_title, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use datestep::{DateStep, date_step};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
 pub use find::{ExcerptPart, FIND_CAP, FoundItem};
 pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
 pub use journal::keep::KeepPlace;
+pub use lookup::{
+    AskToday, CALENDAR_DAYS, CALENDAR_LINES, DATE_STEP_LINES, HEALTH_DAYS, HEALTH_LINES,
+    JOURNAL_DAYS, JOURNAL_LINES, KEPT_LINE, LookScope, Looked, SEARCH_LINES, is_kept_line,
+    kept_line_item, spoken_day, spoken_days, weekday_name,
+};
 pub use merge::BroughtIn;
 pub use mind::{
     AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
