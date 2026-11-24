@@ -16,9 +16,11 @@ struct ReadingArgs: Decodable {
 }
 
 /// Read now while the person is away. On iOS 26 the phone's own progress carries it, and the
-/// person can stop it there; before that the app asks for a short while in the background, and
-/// when iOS ends it the person gets one quiet line and the app says it paused. Not yet tried on an
-/// iPhone: the Info.plist lists the name the progress is made under.
+/// person can stop it there: its end, by them or by iOS, is the person's Stop, since Nocturne
+/// never reads on against them. Before iOS 26, or when the progress cannot start, the app asks
+/// for a short while in the background, and when iOS ends it the person gets one quiet line and
+/// the app says it paused. Not yet tried on an iPhone: the Info.plist lists the names the
+/// progress is made under.
 final class Reading {
   static let shared = Reading()
   static let prefix = "app.nocturne.readnow."
@@ -27,7 +29,9 @@ final class Reading {
   private let lock = NSLock()
   private var task: AnyObject?
   private var background: UIBackgroundTaskIdentifier = .invalid
-  private var registered = false
+  /// A request for the phone's own progress is on its way: no second one is made meanwhile.
+  private var pending = false
+  private var stopped = false
   private var paused = false
   private var pausedTitle = ""
   private var pausedText = ""
@@ -45,9 +49,11 @@ final class Reading {
       self.notesAllowed { notes in
         self.lock.lock()
         let wasPaused = self.paused
+        let wasStopped = self.stopped
         self.paused = false
+        self.stopped = false
         self.lock.unlock()
-        answer(["stop": false, "paused": wasPaused, "notes": notes])
+        answer(["stop": wasStopped, "paused": wasPaused, "notes": notes])
       }
     }
   }
@@ -76,49 +82,74 @@ final class Reading {
         current.updateTitle(title, subtitle: text)
         return
       }
-      if task == nil, UIApplication.shared.applicationState == .active {
-        start(title, text, args)
+      if task == nil, !pending, background == .invalid,
+        UIApplication.shared.applicationState == .active
+      {
+        if start(title, text, args) { return }
+      } else {
+        return
       }
-      return
     }
-    if background == .invalid, UIApplication.shared.applicationState == .active {
-      background = UIApplication.shared.beginBackgroundTask(withName: "Reading what you kept") {
-        [weak self] in
-        self?.expired()
-      }
+    beginShortWhile()
+  }
+
+  /// The short while iOS gives an app as it leaves; its end is a pause.
+  private func beginShortWhile() {
+    guard background == .invalid, UIApplication.shared.applicationState == .active else { return }
+    background = UIApplication.shared.beginBackgroundTask(withName: "Reading what you kept") {
+      [weak self] in
+      self?.expired()
     }
   }
 
+  /// Asks for the phone's own progress under a new name, with its launch handler registered for
+  /// that name first, as BGTaskScheduler requires. False when iOS refused it.
   @available(iOS 26.0, *)
-  private func start(_ title: String, _ text: String, _ args: ReadingArgs) {
-    if !registered {
-      registered = BGTaskScheduler.shared.register(
-        forTaskWithIdentifier: Reading.prefix + "*", using: nil
-      ) { [weak self] task in
-        guard let self, let task = task as? BGContinuedProcessingTask else { return }
-        self.open(task, args)
-      }
+  private func start(_ title: String, _ text: String, _ args: ReadingArgs) -> Bool {
+    let name = Reading.prefix + UUID().uuidString
+    let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: name, using: nil) {
+      [weak self] task in
+      guard let self, let task = task as? BGContinuedProcessingTask else { return }
+      self.open(task, args)
     }
-    guard registered else { return }
-    let request = BGContinuedProcessingTaskRequest(
-      identifier: Reading.prefix + UUID().uuidString, title: title, subtitle: text)
+    guard registered else {
+      NSLog("Nocturne: the reading's progress could not be registered")
+      return false
+    }
+    let request = BGContinuedProcessingTaskRequest(identifier: name, title: title, subtitle: text)
     request.strategy = .fail
-    try? BGTaskScheduler.shared.submit(request)
+    do {
+      try BGTaskScheduler.shared.submit(request)
+      pending = true
+      return true
+    } catch {
+      NSLog("Nocturne: the reading's progress was refused: \(error.localizedDescription)")
+      return false
+    }
   }
 
   @available(iOS 26.0, *)
   private func open(_ task: BGContinuedProcessingTask, _ args: ReadingArgs) {
     DispatchQueue.main.async {
       self.task = task
+      self.pending = false
       task.progress.totalUnitCount = Int64(args.count ?? 0)
       task.progress.completedUnitCount = Int64(args.done ?? 0)
       task.expirationHandler = { [weak self] in
-        DispatchQueue.main.async { self?.expired() }
+        DispatchQueue.main.async { self?.stoppedThere() }
       }
     }
   }
 
-  /// iOS, or the person in the system's own progress, ended the time the app was given.
+  /// The phone's own progress ended, by the person's Stop there or by iOS: told as a Stop.
+  private func stoppedThere() {
+    lock.lock()
+    stopped = true
+    lock.unlock()
+    finish(success: false)
+  }
+
+  /// iOS ended the short while it gave the app as it left: a pause, with one quiet line.
   private func expired() {
     lock.lock()
     paused = true
@@ -140,6 +171,7 @@ final class Reading {
       current.setTaskCompleted(success: success)
     }
     task = nil
+    pending = false
     if background != .invalid {
       UIApplication.shared.endBackgroundTask(background)
       background = .invalid
