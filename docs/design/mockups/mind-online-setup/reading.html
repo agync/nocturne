@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone alone · reading on battery · Nocturne</title>
+<link rel="stylesheet" href="../phone-parity/parity.css">
+<link rel="stylesheet" href="../phone-parity/backup.css">
+<link rel="stylesheet" href="setup.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "This phone", "back": "Today" },
+  "first-waiting": { "bar": "none" },
+  "first-now": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="waiting now left low done paused unreachable first-waiting first-now">
+<main id="content" style="gap: 20px">
+
+  <!-- This phone: the mind online group -->
+  <div class="group" data-state="waiting now left low done paused unreachable">
+    <p class="ghead">Your memory</p>
+    <div class="rows">
+      <div class="row"><span data-icon="phone" data-size="22"></span><span class="rowText"><span class="rowLabel">Where it is</span><span class="rowHint">On this phone · 412 MB</span></span></div>
+    </div>
+  </div>
+
+  <div class="group" data-state="waiting now left low done paused unreachable">
+    <p class="ghead">Nocturne’s mind online</p>
+    <div class="rows">
+      <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Its mind</span>
+        <span class="rowHint" data-state="waiting">answers.example, online · Waiting to charge · 89 to read</span>
+        <span class="rowHint" data-state="now">answers.example, online · Reading now · 12 of 89</span>
+        <span class="rowHint" data-state="left">answers.example, online · Waiting to charge · 77 to read</span>
+        <span class="rowHint" data-state="low">answers.example, online · Waiting to charge · 58 to read</span>
+        <span class="rowHint" data-state="done">answers.example, online</span>
+        <span class="rowHint" data-state="paused">answers.example, online · Paused by your limit · 77 to read</span>
+        <span class="rowHint" data-state="unreachable">answers.example, online · Not answering · 77 to read</span>
+      </span></div>
+
+      <div class="rn" data-state="waiting left">
+        <p class="rnSaid" data-state="left">Read now stopped when you left Nocturne, after 12.</p>
+        <p>Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down.</p>
+        <p>Read now reads while Nocturne stays open, and uses some battery.</p>
+        <span class="btn" data-kind="tonal">Read now</span>
+      </div>
+
+      <div class="rn" data-state="now" role="status">
+        <div class="prog"><span style="width: 13%"></span></div>
+        <p>Keep Nocturne open. The screen stays on until it’s done or you stop.</p>
+        <span class="btn" data-kind="quiet">Stop</span>
+      </div>
+
+      <div class="rn" data-state="low">
+        <p class="rnSaid">Read now stopped at 20% battery, after 31. The rest is read while this phone charges.</p>
+        <p>Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down.</p>
+        <span class="btn" data-kind="tonal" data-off>Read now</span>
+        <p class="why">Read now works above 20% battery.</p>
+      </div>
+
+      <div class="rn" data-state="done" role="status">
+        <p class="rnSaid"><span data-icon="check" data-size="18"></span> Everything you kept is read.</p>
+      </div>
+
+      <div class="rn" data-state="paused">
+        <p class="rnSaid">You’ve reached this month’s limit. The rest is read from 1 December, or when you change the limit.</p>
+        <span class="btn" data-kind="tonal">Change limit</span>
+      </div>
+
+      <div class="rn" data-state="unreachable">
+        <p class="rnSaid">answers.example hasn’t answered since 9:12 am. Nocturne looks again on its own.</p>
+        <p>Read now looks once more, then reads while Nocturne stays open, and uses some battery.</p>
+        <span class="btn" data-kind="tonal">Read now</span>
+      </div>
+
+      <div class="row"><span class="rowText"><span class="rowLabel">What goes</span><span class="rowHint">What you keep, and questions</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">See what was sent</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">This month</span>
+        <span class="rowHint" data-state="paused">200 things read and answered · limit 200</span>
+        <span class="rowHint" data-state="waiting now left low done unreachable">3 things read and answered · no limit</span>
+      </span></div>
+    </div>
+  </div>
+
+  <!-- Reading what you kept, right after turning on, on battery -->
+  <div class="hero" data-state="first-waiting first-now" style="padding-top: 72px">
+    <span data-mark="40"></span>
+    <h1 class="stepH">Reading what you kept</h1>
+    <p class="plead" data-state="first-waiting">Nocturne reads the 89 things you kept while this phone charges, a few at a time. Your first page comes tomorrow morning.</p>
+    <p class="plead" data-state="first-now">Nocturne is reading 89 things you kept, a few at a time. Your first page comes tomorrow morning.</p>
+  </div>
+  <div data-state="first-waiting" style="display: flex; flex-direction: column; gap: 8px">
+    <p class="pstatus" role="status"><span data-icon="moon" data-size="16"></span>Waiting to charge · 89 to read</p>
+  </div>
+  <p class="small" data-state="first-waiting">Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down. Read now reads while Nocturne stays open, and uses some battery.</p>
+  <div data-state="first-now" style="display: flex; flex-direction: column; gap: 8px">
+    <div class="prog"><span style="width: 13%"></span></div>
+    <p class="pstatus" role="status"><span class="pdot pulse"></span>Reading now · 12 of 89</p>
+  </div>
+  <p class="small" data-state="first-now">Keep Nocturne open. The screen stays on until it’s done or you stop.</p>
+  <div class="foot plain" data-state="first-waiting"><span class="btn" data-kind="primary">OK</span><span class="btn">Read now</span></div>
+  <div class="foot plain" data-state="first-now"><span class="btn" data-kind="primary">OK</span><span class="btn" data-kind="quiet">Stop</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+<script>
+// At 200 per cent, each screen starts at the mind group, as the person would scroll to it.
+if (document.documentElement.dataset.text === "200") {
+  for (const scroll of document.querySelectorAll(".scroll")) {
+    const head = [...scroll.querySelectorAll(".ghead")].find((h) => h.textContent.startsWith("Nocturne"));
+    if (head) scroll.scrollTop = head.offsetTop - 8;
+  }
+}
+</script>
+</body>
+</html>
