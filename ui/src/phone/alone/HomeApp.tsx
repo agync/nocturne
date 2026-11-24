@@ -587,6 +587,16 @@ export function HomeApp({
     else leave(depth);
   };
 
+  /** Steps back over `n` entries, then opens `next` on top of where they started. */
+  const leaveThen = (n: number, next: View) => {
+    const open = () => {
+      window.removeEventListener("popstate", open);
+      go(next);
+    };
+    window.addEventListener("popstate", open);
+    leave(n);
+  };
+
   const leavePhrase = (depth: number) => {
     phrase.current = NEW_PHRASE;
     leave(depth);
@@ -857,7 +867,9 @@ export function HomeApp({
               await nightly.setWifiOnly(wifiOnly);
               await nightly.turnOn(text);
               phrase.current = NEW_PHRASE;
-              replace({ name: "nightlyAfter", depth });
+              // The steps leave the history, so Back from what follows never reaches a step
+              // that would turn on a backup that is already on.
+              leaveThen(depth, { name: "nightlyAfter", depth: 1 });
             }}
           />
         );

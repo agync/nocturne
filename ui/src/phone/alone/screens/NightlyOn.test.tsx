@@ -126,6 +126,23 @@ describe("turning the backup on", () => {
     expect(await screen.findByRole("list", { name: "Your phrase" })).toHaveTextContent("copper");
   });
 
+  it("never steps Back into the steps once it is on", async () => {
+    await app("m=kept&v=nightly");
+    await toStep2();
+    await screen.findByLabelText("word 1, harbour");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Your phrase"), {
+      target: { value: SCRIPTED_PHRASE },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(
+      await screen.findByRole("heading", { name: "A recovery key, if you want one" }),
+    ).toBeInTheDocument();
+    history.back();
+    expect(await screen.findByRole("switch", { name: /Back up every night/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Backup · step/)).toBeNull();
+  });
+
   it("checks the phrase typed back, then turns on, offers a key and backs up", async () => {
     await app("m=kept&v=nightly");
     await toStep2();
