@@ -2,7 +2,7 @@
 
 .PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/e2e-phone-native ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
-	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test phone/ios-sim phone/ios-test phone/ios-release \
+	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test phone/ios-sim phone/ios-test phone/ios-release phone/ui \
 	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
@@ -237,8 +237,12 @@ phone/ios-test: phone/ios-sim ## The iPhone plugins' Swift tests in a Simulator 
 	    -destination "platform=iOS Simulator,name=$(IOS_SIMULATOR)") || exit 1; \
 	done
 
-phone/ios-release: ui/node_modules ## Build, sign and export the iPhone app for TestFlight (needs APPLE_API_*, APPLE_DEVELOPMENT_TEAM)
+phone/ui: ui/node_modules
 	cd ui && npm run build:phone-native
+
+# The release workflow builds the interface first, with no key on disk, and runs this with
+# `make -o phone/ui` so that no interface script runs once the key is written.
+phone/ios-release: ui/node_modules phone/ui ## Build, sign and export the iPhone app for TestFlight (needs APPLE_API_*, APPLE_DEVELOPMENT_TEAM)
 	$(PHONE_TAURI) ios build --target aarch64 --export-method app-store-connect --ci
 
 ##@ Utilities

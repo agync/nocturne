@@ -175,7 +175,14 @@ in the `release-signing` environment. Its limits: it builds only the commit the 
 the key and the team reach only the steps that use them, the key file is removed when the job ends,
 the checkout keeps no token, and the job never publishes anything to the release. Before the first
 run, the app must exist in App Store Connect with the bundle identifier `is.nocturne.phone`, and
-the key's role must be Admin, so Xcode may create the certificate and the profile. The build then
+the key's role is App Manager, the narrowest that can upload builds and, with Xcode's automatic
+signing, manage the profiles. Creating the first cloud-managed distribution certificate may need
+Admin: if the first run fails on a certificate permission, run it once with an Admin key (or make
+the certificate by hand in the Apple Developer account) and go back to an App Manager key, since
+later runs only reuse the certificate. This is not verified here; only a real run shows it. The key
+is written to disk only after the dependencies and the interface are built (npm packages installed
+with scripts off, crates fetched); the Xcode archive still compiles the Rust crates with the key
+present, so their build scripts run then. The build then
 appears in TestFlight after Apple has processed it, by email to the key's owner; a person adds it
 to a test group and, for the store, submits it for review in App Store Connect. The release
 workflow does neither.
@@ -227,7 +234,7 @@ To get them: make the Android upload key once with
 `keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`
 and enrol it in Google Play when the app is created there (Play App Signing). Create the App Store
 Connect API key under Users and Access, Integrations, App Store Connect API, as a team key with the
-Admin role: the `.p8` can be downloaded once. The team id is under Membership details in the Apple
+App Manager role (Admin only if the note above applies): the `.p8` can be downloaded once. The team id is under Membership details in the Apple
 Developer account.
 The GitHub App needs read and write access to contents (branches, tags, releases and their files)
 and to pull requests (the release pull request and its labels) on this repository. The helper
