@@ -1,12 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { formatBytes, formatLongDay, formatTimeOfDay } from "../../../copy/format";
+import { formatBytes, formatTimeOfDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { BackupProgress, BackupReport, KeptCounts } from "../../../engine/bindings";
+import type { BackupProgress, BackupReport } from "../../../engine/bindings";
 import { progressDetail, useProgressEta } from "../../../screens/backup/progress";
 import { useHeading } from "../../native/screens/parts";
 import { Button, Icon, Page } from "../../screens/ui";
-import { type Checked, HomeRequestError, type PickedFile, type Progress } from "../api";
-import { chips } from "./parts";
+import {
+  type Checked,
+  type FileRestored,
+  HomeRequestError,
+  type PickedFile,
+  type Progress,
+} from "../api";
+import { backupDay } from "../nightly";
 
 const MIN_PASSPHRASE = 8;
 
@@ -119,11 +125,14 @@ export function Running({
 export function Done({
   title,
   body,
+  note,
   button,
   onDone,
 }: {
   title: string;
   body: string;
+  /** A smaller line under the body. */
+  note?: string;
   button: string;
   onDone(): void;
 }) {
@@ -139,6 +148,7 @@ export function Done({
             {title}
           </h1>
           <p className="ph-body ph-ink2">{body}</p>
+          {note ? <p className="ph-small">{note}</p> : null}
         </div>
         <div className="ph-spacer" />
         <Button kind="primary" onClick={onDone}>
@@ -338,14 +348,23 @@ type RestoreError = "wrong" | "bad" | "newer" | "damaged" | "full" | "failed";
 
 type RestoreStep =
   | { name: "form"; error: RestoreError | null }
-  | { name: "replace"; checked: Checked }
-  | { name: "running"; phase: "checking" | "restoring"; progress: BackupProgress | null }
+  /** This phone has a memory too: the backup's things join it, once the person says so. */
+  | { name: "bringIn"; checked: Checked }
+  | {
+      name: "running";
+      phase: "checking" | "restoring";
+      progress: BackupProgress | null;
+      bringing: boolean;
+    }
   | { name: "stopped" }
-  | { name: "done"; count: number };
+  | { name: "done"; count: number }
+  | { name: "merged"; brought: Extract<FileRestored, { kind: "broughtIn" }> };
 
 /**
  * Bring back your memory: the phone's open sheet for the backup file, its passphrase, then 0013's
- * checks. The chosen file's copy goes when the person leaves without bringing it back.
+ * checks. Onto a phone that has a memory, the backup's things join it (decision 1 of
+ * docs/design/phone-backup.md). The chosen file's copy goes when the person leaves without
+ * bringing it back.
  */
 export function Restore({
   pickFile,
@@ -360,12 +379,17 @@ export function Restore({
   /** The phone's open sheet; null when closed, a `notABackup` error for another file. */
   pickFile(): Promise<PickedFile | null>;
   check(file: string, passphrase: string, onProgress: Progress): Promise<Checked>;
-  restore(file: string, passphrase: string, replace: boolean, onProgress: Progress): Promise<void>;
+  restore(
+    file: string,
+    passphrase: string,
+    bringIn: boolean,
+    onProgress: Progress,
+  ): Promise<FileRestored>;
   stop(): Promise<void>;
   letGo(): Promise<void>;
   onBack(): void;
   onDone(): void;
-  /** This phone holds a memory (Restore in This phone): what is here is always asked about. */
+  /** This phone holds a memory (Restore in This phone): bringing its things in is asked first. */
   holds?: boolean;
 }) {
   const [file, setFile] = useState<PickedFile | null>(null);
@@ -395,22 +419,26 @@ export function Restore({
   };
 
   const running =
-    (phase: "checking" | "restoring") =>
+    (phase: "checking" | "restoring", bringing = false) =>
     (progress: BackupProgress): void =>
-      setStep({ name: "running", phase, progress });
+      setStep({ name: "running", phase, progress, bringing });
 
   const failed = (e: unknown) =>
     e instanceof HomeRequestError && e.code === "stopped"
       ? setStep({ name: "stopped" })
       : setStep({ name: "form", error: restoreError(e) });
 
-  const bringIn = async (checked: Checked, replace: boolean) => {
+  const bringIn = async (checked: Checked, bringing: boolean) => {
     if (!file) return;
     try {
-      setStep({ name: "running", phase: "restoring", progress: null });
-      await restore(file.path, passphrase, replace, running("restoring"));
+      setStep({ name: "running", phase: "restoring", progress: null, bringing });
+      const done = await restore(file.path, passphrase, bringing, running("restoring", bringing));
       kept.current = true;
-      setStep({ name: "done", count: checked.backup.things });
+      setStep(
+        done.kind === "broughtIn"
+          ? { name: "merged", brought: done }
+          : { name: "done", count: checked.backup.things },
+      );
     } catch (e) {
       failed(e);
     }
@@ -419,15 +447,28 @@ export function Restore({
   const bring = async () => {
     if (!file || passphrase === "") return;
     try {
-      setStep({ name: "running", phase: "checking", progress: null });
+      setStep({ name: "running", phase: "checking", progress: null, bringing: false });
       const checked = await check(file.path, passphrase, running("checking"));
-      if (holds || checked.check.here !== null) return setStep({ name: "replace", checked });
+      if (holds || checked.check.here !== null) return setStep({ name: "bringIn", checked });
       await bringIn(checked, false);
     } catch (e) {
       failed(e);
     }
   };
 
+  if (step.name === "running" && step.bringing) {
+    const { progress } = step;
+    const adding = progress !== null && progress.total > 0 && progress.done >= progress.total;
+    return (
+      <Running
+        title={t("phone.backup.adding.title")}
+        label={adding ? t("phone.backup.adding.adding") : t("phone.backup.adding.ready")}
+        progress={progress}
+        body={t("phone.backup.adding.body")}
+        onStop={adding ? undefined : stop}
+      />
+    );
+  }
   if (step.name === "running") {
     const { progress } = step;
     return (
@@ -459,12 +500,30 @@ export function Restore({
         onDone={onBack}
       />
     );
-  if (step.name === "replace")
+  if (step.name === "bringIn")
     return (
-      <Replace
+      <BringIn
         checked={step.checked}
-        onKeep={onBack}
-        onReplace={() => void bringIn(step.checked, true)}
+        onNotNow={onBack}
+        onBring={() => void bringIn(step.checked, true)}
+      />
+    );
+  if (step.name === "merged")
+    return (
+      <Done
+        title={t("phone.backup.merged.title")}
+        body={t("phone.backup.merged.body", {
+          things: step.brought.things,
+          entries: step.brought.entries,
+          checkins: step.brought.checkins,
+        })}
+        note={
+          step.brought.same > 0
+            ? t("phone.backup.merged.same", { same: step.brought.same })
+            : undefined
+        }
+        button={t("restore.restored.continue")}
+        onDone={onDone}
       />
     );
   if (step.name === "done")
@@ -562,78 +621,52 @@ function RestoreProblem({ error }: { error: RestoreError }) {
   );
 }
 
-function Count({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="ph-replace-row">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-function Columns({ counts }: { counts: KeptCounts }) {
-  return (
-    <>
-      <Count label={t("phone.alone.replace.things")} value={counts.things} />
-      <Count label={t("phone.alone.replace.journal")} value={counts.journalEntries} />
-      <Count label={t("phone.alone.replace.originals")} value={counts.photosAndRecordings} />
-    </>
-  );
-}
-
-/** "Replace what's on this phone?": 0013's choice, worded for the phone; neither is the default. */
-function Replace({
+/** "This phone has a memory too": both sides, then whether to bring the backup's things in. */
+function BringIn({
   checked,
-  onKeep,
-  onReplace,
+  onNotNow,
+  onBring,
 }: {
   checked: Checked;
-  onKeep(): void;
-  onReplace(): void;
+  onNotNow(): void;
+  onBring(): void;
 }) {
-  const heading = useHeading("replace");
-  const { summary, here, putAside } = checked.check;
+  const heading = useHeading("bringIn");
+  const { summary } = checked.check;
   return (
     <Page bar={null}>
-      <main className="ph-main" style={{ gap: 16 }}>
+      <main className="ph-main" style={{ gap: 14 }}>
         <h1 className="ph-steph" tabIndex={-1} ref={heading}>
-          {t("phone.alone.replace.title")}
+          {t("phone.backup.merge.title")}
         </h1>
-        <p className="ph-body ph-ink2">{chips("phone.alone.replace.body")}</p>
-        <section className="ph-replace" aria-labelledby="ph-replace-in">
-          <h2 className="ph-see-head" id="ph-replace-in">
-            {t("restore.confirm.in")} · {t("restore.confirm.in.note")}
-          </h2>
-          <dl>
-            <Count label={t("restore.confirm.made")} value={formatLongDay(summary.madeAt)} />
-            <Columns counts={checked.backup} />
-          </dl>
-        </section>
-        {here ? (
-          <section className="ph-replace" aria-labelledby="ph-replace-here">
-            <h2 className="ph-see-head" id="ph-replace-here">
-              {t("phone.alone.replace.here")} · {t("restore.confirm.here.note")}
-            </h2>
-            <dl>
-              {here.lastKept ? (
-                <Count label={t("restore.confirm.lastKept")} value={formatLongDay(here.lastKept)} />
-              ) : null}
-              {checked.here ? <Columns counts={checked.here} /> : null}
-              {here.keptAfterBackup > 0 ? (
-                <Count label={t("restore.confirm.keptAfter")} value={here.keptAfterBackup} />
-              ) : null}
-            </dl>
-          </section>
-        ) : null}
-        {putAside ? (
-          <p className="ph-small">
-            {t("restore.confirm.already", { day: formatLongDay(putAside) })}
-          </p>
-        ) : null}
+        <div className="ph-nb-both">
+          <div>
+            <b>{t("phone.backup.merge.inBackup")}</b>
+            <span>
+              {t("phone.backup.merge.backupLineNoFirst", {
+                count: checked.backup.things,
+                day: backupDay(summary.madeAt),
+                size: formatBytes(summary.bytes),
+              })}
+            </span>
+          </div>
+          <div>
+            <b>{t("phone.backup.merge.onPhone")}</b>
+            {checked.here ? (
+              <span>{t("phone.backup.merge.things", { count: checked.here.things })}</span>
+            ) : null}
+          </div>
+        </div>
+        <p className="ph-body ph-ink2">{t("phone.backup.merge.lead")}</p>
+        <p className="ph-body">{t("phone.backup.merge.what")}</p>
       </main>
       <footer className="ph-foot">
-        <Button onClick={onKeep}>{t("restore.confirm.keep")}</Button>
-        <Button onClick={onReplace}>{t("restore.confirm.replace")}</Button>
+        <Button kind="primary" onClick={onBring}>
+          {t("phone.backup.merge.yes")}
+        </Button>
+        <button type="button" className="ph-textbtn" onClick={onNotNow}>
+          {t("phone.backup.notNow")}
+        </button>
       </footer>
     </Page>
   );

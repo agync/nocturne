@@ -203,11 +203,12 @@ pub enum HomeCall {
         file: String,
         passphrase: String,
     },
-    /// Bring a backup back. `replace` says the person agreed to put what is here aside.
+    /// Bring a backup back. On a phone that holds a memory, `bring_in` says the person agreed to
+    /// bring the backup's things into it.
     RestoreBackup {
         file: String,
         passphrase: String,
-        replace: bool,
+        bring_in: bool,
     },
     DeleteEverything {
         phrase: String,
@@ -286,6 +287,14 @@ pub enum HomeAnswer {
         here: Option<KeptCounts>,
     },
     Restored,
+    /// A backup's things joined the memory here.
+    BroughtIn {
+        things: u32,
+        entries: u32,
+        checkins: u32,
+        /// On both, so kept once.
+        same: u32,
+    },
     Deleted,
     Exported {
         report: ExportReport,

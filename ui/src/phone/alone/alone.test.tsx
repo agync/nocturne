@@ -424,7 +424,7 @@ describe("a memory that can't be opened, and bringing back a backup", () => {
 });
 
 describe("a backup over a memory that is already here", () => {
-  it("never replaces what is here without asking", async () => {
+  it("brings its things in after asking, and puts nothing aside", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
     await toFile();
@@ -434,30 +434,28 @@ describe("a backup over a memory that is already here", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
     expect(
-      await screen.findByRole("heading", { name: "Replace what’s on this phone?" }),
+      await screen.findByRole("heading", {
+        name: "Your backup has its own memory, and this phone has one too.",
+      }),
     ).toBeVisible();
-    expect(screen.getByText(/You can bring back what was here from/)).toHaveTextContent(
-      "Restoring puts what’s on this phone now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from This phone.",
-    );
-    expect(screen.getByText("On this phone now · Put aside, not deleted")).toBeInTheDocument();
-    expect(screen.getByText("Kept after the backup")).toBeInTheDocument();
-    const comes = screen.getByRole("region", { name: "In the backup · Comes in" });
-    for (const [label, value] of [
-      ["Things kept", "128"],
-      ["Journal entries", "52"],
-      ["Photos and recordings", "40"],
-    ] as const)
-      expect(within(comes).getByText(label).nextSibling).toHaveTextContent(value);
-    const here = screen.getByRole("region", { name: "On this phone now · Put aside, not deleted" });
-    expect(within(here).getByText("Journal entries").nextSibling).toHaveTextContent("0");
-    expect(within(here).getByText("Photos and recordings").nextSibling).toHaveTextContent("1");
-    fireEvent.click(screen.getByRole("button", { name: "Replace with the backup" }));
+    const inBackup = screen.getByText("In the backup").parentElement as HTMLElement;
+    expect(inBackup).toHaveTextContent(/128 things, up to .* · about/);
+    const here = screen.getByText("On this phone").parentElement as HTMLElement;
+    expect(here).toHaveTextContent("2 things");
+    expect(screen.queryByText(/Put aside, not deleted/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Bring them in" }));
     expect(
-      await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
+      await screen.findByRole("heading", { name: "Your backup’s things are here." }),
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        "126 things, 52 journal entries and 6 check-ins were added to the memory on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 were already here, so they were kept once.")).toBeInTheDocument();
   });
 
-  it("is reached from This phone, and always asks what to do with what is here", async () => {
+  it("is reached from This phone, and always asks before bringing things in", async () => {
     await app("m=kept");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     expect(
@@ -473,11 +471,13 @@ describe("a backup over a memory that is already here", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
     expect(
-      await screen.findByRole("heading", { name: "Replace what’s on this phone?" }),
+      await screen.findByRole("heading", {
+        name: "Your backup has its own memory, and this phone has one too.",
+      }),
     ).toBeVisible();
   }, 15_000);
 
-  it("keeps what is here when the person says so", async () => {
+  it("leaves what is here as it was with Not now", async () => {
     await app("m=first&s=welcome");
     fireEvent.click(await screen.findByRole("button", { name: "I have a backup" }));
     await toFile();
@@ -487,7 +487,7 @@ describe("a backup over a memory that is already here", () => {
       target: { value: "already here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep what’s here" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
     expect(
       await screen.findByRole("heading", { name: "Nocturne remembers your day" }),
     ).toBeVisible();

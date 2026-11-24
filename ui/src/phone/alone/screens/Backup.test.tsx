@@ -121,7 +121,10 @@ describe("bringing a backup back", () => {
       <Restore
         pickFile={async () => ({ path: "/file", name: "backup.nocturne", bytes: 3 * MB })}
         check={async () => checked}
-        restore={async (_file, _pass, _replace, onProgress) => restore(onProgress)}
+        restore={async (_file, _pass, _bringIn, onProgress) => {
+          await restore(onProgress);
+          return { kind: "restored" };
+        }}
         stop={stop}
         letGo={async () => undefined}
         onBack={() => undefined}

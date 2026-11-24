@@ -84,8 +84,8 @@ impl Home {
             HomeCall::RestoreBackup {
                 file,
                 passphrase,
-                replace,
-            } => self.restore_backup(Path::new(&file), &passphrase, replace, paired, progress),
+                bring_in,
+            } => self.restore_backup(Path::new(&file), &passphrase, bring_in, paired, progress),
             HomeCall::DeleteEverything { phrase } => self.delete_everything(&phrase),
             HomeCall::Export { dest } => self.using().and_then(|(_use, o)| {
                 let dest = Path::new(&dest);
@@ -237,13 +237,15 @@ impl Home {
         })
     }
 
-    /// Unpack the backup beside the store, then put it in the store's place: what was here is
-    /// put aside whole, never deleted. The phone is alone afterwards.
+    /// Unpack the backup beside the store. On an empty phone it goes in the store's place and the
+    /// phone is alone afterwards. On a phone that holds a memory its things are brought in, once
+    /// the person agreed (decision 1 of `docs/design/phone-backup.md`): nothing here is put aside
+    /// or deleted, and a thing on both is kept once.
     fn restore_backup(
         &self,
         file: &Path,
         passphrase: &str,
-        replace: bool,
+        bring_in: bool,
         paired: bool,
         progress: Progress<'_>,
     ) -> Result<HomeAnswer, HomeError> {
@@ -256,7 +258,7 @@ impl Home {
             let _use = self.gate.read().unwrap_or_else(|e| e.into_inner());
             self.here(None).is_some()
         };
-        if holds && !replace {
+        if holds && !bring_in {
             return Err(HomeError::Invalid);
         }
         let stage = self.stage_dir();
@@ -267,7 +269,25 @@ impl Home {
             clear(&stage);
             return Err(code(&e));
         }
-        self.put_in_place(&stage)
+        if !holds {
+            return self.put_in_place(&stage);
+        }
+        let brought = self.using().and_then(|(_use, open)| {
+            open.engine
+                .bring_in_backup(&stage.join("store"))
+                .map_err(|e| {
+                    tracing::warn!("the backup's things could not be brought in: {e}");
+                    code(&e)
+                })
+        });
+        clear(&stage);
+        let b = brought?;
+        Ok(HomeAnswer::BroughtIn {
+            things: b.things,
+            entries: b.entries,
+            checkins: b.checkins,
+            same: b.same,
+        })
     }
 
     /// Put the store unpacked in `stage` in the store's place: what was here is put aside
