@@ -224,9 +224,15 @@ struct SecretValue {
     value: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct BackgroundOn {
-    on: bool,
+/// What the background windows are asked for: the mind, and the nightly backup with its
+/// "Wi-Fi only".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Windows {
+    pub mind: bool,
+    pub backup: bool,
+    /// The backup's windows open only on a network that costs nothing by the byte.
+    pub wifi_only: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -349,9 +355,11 @@ impl<R: Runtime> System<R> {
         Ok(self.native("power", ())?.unwrap_or_default())
     }
 
-    /// Asks the system for background windows while the phone charges, or for none.
-    pub fn background(&self, on: bool) -> Result<(), Error> {
-        let _: Option<serde_json::Value> = self.native("background", BackgroundOn { on })?;
+    /// Asks the system for background windows while the phone charges, for the mind and for the
+    /// backup, or for none. On Android the backup's need an unmetered network while
+    /// `wifi_only`; an iPhone has one kind of window for both.
+    pub fn background(&self, windows: Windows) -> Result<(), Error> {
+        let _: Option<serde_json::Value> = self.native("background", windows)?;
         Ok(())
     }
 
@@ -678,6 +686,19 @@ mod tests {
         assert_eq!(read(r#"{"outcome":"turnedOff"}"#), Connected::TurnedOff);
         assert_eq!(read(r#"{"outcome":"offline"}"#), Connected::Offline);
         assert_eq!(read(r#"{"outcome":"other"}"#), Connected::Failed);
+    }
+
+    #[test]
+    fn windows_go_to_the_phone_as_it_reads_them() {
+        let windows = Windows {
+            mind: false,
+            backup: true,
+            wifi_only: true,
+        };
+        assert_eq!(
+            serde_json::to_value(windows).unwrap(),
+            serde_json::json!({ "mind": false, "backup": true, "wifiOnly": true })
+        );
     }
 
     #[test]

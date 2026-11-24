@@ -412,6 +412,13 @@ impl PhoneBackup {
         saved.on || saved.delete_pending
     }
 
+    /// Whether the nights wait for Wi-Fi, so the phone opens their background windows only there.
+    /// A deletion still owed to the account goes on any network.
+    pub fn wifi_only(&self) -> bool {
+        let saved = self.saved();
+        saved.on && saved.wifi_only && !saved.delete_pending
+    }
+
     fn waits_for_wifi(&self, saved: &Saved) -> bool {
         saved.wifi_only && self.unmetered.load(Ordering::SeqCst) != UNMETERED
     }

@@ -200,7 +200,12 @@ fn wifi_only_waits_for_wifi() {
     let p = phone(&place, true);
     p.keep("Something to keep.");
     p.backup.turn_on(PHRASE).unwrap();
+    assert!(!p.backup.wifi_only());
     p.backup.set_wifi_only(true);
+    assert!(
+        p.backup.wifi_only(),
+        "the background windows wait for Wi-Fi too"
+    );
     assert_eq!(p.state(), BackupState::WaitingForWifi);
     assert!(!p.backup.pass(&p.home, true));
     assert_eq!(p.now(), Err(BackupProblem::WaitingForWifi));
@@ -212,6 +217,11 @@ fn wifi_only_waits_for_wifi() {
     p.later(21);
     p.backup.set_unmetered(Some(true));
     assert!(p.backup.pass(&p.home, true));
+    p.backup.turn_off(true).unwrap();
+    assert!(
+        !p.backup.wifi_only(),
+        "a deletion owed to the account goes on any network"
+    );
 }
 
 #[test]
