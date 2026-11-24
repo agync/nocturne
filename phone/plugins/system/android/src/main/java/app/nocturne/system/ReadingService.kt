@@ -131,9 +131,10 @@ class ReadingService : Service() {
         return START_NOT_STICKY
     }
 
-    /** Android 15 ends a data sync service after its allowed time: that is a stop. */
+    /** Android 15 ends a data sync service after its allowed time: told as its own stop. */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        stopReading()
+        Reading.timedOut = true
+        endService()
     }
 
     override fun onDestroy() {
@@ -143,6 +144,10 @@ class ReadingService : Service() {
 
     private fun stopReading() {
         Reading.stopAsked = true
+        endService()
+    }
+
+    private fun endService() {
         Reading.running = false
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
