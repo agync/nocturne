@@ -1629,6 +1629,82 @@ figcaption {
   }
 }
 
+/* Support */
+
+.support {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 720px;
+  padding: 56px 0 40px;
+}
+
+.support h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.5rem, 5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.help-ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+.help-ways > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+}
+
+.help-ways h3 {
+  font-family: var(--serif);
+  font-size: 1.375rem;
+  line-height: 1.2;
+}
+
+.help-ways p,
+.qa dd {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+
+.help-ways a,
+.qa a,
+.contact a {
+  color: var(--accent);
+}
+
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.contact h2 {
+  font-family: var(--serif);
+  font-size: clamp(2.25rem, 4.4vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.contact p {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+
+.contact .address {
+  font-family: var(--mono);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

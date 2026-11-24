@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{t:support.title}}</title>
+<meta name="description" content="{{t:support.description}}">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="{{SITE_URL}}{{p:/support}}">
+{{alternates}}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="{{og_locale}}">
+{{og_alternates}}
+<meta property="og:title" content="{{t:support.title}}">
+<meta property="og:description" content="{{t:support.description}}">
+<meta property="og:url" content="{{SITE_URL}}{{p:/support}}">
+<meta property="og:image" content="{{SITE_URL}}/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{t:head.og.image.alt}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{SITE_URL}}/assets/img/og.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/site.css">
+<script src="/assets/js/theme.js"></script>
+{{suggest_script}}
+</head>
+<body>
+<a class="skip" href="#main">{{t:header.skip}}</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="{{p:/}}" aria-label="{{t:header.brand.aria}}">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="{{t:nav.aria}}">
+    <a class="nav-section" href="{{p:/}}#how">{{t:nav.how}}</a>
+    <a class="nav-section" href="{{p:/}}#privacy">{{t:nav.privacy}}</a>
+    <a class="nav-section" href="{{p:/}}#requirements">{{t:nav.requirements}}</a>
+    <a href="{{p:/install}}">{{t:nav.download}}</a>
+    <a href="/docs/"{{en_link}}>{{t:nav.docs}}{{en_mark}}</a>
+  </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="{{t:theme.aria}}">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="{{t:theme.system}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.system}}</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="{{t:theme.light}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.light}}</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="{{t:theme.dark}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">{{t:theme.dark}}</span></button>
+    </div>
+    {{lang_switch}}
+  </div>
+</header>
+
+<main id="main">
+
+<section class="support" aria-labelledby="support-title">
+  <h1 id="support-title">{{t:support.heading}}</h1>
+  <p class="lede">{{t:support.lede}}</p>
+  {{note}}
+</section>
+
+<section class="band" aria-labelledby="first-title">
+  <div class="intro">
+    <h2 id="first-title">{{t:support.first.title}}</h2>
+  </div>
+  <div class="help-ways">
+    <div>
+      <h3>{{t:support.ask.title}}</h3>
+      <p>{{t:support.ask.text}}</p>
+    </div>
+    <div>
+      <h3>{{t:support.phone.title}}</h3>
+      <p>{{t:support.phone.text}}</p>
+    </div>
+    <div>
+      <h3>{{t:support.guide.title}}</h3>
+      <p>{{t:support.guide.text}}</p>
+    </div>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="qa-title">
+  <div class="intro">
+    <h2 id="qa-title">{{t:support.qa.title}}</h2>
+  </div>
+  <dl class="promises needs qa">
+    <div><dt>{{t:support.qa.page.term}}</dt><dd>{{t:support.qa.page.detail}}</dd></div>
+    <div><dt>{{t:support.qa.lost.term}}</dt><dd>{{t:support.qa.lost.detail}}</dd></div>
+    <div><dt>{{t:support.qa.passphrase.term}}</dt><dd>{{t:support.qa.passphrase.detail}}</dd></div>
+    <div><dt>{{t:support.qa.delete.term}}</dt><dd>{{t:support.qa.delete.detail}}</dd></div>
+    <div><dt>{{t:support.qa.collect.term}}</dt><dd>{{t:support.qa.collect.detail}}</dd></div>
+  </dl>
+</section>
+
+<section class="band" aria-labelledby="contact-title">
+  <div class="contact">
+    <h2 id="contact-title">{{t:support.contact.title}}</h2>
+    <p>{{t:support.contact.email}}</p>
+    <p>{{t:support.contact.github}}</p>
+    <p>{{t:support.contact.security}}</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    {{t:foot.brand}}
+  </p>
+  <nav aria-label="{{t:foot.aria}}">
+    <a href="/docs/"{{en_link}}>{{t:foot.docs}}{{en_mark}}</a>
+    <a href="/docs/guide/your-data.html"{{en_link}}>{{t:foot.data}}{{en_mark}}</a>
+    <a href="/docs/guide/install.html"{{en_link}}>{{t:foot.install}}{{en_mark}}</a>
+    <a href="{{p:/support}}">{{t:foot.support}}</a>
+    <a href="/assets/fonts/OFL.txt"{{en_link}}>{{t:foot.font}}{{en_mark}}</a>
+  </nav>
+  {{lang_foot}}
+</footer>
+
+</div>
+</body>
+</html>
