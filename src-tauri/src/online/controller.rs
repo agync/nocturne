@@ -7,13 +7,14 @@ use std::sync::{Arc, Mutex};
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    CheckOutcome, EVENT_ONLINE, KeyStorage, LedgerKind, LocalReason, NoticeCode, OnlineForm,
-    OnlinePause, OnlineProblem, OnlineSettings, OnlineSettingsPatch, OnlineState, OnlineView,
-    SendKind, SendResult, SentLine,
+    CheckOutcome, EVENT_ONLINE, KeyStorage, LedgerKind, LocalReason, ModelList, NoticeCode,
+    OnlineForm, OnlinePause, OnlineProblem, OnlineSettings, OnlineSettingsPatch, OnlineState,
+    OnlineView, SendKind, SendResult, SentLine,
 };
 use nocturne_engine::{BoxFuture, Engine, NewSend, OnlineFailure, OnlineReceipt, OnlineRow};
 use nocturne_lemonade::mind::online::{OnlineMind, check};
 use nocturne_lemonade::online::{self, CloudRoute, OnlineKey, UrlProblem, host_of};
+use nocturne_provider::Provider;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -520,26 +521,22 @@ impl<R: Runtime> OnlineHub<R> {
         }
     }
 
-    /// One connection check with what the person entered. The engine is relaunched with this
-    /// route (a provisional one until the person agrees), then asked one short question. An
-    /// empty key while set up means the key already kept.
-    pub async fn check(&self, form: OnlineForm) -> Result<CheckOutcome, CommandError> {
+    /// The route for what the person entered, judged as the check judges it: the address first,
+    /// with no key in it, then what its name resolves to now. A blank key means the one kept,
+    /// and only for the address it was kept for. The check's outcome when it does not pass.
+    async fn entered(&self, form: OnlineForm, row: &OnlineRow) -> Result<CloudRoute, CheckOutcome> {
         let OnlineForm {
             base_url,
             key,
             model,
         } = form;
         let key = OnlineKey::new(key);
-        let _ops = self.ops.lock().await;
-        self.load();
-        let engine = self.engine()?;
-        let row = engine.online_state().map_err(internal)?;
         let model = model.trim().to_string();
         // The address is judged first, with no key in it.
         let entered = match route_from(base_url.trim(), &model, OnlineKey::new(String::new())) {
             Ok(r) => r.base_url().clone(),
-            Err(UrlProblem::NotHttps) => return Ok(CheckOutcome::NotHttps),
-            Err(_) => return Ok(CheckOutcome::AddressNotAllowed),
+            Err(UrlProblem::NotHttps) => return Err(CheckOutcome::NotHttps),
+            Err(_) => return Err(CheckOutcome::AddressNotAllowed),
         };
         // A name on the person's own network is judged by what it resolves to now.
         let lookup = self
@@ -549,8 +546,8 @@ impl<R: Runtime> OnlineHub<R> {
             .clone();
         match tokio::time::timeout(LOOKUP_WAIT, online::resolved_reach(&entered, &lookup)).await {
             Ok(Ok(_)) => {}
-            Ok(Err(_)) => return Ok(CheckOutcome::AddressNotAllowed),
-            Err(_) => return Ok(CheckOutcome::Unreachable),
+            Ok(Err(_)) => return Err(CheckOutcome::AddressNotAllowed),
+            Err(_) => return Err(CheckOutcome::Unreachable),
         }
         let entered = entered.to_string();
         let key = if key.expose().trim().is_empty() {
@@ -562,19 +559,100 @@ impl<R: Runtime> OnlineHub<R> {
                 .and_then(|u| route_from(u, &model, OnlineKey::new(String::new())).ok())
                 .map(|r| r.base_url().to_string());
             if !row.set_up || kept_for.as_deref() != Some(entered.as_str()) {
-                return Ok(CheckOutcome::KeyRefused);
+                return Err(CheckOutcome::KeyRefused);
             }
             match self.keys.load() {
                 Ok(Some((k, _))) => k,
-                _ => return Ok(CheckOutcome::KeyRefused),
+                _ => return Err(CheckOutcome::KeyRefused),
             }
         } else {
             OnlineKey::new(key.expose().trim().to_string())
         };
-        let route = match route_from(&entered, &model, key) {
-            Ok(r) => r,
-            Err(UrlProblem::NotHttps) => return Ok(CheckOutcome::NotHttps),
-            Err(_) => return Ok(CheckOutcome::AddressNotAllowed),
+        match route_from(&entered, &model, key) {
+            Ok(r) => Ok(r),
+            Err(UrlProblem::NotHttps) => Err(CheckOutcome::NotHttps),
+            Err(_) => Err(CheckOutcome::AddressNotAllowed),
+        }
+    }
+
+    /// One look at the provider's list of models with what the person entered, at their
+    /// request: the names to choose from, none, or why it failed, worded as the check. The look
+    /// goes in the sent log as a connection check. The check that follows still asks the engine,
+    /// which reads the list itself as it is given the route.
+    pub async fn list(&self, form: OnlineForm) -> Result<ModelList, CommandError> {
+        self.load();
+        let engine = self.engine()?;
+        let row = engine.online_state().map_err(internal)?;
+        // The look names no model, and the name may not be typed yet.
+        let form = OnlineForm {
+            model: "list".into(),
+            ..form
+        };
+        let route = match self.entered(form, &row).await {
+            Ok(route) => route,
+            Err(problem) => return Ok(ModelList::Failed { problem }),
+        };
+        let lookup = self
+            .lookup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let provider = match Provider::new(route.base_url().as_str(), "list", route.key.clone()) {
+            Ok(p) => p.with_lookup(lookup),
+            Err(UrlProblem::NotHttps) => {
+                return Ok(ModelList::Failed {
+                    problem: CheckOutcome::NotHttps,
+                });
+            }
+            Err(_) => {
+                return Ok(ModelList::Failed {
+                    problem: CheckOutcome::AddressNotAllowed,
+                });
+            }
+        };
+        let look = provider.list().await;
+        if let Some(exchange) = look.exchange {
+            let reached = exchange.status.is_some();
+            let result = match &look.list {
+                ModelList::Failed { .. } => SendResult::Failed {
+                    reason: LocalReason::CouldntReach,
+                },
+                _ => SendResult::Answered { receipts: 0 },
+            };
+            let receipt = OnlineReceipt {
+                status: exchange.status,
+                bytes_up: exchange.bytes_up,
+                bytes_down: exchange.bytes_down,
+                seconds: exchange.seconds,
+                ..OnlineReceipt::default()
+            };
+            self.log(
+                &engine,
+                SendKind::Check,
+                "",
+                provider.host(),
+                "",
+                receipt,
+                result,
+                false,
+                reached,
+            );
+        }
+        Ok(look.list)
+    }
+
+    /// One connection check with what the person entered. The engine is relaunched with this
+    /// route (a provisional one until the person agrees), then asked one short question. An
+    /// empty key while set up means the key already kept.
+    pub async fn check(&self, form: OnlineForm) -> Result<CheckOutcome, CommandError> {
+        let model = form.model.trim().to_string();
+        let _ops = self.ops.lock().await;
+        self.load();
+        let engine = self.engine()?;
+        let row = engine.online_state().map_err(internal)?;
+        let route = match self.entered(form, &row).await {
+            Ok(route) => route,
+            Err(outcome) => return Ok(outcome),
         };
         let host = host_of(route.base_url());
         let token = CancellationToken::new();

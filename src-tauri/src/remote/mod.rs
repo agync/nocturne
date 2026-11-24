@@ -401,6 +401,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("stop_move", Never),
         ("get_online", Never),
         ("check_online", Never),
+        ("list_online_models", Never),
         ("cancel_online_check", Never),
         ("turn_on_online", Never),
         ("turn_off_online", Never),

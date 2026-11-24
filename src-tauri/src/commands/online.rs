@@ -5,7 +5,8 @@
 use std::sync::Arc;
 
 use nocturne_contract::{
-    CheckOutcome, OnlineForm, OnlineSend, OnlineSettings, OnlineSettingsPatch, OnlineView,
+    CheckOutcome, ModelList, OnlineForm, OnlineSend, OnlineSettings, OnlineSettingsPatch,
+    OnlineView,
 };
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -29,6 +30,16 @@ pub async fn check_online<R: Runtime>(
     form: OnlineForm,
 ) -> Result<CheckOutcome, CommandError> {
     hub(&app)?.check(form).await
+}
+
+/// One look at the service's list of models with the address and key entered, at the person's
+/// request.
+#[tauri::command]
+pub async fn list_online_models<R: Runtime>(
+    app: AppHandle<R>,
+    form: OnlineForm,
+) -> Result<ModelList, CommandError> {
+    hub(&app)?.list(form).await
 }
 
 #[tauri::command]
