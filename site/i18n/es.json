@@ -344,8 +344,8 @@
     "from": "An AI chip"
   },
   "req.chip.detail": {
-    "text": "Útil, nunca necesario. En algunos ordenadores AMD con chip de IA y 16 GB o más, el chip de IA lee tus notas de voz, así las respuestas y el repaso diario no tienen que esperarlas.",
-    "from": "Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them."
+    "text": "Útil, nunca necesario. En ordenadores AMD Ryzen AI serie 300 o posteriores, con 16 GB o más, el chip de IA lee tus notas de voz. En muchos con 32 GB o más también lee lo que guardas, y en algunos también responde a tus preguntas, así el resto del ordenador tiene menos trabajo.",
+    "from": "Helpful, never needed. On AMD Ryzen AI 300 series computers and newer, with 16 GB or more, the AI chip reads your voice notes. On many with 32 GB or more it also reads what you keep, and on some it answers your questions too, so the rest of the computer has less to do."
   },
   "req.system.term": {
     "text": "El sistema",
@@ -404,8 +404,8 @@
     "from": "Made for 8 GB computers. Simpler answers that may miss details."
   },
   "req.downloads": {
-    "text": "Las descargas de la puesta en marcha ocupan entre unos 3 GB y 26 GB, según la configuración. Después, Nocturne funciona sin conexión a internet.",
-    "from": "Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all."
+    "text": "Las descargas de la puesta en marcha ocupan entre unos 3 GB y 26 GB, según la configuración, y unos 9 GB más donde el chip de IA lee lo que guardas. Después, Nocturne funciona sin conexión a internet.",
+    "from": "Downloads at setup are between about 3 GB and 26 GB, depending on the setup, and about 9 GB more where the AI chip reads what you keep. After that, Nocturne works with no internet at all."
   },
   "get.title": {
     "text": "Consigue Nocturne.",
@@ -548,8 +548,8 @@
     "from": "From your software centre"
   },
   "linux.flatpak.text": {
-    "text": "La opción para la mayoría, en cualquier escritorio Linux. Tu centro de software mantiene Nocturne al día. Por esta vía aún no puede iniciarse con el ordenador.",
-    "from": "The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet."
+    "text": "La opción para la mayoría, en cualquier escritorio Linux. Tu centro de software mantiene Nocturne al día.",
+    "from": "The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date."
   },
   "linux.flatpak.button": {
     "text": "Obtener el Flatpak",
@@ -652,12 +652,12 @@
     "from": "It downloads what it needs"
   },
   "after.2.text": {
-    "text": "Primero pregunta y luego descarga lo que este ordenador puede ejecutar: entre unos 3 GB y 26 GB. Es la única vez que Nocturne necesita internet, y sigue por sí solo si se corta la conexión.",
-    "from": "It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops."
+    "text": "Primero pregunta y luego descarga lo que este ordenador puede ejecutar: entre unos 3 GB y 26 GB, y unos 9 GB más donde el chip de IA lee lo que guardas. Es la única vez que Nocturne necesita internet, y sigue por sí solo si se corta la conexión.",
+    "from": "It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB, and about 9&nbsp;GB more where the AI chip reads what you keep. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops."
   },
   "after.3.when": {
-    "text": "A la mañana siguiente",
-    "from": "The next morning"
+    "text": "A la hora que elijas",
+    "from": "At the time you choose"
   },
   "after.3.title": {
     "text": "Tu primera página",
@@ -670,6 +670,114 @@
   "foot.install": {
     "text": "Guía de instalación",
     "from": "Install guide"
+  },
+  "foot.support": {
+    "text": "Ayuda",
+    "from": "Support"
+  },
+  "support.title": {
+    "text": "Ayuda · Nocturne",
+    "from": "Support · Nocturne"
+  },
+  "support.description": {
+    "text": "Ayuda con Nocturne en el ordenador o el móvil: respuestas de su propia guía, qué probar primero y cómo hablar con las personas que lo hacen.",
+    "from": "Help with Nocturne on a computer or a phone: answers from its own guide, what to try first, and how to reach the people who make it."
+  },
+  "support.heading": {
+    "text": "Ayuda con Nocturne.",
+    "from": "Help with Nocturne."
+  },
+  "support.lede": {
+    "text": "Nocturne lo guarda todo en tu propio ordenador o móvil, así que ningún servicio de ayuda puede ver tus recuerdos. La ayuda empieza en el propio Nocturne y su guía, y las personas que lo hacen están a un mensaje de distancia.",
+    "from": "Nocturne keeps everything on your own computer or phone, so no help desk can see your memory. Help starts with Nocturne itself and its guide, and the people who make it are a message away."
+  },
+  "support.first.title": {
+    "text": "Empieza por aquí.",
+    "from": "Start here."
+  },
+  "support.ask.title": {
+    "text": "Pregunta a Nocturne",
+    "from": "Ask Nocturne"
+  },
+  "support.ask.text": {
+    "text": "En el ordenador, escribe tu pregunta en el cuadro de preguntas, por ejemplo <q>cómo añado un móvil</q>. Nocturne responde con la guía que trae consigo y te enseña la parte que ha usado.",
+    "from": "On a computer, type your question in the ask box, like <q>how do I add a phone</q>. Nocturne answers from the guide that comes with it and shows the part it used."
+  },
+  "support.phone.title": {
+    "text": "En tu móvil",
+    "from": "On your phone"
+  },
+  "support.phone.text": {
+    "text": "Abre <b>Este móvil</b> (This phone) y luego <b>Ayuda</b> (Help): lo que puede hacer este móvil, sus permisos con una forma de cambiarlos y la política de privacidad.",
+    "from": "Open <b>This phone</b>, then <b>Help</b>: what this phone can do, its permissions with a way to change them, and the privacy policy."
+  },
+  "support.guide.title": {
+    "text": "Lee la guía",
+    "from": "Read the guide"
+  },
+  "support.guide.text": {
+    "text": "<a href=\"/docs/guide/install.html\"{{en_link}}>Instalación{{en_mark}}</a>, <a href=\"/docs/guide/desktops.html\"{{en_link}}>el escritorio de tu ordenador{{en_mark}}</a>, <a href=\"/docs/guide/away-from-home.html\"{{en_link}}>Fuera de casa{{en_mark}}</a>, <a href=\"/docs/guide/online-answers.html\"{{en_link}}>Respuestas en línea{{en_mark}}</a> y <a href=\"/docs/guide/your-data.html\"{{en_link}}>tus datos{{en_mark}}</a>.",
+    "from": "<a href=\"/docs/guide/install.html\"{{en_link}}>Installing{{en_mark}}</a>, <a href=\"/docs/guide/desktops.html\"{{en_link}}>your computer’s desktop{{en_mark}}</a>, <a href=\"/docs/guide/away-from-home.html\"{{en_link}}>Away from home{{en_mark}}</a>, <a href=\"/docs/guide/online-answers.html\"{{en_link}}>Online answers{{en_mark}}</a> and <a href=\"/docs/guide/your-data.html\"{{en_link}}>your data{{en_mark}}</a>."
+  },
+  "support.qa.title": {
+    "text": "Preguntas frecuentes.",
+    "from": "Common questions."
+  },
+  "support.qa.page.term": {
+    "text": "Mi página no ha llegado",
+    "from": "My page didn’t come"
+  },
+  "support.qa.page.detail": {
+    "text": "Nocturne la escribe en las horas anteriores a la hora de tu página, mientras el ordenador está encendido, enchufado y sin uso. Si estaba apagado o suspendido, Nocturne se pone al día al despertar. <a href=\"/docs/guide/desktops.html\"{{en_link}}>La guía{{en_mark}}</a> explica cada escritorio.",
+    "from": "Nocturne writes it in the hours before your page time, while the computer is on, plugged in and not in use. If it was off or asleep, Nocturne catches up when it wakes. <a href=\"/docs/guide/desktops.html\"{{en_link}}>The guide{{en_mark}}</a> explains each desktop."
+  },
+  "support.qa.lost.term": {
+    "text": "He perdido el móvil",
+    "from": "I lost my phone"
+  },
+  "support.qa.lost.detail": {
+    "text": "Si estaba emparejado con tu ordenador, tus recuerdos están en el ordenador: abre allí <b>Fuera de casa</b> (Away from home), elige <b>Ver móviles</b> (See phones) y luego <b>Quitar</b> (Remove) junto a él. Si el móvil guardaba tus recuerdos por su cuenta, instala Nocturne en el móvil nuevo y elige <b>Tengo una copia</b> (I have a backup).",
+    "from": "If it was paired with your computer, your memory is on the computer: open <b>Away from home</b> there, choose <b>See phones</b>, then <b>Remove</b> beside it. If the phone kept your memory on its own, install Nocturne on the new phone and choose <b>I have a backup</b>."
+  },
+  "support.qa.passphrase.term": {
+    "text": "He olvidado mi contraseña",
+    "from": "I forgot my passphrase"
+  },
+  "support.qa.passphrase.detail": {
+    "text": "Nadie puede abrir una copia de seguridad bloqueada sin su contraseña o clave de recuperación, ni siquiera las personas que hacen Nocturne. Haz una copia nueva con una contraseña que puedas guardar.",
+    "from": "No one can open a locked backup without its passphrase or recovery key, not even the people who make Nocturne. Make a new backup with a passphrase you can keep."
+  },
+  "support.qa.delete.term": {
+    "text": "¿Cómo borro todo?",
+    "from": "How do I delete everything?"
+  },
+  "support.qa.delete.detail": {
+    "text": "Elige <b>Borrar todo…</b> (Delete everything…) en <b>Privacidad</b> (Privacy) en un ordenador, o en <b>Este móvil</b> (This phone) en un móvil que guarda tus recuerdos por sí mismo. Quienes hacen Nocturne no conservan nada tuyo, así que no hay nada más que pedir. Un servicio que elegiste para las respuestas guarda lo que recibió según sus propias reglas.",
+    "from": "Choose <b>Delete everything…</b> in <b>Privacy</b> on a computer, or in <b>This phone</b> on a phone that keeps your memory itself. Nocturne’s makers hold nothing of yours, so there is nothing else to ask for. A service you chose for answers keeps what it received under its own rules."
+  },
+  "support.qa.collect.term": {
+    "text": "¿Qué recoge Nocturne?",
+    "from": "What does Nocturne collect?"
+  },
+  "support.qa.collect.detail": {
+    "text": "Nada. Ni cuenta, ni analíticas, ni informes de errores. Solo lo que tú activas puede salir de tu ordenador o móvil.",
+    "from": "Nothing. No account, no analytics, no crash reports. Only what you turn on can leave your computer or phone."
+  },
+  "support.contact.title": {
+    "text": "Escríbenos.",
+    "from": "Write to us."
+  },
+  "support.contact.email": {
+    "text": "¿Algo no funciona, o hay una palabra que suena mal? Escribe a <a class=\"address\" href=\"mailto:hello@nocturne.is\">hello@nocturne.is</a>. Cada mensaje lo lee una persona. Dinos qué ordenador o móvil usas y qué viste; nunca envíes lo que guardaste, tu contraseña ni la clave de tu servicio en línea.",
+    "from": "Something not working, or a word that reads wrong? Email <a class=\"address\" href=\"mailto:hello@nocturne.is\">hello@nocturne.is</a>. A person reads every message. Say which computer or phone you use and what you saw; never send what you kept, your passphrase or your online service key."
+  },
+  "support.contact.github": {
+    "text": "O abre una incidencia en <a href=\"https://github.com/agync/nocturne/issues\">GitHub</a>. Las incidencias son públicas, así que no incluyas nada personal.",
+    "from": "Or open an issue on <a href=\"https://github.com/agync/nocturne/issues\">GitHub</a>. Issues are public, so leave out anything personal."
+  },
+  "support.contact.security": {
+    "text": "Para informar de un problema de seguridad, usa <a href=\"https://github.com/agync/nocturne/security\">el aviso privado de GitHub</a>, no una incidencia pública.",
+    "from": "To report a security problem, use <a href=\"https://github.com/agync/nocturne/security\">GitHub’s private reporting</a>, not a public issue."
   },
   "missing.title": {
     "text": "No está aquí · Nocturne",
