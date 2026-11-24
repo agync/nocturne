@@ -247,7 +247,10 @@ later with [Make a recovery key](#make-a-recovery-key):
 | Foot | "Nocturne shows this only once." |
 
 The key is shown on screen only here and is not kept on the phone in a form that can be shown again.
-After "Print or save…" the button reads "Done".
+After "Print or save…" the button reads "Done". The key opens the backup only once it is saved and
+the account has taken it. When the account can't be reached then, a line says: "Your key is saved,
+but it doesn’t open your backup yet: Nocturne couldn’t reach your iCloud." (or "your Google Drive"),
+and the button reads "Try again"; "Not now" or "Cancel" leaves the saved key opening nothing.
 
 ### The first backup
 
@@ -314,7 +317,7 @@ under the switch group.
 | Another phone made a newer backup | "Stopped · last backup {day}, {time}" | [Below](#a-newer-backup-from-another-phone) |
 | A backup from a newer Nocturne in the account | "Stopped · last backup {day}, {time}" | "A newer Nocturne made the latest backup. Update Nocturne from {store} to carry on." with "Update". {store} is "the App Store" or "Google Play" |
 | Android, the account chosen already holds another backup | "Stopped · last backup {day}, {time}" | "This Google account’s Drive already holds another Nocturne backup, so the backup has stopped and nothing was written over it. Choose another account, or delete the Nocturne backup folder in that Drive and choose this account again." with "Choose account". Nocturne doesn't try again by itself |
-| Android, the phrase is needed again in the account chosen | "Stopped · last backup {day}, {time}" | "To carry on in this account, the backup needs its phrase set again. A recovery key you made before doesn’t open it there." with "Change the phrase…" |
+| Android, the phrase is needed again in the account chosen | "Stopped · last backup {day}, {time}" | "To carry on in this account, the backup needs its phrase set again. A recovery key you made before doesn’t open it there." with "Change the phrase…". "Make a recovery key…" is not offered until then |
 | No backup yet, after turning on or in an account chosen since | "No backup yet · next tonight while this phone charges"; waiting for Wi-Fi: "No backup yet · waiting for Wi-Fi"; not charged: "No backup yet · waits for this phone to charge"; stopped: "Stopped · no backup yet" | As the state's, and for no room only its first sentence: "There’s no room in your iCloud for tonight’s backup." or "in your Google Drive" |
 
 On an iPhone, Nocturne can open only its own page in Settings, so under the line it says where to

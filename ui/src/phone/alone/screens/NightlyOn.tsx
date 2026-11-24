@@ -607,6 +607,7 @@ export function KeyGroups({ text }: { text: string }) {
  */
 export function KeyShown({
   text,
+  ios,
   later = false,
   save,
   keep,
@@ -614,6 +615,7 @@ export function KeyShown({
   onClose,
 }: {
   text: string;
+  ios: boolean;
   later?: boolean;
   save(text: string): Promise<"saved" | "cancelled" | "failed">;
   /** The key went to the phone's sheet: from now on it opens the backup. */
@@ -624,20 +626,25 @@ export function KeyShown({
   onClose(saved: boolean): void;
 }) {
   const [saved, setSaved] = useState(false);
+  // Saved by the person, but the account did not take it yet: it opens nothing until it does.
+  const [notKept, setNotKept] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
   const heading = useHeading("key");
-  const printOrSave = async () => {
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
+  const keepIt = async () => {
     try {
-      if ((await save(text)) !== "saved") return;
       await keep();
+      setNotKept(false);
       setSaved(true);
       onSaved();
     } catch {
-      setFailed(true);
+      setNotKept(true);
+    }
+  };
+  const printOrSave = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (notKept || (await save(text)) === "saved") await keepIt();
     } finally {
       setBusy(false);
     }
@@ -657,9 +664,9 @@ export function KeyShown({
           </p>
         </div>
         <KeyGroups text={text} />
-        {failed ? (
+        {notKept ? (
           <p className="ph-error" role="alert">
-            {t("ask.action.failed")}
+            {onPhone(ios, "phone.backup.key.notKept.ios", "phone.backup.key.notKept.android")}
           </p>
         ) : null}
       </main>
@@ -671,7 +678,7 @@ export function KeyShown({
         ) : (
           <>
             <Button kind="primary" disabled={busy} onClick={() => void printOrSave()}>
-              {t("phone.backup.key.print")}
+              {notKept ? t("phone.backup.tryAgain") : t("phone.backup.key.print")}
             </Button>
             <button type="button" className="ph-textbtn" onClick={() => onClose(false)}>
               {later ? t("phone.backup.key.cancel") : t("phone.backup.notNow")}
@@ -804,6 +811,7 @@ export function AfterTurnOn({
   return (
     <KeyShown
       text={key}
+      ios={ios}
       save={api.saveKey}
       keep={api.keepRecoveryKey}
       onSaved={onKeyMade}

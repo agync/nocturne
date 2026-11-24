@@ -83,6 +83,8 @@
   "phone.backup.key.done": "Done",
   "phone.backup.key.cancel": "Cancel",
   "phone.backup.key.foot": "Nocturne shows this only once.",
+  "phone.backup.key.notKept.ios": "Your key is saved, but it doesn’t open your backup yet: Nocturne couldn’t reach your iCloud.",
+  "phone.backup.key.notKept.android": "Your key is saved, but it doesn’t open your backup yet: Nocturne couldn’t reach your Google Drive.",
   "phone.backup.newKey.title": "Your new recovery key",
   "phone.backup.newKey.body": "It opens your backup if you lose your phrase. Print it or save it, and keep it away from this phone. An earlier key no longer works.",
   "phone.backup.makeKey.title": "Make a recovery key?",

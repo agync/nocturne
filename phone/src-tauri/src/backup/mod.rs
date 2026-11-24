@@ -384,12 +384,20 @@ pub struct PhoneBackup {
     /// The passphrase work the locked key asks for; `None` is what Nocturne writes.
     work_factor: Option<u8>,
     /// A recovery key's lock, made and shown but not yet saved by the person: nothing opens
-    /// with it until it is kept, so "Cancel" leaves the earlier key working.
-    new_key: Mutex<Option<Vec<u8>>>,
+    /// with it until it is kept, so "Cancel" leaves the earlier key working. It holds the key it
+    /// locks and the account it was made for, and is kept only while both are still the backup's.
+    new_key: Mutex<Option<NewKey>>,
     /// Keeps what the phone notes of the backup out of the phone's own device backup, as the
     /// memory is: it holds the key's locks. Run after each write, since a file written again in
     /// its place loses the mark on an iPhone.
     exclude: Option<crate::home::ExcludeFromBackup>,
+}
+
+/// A recovery key made and shown, waiting for the person to save it.
+struct NewKey {
+    locked: Vec<u8>,
+    key: NightKey,
+    account: u64,
 }
 
 /// Whether the phone was found charging since the last night finished.
@@ -501,6 +509,7 @@ impl PhoneBackup {
     }
 
     fn keep_key(&self, key: &NightKey) -> Result<(), BackupProblem> {
+        lock(&self.new_key).take();
         if self.keys.keep(key.secret().expose_secret()) {
             Ok(())
         } else {
@@ -707,8 +716,17 @@ impl PhoneBackup {
     pub fn recovery_key(&self) -> Result<String, BackupProblem> {
         self.place()?;
         let key = self.key()?;
+        let saved = self.saved();
+        if saved.fresh && saved.locks.is_none() {
+            // Nothing could keep it until "Change the phrase" sets the locks again.
+            return Err(BackupProblem::Damaged);
+        }
         let (text, locked) = nightly::recovery_lock(&key, self.work_factor)?;
-        *lock(&self.new_key) = Some(locked);
+        *lock(&self.new_key) = Some(NewKey {
+            locked,
+            key,
+            account: saved.account,
+        });
         Ok(text)
     }
 
@@ -716,8 +734,13 @@ impl PhoneBackup {
     /// before. When the account can't be reached the key stays made, so this can be asked again.
     pub fn keep_recovery_key(&self) -> Result<(), BackupProblem> {
         let place = self.place()?;
-        let locked = lock(&self.new_key).take().ok_or(BackupProblem::NotReady)?;
+        let made = lock(&self.new_key).take().ok_or(BackupProblem::NotReady)?;
+        // Made for another key or account than the backup's now: it would open nothing.
+        if made.account != self.saved().account || !self.key()?.same_as(&made.key) {
+            return Err(BackupProblem::NotReady);
+        }
         let _held = lock(&self.locking);
+        let locked = &made.locked;
         let kept = if self.saved().fresh {
             // Nothing goes to an account the backup is starting afresh on before its first
             // night carries the copy there.
@@ -736,12 +759,12 @@ impl PhoneBackup {
         } else {
             self.relock(
                 place.as_ref(),
-                || Ok(nightly::keep_recovery_lock(place.as_ref(), &locked)?),
+                || Ok(nightly::keep_recovery_lock(place.as_ref(), locked)?),
                 |(), locks| locks.recovery = Some(locked.clone()),
             )
         };
         if kept.is_err() {
-            lock(&self.new_key).get_or_insert(locked);
+            lock(&self.new_key).get_or_insert(made);
         }
         kept
     }
@@ -801,6 +824,7 @@ impl PhoneBackup {
     pub fn turn_off(&self, also_delete: bool) -> Result<(), BackupProblem> {
         if also_delete {
             self.keys.forget();
+            lock(&self.new_key).take();
         }
         let held = lock(&self.locking);
         self.update(|s| {
