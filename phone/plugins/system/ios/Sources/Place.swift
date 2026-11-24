@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Why a call to the person's iCloud did not do what was asked, as the core names it.
@@ -37,6 +38,17 @@ enum ICloudPlace {
     if NetworkCost.shared.online == false { return "offline" }
     if FileManager.default.ubiquityIdentityToken == nil { return "noAccount" }
     return (try? folder()) != nil ? "connected" : "turnedOff"
+  }
+
+  /// An opaque mark for the iCloud account this iPhone is signed in to: a hash of its identity
+  /// token, archived, as Apple suggests for comparing them. Another account gives another mark;
+  /// `nil` when signed out.
+  static func account() -> String? {
+    guard let token = FileManager.default.ubiquityIdentityToken,
+      let data = try? NSKeyedArchiver.archivedData(
+        withRootObject: token, requiringSecureCoding: false)
+    else { return nil }
+    return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
   static func folder() throws -> URL {

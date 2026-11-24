@@ -1213,3 +1213,56 @@ fn a_restore_names_the_health_readings_to_read_again() {
         "no reading came back from the backup"
     );
 }
+
+#[test]
+fn another_icloud_signed_in_is_another_account_and_the_deletion_stays_with_the_first() {
+    let mark = Arc::new(Mutex::new(Some("icloud-a".to_string())));
+    let old = Arc::new(MemoryPlace::new());
+    let p = phone(&old, true);
+    let seen = mark.clone();
+    p.backup
+        .set_account_probe(Some(Arc::new(move || lock(&seen).clone())));
+    p.keep("Something to keep.");
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    assert_eq!(p.backup.saved().account_name.as_deref(), Some("icloud-a"));
+    let held = old.names();
+
+    // Delete everything while offline; then the iPhone signs in to another iCloud.
+    old.fail_with(Some(PlaceError::Offline));
+    p.backup.erase();
+    old.fail_with(None);
+    *lock(&mark) = Some("icloud-b".into());
+    let new = Arc::new(MemoryPlace::new());
+    new.put("key-phrase", b"theirs").unwrap();
+    p.backup.set_place(Some(new.clone()));
+    assert!(!p.backup.pass(&p.home, false));
+    assert_eq!(
+        new.names(),
+        vec!["key-phrase".to_string()],
+        "never sent here"
+    );
+    assert!(p.backup.status().delete_pending);
+    assert_eq!(old.names(), held);
+
+    // Signed in to the first again: the deletion runs there.
+    *lock(&mark) = Some("icloud-a".into());
+    p.backup.set_place(Some(old.clone()));
+    assert!(!p.backup.pass(&p.home, false));
+    assert!(old.names().is_empty());
+    assert!(!p.backup.status().delete_pending);
+}
+
+#[test]
+fn a_connect_that_names_another_account_without_a_previous_one_is_a_change() {
+    let p = phone(&Arc::new(MemoryPlace::new()), true);
+    p.keep("Something to keep.");
+    p.backup.reconnected(Some("a"), None);
+    p.backup.turn_on(PHRASE).unwrap();
+    p.now().unwrap();
+    let before = p.backup.saved().account;
+    p.backup.reconnected(Some("b"), None);
+    let saved = p.backup.saved();
+    assert_eq!(saved.account, before + 1);
+    assert!(saved.fresh, "the backup starts afresh in the other account");
+}

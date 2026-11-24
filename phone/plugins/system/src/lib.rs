@@ -396,6 +396,22 @@ impl<R: Runtime> System<R> {
         self.native("placeConnect", Choose { choose })
     }
 
+    /// The iCloud account this iPhone is signed in to, as an opaque mark that changes when
+    /// another account signs in; `None` when it is signed out, on Android and on a computer.
+    pub fn place_account(&self) -> Result<Option<String>, Error> {
+        #[derive(Deserialize)]
+        struct Account {
+            #[serde(default)]
+            account: Option<String>,
+        }
+        if !cfg!(target_os = "ios") {
+            return Ok(None);
+        }
+        Ok(self
+            .native::<Account>("placeAccount", ())?
+            .and_then(|a| a.account))
+    }
+
     fn place(&self, method: &str, call: PlaceCall<'_>) -> Result<PlaceAnswer, Error> {
         self.native(method, call)?
             .ok_or_else(|| Error("no account on a computer".into()))
