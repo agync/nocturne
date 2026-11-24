@@ -670,7 +670,6 @@ impl Engine {
         if !db.is_file() {
             return Err(Error::not_found("the phone's memory"));
         }
-        let phone = crate::store::open_untrusted(&db)?;
         let name: Option<String> = self.read(|conn| {
             Ok(conn
                 .query_row(
@@ -682,12 +681,41 @@ impl Engine {
                 .optional()?)
         })?;
         let name = name.ok_or_else(|| Error::not_found(format!("device {device}")))?;
+        self.bring_in_as(staged, device, &name)
+    }
+
+    /// Bring a nightly backup of this phone's own memory, unpacked in the store folder `staged`,
+    /// into the memory here, as [`Engine::bring_in`] brings a phone's: nothing here is put aside
+    /// or removed, and a thing on both is kept once. What comes in is kept through this phone's
+    /// own row.
+    pub fn bring_in_backup(&self, staged: &Path) -> Result<BroughtIn> {
+        let db = staged.join(crate::DB_FILE);
+        if !db.is_file() {
+            return Err(Error::not_found("the backup's memory"));
+        }
+        let own: Option<(String, String)> = self.read(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT id, name FROM remote_devices WHERE connection = 'local' \
+                     ORDER BY paired_at LIMIT 1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?)
+        })?;
+        let (device, name) = own.ok_or_else(|| Error::not_found("this phone's own row"))?;
+        self.bring_in_as(staged, &device, &name)
+    }
+
+    fn bring_in_as(&self, staged: &Path, device: &str, name: &str) -> Result<BroughtIn> {
+        let db = staged.join(crate::DB_FILE);
+        let phone = crate::store::open_untrusted(&db)?;
         let here_cols = self.read(|conn| columns(conn, "main", "items"))?;
         let shared: Vec<String> = columns(&phone, "main", "items")?
             .into_iter()
             .filter(|c| here_cols.contains(c))
             .collect();
-        let (arriving, again) = read_phone(&phone, &shared, &name)?;
+        let (arriving, again) = read_phone(&phone, &shared, name)?;
         drop(phone);
 
         // The originals are copied first, outside the transaction, so the store is never held
