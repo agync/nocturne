@@ -12,18 +12,41 @@ html[data-text="200"] .device[data-os="ios"] .screen { height: 852px; }
 html[data-text="200"] .scroll { overflow: hidden; }
 html[data-text="200"] .foot { position: sticky; gap: 4px; padding-top: 8px; padding-bottom: 20px; }
 html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
+html[data-text="200"] .foot::before { height: 72px; }
+
+/* At 200 per cent the status bar and iPhone's navigation bar keep the phone's own sizes, as the
+   phones do. The kit's own rule loses to the per-phone sizes. */
+html[data-text="200"] .device[data-os="android"] .sys { font-size: 14px; }
+html[data-text="200"] .device[data-os="ios"] .sys { font-size: 17px; }
+html[data-text="200"] .device[data-os="ios"] .nav { height: 44px; min-height: 0; padding-top: 0; padding-bottom: 0; }
+html[data-text="200"] .device[data-os="ios"] .nav > span { font-size: 17px; }
+
+/* Without a bottom bar, what scrolls under the home bar fades out above it. */
+html[data-text="200"]:not([data-view="away"]):not([data-view="paused"]) .screen:not(.hasTabs) .homebar { background: var(--bg); }
+html[data-text="200"]:not([data-view="away"]):not([data-view="paused"]) .screen:not(.hasTabs) .homebar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
+
+/* Once a screen has scrolled, a hairline under its bar, as in the app. */
+.screen[data-scrolled] .appbar, .screen[data-scrolled] .nav { box-shadow: 0 1px 0 var(--rule); }
+
+/* Body text on the steps, the app's size */
+.copy { font-size: 0.9375rem; line-height: 1.5; }
+.small { font-size: 0.875rem; line-height: 1.5; }
+.expander[data-open] svg { transform: rotate(180deg); }
 
 /* The name field and its list */
 .nfield { display: flex; flex-direction: column; gap: 6px; }
 .nfield .fieldInput { min-height: 52px; border-color: var(--rule2); }
 .nfield .fieldInput[data-focus] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .nfield .fieldInput .ph { color: var(--ink3); }
+.nfield .fieldInput[data-focus] span:first-child { flex: none; }
+.nfield .fieldInput[data-focus] .caret { margin-left: -6px; }
 .mono { font-family: var(--font-mono); font-size: 0.9375rem; }
-.pick { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 2px; color: var(--accent); font-size: 0.9375rem; font-weight: 500; }
+.pick { display: flex; align-items: center; gap: 10px; min-height: 48px; color: var(--accent); font-size: 0.9375rem; font-weight: 500; line-height: 1.4; }
 .pick span { flex: 1; }
+.pick > svg { flex: none; }
 .pick[data-off] { color: var(--ink3); }
 .pick[data-busy] { color: var(--ink2); }
-.pick .pdot { flex: none; margin: 0 5px; }
+.pick .pdot { flex: none; margin: 0 6.5px; }
 .from { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
 .why { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
 .prob { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--ember-soft); }
@@ -31,9 +54,13 @@ html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
 .prob span { color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
 .prob.calm { background: var(--accent-soft); }
 .works { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; }
+html[data-text="200"] .pick { align-items: flex-start; padding: 8px 0; }
+html[data-text="200"] .pick > svg, html[data-text="200"] .pick .pdot { margin-top: calc(0.7em - 10px); }
+html[data-text="200"] .pick .pdot { margin-top: calc(0.7em - 3.5px); }
 
 /* The list sheet */
 .over .sheetUp { max-height: 86%; gap: 12px; padding-bottom: 28px; }
+.over .sheetUp.tall { height: calc(100% - 104px); max-height: none; }
 .device[data-os="ios"] .over .sheetUp { padding-bottom: 42px; }
 .grip { align-self: center; width: 36px; height: 4px; border-radius: 2px; background: var(--rule2); }
 .sheetHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -42,9 +69,9 @@ html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
 .close { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; margin: -6px -10px 0 0; color: var(--ink); }
 .search { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--ink); border-radius: 12px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--ink); font-size: 1rem; }
 .search svg { flex: none; color: var(--ink2); }
-.search .caret { margin-left: -9px; }
-.names { display: flex; flex-direction: column; margin: 0 -4px; padding: 0; list-style: none; overflow: hidden; }
-.names li { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 4px; border-bottom: 1px solid var(--rule); }
+.search .caret { margin-left: -8px; }
+.names { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; overflow: hidden; }
+.names li { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 4px 0; border-bottom: 1px solid var(--rule); }
 .names li:last-child { border-bottom: 0; }
 .names .rad { flex: none; width: 20px; height: 20px; border: 1.5px solid var(--ink3); border-radius: 50%; }
 .names li[data-on] .rad { border: 6px solid var(--ink); }
@@ -55,20 +82,22 @@ html[data-text="200"] .device[data-os="ios"] .foot { padding-bottom: 34px; }
 .none p { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
 
 /* Read now, in This phone's mind group */
-.rn { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 16px; }
-.device[data-os="ios"] .rn { padding: 4px 16px 16px; }
+.rn { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 16px 38px; }
+.device[data-os="ios"] .rn { padding: 4px 16px 16px 54px; }
+.device[data-os="ios"] .rn + .row { box-shadow: 0 -0.5px 0 var(--rule); }
 .rn p { margin: 0; color: var(--ink2); font-size: 0.875rem; line-height: 1.5; }
 .rn p.rnSaid { display: flex; align-items: flex-start; gap: 6px; color: var(--ink); font-size: 0.9375rem; }
+.rn p.rnSaid svg { flex: none; margin-top: 2px; }
 .rn .btn { height: 44px; }
 html[data-text="200"] .rn .btn { height: auto; }
 svg.mark { background: none; }
-.osNote { padding: 4px 0 12px; text-align: left; letter-spacing: 0.04em; }
+.osNote { margin: 0 0 12px 38px; padding: 8px 10px; border: 1px dashed var(--ink3); border-radius: 8px; text-align: left; letter-spacing: 0.04em; }
 
 /* Away from Nocturne: Android's notification shade, iPhone's Lock Screen */
-.shade { display: flex; flex-direction: column; gap: 14px; min-height: 100%; margin: -20px -20px -24px; padding: 12px 12px 24px; background: color-mix(in srgb, var(--ink) 10%, var(--bg)); }
-.shadeTime { padding: 0 8px; font-size: 2rem; font-weight: 400; }
+.shade { display: flex; flex-direction: column; gap: 14px; min-height: 100%; margin: -20px -20px -24px; padding: 12px 16px 24px; background: var(--shade); }
+.shadeTime { padding: 0 4px; font-size: 2rem; font-weight: 400; }
 .shadeTime span { margin-left: 8px; color: var(--ink2); font-size: 0.875rem; }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0 4px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tiles span { height: 56px; border-radius: 28px; background: color-mix(in srgb, var(--ink) 12%, var(--sheet)); }
 .note2 { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 6px; border-radius: 24px; background: var(--sheet); }
 .noteApp { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 0.75rem; }
@@ -101,5 +130,15 @@ html[data-view="paused"] .device[data-os="ios"] .sys { color: #fff; }
 .lock svg.mark, .banner svg.mark { color: currentColor; }
 html[data-text="200"] .lockTime { font-size: 3rem; }
 .shade { flex: 1; }
-html[data-view="away"] .device[data-os="android"] .screen { background: color-mix(in srgb, var(--ink) 10%, var(--bg)); }
+html { --shade: color-mix(in srgb, var(--ink) 10%, var(--bg)); }
+html[data-theme="dark"] { --shade: color-mix(in srgb, #000 45%, var(--bg)); }
+html[data-view="away"] .device[data-os="android"] .screen { background: var(--shade); }
+html[data-theme="dark"] .banner { background: rgba(38, 40, 46, 0.86); color: #fff; }
+html[data-theme="dark"] .bannerHead { color: rgba(255, 255, 255, 0.6); }
+/* Away from Nocturne the time is the big clock, so the status bar leaves it out, as the phones do. */
+html[data-view="away"] .sysTime, html[data-view="paused"] .device[data-os="ios"] .sysTime { visibility: hidden; }
+html[data-text="200"] .liveHead { align-items: flex-start; }
+html[data-text="200"] .liveTitle { line-height: 1.3; }
+html[data-text="200"] .liveHead svg.mark { margin-top: 10px; }
+html[data-text="200"] .liveStop { margin-top: 5px; }
 .lock { text-align: center; } .live, .banner { text-align: left; }

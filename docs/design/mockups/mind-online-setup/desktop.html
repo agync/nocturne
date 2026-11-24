@@ -127,7 +127,9 @@ h1:focus { outline: none; }
 .dialogHead h2 { margin: 0; font: 400 1.5rem / 1.25 var(--font-serif); }
 .searchInput { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .searchInput svg { color: var(--ink2); }
-.caret { display: inline-block; width: 1px; height: 1.2em; margin-left: -9px; background: var(--ink); }
+.caret { display: inline-block; width: 1px; height: 1.2em; margin-left: -8px; background: var(--ink); }
+:root[data-theme="dark"] .scrim { background: rgba(0, 0, 0, 0.6); }
+:root[data-theme="dark"] .dialog { box-shadow: 0 0 0 1px var(--rule2), var(--e2); }
 .names { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
 .names li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--s-3); border-bottom: 1px solid var(--rule); font: 400 0.875rem / 1.4 var(--font-mono); }
 .names li[aria-checked="true"] { background: var(--accent-soft); font-weight: 500; }
