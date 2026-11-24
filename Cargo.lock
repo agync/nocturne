@@ -3671,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-app"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "age",
  "axum",
@@ -3720,7 +3720,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-channel"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "aes-gcm 0.11.1",
  "base64 0.23.1",
@@ -3744,7 +3744,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-contract"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3753,7 +3753,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-engine"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "age",
  "dunce",
@@ -3775,7 +3775,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-helpers"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "nocturne-engine",
@@ -3796,7 +3796,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-intelligence"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "jiff",
  "nocturne-contract",
@@ -3813,7 +3813,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-lemonade"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -3850,7 +3850,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-mind"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "getrandom 0.4.3",
  "jiff",
@@ -3864,7 +3864,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-phone"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "dunce",
  "jiff",
@@ -3893,7 +3893,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-provider"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -6574,7 +6574,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-nocturne-calendar"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "nocturne-contract",
  "serde",
@@ -6585,7 +6585,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-nocturne-health"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "nocturne-contract",
  "serde",
@@ -6596,7 +6596,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-nocturne-speech"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6606,7 +6606,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-nocturne-system"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
