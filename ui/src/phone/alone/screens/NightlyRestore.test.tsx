@@ -348,6 +348,14 @@ describe("bringing a backup into a phone that has a memory", () => {
     expect(screen.getByText("Keep Nocturne open until this finishes.")).toBeInTheDocument();
   });
 
+  it("does not ask who makes the backups when it was this phone's own", async () => {
+    await toMerge("&own");
+    fireEvent.click(screen.getByRole("button", { name: "Bring them in" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("button", { name: /Restore a backup…/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Make the backups from this phone?" })).toBeNull();
+  });
+
   it("Not now leaves the phone as it was", async () => {
     await toMerge();
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
