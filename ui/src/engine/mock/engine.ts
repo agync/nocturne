@@ -29,6 +29,7 @@ import type {
   MemoryView,
   MergeOutcome,
   ModelChoice,
+  ModelList,
   ModelsView,
   NeedsYouEntry,
   Notice,
@@ -2004,6 +2005,7 @@ export class MockEngine implements EngineClient {
 
   getOnline = async (): Promise<OnlineView> => this.online.view();
   checkOnline = (form: OnlineForm): Promise<CheckOutcome> => this.online.check(form);
+  listOnlineModels = (form: OnlineForm): Promise<ModelList> => this.online.list(form);
   cancelOnlineCheck = (): Promise<void> => this.online.cancelCheck();
   turnOnOnline = (settings: OnlineSettings): Promise<OnlineView> => this.online.turnOn(settings);
   turnOffOnline = (forget: boolean): Promise<OnlineView> => this.online.turnOff(forget);

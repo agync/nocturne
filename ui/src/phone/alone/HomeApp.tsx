@@ -769,6 +769,7 @@ export function HomeApp({
           <MindDetails
             draft={draft.current}
             check={mind.check}
+            list={mind.list}
             onDraft={setDraft}
             onBack={back}
             onNext={next}

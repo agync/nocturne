@@ -171,6 +171,12 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
     "check_online",
     ["form"],
   ],
+  [
+    "listOnlineModels",
+    [{ baseUrl: "https://api.example.com/v1", key: "k", model: "" }],
+    "list_online_models",
+    ["form"],
+  ],
   ["cancelOnlineCheck", [], "cancel_online_check", []],
   [
     "turnOnOnline",

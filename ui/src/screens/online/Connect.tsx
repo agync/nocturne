@@ -1,9 +1,12 @@
 import { type FormEvent, useId, useRef, useState } from "react";
 import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
+import { Icon } from "../../components/Icon/Icon";
 import { type CopyId, t } from "../../copy/t";
 import type { CheckOutcome, OnlineForm } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
+import { ModelDialog } from "./ModelDialog";
+import { afterLook, against, type ListProblem, type ListState, typingHelps } from "./modelList";
 import styles from "./Online.module.css";
 import { Frame, LockNote } from "./parts";
 import { StepAside } from "./SetupBits";
@@ -69,6 +72,15 @@ const FAILURE: Record<
   },
 };
 
+/** The words under the name field for a look that failed: the check's title, and the list's help. */
+function listProblem(problem: ListProblem): [CopyId, CopyId] {
+  const { title, detail } = FAILURE[problem];
+  if (typingHelps(problem)) return [title, "advanced.online.connect.list.later.detail"];
+  if (problem === "keyRefused") return [title, "advanced.online.connect.list.keyRefused.detail"];
+  if (problem === "noInternet") return [title, "advanced.online.connect.list.noInternet.detail"];
+  return [title, detail];
+}
+
 /** The host of the address typed so far, or "" while it is not an address yet. */
 export function hostOfAddress(address: string): string {
   try {
@@ -111,6 +123,12 @@ export function Connect({
   const live = useRef(form);
   live.current = form;
   const region = useRef<HTMLDivElement>(null);
+  // The list is the step's alone: leaving forgets it, and a new address or key drops it.
+  const [looked, setLooked] = useState<ListState | { name: "error" }>({ name: "idle" });
+  const [listOpen, setListOpen] = useState(false);
+  const looks = useRef(0);
+  const nameField = useRef<HTMLInputElement>(null);
+  const pick = useRef<HTMLButtonElement>(null);
   const host = hostOfAddress(form.baseUrl);
   const filled = form.baseUrl.trim() !== "" && form.key.trim() !== "" && form.model.trim() !== "";
   const works = outcome?.type === "works";
@@ -120,14 +138,50 @@ export function Connect({
       : null;
   const named = host || sentence(t("advanced.online.connect.thatAddress"));
 
+  const ready = form.baseUrl.trim() !== "" && form.key.trim() !== "";
+  const names = looked.name === "listed" ? looked.names : null;
+  const stands = against(form.model, names);
+
   const edit = (patch: Partial<ConnectForm>) => {
     setForm({ ...form, ...patch });
     if (outcome) setOutcome(null);
+    if (patch.baseUrl !== undefined || patch.key !== undefined) {
+      looks.current += 1;
+      setLooked({ name: "idle" });
+    }
+  };
+
+  const look = async () => {
+    if (!ready || checking || looked.name === "looking") return;
+    if (names) return setListOpen(true);
+    const mine = ++looks.current;
+    setLooked({ name: "looking" });
+    try {
+      const found = afterLook(
+        await engine.listOnlineModels({
+          baseUrl: form.baseUrl.trim(),
+          key: form.key.trim(),
+          model: form.model.trim(),
+        }),
+      );
+      if (mine !== looks.current) return;
+      setLooked(found);
+      if (found.name === "listed") setListOpen(true);
+      else if (found.name === "none") nameField.current?.focus();
+    } catch {
+      if (mine === looks.current) setLooked({ name: "error" });
+    }
+  };
+
+  const choose = (name: string) => {
+    setListOpen(false);
+    edit({ model: name });
+    nameField.current?.focus();
   };
 
   const check = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (!filled || checking) return;
+    if (!filled || checking || looked.name === "looking") return;
     const asked = {
       baseUrl: form.baseUrl.trim(),
       key: form.key.trim(),
@@ -157,6 +211,7 @@ export function Connect({
     region.current?.focus({ preventScroll: true });
   };
 
+  const listAgain = looked.name === "failed" || looked.name === "none" || looked.name === "error";
   const invalid = (field: "baseUrl" | "key" | "model") => failure?.field === field;
   const errorId = `${id}-error`;
   const describe = (field: "baseUrl" | "key" | "model", hint?: string) =>
@@ -238,6 +293,7 @@ export function Connect({
             <small>{t("advanced.online.connect.name.word")}</small>
           </label>
           <input
+            ref={nameField}
             id={`${id}-model`}
             className={styles.input}
             type="text"
@@ -247,10 +303,82 @@ export function Connect({
             placeholder={t("advanced.online.connect.name.placeholder")}
             value={form.model}
             aria-invalid={invalid("model")}
-            aria-describedby={describe("model")}
+            aria-describedby={describe("model", stands.kind === "none" ? undefined : `${id}-under`)}
             readOnly={checking}
             onChange={(event) => edit({ model: event.target.value })}
           />
+          {stands.kind === "on" ? (
+            <p id={`${id}-under`} className={styles.from}>
+              {t("advanced.online.connect.list.on", { host })}
+            </p>
+          ) : stands.kind === "notOn" ? (
+            <p id={`${id}-under`} className={`${styles.from} ${styles.fromInk}`}>
+              {t("advanced.online.connect.list.notOn", { name: form.model.trim(), host })}
+            </p>
+          ) : stands.kind === "capitals" ? (
+            <>
+              <p id={`${id}-under`} className={`${styles.from} ${styles.fromInk}`}>
+                {t("advanced.online.connect.list.capitals", {
+                  name: form.model.trim(),
+                  host,
+                  listed: stands.listed,
+                })}
+              </p>
+              <button
+                type="button"
+                className={styles.useListed}
+                onClick={() => choose(stands.listed)}
+              >
+                {t("advanced.online.connect.list.useListed", { listed: stands.listed })}
+              </button>
+            </>
+          ) : null}
+          {looked.name === "looking" ? (
+            <p className={styles.pick} data-busy="" role="status">
+              <span className={styles.dot} aria-hidden="true" />
+              <span>{t("advanced.online.connect.list.looking", { host })}</span>
+            </p>
+          ) : (
+            <>
+              <button
+                ref={pick}
+                type="button"
+                className={styles.pick}
+                aria-disabled={ready && !checking ? undefined : true}
+                aria-describedby={ready ? undefined : `${id}-needs`}
+                onClick={() => void look()}
+              >
+                <Icon name={listAgain ? "rotate-ccw" : "list"} size={16} />
+                <span>
+                  {listAgain
+                    ? t("advanced.online.connect.list.again")
+                    : ready && host
+                      ? t("advanced.online.connect.list", { host })
+                      : t("advanced.online.connect.list.noHost")}
+                </span>
+              </button>
+              {ready ? null : (
+                <p id={`${id}-needs`} className={styles.from}>
+                  {t("advanced.online.connect.list.needs")}
+                </p>
+              )}
+            </>
+          )}
+          {looked.name === "failed" ? (
+            <div className={styles.listProblem} role="alert">
+              <p>{t(listProblem(looked.problem)[0], { host: named, used: form.model.trim() })}</p>
+              <p>{t(listProblem(looked.problem)[1])}</p>
+            </div>
+          ) : looked.name === "none" ? (
+            <div className={styles.listProblem} data-calm="" role="status">
+              <p>{t("advanced.online.connect.list.none", { host: named })}</p>
+              <p>{t("advanced.online.connect.list.none.detail")}</p>
+            </div>
+          ) : looked.name === "error" ? (
+            <p className={styles.listProblem} role="alert">
+              {t("advanced.online.connect.list.failed")}
+            </p>
+          ) : null}
         </div>
         <button type="submit" hidden />
       </form>
@@ -319,7 +447,7 @@ export function Connect({
             )}
             <Button
               variant={works ? "quiet" : "secondary"}
-              disabled={!filled}
+              disabled={!filled || looked.name === "looking"}
               onClick={() => void check()}
             >
               {t(
@@ -334,6 +462,18 @@ export function Connect({
           {t("online.notNow")}
         </Button>
       </ActionBar>
+      {listOpen && names ? (
+        <ModelDialog
+          host={host}
+          names={names}
+          chosen={form.model.trim()}
+          onChoose={choose}
+          onClose={() => {
+            setListOpen(false);
+            pick.current?.focus();
+          }}
+        />
+      ) : null}
     </Frame>
   );
 }

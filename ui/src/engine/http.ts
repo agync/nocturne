@@ -339,6 +339,8 @@ export class HttpEngine implements EngineClient {
 
   getOnline: EngineClient["getOnline"] = () => this.call("get_online");
   checkOnline: EngineClient["checkOnline"] = (form) => this.call("check_online", { form });
+  listOnlineModels: EngineClient["listOnlineModels"] = (form) =>
+    this.call("list_online_models", { form });
   cancelOnlineCheck: EngineClient["cancelOnlineCheck"] = () => this.call("cancel_online_check");
   turnOnOnline: EngineClient["turnOnOnline"] = (settings) =>
     this.call("turn_on_online", { settings });

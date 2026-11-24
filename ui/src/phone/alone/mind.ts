@@ -2,7 +2,7 @@
 // Each call is one of the app's own commands; the key goes in once, with turning on.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { CheckOutcome, ReadingKind } from "../../engine/bindings";
+import type { CheckOutcome, ModelList, ReadingKind } from "../../engine/bindings";
 
 /** The form's three details, as typed. */
 export interface ProviderForm {
@@ -108,6 +108,8 @@ export class TurnOnError extends Error {
 export interface MindApi {
   chosen(): Promise<MindChosen>;
   check(form: ProviderForm): Promise<CheckOutcome>;
+  /** One look at the service's list with the form's address and key. */
+  list(form: ProviderForm): Promise<ModelList>;
   turnOn(form: ProviderForm): Promise<void>;
   turnOff(): Promise<void>;
   setLimit(limit: MindLimit): Promise<void>;
@@ -122,6 +124,7 @@ export function createMindApi(): MindApi {
   return {
     chosen: () => invoke<MindChosen>("mind_chosen"),
     check: (form) => invoke<CheckOutcome>("mind_check", { form }),
+    list: (form) => invoke<ModelList>("mind_list", { form }),
     async turnOn(form) {
       try {
         await invoke("mind_turn_on", { form });
