@@ -11,6 +11,9 @@ tags: [adr, phone, online, privacy, mind]
 Status: accepted by the owner on 2026-11-23 ("ADR 0020 accepted now"). Proposed 2026-11-22.
 Amended 2026-11-23 (owner): an online mind gets what a good answer needs, check-ins, originals and
 things marked private included; private decides only what comes up on its own.
+Amended 2026-11-24 (owner): a phone's question sends today's date, and its mind may look further
+in the phone's own memory, read only, up to 4 requests per question, each counted
+([0022 Ask looks things up](0022-ask-looks-things-up.md)).
 
 ## Context
 
