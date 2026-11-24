@@ -52,6 +52,12 @@ class SecretArgs {
 }
 
 @InvokeArg
+class CopyArgs {
+    var text: String = ""
+    var clearAfterMs: Long = 60_000
+}
+
+@InvokeArg
 class BackgroundArgs {
     var mind: Boolean = false
     var backup: Boolean = false
@@ -170,6 +176,14 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         val out = JSObject()
         out.put("is24", DateFormat.is24HourFormat(activity))
         invoke.resolve(out)
+    }
+
+    /** A phrase or recovery key to paste elsewhere: kept out of paste previews, cleared later. */
+    @Command
+    fun copySecret(invoke: Invoke) {
+        val args = invoke.parseArgs(CopyArgs::class.java)
+        Clip.copy(activity, args.text, args.clearAfterMs)
+        invoke.resolve()
     }
 
     /** This app's page in the phone's settings, where the camera can be turned back on. */

@@ -1,6 +1,6 @@
 //! What the backup's screens need beyond the backup itself: "Print or save…" for a recovery key,
-//! through the phone's own save sheet. The key is written to a private folder of the app's cache
-//! only while the sheet is open, then removed.
+//! through the phone's own save sheet, and "Copy" for a phrase. The key is written to a private
+//! folder of the app's cache only while the sheet is open, then removed.
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
@@ -12,6 +12,20 @@ use crate::sync::ledger::write_private;
 const OUTBOX: &str = "backup-key";
 /// The name the save sheet offers.
 const NAME: &str = "nocturne-recovery-key.txt";
+
+/// A copied phrase leaves the clipboard after this long.
+const COPY_CLEARS: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// "Copy": the phrase on the phone's clipboard for a password manager, kept out of its paste
+/// previews and cleared after a minute. `false` where the phone has no such clipboard, so the
+/// screen copies it the web's way.
+#[tauri::command]
+pub fn backup_copy<R: Runtime>(app: AppHandle<R>, text: String) -> bool {
+    app.system()
+        .copy_secret(&text, COPY_CLEARS)
+        .inspect_err(|e| tracing::warn!("the phrase could not be copied: {e:?}"))
+        .unwrap_or(false)
+}
 
 /// What came of the save sheet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

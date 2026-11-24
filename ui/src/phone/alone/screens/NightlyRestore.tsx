@@ -20,7 +20,15 @@ import {
   type Versions,
   versionsOf,
 } from "../nightly";
-import { BackOnly, CheckStep, NEW_PHRASE, type PhraseDraft, PhraseStep } from "./NightlyOn";
+import {
+  BackOnly,
+  CheckStep,
+  NEW_PHRASE,
+  noLearning,
+  type PhraseDraft,
+  PhraseStep,
+  SECRET_FIELD,
+} from "./NightlyOn";
 import { Chip, chips } from "./parts";
 
 type Step =
@@ -580,8 +588,9 @@ export function NightlyRestore({
               className={error ? "ph-input ph-nb-input--wrong" : "ph-input"}
               type="text"
               autoComplete="current-password"
+              {...SECRET_FIELD}
               autoCapitalize={withKey ? "characters" : "none"}
-              spellCheck={false}
+              ref={noLearning}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? err : undefined}
               value={text}
@@ -996,6 +1005,7 @@ export function NightlyRestore({
           draft={draft}
           onDraft={setDraft}
           newPhrase={api.newPhrase}
+          copy={api.copy}
           onBack={() => setStep({ name: "newPhrase" })}
           onNext={() => setStep({ name: "check" })}
         />

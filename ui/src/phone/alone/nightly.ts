@@ -161,6 +161,8 @@ export interface BackupApi {
   ): Promise<Restored>;
   makeInUse(): Promise<void>;
   stop(): Promise<void>;
+  /** "Copy" on the phone's own clipboard, out of its paste previews; `false` where it has none. */
+  copy(text: string): Promise<boolean>;
   /** The phone's save sheet for the recovery key. */
   saveKey(key: string): Promise<KeySaved>;
   /** Progress of whatever night or restore runs; returns the way to stop listening. */
@@ -242,6 +244,7 @@ export function createBackupApi(): BackupApi {
       following(onProgress, () => call("backup_restore", { opening, night })),
     makeInUse: () => call("backup_make_in_use"),
     stop: () => invoke<void>("backup_stop").catch(() => undefined),
+    copy: (text) => call<boolean>("backup_copy", { text }).catch(() => false),
     saveKey: (key) => call<KeySaved>("backup_save_key", { key }).catch(() => "failed" as const),
     watch: (onProgress) => {
       const stop = listen<BackupProgress>("backup-progress", (e) => onProgress(e.payload));

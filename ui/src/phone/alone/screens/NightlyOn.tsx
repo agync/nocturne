@@ -304,13 +304,38 @@ export function PhraseWords({ phrase }: { phrase: string }) {
 /** A minute after "Copy", the phrase leaves where it was pasted from. */
 const COPY_CLEARS_MS = 60_000;
 
-function copyPhrase(phrase: string) {
+/**
+ * "Copy": the phone's own clipboard keeps the phrase out of its paste previews and clears it
+ * after a minute. Where there is none, as in a browser, the web's clipboard does the same.
+ */
+async function copyPhrase(phrase: string, copy?: (text: string) => Promise<boolean>) {
+  if (copy && (await copy(phrase).catch(() => false))) return;
   const clip = navigator.clipboard;
   if (!clip) return;
-  void clip.writeText(phrase).then(
+  await clip.writeText(phrase).then(
     () => setTimeout(() => void clip.writeText("").catch(() => undefined), COPY_CLEARS_MS),
     () => undefined,
   );
+}
+
+/**
+ * What a field for a phrase or a recovery key asks of the keyboard: no corrections, capitals or
+ * suggestions, and nothing learnt from what is typed.
+ */
+export const SECRET_FIELD = {
+  autoCapitalize: "none",
+  autoCorrect: "off",
+  spellCheck: false,
+} as const;
+
+/**
+ * Shown as text, yet read by the keyboard as a password once shown: Android's keyboards then
+ * learn nothing from it, as for a password shown with its eye.
+ */
+export function noLearning(input: HTMLInputElement | null) {
+  if (!input || input.type !== "text") return;
+  input.type = "password";
+  input.type = "text";
 }
 
 function SafeNote() {
@@ -327,12 +352,15 @@ export function PhraseStep({
   draft,
   onDraft,
   newPhrase,
+  copy,
   onBack,
   onNext,
 }: {
   draft: PhraseDraft;
   onDraft(next: PhraseDraft): void;
   newPhrase(): Promise<string>;
+  /** The phone's own clipboard for "Copy"; `false` where it has none. */
+  copy?(text: string): Promise<boolean>;
   onBack(): void;
   onNext(): void;
 }) {
@@ -384,8 +412,8 @@ export function PhraseStep({
                 className="ph-input"
                 type="text"
                 autoComplete="new-password"
-                autoCapitalize="none"
-                spellCheck={false}
+                {...SECRET_FIELD}
+                ref={noLearning}
                 aria-describedby={hint}
                 value={d.typed}
                 onChange={(e) => set({ ...d, typed: e.target.value })}
@@ -412,7 +440,11 @@ export function PhraseStep({
                 <button type="button" className="ph-link" onClick={another}>
                   {t("phone.backup.phrase.another")}
                 </button>
-                <button type="button" className="ph-link" onClick={() => copyPhrase(d.ours)}>
+                <button
+                  type="button"
+                  className="ph-link"
+                  onClick={() => void copyPhrase(d.ours, copy)}
+                >
                   {t("phone.backup.phrase.copy")}
                 </button>
               </div>
@@ -503,8 +535,8 @@ export function CheckStep({
             className={wrong ? "ph-input ph-nb-input--wrong" : "ph-input"}
             type="text"
             autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
+            {...SECRET_FIELD}
+            ref={noLearning}
             aria-invalid={wrong || undefined}
             aria-describedby={wrong ? err : undefined}
             value={typed}

@@ -326,6 +326,26 @@ impl<R: Runtime> System<R> {
         Ok(sheet.unwrap_or(Sheet::Failed))
     }
 
+    /// Puts `text` on the phone's clipboard to paste elsewhere, kept out of its paste previews and
+    /// from the person's other devices where the phone allows, and cleared after `clear_after`.
+    /// `false` where there is no such clipboard, as on a computer.
+    pub fn copy_secret(&self, text: &str, clear_after: std::time::Duration) -> Result<bool, Error> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Copy<'a> {
+            text: &'a str,
+            clear_after_ms: u64,
+        }
+        let copied: Option<serde_json::Value> = self.native(
+            "copySecret",
+            Copy {
+                text,
+                clear_after_ms: clear_after.as_millis() as u64,
+            },
+        )?;
+        Ok(copied.is_some())
+    }
+
     /// Keeps `value` as the secret `name` in the phone's safe place, in place of one kept
     /// before. An error where there is no safe place, as on a computer.
     pub fn keep_secret(&self, name: &str, value: &str) -> Result<(), Error> {
