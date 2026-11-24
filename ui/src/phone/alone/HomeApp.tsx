@@ -291,7 +291,11 @@ export function HomeApp({
       const s = await nightly.status().catch(() => null);
       const next = s ? todayCard(s, services.platform.ios, new Date(services.now())) : null;
       const shown = next ? await home.notes.get(CARD_SHOWN).catch(() => null) : null;
-      if (!gone) setCard(next && shown !== next.cause ? next : null);
+      if (gone) return;
+      const show = next && shown !== next.cause ? next : null;
+      setCard(show);
+      // Once on screen, it does not come back for the same cause.
+      if (show) void home.notes.set(CARD_SHOWN, show.cause).catch(() => undefined);
     })();
     return () => {
       gone = true;
@@ -1033,7 +1037,6 @@ export function HomeApp({
             }}
             backupCard={card}
             onBackupCard={(open) => {
-              if (card) void home.notes.set(CARD_SHOWN, card.cause).catch(() => undefined);
               if (open) go({ name: "nightly" });
             }}
             onMind={toMind}

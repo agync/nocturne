@@ -40,7 +40,7 @@ export function backupHint(
     const values = { done: formatBytes(progress.done), size: formatBytes(progress.total) };
     return s.last ? t("phone.backup.hint.running", values) : t("phone.backup.hint.first", values);
   }
-  if (!s.on) {
+  if (!s.on || s.state.state === "notInUse") {
     if (!keptOff(s) || !s.last) return t("phone.backup.hint.off");
     return onPhone(ios, "phone.backup.hint.offKept.ios", "phone.backup.hint.offKept.android", {
       day: backupDay(s.last.at, now),
@@ -72,6 +72,9 @@ export function backupHint(
       return t("phone.backup.hint.tonight", { day, time });
   }
 }
+
+/** The account did not answer: the backup is off, and goes from the account once it does. */
+const PENDING: ReadonlySet<string> = new Set(["offline", "unavailable", "noAccess"]);
 
 type Sheet = "off" | "makeKey" | "change" | "inUse" | null;
 
@@ -125,7 +128,10 @@ export function NightlyBackup({
   );
   useEffect(() => {
     void look();
-    void notes.get(KEY_MADE).then(setKeyMade, () => undefined);
+    void notes.get(KEY_MADE).then(
+      (v) => setKeyMade(v || null),
+      () => undefined,
+    );
     const front = () => {
       if (document.visibilityState === "visible") void look();
     };
@@ -174,9 +180,10 @@ export function NightlyBackup({
     void run(async () => {
       try {
         await api.turnOnAgain();
-      } catch {
-        // Never on here, or its key went with the backup: the three steps.
-        return onTurnOn();
+      } catch (e) {
+        // Never on here, or its key went with the backup: the three steps. Anything else says so.
+        if (problemOf(e) === "off") return onTurnOn();
+        throw e;
       }
       const s = await api.status();
       if (s.state.state === "notInUse") await api.makeInUse();
@@ -186,7 +193,10 @@ export function NightlyBackup({
 
   const turnOff = () =>
     void run(async () => {
-      await api.turnOff(alsoDelete);
+      await api.turnOff(alsoDelete).catch((e: unknown) => {
+        // Off already; the backup in the account goes once it answers.
+        if (!alsoDelete || !PENDING.has(problemOf(e))) throw e;
+      });
       setOnAgain(false);
       setDeleted(alsoDelete);
       setAlsoDelete(false);
@@ -200,7 +210,11 @@ export function NightlyBackup({
   const chooseAccount = () =>
     void run(async () => {
       const c = await api.connect(true);
-      if (c.outcome === "connected" && c.previous) setAccount(c.previous);
+      if (c.outcome !== "connected") return;
+      if (c.previous) setAccount(c.previous);
+      // A night written clears the stop; until then nothing runs.
+      await api.now(false, setProgress).catch(() => undefined);
+      setProgress(null);
     });
 
   if (key)
@@ -216,7 +230,12 @@ export function NightlyBackup({
         }}
         onClose={(saved) => {
           // A key that was never saved must not open the backup.
-          if (!saved) void api.dropRecoveryKey().catch(() => undefined);
+          if (!saved) {
+            void api.dropRecoveryKey().catch(() => undefined);
+            // The earlier key stopped working when this one was made.
+            setKeyMade(null);
+            void notes.set(KEY_MADE, "").catch(() => undefined);
+          }
           setKey(null);
         }}
       />
@@ -561,7 +580,9 @@ export function MovedBackup({ api, ios }: { api: BackupApi; ios: boolean }) {
     setBusy(true);
     setFailed(false);
     try {
-      await api.turnOff(true);
+      await api.turnOff(true).catch((e: unknown) => {
+        if (!PENDING.has(problemOf(e))) throw e;
+      });
       setAsking(false);
       setStatus(await api.status().catch(() => null));
     } catch {

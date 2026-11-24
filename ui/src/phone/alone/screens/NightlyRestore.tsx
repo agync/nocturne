@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { formatBytes } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { BackupProgress } from "../../../engine/bindings";
@@ -28,13 +28,17 @@ type Step =
   | { name: "nights" }
   | { name: "merge" }
   | { name: "getting" }
-  | { name: "problem"; why: "room" | "missing" | "newer" | "lost" | "stopped" }
+  | { name: "problem"; why: "room" | "missing" | "newer" | "lost" | "stopped" | "failed" }
   | { name: "restored"; restored: Extract<Restored, { kind: "replaced" }> }
   | { name: "merged"; restored: Extract<Restored, { kind: "broughtIn" }> }
   | { name: "newPhrase" }
   | { name: "phrase" }
   | { name: "check" }
   | { name: "inUse" };
+
+/** The way to the backup went away; anything else is a plain failure. */
+const lostOr = (p: string): "lost" | "failed" =>
+  ["noAccess", "unavailable", "signedOut", "noPermission"].includes(p) ? "lost" : "failed";
 
 /** Wrong this many times, the line points to the password manager and the recovery key. */
 const WRONG_AGAIN = 3;
@@ -184,12 +188,25 @@ export function NightlyRestore({
   const [here, setHere] = useState<number | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const [draft, setDraft] = useState<PhraseDraft>(NEW_PHRASE);
+  const [failed, setFailed] = useState(false);
   // The night's things are being added: Stop is no longer offered.
   const adding = useRef(false);
   const stopped = useRef(false);
   const name = useId();
   const field = useId();
   const err = useId();
+
+  // Leaving while it comes down stops it, so nothing is brought in unseen. Once its things are
+  // being added it finishes.
+  const running = useRef(false);
+  running.current = step.name === "getting";
+  useEffect(
+    () => () => {
+      if (running.current && !adding.current) void api.stop();
+    },
+    [api],
+  );
+  const downloaded = progress !== null && progress.total > 0 && progress.done >= progress.total;
 
   const opening = (): Opening =>
     withKey ? { with: "recoveryKey", text } : { with: "phrase", text };
@@ -219,11 +236,12 @@ export function NightlyRestore({
       const c = await api.connect(choose);
       if (c.outcome === "connected") return void (await look());
       if (c.outcome === "offline") return setStep({ name: "none", why: "offline" });
+      if (c.outcome === "failed") return setStep({ name: "problem", why: "failed" });
       if (ios)
         return setStep({ name: "none", why: c.outcome === "noAccount" ? "none" : "icloudOff" });
       setStep({ name: "where", refused: true });
     } catch {
-      setStep({ name: "where", refused: !ios });
+      setStep({ name: "problem", why: "failed" });
     } finally {
       setBusy(false);
     }
@@ -240,7 +258,7 @@ export function NightlyRestore({
       const p = problemOf(e);
       if (p === "wrongPhrase" || p === "noPhrase") setWrong((n) => n + 1);
       else if (p === "offline") setStep({ name: "none", why: "offline" });
-      else setStep({ name: "problem", why: "lost" });
+      else setStep({ name: "problem", why: lostOr(p) });
       return null;
     }
   };
@@ -289,7 +307,7 @@ export function NightlyRestore({
         return setStep({ name: "found" });
       }
       if (p === "offline") return setStep({ name: "none", why: "offline" });
-      setStep({ name: "problem", why: "lost" });
+      setStep({ name: "problem", why: lostOr(p) });
     } finally {
       setProgress(null);
     }
@@ -474,7 +492,7 @@ export function NightlyRestore({
           </p>
           {shown?.at ? (
             <div className="ph-nb-found">
-              <Icon name="lock" size={22} />
+              <Icon name="shield" size={22} />
               <span className="ph-srow-text">
                 <span className="ph-srow-label">
                   {t("phone.backup.found.card", {
@@ -690,7 +708,7 @@ export function NightlyRestore({
           label={t("phone.backup.getting.stage")}
           progress={progress}
           body={t("phone.backup.getting.body")}
-          onStop={stop}
+          onStop={downloaded ? undefined : stop}
         />
       );
     case "problem": {
@@ -715,6 +733,12 @@ export function NightlyRestore({
                 <p className="ph-body ph-ink2">{t("phone.backup.getting.stoppedBody")}</p>
               </Hero>
             )}
+          </Screen>
+        );
+      if (step.why === "failed")
+        return (
+          <Screen foot={again}>
+            <Hero icon="info" title={t("ask.action.failed")} />
           </Screen>
         );
       if (step.why === "room")
@@ -896,9 +920,15 @@ export function NightlyRestore({
                 disabled={busy}
                 onClick={async () => {
                   setBusy(true);
-                  await api.makeInUse().catch(() => undefined);
-                  setBusy(false);
-                  onDone();
+                  setFailed(false);
+                  try {
+                    await api.makeInUse();
+                    onDone();
+                  } catch {
+                    setFailed(true);
+                  } finally {
+                    setBusy(false);
+                  }
                 }}
               >
                 {t("phone.backup.inUseAsk.yes")}
@@ -911,6 +941,11 @@ export function NightlyRestore({
         >
           <Hero icon="phone" title={t("phone.backup.inUseAsk.title")}>
             <p className="ph-body ph-ink2">{t("phone.backup.inUseAsk.body")}</p>
+            {failed ? (
+              <p className="ph-error" role="alert">
+                {t("ask.action.failed")}
+              </p>
+            ) : null}
           </Hero>
         </Screen>
       );

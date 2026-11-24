@@ -135,7 +135,9 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("button", { name: "Back up now" })).toBeVisible();
       await look(page, `backup-on-ios-${scheme}`, true);
       await page.goto("/?m=kept&v=nightly&b=wifi");
-      await expect(page.getByRole("button", { name: "Back up now over mobile data" })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Back up now over mobile data" }),
+      ).toBeVisible();
       await look(page, `backup-wifi-${scheme}`);
       await page.goto("/?m=kept&v=nightly&b=signedOut");
       await expect(page.getByRole("button", { name: "Choose account" })).toBeVisible();
