@@ -309,7 +309,7 @@ describe("bringing a backup into a phone that has a memory", () => {
     await toMerge();
     const inBackup = screen.getByText("In the backup").parentElement as HTMLElement;
     expect(inBackup).toHaveTextContent(
-      /2,120 things, from Sunday 2 March to today · about 1.4\sGB/,
+      /2,120 things, from Sunday 2 March to Friday 13 November · about 1.4\sGB/,
     );
     const here = screen.getByText("On this phone").parentElement as HTMLElement;
     expect(here).toHaveTextContent("412 things, from Saturday 20 June to today");

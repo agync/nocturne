@@ -475,6 +475,11 @@ describe("a backup over a memory that is already here", () => {
         name: "Your backup has its own memory, and this phone has one too.",
       }),
     ).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByText("On this phone").parentElement).toHaveTextContent(
+        "412 things, from Saturday 20 June to today",
+      ),
+    );
   }, 15_000);
 
   it("leaves what is here as it was with Not now", async () => {
