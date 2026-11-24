@@ -20,7 +20,7 @@ with "Nocturne's mind online" on the phone, the second shared with Online answer
 3. **Reading looks stuck on battery.** The phone reads only while it charges, but This phone says
    "Reading · 0 of 89", and there is no way to read now.
 
-Status: proposed, with the owner's decisions of 2026-11-24 folded in. Nothing here is built. It
+Status: built, with the owner's decisions of 2026-11-24 folded in; see [As built](#as-built). It
 extends the approved [Keeping the next step in view](step-flow-actions.md) to the phone, and changes
 the details step of both setups.
 
@@ -643,3 +643,22 @@ Not written here; for the build.
   notification shows, and reading carries on when Nocturne opens.
 - No notification names a kept thing, a question or a host.
 - After Read now ends, no pass reads until the charger or the next Read now.
+
+## As built
+
+Where the page left a choice, the build reads it this way:
+
+- **The look on the computer.** The computer's check goes through its own engine, which reads the
+  service's list itself each time it is given an address. "Choose from {host}'s list…" takes its
+  look with the same client the phone uses, listed in Sent online as a connection check, so a
+  check after it still has the engine's own look.
+- **The list kept for the check.** On the phone the check uses the list from the person's look
+  once, when the address and key are the same and the look is under 15 minutes old.
+- **Copy for each phone.** The lines that differ between Android and iPhone are keys ending in
+  `.android` and `.iphone`, such as `phone.mind.readNow.cost.android`.
+- **Change limit** opens the mind's setup, as "Change…" does, since the phone has no limit screen
+  of its own.
+- **The computer's dialog** uses the app's own dialog, with its title and Close as every dialog
+  has them.
+- **Done and charging lines** show while they hold, until Nocturne is closed or a new Read now
+  starts, rather than only until the person leaves This phone.
