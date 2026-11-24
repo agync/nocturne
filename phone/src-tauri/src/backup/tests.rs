@@ -870,3 +870,28 @@ fn this_phone_s_own_backup_turned_off_comes_back_as_its_own() {
         "the same backup, on again with no steps"
     );
 }
+
+#[test]
+fn what_the_phone_notes_of_the_backup_stays_out_of_its_own_device_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::at("2026-11-24T22:00:00Z", "Europe/London"));
+    let marked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = marked.clone();
+    let mut backup = PhoneBackup::new(
+        dir.path().to_path_buf(),
+        Box::new(MemoryBackupKeys::default()),
+        clock,
+    )
+    .with_exclude(Box::new(move |path: &Path| {
+        seen.lock().unwrap().push(path.to_path_buf())
+    }));
+    backup.set_work_factor(4);
+    backup.set_place(Some(Arc::new(MemoryPlace::new())));
+    backup.turn_on(PHRASE).unwrap();
+    backup.set_wifi_only(true);
+    let marked = marked.lock().unwrap();
+    let file = dir.path().join("nightly-backup.json");
+    assert!(file.exists());
+    assert!(marked.len() >= 2, "marked again after each write");
+    assert!(marked.iter().all(|p| *p == file));
+}

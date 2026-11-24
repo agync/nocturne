@@ -199,11 +199,14 @@ class SystemPlugin: Plugin {
     invoke.resolve()
   }
 
-  /// Marks a folder of the app's own so iCloud and computer backups leave it out. The mark is
-  /// on the folder: what is written in it later stays out too.
+  /// Marks a folder or a file of the app's own so iCloud and computer backups leave it out. The
+  /// mark on a folder keeps out what is written in it later too; a file written again in its
+  /// place needs it again.
   @objc public func excludeFromBackup(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(FolderArgs.self)
-    var url = URL(fileURLWithPath: args.path, isDirectory: true)
+    var folder: ObjCBool = false
+    FileManager.default.fileExists(atPath: args.path, isDirectory: &folder)
+    var url = URL(fileURLWithPath: args.path, isDirectory: folder.boolValue)
     var values = URLResourceValues()
     values.isExcludedFromBackup = true
     do {

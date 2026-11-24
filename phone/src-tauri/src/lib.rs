@@ -42,7 +42,8 @@ pub fn run() {
                 dir.clone(),
                 Box::new(backup::SafeBackupKeys(app.handle().clone())),
                 clock.clone(),
-            );
+            )
+            .with_exclude(exclude_from_backup(app.handle()));
             backup::place_account::attach(app.handle(), &nightly);
             let thinking =
                 mind::PhoneMind::new(dir, Box::new(mind::SafeKeys(app.handle().clone())), clock);
@@ -164,8 +165,9 @@ pub fn run() {
         });
 }
 
-/// The store stays out of the phone's own backup. Android's backup rules already leave out every
-/// folder of the app; an iPhone marks the folder itself.
+/// The store, and what the phone notes of the nightly backup, stay out of the phone's own
+/// backup. Android's backup rules already leave out every folder of the app; an iPhone marks the
+/// folder or the file itself.
 fn exclude_from_backup<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> home::ExcludeFromBackup {
     #[cfg(target_os = "ios")]
     {
