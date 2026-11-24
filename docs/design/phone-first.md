@@ -717,6 +717,9 @@ After turning on, once.
 | Note | "Reading carries on when this phone allows it, often while it charges." |
 | Button | "OK" |
 
+On battery these words change, and "Read now" joins "OK": proposed in [Setting up Nocturne's mind
+online](mind-online-setup.md#problem-3-reading-on-battery).
+
 Next morning, Today shows the page as the companion's phone edition does, with the receipt chips,
 and a line under the title: "Written by {host}" or "Written by Apple Intelligence". The page
 carries its own date, so Today hides its own date label while the page shows, and shows it again
@@ -762,7 +765,7 @@ A group headed "Nocturne’s mind online" (or "Apple Intelligence"), under Your 
 
 | State | What shows |
 |---|---|
-| Reading | Nothing on Today; This phone: "Reading · {done} of {count}" |
+| Reading | Nothing on Today; This phone: "Reading · {done} of {count}" while charging. On battery, "Waiting to charge · {left} to read" with Read now, as proposed in [Setting up Nocturne's mind online](mind-online-setup.md#states) |
 | Service unreachable | Today keeps the last page with "Written {day}. {host} hasn’t answered since {time}." Ask finds by words with "Answers are back when {host} is." Meanwhile the phone looks again with one look at the service's list of models, listed in Sent online as a "Connection check": after 1, 5, 15 and 30 minutes, then every 30 minutes, never while paused by the limit. When one is answered, the state ends and Ask answers again |
 | Key refused | On Today and Ask: "Your provider refused the key" / "{host} no longer accepts the key Nocturne has. Until you check it, Ask finds by words." with "Check the key…", which opens the details step |
 | No credit | On Today and Ask: "Your provider says there’s no credit left" / "Add credit on your provider’s website, then check again. Until then, Ask finds by words." with "Check again", which opens the details step |
