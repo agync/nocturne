@@ -212,8 +212,8 @@
     "from": "It stays quiet"
   },
   "journal.quiet.detail": {
-    "text": "Nichts aus deinem Tagebuch wird vorgelesen oder in einer Benachrichtigung oder auf dem Sperrbildschirm gezeigt. Wenn du Online-Antworten (Online answers) einschaltest, kann eine Zeile aus deinem Tagebuch mit einer Frage mitgehen, wenn sie hilft, sie zu beantworten. Deine Gefühlsnotizen, Reflexionen und Rückblicke gehen nie mit.",
-    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+    "text": "Nichts aus deinem Tagebuch wird vorgelesen oder in einer Benachrichtigung oder auf dem Sperrbildschirm gezeigt. Wenn du Online-Antworten (Online answers) einschaltest, kann eine Zeile aus deinem Tagebuch oder eine Gefühlsnotiz mit einer Frage mitgehen, wenn sie hilft, sie zu beantworten. Deine Reflexionen und Rückblicke gehen nie mit.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal or a check-in can go with a question it helps answer. Your reflections and recaps never do."
   },
   "journal.day.alt": {
     "text": "Heute im Tagebuch, Donnerstag, 12. November: ein Eintrag über das Mittagessen mit Priya, mit einer Sprachnotiz und einem Foto. Daneben, wie sich der Tag angefühlt hat, mit drei Gefühlsnotizen (müde, froh, erleichtert und zufrieden).",
@@ -284,8 +284,8 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite und dein Tagebuch lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Darunter können Zeilen aus deinem Tagebuch sein, aber nie deine Gefühlsnotizen, Reflexionen oder Rückblicke. Nie etwas, das als privat markiert ist.",
-    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
+    "text": "Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite und dein Tagebuch lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Darunter können Zeilen aus deinem Tagebuch und deine Gefühlsnotizen sein, aber nie deine Reflexionen oder Rückblicke. Nie etwas, das als privat markiert ist.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal and your check-ins, but never your reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
     "text": "Nocturne auf einem gekoppelten Handy: verbunden mit dem Computer zu Hause, mit Fragen, Festhalten, der heutigen Seite und dem Tagebuch, und einem Hinweis, dass als privat markierte Dinge auf dem Computer bleiben.",

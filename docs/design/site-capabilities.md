@@ -85,7 +85,7 @@ demo data. There is one daily ritual, and the page is it.
 |---|---|
 | Keep everything | Writing the day is one more way to keep. What was kept through the day is already on the journal's timeline |
 | Receipts or it did not happen | Every line of a reflection or recap opens what it came from. A feeling is quoted, never guessed |
-| Offline after setup | Reflections and recaps are written on the computer. Check-ins, reflections and recaps never go online, even with Online answers on |
+| Offline after setup | Reflections and recaps are written on the computer. Reflections and recaps never go online, even with Online answers on; a check-in can go with a question it helps answer |
 | One quiet note a day, never what you kept | Nothing from the journal is ever in a notification, the tray, on a lock screen or read aloud |
 | Calm presence | The journal has no streaks, no counts, no daily prompt and no reminder unless the person turns one on |
 | It never edits what you kept | A changed entry keeps its earlier version |
