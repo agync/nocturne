@@ -671,7 +671,11 @@ impl Engine {
             });
             write_new(&dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?.as_bytes())?;
             step();
-            crate::online::export_section(conn, dir)?;
+            let originals = self.originals_dir();
+            let kept = |conn: &Connection, id: &str| {
+                crate::lookup::kept_line_now(conn, self.clock(), &originals, id)
+            };
+            crate::online::export_section(conn, dir, &kept)?;
             crate::phones::export::export_section(conn, dir, &self.clock().tz())?;
             Ok(ExportReport {
                 memories: current,
