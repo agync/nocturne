@@ -4,10 +4,12 @@
 //! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
 //! the room left on the phone, and on an iPhone a folder kept out of its backup. For the core
 //! alone: a secret kept in the phone's safe place (Android's keystore, the iPhone's keychain),
-//! whether the phone charges and its network is unmetered, the background windows the system
-//! allows while it charges, and the nightly backup's folder in the person's own account (Google
-//! Drive on Android, the app's iCloud space on an iPhone). On a computer every command answers a
-//! stand-in, and no secret is kept.
+//! whether the phone charges, its battery level and battery saving, and whether its network
+//! is unmetered, the background windows the system allows while it charges, the nightly
+//! backup's folder in the person's own account (Google Drive on Android, the app's iCloud
+//! space on an iPhone), and the reading the person started on battery shown where the phone
+//! shows such work (Android's notification, iPhone's own progress). On a computer every
+//! command answers a stand-in, and no secret is kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -118,8 +120,9 @@ struct Free {
     bytes: Option<u64>,
 }
 
-/// Whether the phone charges, whether the system has a background window open for the app, and
-/// whether its network costs nothing by the byte, such as Wi-Fi.
+/// Whether the phone charges, its battery level, whether battery saving is on (Battery Saver,
+/// Low Power Mode), whether the system has a background window open for the app, and whether
+/// its network costs nothing by the byte, such as Wi-Fi.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 pub struct Power {
     /// `None` when the phone does not say.
@@ -130,6 +133,11 @@ pub struct Power {
     /// `None` while offline, or when the phone does not say.
     #[serde(default)]
     pub unmetered: Option<bool>,
+    /// Per cent, when the phone says.
+    #[serde(default)]
+    pub percent: Option<u8>,
+    #[serde(default)]
+    pub saver: Option<bool>,
 }
 
 /// How a call to the backup's folder in the person's account ended.
@@ -209,6 +217,48 @@ struct PlaceCall<'a> {
 #[derive(Debug, Serialize)]
 struct Choose {
     choose: bool,
+}
+
+/// The reading the person started on battery, as the phone shows it while they are elsewhere.
+/// Its words come filled in: counts and what happened, never a kept thing, a question or a host.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "state",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ReadingNote {
+    /// Started from the person's tap, or under way: Android's ongoing notification in its own
+    /// quiet channel, with Stop; iPhone's own progress from iOS 26, or the short time iPhone
+    /// gives as the app leaves. `paused_*` is iPhone's line if it pauses the reading.
+    Reading {
+        channel: String,
+        channel_about: String,
+        title: String,
+        text: String,
+        stop: String,
+        done: u32,
+        count: u32,
+        paused_title: String,
+        paused_text: String,
+    },
+    /// It ended, for `why`; `title` and `text`, when given, are left as one quiet line if the
+    /// person is elsewhere.
+    Ended {
+        why: String,
+        title: Option<String>,
+        text: Option<String>,
+    },
+}
+
+/// What the phone says back about the reading: Stop was pressed where the phone shows it,
+/// iPhone paused it, and whether notifications may show.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct ReadingAnswer {
+    pub stop: bool,
+    pub paused: bool,
+    pub notes: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -373,6 +423,12 @@ impl<R: Runtime> System<R> {
     /// Whether the phone charges and a background window is open. Unknown on a computer.
     pub fn power(&self) -> Result<Power, Error> {
         Ok(self.native("power", ())?.unwrap_or_default())
+    }
+
+    /// Shows the reading on battery where the phone shows such work, or ends it, and says
+    /// what the person did there since. Nothing on a computer.
+    pub fn reading_now(&self, note: &ReadingNote) -> Result<ReadingAnswer, Error> {
+        Ok(self.native("readingNow", note)?.unwrap_or_default())
     }
 
     /// Asks the system for background windows while the phone charges, for the mind and for the
@@ -651,6 +707,17 @@ mod tests {
                 charging: Some(true),
                 window: true,
                 unmetered: None,
+                ..Power::default()
+            }
+        );
+        assert_eq!(
+            read(r#"{"charging":false,"window":false,"percent":42,"saver":true}"#),
+            Power {
+                charging: Some(false),
+                window: false,
+                percent: Some(42),
+                saver: Some(true),
+                unmetered: None,
             }
         );
         assert_eq!(
@@ -734,6 +801,51 @@ mod tests {
         assert_eq!(
             serde_json::to_value(windows).unwrap(),
             serde_json::json!({ "mind": false, "backup": true, "wifiOnly": true })
+        );
+    }
+
+    #[test]
+    fn the_reading_goes_to_the_phone_and_its_answer_comes_back() {
+        let note = ReadingNote::Reading {
+            channel: "Reading now".into(),
+            channel_about: "Shows while Nocturne reads what you kept.".into(),
+            title: "Reading what you kept".into(),
+            text: "12 of 89".into(),
+            stop: "Stop".into(),
+            done: 12,
+            count: 89,
+            paused_title: "Reading paused".into(),
+            paused_text: "after 12 of 89".into(),
+        };
+        let json = serde_json::to_value(&note).unwrap();
+        assert_eq!(json["state"], "reading");
+        assert_eq!(
+            json["channelAbout"],
+            "Shows while Nocturne reads what you kept."
+        );
+        assert_eq!(json["pausedText"], "after 12 of 89");
+        let ended = serde_json::to_value(ReadingNote::Ended {
+            why: "low".into(),
+            title: None,
+            text: None,
+        })
+        .unwrap();
+        assert_eq!(
+            ended,
+            serde_json::json!({"state": "ended", "why": "low", "title": null, "text": null})
+        );
+        let answer: ReadingAnswer = serde_json::from_str(r#"{"stop":true,"notes":true}"#).unwrap();
+        assert_eq!(
+            answer,
+            ReadingAnswer {
+                stop: true,
+                paused: false,
+                notes: true
+            }
+        );
+        assert_eq!(
+            serde_json::from_str::<ReadingAnswer>("{}").unwrap(),
+            ReadingAnswer::default()
         );
     }
 
