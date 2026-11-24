@@ -1485,6 +1485,64 @@ fn a_reflection_comes_for_a_day_this_phone_has_none_for_and_never_replaces_or_re
     );
 }
 
+#[test]
+fn a_page_for_a_day_both_have_stays_this_phones_and_the_backups_does_not_come() {
+    let day = common::date("2026-11-14");
+    let page_body = |f: &Fixture| -> String {
+        raw_db(f)
+            .query_row(
+                "SELECT body FROM pages WHERE date = '2026-11-14'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let old = fixture();
+    let (_, theirs) = learn(
+        &old.engine,
+        "Zed knows x.",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    old.clock.set_str("2026-11-14T07:00:00Z");
+    let page = old.engine.compose_page(day, Edition::Screen).unwrap();
+    old.engine.save_page(&page).unwrap();
+    assert!(
+        page_body(&old).contains(&theirs),
+        "the backup's page cites it"
+    );
+    let (place, key) = back_up_night(&old);
+
+    let here = phone_with_memory();
+    let (_, mine) = learn(
+        &here.engine,
+        "Amy prefers tea.",
+        cand("Amy", Predicate::Prefers, "tea", "Amy prefers tea."),
+    );
+    here.clock.set_str("2026-11-14T07:00:00Z");
+    let page = here.engine.compose_page(day, Edition::Screen).unwrap();
+    here.engine.save_page(&page).unwrap();
+    let before = page_body(&here);
+    assert!(before.contains(&mine));
+
+    let brought = bring_newest(&here.engine, &place, &key);
+    assert_eq!(brought.things, 1, "the backup's things still come");
+    assert!(here.engine.get_memory(&theirs).is_ok());
+    assert_eq!(
+        page_body(&here),
+        before,
+        "this phone's page is the one kept"
+    );
+    assert!(!page_body(&here).contains(&theirs));
+    assert_eq!(
+        sql_count(
+            here.dir.path(),
+            "SELECT COUNT(*) FROM pages WHERE date = '2026-11-14'"
+        ),
+        1,
+        "never two pages for one day"
+    );
+}
+
 fn add_mention(f: &Fixture, item: &str, entity: &str, name: &str, ord: u32) {
     let conn = raw_db(f);
     conn.execute(
