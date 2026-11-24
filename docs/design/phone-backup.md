@@ -88,7 +88,8 @@ flowchart LR
 
 | Part | Choice |
 |---|---|
-| What goes each night | Each thing kept, its original, the journal, check-ins, pages, reflections, calendar entries and health readings, and the marks on them, as locked pieces, each named by a hash of its locked contents. Only pieces the account doesn't have yet go. Then a small locked index that lists the night's pieces |
+| What goes each night | Each thing kept, its original, the journal, check-ins, pages, reflections, calendar entries, and the marks on them, as locked pieces, each named by a hash of its locked contents. Only pieces the account doesn't have yet go. Then a small locked index that lists the night's pieces |
+| Health readings | Never in the backup, on iPhone and Android alike ([decision 8](#decisions)). The night notes only the first day the phone holds readings for. Pages, reflections and day lines that speak of them are backed up as usual. A restore reads the readings again from Health or Health Connect ([below](#health-readings-after-a-restore)) |
 | Private things | Backed up like everything else, locked like everything else. A private mark decides what comes up on its own, never what is backed up ([What private means](only-marked-private.md)) |
 | How many | Seven nightly indexes. A piece no kept index lists is removed |
 | When | At night while the phone charges, at a time the phone's system chooses. Over mobile data too, unless "Wi-Fi only" is on (off by default). "Back up now" runs one at once, charging or not |
@@ -504,8 +505,9 @@ again, since its things are unpacked beside the memory here until they are added
 ### Onto an empty phone
 
 A new phone, or one that was reset or emptied by Delete everything. The backup comes back as it
-was: every thing, the journal, check-ins, pages, reflections, calendar and health readings, what
-was forgotten, the marks, and the settings that belong to the memory.
+was: every thing, the journal, check-ins, pages, reflections, calendar entries, what was forgotten,
+the marks, and the settings that belong to the memory. Health readings are read again from the
+phone's health app ([below](#health-readings-after-a-restore)).
 
 | Part | Copy |
 |---|---|
@@ -514,6 +516,7 @@ was forgotten, the marks, and the settings that belong to the memory.
 | Done body | "{count} things, every page and your journal." |
 | Afterwards, when the old phone had an online mind | "Its mind stays off until you choose it again in {thisPhone}." |
 | Afterwards, calendar and health | "Your calendar and Health on this phone stay off until you turn them on again." |
+| Afterwards, health readings | When the old phone held any, [the line below](#health-readings-after-a-restore) |
 | Button | "Continue" |
 
 The phone's own permissions, and the key to an online service, never travel in a backup (0013).
@@ -553,6 +556,7 @@ that was on the phone is lost, and anything that came in can be forgotten like a
 | Done title | "Your backup’s things are here." |
 | Done body | "{count} things, {entries} journal entries and {checkins} check-ins were added to the memory on this phone." |
 | Done, kept once | When above zero: "{same} were already here, so they were kept once." |
+| Done, health readings | When the backup's phone held any, [the line below](#health-readings-after-a-restore) |
 | Button | "Continue" |
 
 Nothing is added until everything has arrived and passed the checks; then all of it is added in one
@@ -560,7 +564,7 @@ step, or none of it.
 
 **What comes in.** Every kept thing with its original, how and where it was kept, its private mark
 and what was worked out from it, so nothing is read again; journal entries and good things;
-check-ins; pages and reflections; calendar entries and health readings; what the person forgot from
+check-ins; pages and reflections; calendar entries; what the person forgot from
 a thing, which stays forgotten; the names they taught it and what they confirmed or settled. Not the
 backup's settings: this phone's stay.
 
@@ -569,11 +573,37 @@ backup's settings: this phone's stay.
 | The same thing on both | Kept once. The one on this phone stays, and when the backup's was kept on another device, its page adds under "Kept": "Also kept on {device} · {day}, {time}" |
 | Journal entries or check-ins for the same day | Both kept, each on its day in time order. Nothing is joined into one entry |
 | A page or reflection for the same day | This phone's is kept, and the backup's doesn't come. Keeping both, with two pages for one day, waits for a later release ([decision 6](#decisions)) |
-| Calendar entries and health readings on both | Kept once, by their own identity in the phone's calendar or Health; the newer version stays |
+| Calendar entries on both | Kept once, by their own identity in the phone's calendar; the newer version stays |
+| Health readings | None come from the backup. They are read again from the phone's health app ([below](#health-readings-after-a-restore)) |
 | Private marks | Kept as they were. When the same thing is on both and either is private, it is private |
 | Something forgotten on either side | Stays forgotten. Something forgotten for good on this phone is not brought back from an older backup: the phone keeps a note of what it forgot for good, without the thing itself, for this |
 | The backup is this phone's own | The same, so restoring an earlier night of this phone adds back only what is no longer here and was never forgotten for good |
 | What this phone's mind would read | Nothing: what came in was already read, so nothing is sent online again for it |
+
+### Health readings after a restore
+
+Health readings never go into the backup (App Store guideline 5.1.3 bars health data in iCloud,
+and Android follows the same rule so the two behave alike). After a restore of either kind, the
+phone reads them again from its own health app, as far back as the first day the backup's phone
+held readings for, once Health is on in Nocturne.
+
+| Phone | How far back |
+|---|---|
+| iPhone | Health keeps the whole history: read again back to that day |
+| Android, Health Connect offers older readings | Nocturne asks for older readings with the other kinds whenever Health Connect offers them. Once allowed, read again back to that day; until then, the last 30 days |
+| Android, Health Connect gives only the last 30 days | The last 30 days. What is older doesn't come back, and the done screen says so |
+
+The done screen, of either restore, adds one line when the backup's phone held readings. {day} is
+that first day, written with its year ("14 March 2025"); {from} is the day 30 days back.
+
+| Case | Copy |
+|---|---|
+| iPhone | "Health readings aren’t kept in your backup. With Health on in {thisPhone}, Nocturne reads them again from Health, back to {day}." |
+| Android, older readings offered | "Health readings aren’t kept in your backup. With Health on in {thisPhone}, Nocturne reads them again from Health Connect, back to {day}, once you allow older readings there." |
+| Android, only the last 30 days, and {day} is older | "Health readings aren’t kept in your backup. Health Connect on this phone lets Nocturne read only the last 30 days, so readings from before {from} don’t come back. Pages and reflections that mention them stay." |
+
+A night written before this rule may still hold readings; it ages out with the seven nights, and a
+restore from it leaves them out too.
 
 ### Make the backups from this phone?
 
@@ -691,3 +721,4 @@ Settled by the owner on 2026-11-24, each as recommended.
 | 5 | A restore that brought things in has no undo. Nothing on the phone was lost, and anything that came in can be forgotten | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
 | 6 | Two pages for one day are deferred to a later release. When a bring in meets a page or reflection both sides have for the same day, this phone's stays and the backup's doesn't come | [Onto a phone that has a memory](#onto-a-phone-that-has-a-memory) |
 | 7 | Delete everything while offline, then another account chosen before the phone is back online: the deletion stays tied to the earlier account and runs when Nocturne next reaches it. The new account never receives it, and the change never drops it | [Delete everything, with a backup](#forgetting-delete-everything-and-private), [States in This phone](#states-in-this-phone) |
+| 8 | Health readings stay out of the backup on both platforms, in every night, restore and bring in (App Store guideline 5.1.3; Android alike). Pages, reflections and day lines about health stay. A restore reads the readings again from Health or Health Connect, as far back as the phone allows, and says what doesn't come back | [Health readings after a restore](#health-readings-after-a-restore) |
