@@ -11,77 +11,111 @@
 {
   "*": { "tab": "", "action": false, "bar": "back", "title": "This phone", "back": "Today" },
   "first-waiting": { "bar": "none" },
-  "first-now": { "bar": "none" }
+  "first-now": { "bar": "none" },
+  "away": { "bar": "none" },
+  "paused": { "bar": "none" }
 }
 </script>
 </head>
-<body data-frame="duo" data-states="waiting now left low done paused unreachable first-waiting first-now">
+<body data-frame="duo" data-states="waiting now away paused back low anyway done limit unreachable first-waiting first-now">
 <main id="content" style="gap: 20px">
 
   <!-- This phone: the mind online group -->
-  <div class="group" data-state="waiting now left low done paused unreachable">
+  <div class="group" data-state="waiting now back low anyway done limit unreachable">
     <p class="ghead">Your memory</p>
     <div class="rows">
       <div class="row"><span data-icon="phone" data-size="22"></span><span class="rowText"><span class="rowLabel">Where it is</span><span class="rowHint">On this phone · 412 MB</span></span></div>
     </div>
   </div>
 
-  <div class="group" data-state="waiting now left low done paused unreachable">
+  <div class="group" data-state="waiting now back low anyway done limit unreachable">
     <p class="ghead">Nocturne’s mind online</p>
     <div class="rows">
       <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Its mind</span>
         <span class="rowHint" data-state="waiting">answers.example, online · Waiting to charge · 89 to read</span>
-        <span class="rowHint" data-state="now">answers.example, online · Reading now · 12 of 89</span>
-        <span class="rowHint" data-state="left">answers.example, online · Waiting to charge · 77 to read</span>
+        <span class="rowHint" data-state="now back">answers.example, online · Reading now · 12 of 89</span>
         <span class="rowHint" data-state="low">answers.example, online · Waiting to charge · 58 to read</span>
+        <span class="rowHint" data-state="anyway">answers.example, online · Reading now · 31 of 89</span>
         <span class="rowHint" data-state="done">answers.example, online</span>
-        <span class="rowHint" data-state="paused">answers.example, online · Paused by your limit · 77 to read</span>
+        <span class="rowHint" data-state="limit">answers.example, online · Paused by your limit · 77 to read</span>
         <span class="rowHint" data-state="unreachable">answers.example, online · Not answering · 77 to read</span>
       </span></div>
 
-      <div class="rn" data-state="waiting left">
-        <p class="rnSaid" data-state="left">Read now stopped when you left Nocturne, after 12.</p>
+      <div class="rn" data-state="waiting">
         <p>Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down.</p>
-        <p>Read now reads while Nocturne stays open, and uses some battery.</p>
+        <p data-os="android">Read now reads straight away and uses some battery. It carries on if you leave Nocturne, with a notification to stop it.</p>
+        <p data-os="ios">Read now reads straight away and uses some battery. iPhone may pause it when you leave Nocturne; it carries on when you come back.</p>
         <span class="btn" data-kind="tonal">Read now</span>
       </div>
 
-      <div class="rn" data-state="now" role="status">
-        <div class="prog"><span style="width: 13%"></span></div>
-        <p>Keep Nocturne open. The screen stays on until it’s done or you stop.</p>
+      <div class="rn" data-state="now back anyway" role="status">
+        <p class="rnSaid" data-state="back" data-os="ios">iPhone paused reading while you were away, after 12. It carries on now.</p>
+        <p class="rnSaid" data-state="anyway">Reading anyway, down to 5% battery.</p>
+        <div class="prog" data-state="now back"><span style="width: 13%"></span></div>
+        <div class="prog" data-state="anyway"><span style="width: 35%"></span></div>
+        <p data-os="android">You can leave Nocturne. Reading carries on, and the notification shows how far it has got.</p>
+        <p data-os="ios">If you leave Nocturne, iPhone may pause reading. It carries on when you come back.</p>
         <span class="btn" data-kind="quiet">Stop</span>
       </div>
+      <p class="osLabel osNote" data-state="back" data-os="android">Android doesn’t pause: it reads on with its notification.</p>
 
       <div class="rn" data-state="low">
         <p class="rnSaid">Read now stopped at 20% battery, after 31. The rest is read while this phone charges.</p>
-        <p>Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down.</p>
-        <span class="btn" data-kind="tonal" data-off>Read now</span>
-        <p class="why">Read now works above 20% battery.</p>
+        <p>Read anyway reads until everything is read or you stop it, down to 5% battery.</p>
+        <span class="btn" data-kind="tonal">Read anyway</span>
       </div>
 
       <div class="rn" data-state="done" role="status">
         <p class="rnSaid"><span data-icon="check" data-size="18"></span> Everything you kept is read.</p>
       </div>
 
-      <div class="rn" data-state="paused">
+      <div class="rn" data-state="limit">
         <p class="rnSaid">You’ve reached this month’s limit. The rest is read from 1 December, or when you change the limit.</p>
         <span class="btn" data-kind="tonal">Change limit</span>
       </div>
 
       <div class="rn" data-state="unreachable">
         <p class="rnSaid">answers.example hasn’t answered since 9:12 am. Nocturne looks again on its own.</p>
-        <p>Read now looks once more, then reads while Nocturne stays open, and uses some battery.</p>
+        <p>Read now looks once more, then reads straight away, and uses some battery.</p>
         <span class="btn" data-kind="tonal">Read now</span>
       </div>
 
       <div class="row"><span class="rowText"><span class="rowLabel">What goes</span><span class="rowHint">What you keep, and questions</span></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">See what was sent</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
       <div class="row"><span class="rowText"><span class="rowLabel">This month</span>
-        <span class="rowHint" data-state="paused">200 things read and answered · limit 200</span>
-        <span class="rowHint" data-state="waiting now left low done unreachable">3 things read and answered · no limit</span>
+        <span class="rowHint" data-state="limit">200 things read and answered · limit 200</span>
+        <span class="rowHint" data-state="waiting now back low anyway done unreachable">3 things read and answered · no limit</span>
       </span></div>
     </div>
   </div>
+
+  <!-- Away from Nocturne while it reads: Android's notification, iPhone's own progress -->
+  <div class="shade" data-state="away" data-os="android">
+    <p class="shadeTime">9:41 <span>Tue 24 Nov</span></p>
+    <div class="tiles"><span></span><span></span><span></span><span></span></div>
+    <div class="note2">
+      <p class="noteApp"><span data-mark="14"></span> Nocturne · Reading now</p>
+      <p class="noteTitle">Reading what you kept</p>
+      <p class="noteText">12 of 89</p>
+      <div class="noteProg"><span style="width: 13%"></span></div>
+      <p class="noteActs"><span>Stop</span></p>
+    </div>
+  </div>
+  <div class="lock" data-state="away paused" data-os="ios">
+    <p class="lockDate">Tuesday 24 November</p>
+    <p class="lockTime">9:41</p>
+    <div class="live" data-state="away">
+      <div class="liveHead"><span data-mark="18"></span><span class="liveTitle">Reading what you kept</span><span class="liveStop" aria-label="Stop"><span data-icon="x" data-size="16"></span></span></div>
+      <p class="liveText">12 of 89</p>
+      <div class="liveProg"><span style="width: 13%"></span></div>
+    </div>
+    <div class="banner" data-state="paused">
+      <p class="bannerHead"><span data-mark="16"></span> NOCTURNE <span class="bannerWhen">now</span></p>
+      <p class="bannerTitle">Reading paused</p>
+      <p class="bannerText">iPhone paused it when you left Nocturne, after 12 of 89. Open Nocturne to carry on.</p>
+    </div>
+  </div>
+  <p class="osLabel" data-state="paused" data-os="android" style="padding-top: 320px">iPhone only. Android reads on with its notification.</p>
 
   <!-- Reading what you kept, right after turning on, on battery -->
   <div class="hero" data-state="first-waiting first-now" style="padding-top: 72px">
@@ -93,17 +127,21 @@
   <div data-state="first-waiting" style="display: flex; flex-direction: column; gap: 8px">
     <p class="pstatus" role="status"><span data-icon="moon" data-size="16"></span>Waiting to charge · 89 to read</p>
   </div>
-  <p class="small" data-state="first-waiting">Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down. Read now reads while Nocturne stays open, and uses some battery.</p>
+  <p class="small" data-state="first-waiting" data-os="android">Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down. Read now reads straight away and uses some battery. It carries on if you leave Nocturne, with a notification to stop it.</p>
+  <p class="small" data-state="first-waiting" data-os="ios">Nocturne reads what you keep while this phone charges, so it doesn’t run the battery down. Read now reads straight away and uses some battery. iPhone may pause it when you leave Nocturne; it carries on when you come back.</p>
   <div data-state="first-now" style="display: flex; flex-direction: column; gap: 8px">
     <div class="prog"><span style="width: 13%"></span></div>
     <p class="pstatus" role="status"><span class="pdot pulse"></span>Reading now · 12 of 89</p>
   </div>
-  <p class="small" data-state="first-now">Keep Nocturne open. The screen stays on until it’s done or you stop.</p>
+  <p class="small" data-state="first-now" data-os="android">You can leave Nocturne. Reading carries on, and the notification shows how far it has got.</p>
+  <p class="small" data-state="first-now" data-os="ios">If you leave Nocturne, iPhone may pause reading. It carries on when you come back.</p>
   <div class="foot plain" data-state="first-waiting"><span class="btn" data-kind="primary">OK</span><span class="btn">Read now</span></div>
   <div class="foot plain" data-state="first-now"><span class="btn" data-kind="primary">OK</span><span class="btn" data-kind="quiet">Stop</span></div>
 </main>
 <script src="../phone-apps/shell.js"></script>
 <script>
+const view = new URLSearchParams(location.search).get("state") || "waiting";
+document.documentElement.dataset.view = view;
 // At 200 per cent, each screen starts at the mind group, as the person would scroll to it.
 if (document.documentElement.dataset.text === "200") {
   for (const scroll of document.querySelectorAll(".scroll")) {
