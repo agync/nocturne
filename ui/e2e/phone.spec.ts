@@ -702,6 +702,9 @@ test("bundle.under_budget: the shipped phone app is under 300 KB gzip of script 
     expect(text.includes(forbidden), forbidden).toBe(false);
   }
   expect(all.some((f) => f.endsWith("/sw.js"))).toBe(true);
+  // The phone app's own screens come with the phone app; a browser on a paired phone never
+  // runs them, so they are not shipped to it.
+  expect(all.filter((f) => /NativeRoot|nativeMock/.test(f))).toEqual([]);
   const html = readFileSync(resolve(out, "index.html"), "utf8");
   expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
   expect(html).not.toMatch(/\sstyle=|<style/);

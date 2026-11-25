@@ -99,6 +99,7 @@ export async function loadServices(): Promise<Services> {
   if (import.meta.env.VITE_ENGINE === "phone-mock") {
     return (await import("./testing/mockServices")).mockServices();
   }
-  if (isNative()) return (await import("./native/services")).nativeServices();
+  if (import.meta.env.VITE_PHONE_NATIVE !== "0" && isNative())
+    return (await import("./native/services")).nativeServices();
   return realServices();
 }
