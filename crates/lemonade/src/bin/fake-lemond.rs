@@ -1209,7 +1209,7 @@ async fn cloud_auth(State(app): State<Shared>, Json(body): Json<Value>) -> Respo
         .trim_end_matches('/');
     let mut listed = 0;
     if base.starts_with("http://127.0.0.1:")
-        && let Ok(http) = reqwest::Client::builder().no_proxy().build()
+        && let Ok(http) = nocturne_lemonade::tls::builder().no_proxy().build()
         && let Ok(r) = http
             .get(format!("{base}/models"))
             .bearer_auth(&key)
@@ -1284,7 +1284,7 @@ async fn chat_online(app: &App, body: &Value) -> Response {
         .unwrap_or_default();
     let mut upstream = body.clone();
     upstream["model"] = json!(model);
-    let Ok(http) = reqwest::Client::builder().no_proxy().build() else {
+    let Ok(http) = nocturne_lemonade::tls::builder().no_proxy().build() else {
         return err(500, "backend_error", "no http client");
     };
     match http

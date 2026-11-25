@@ -86,7 +86,7 @@ impl Admin {
 
     pub(crate) fn detached() -> Admin {
         let timeouts = Timeouts::default();
-        let http = reqwest::Client::builder()
+        let http = crate::tls::builder()
             .connect_timeout(timeouts.connect)
             .timeout(timeouts.request)
             .no_proxy()

@@ -19,7 +19,7 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 fn http() -> &'static reqwest::Client {
     static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
     HTTP.get_or_init(|| {
-        reqwest::Client::builder()
+        crate::tls::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(TIMEOUT)
             .no_proxy()

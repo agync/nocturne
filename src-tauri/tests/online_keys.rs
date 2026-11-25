@@ -73,7 +73,7 @@ fn lab_with(keychain: MemoryKeychain) -> Lab {
 impl Lab {
     fn script(&self, body: Value) {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(self.s.url("/fake/script"))
                 .json(&body)
                 .send()

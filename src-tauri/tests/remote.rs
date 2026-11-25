@@ -3550,7 +3550,7 @@ fn a_phone_question_waits_for_the_online_notice_and_can_clear_it() {
     assert_eq!(p.h.ok("get_online", json!({}))["changeNotice"], true);
     let questions = || -> usize {
         let all: Vec<serde_json::Value> = port.own(block(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(s.url("/fake/requests"))
                 .send()
                 .await

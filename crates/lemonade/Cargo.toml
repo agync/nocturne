@@ -44,6 +44,8 @@ tracing.workspace = true
 jiff.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "process", "fs", "io-util", "net", "signal"] }
 reqwest.workspace = true
+# Picks the ring provider for the clients reqwest builds here.
+rustls.workspace = true
 process-wrap = { version = "10", features = ["tokio1"] }
 getrandom = "0.4"
 sysinfo = { version = "0.40", default-features = false, features = ["system", "disk"] }

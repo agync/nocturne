@@ -337,7 +337,7 @@ async fn rig() -> Rig {
 
 async fn script_chat(r: &Rig, content: &str) {
     let e = r.sup.client().endpoint().unwrap();
-    reqwest::Client::new()
+    nocturne_lemonade::tls::client()
         .post(format!("http://127.0.0.1:{}/fake/script", e.port))
         .bearer_auth(e.key.clone())
         .json(&json!({"chat": [{"content": content}]}))
@@ -348,7 +348,7 @@ async fn script_chat(r: &Rig, content: &str) {
 
 async fn chats(r: &Rig) -> Vec<Value> {
     let e = r.sup.client().endpoint().unwrap();
-    let all: Value = reqwest::Client::new()
+    let all: Value = nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/fake/requests", e.port))
         .bearer_auth(e.key.clone())
         .send()

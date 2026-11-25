@@ -67,7 +67,7 @@ fn rows(dirs: &Dirs) -> Value {
 
 async fn engine_env(sup: &Supervisor) -> Value {
     let endpoint = sup.client().endpoint().unwrap();
-    reqwest::Client::new()
+    nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
         .bearer_auth(&endpoint.key)
         .send()
@@ -88,7 +88,7 @@ async fn engine_holds(sup: &Supervisor) -> (bool, bool) {
         .iter()
         .any(|m| m.model_name == MODEL_ID);
     let endpoint = sup.client().endpoint().unwrap();
-    let info: Value = reqwest::Client::new()
+    let info: Value = nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/v1/system-info", endpoint.port))
         .bearer_auth(&endpoint.key)
         .send()
@@ -301,7 +301,7 @@ async fn relaunch_waits_for_idle_with_a_cap() {
                 .collect::<Vec<_>>()
         )
     };
-    reqwest::Client::new()
+    nocturne_lemonade::tls::client()
         .post(format!("http://127.0.0.1:{}/fake/script", endpoint.port))
         .bearer_auth(&endpoint.key)
         .json(&script(2))
@@ -878,7 +878,7 @@ async fn real_engine_takes_the_key_at_run_time() {
     assert!(!meta.not_sure);
     assert_eq!(config(&dirs)["offline"], true);
     // A redirect from the provider is not followed by the engine's POST.
-    reqwest::Client::new()
+    nocturne_lemonade::tls::client()
         .post(format!("http://127.0.0.1:{port}/fake/script"))
         .json(&json!({"redirect": "/v1/elsewhere"}))
         .send()
@@ -932,7 +932,7 @@ impl Provider {
 
     /// What reached the stand-in. It leaves out stray probes from other programs itself.
     async fn requests(&self) -> Vec<Value> {
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .get(format!("http://127.0.0.1:{}/fake/requests", self.port))
             .send()
             .await
@@ -1053,7 +1053,7 @@ async fn turning_off_clears_the_key_in_the_engine_at_once() {
         tokio::spawn(async move { c.set_cloud(None).await })
     };
     let held = |port: u16, key: String| async move {
-        let info: Value = reqwest::Client::new()
+        let info: Value = nocturne_lemonade::tls::client()
             .get(format!("http://127.0.0.1:{port}/v1/system-info"))
             .bearer_auth(key)
             .send()
@@ -1273,7 +1273,7 @@ async fn an_online_model_unloaded_by_the_engine_is_noticed() {
     let control = sup.control();
     assert!(control.route_held().await);
     let endpoint = sup.client().endpoint().unwrap();
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     let url = |p: &str| format!("http://127.0.0.1:{}{p}", endpoint.port);
     http.post(url("/fake/mode"))
         .bearer_auth(&endpoint.key)

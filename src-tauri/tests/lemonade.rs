@@ -197,7 +197,7 @@ impl Lab {
                 );
                 tokio::time::sleep(Duration::from_millis(20)).await;
             };
-            let _ = reqwest::Client::new()
+            let _ = nocturne_lemonade::tls::client()
                 .post(format!("http://127.0.0.1:{}/fake/crash", endpoint.port))
                 .bearer_auth(&endpoint.key)
                 .send()
@@ -276,7 +276,7 @@ impl Lab {
         block_on(async {
             let client = self.services.client().await.expect("an engine");
             let endpoint = client.endpoint().expect("an address");
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(format!("http://127.0.0.1:{}/fake/mode", endpoint.port))
                 .bearer_auth(&endpoint.key)
                 .json(&json!({ "mode": mode }))
@@ -291,7 +291,7 @@ impl Lab {
         block_on(async {
             let client = self.services.client().await.expect("an engine");
             let endpoint = client.endpoint().expect("an address");
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(format!("http://127.0.0.1:{}/fake/requests", endpoint.port))
                 .bearer_auth(&endpoint.key)
                 .send()

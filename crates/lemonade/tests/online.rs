@@ -59,7 +59,7 @@ impl StandIn {
     }
 
     async fn script(&self, body: Value) {
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .post(format!("http://127.0.0.1:{}/fake/script", self.port))
             .json(&body)
             .send()
@@ -68,7 +68,7 @@ impl StandIn {
     }
 
     async fn requests(&self) -> Vec<Value> {
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .get(format!("http://127.0.0.1:{}/fake/requests", self.port))
             .send()
             .await

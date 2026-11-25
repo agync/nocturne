@@ -51,7 +51,7 @@ fn lab() -> Lab {
 impl Lab {
     fn script(&self, body: Value) {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(self.s.url("/fake/script"))
                 .json(&body)
                 .send()
@@ -64,7 +64,7 @@ impl Lab {
         self.port.own_with(
             &[KEY],
             block_on(async {
-                reqwest::Client::new()
+                nocturne_lemonade::tls::client()
                     .get(self.s.url("/fake/requests"))
                     .send()
                     .await
@@ -179,7 +179,7 @@ fn another_ports_engine_client_is_not_this_labs_request() {
     let other = StandInPort::new(Some(l.s.port));
     let get = |key: &str| {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(l.s.url("/v1/models"))
                 .bearer_auth(key)
                 .send()
@@ -189,7 +189,7 @@ fn another_ports_engine_client_is_not_this_labs_request() {
     };
     get(other.engine_key());
     block_on(async {
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .get(l.s.url("/v1/models"))
             .header("user-agent", "Go-http-client/1.1")
             .send()
@@ -739,7 +739,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
     assert_eq!(out["type"], "keyRefused");
     let log = |other: &StandIn| -> Vec<Value> {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(other.url("/fake/requests"))
                 .send()
                 .await

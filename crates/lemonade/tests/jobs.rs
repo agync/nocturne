@@ -90,7 +90,7 @@ impl Rig {
 
     async fn requests(&self, path: &str) -> Vec<Value> {
         let e = self.sup.client().endpoint().unwrap();
-        let all: Value = reqwest::Client::new()
+        let all: Value = nocturne_lemonade::tls::client()
             .get(format!("http://127.0.0.1:{}/fake/requests", e.port))
             .bearer_auth(e.key)
             .send()

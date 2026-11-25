@@ -337,7 +337,7 @@ fn error_reply(status: u16, script: &Script, headers: &HeaderMap) -> Response {
 }
 
 async fn relay_chat(url: &str, key: &str, body: Bytes) -> Response {
-    let sent = reqwest::Client::new()
+    let sent = nocturne_lemonade::tls::client()
         .post(format!("{url}/chat/completions"))
         .bearer_auth(key)
         .header(header::CONTENT_TYPE, "application/json")

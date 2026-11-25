@@ -102,7 +102,7 @@ async fn installed_ready(setup: &Setup) -> Option<Tier> {
 }
 
 async fn raw(sup: &Supervisor, method: &str, path: &str, body: Value) -> Value {
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     for _ in 0..100 {
         if let Some(e) = sup.client().endpoint() {
             let url = format!("http://127.0.0.1:{}{path}", e.port);

@@ -120,7 +120,7 @@ async fn the_child_environment_holds_only_what_we_allow() {
     let dirs = common::dirs(tmp.path());
     let sup = start(&dirs, None).await;
     let endpoint = sup.client().endpoint().unwrap();
-    let env: Value = reqwest::Client::new()
+    let env: Value = nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
         .bearer_auth(&endpoint.key)
         .send()
@@ -561,7 +561,7 @@ async fn killing_the_owner_makes_the_engine_exit_by_itself() {
 /// The admin key the supervisor gave the engine, read back from the engine's own environment.
 async fn admin_key_of(sup: &Supervisor) -> String {
     let endpoint = sup.client().endpoint().unwrap();
-    let env: Value = reqwest::Client::new()
+    let env: Value = nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
         .bearer_auth(&endpoint.key)
         .send()
@@ -599,7 +599,7 @@ async fn the_admin_endpoints_refuse_the_inference_key_and_take_the_admin_key() {
     let sup = start(&dirs, None).await;
     let admin = admin_key_of(&sup).await;
     let endpoint = sup.client().endpoint().unwrap();
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     let url = format!("http://127.0.0.1:{}/internal/config", endpoint.port);
     let with_api = http
         .get(&url)
@@ -651,7 +651,7 @@ async fn each_launch_gets_new_keys() {
 
 async fn engine_env(sup: &Supervisor) -> Value {
     let endpoint = sup.client().endpoint().unwrap();
-    reqwest::Client::new()
+    nocturne_lemonade::tls::client()
         .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
         .bearer_auth(&endpoint.key)
         .send()
