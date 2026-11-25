@@ -812,6 +812,35 @@ jobs:
           set -euo pipefail
           make ui/install
           make phone/ios-test
+      # swift-rs runs `swift build` for each plugin and, when that dies without a diagnostic, says
+      # only "Failed to compile swift package". This builds each plugin's package again with the
+      # same arguments and shows any Swift crash report or kill by the system, so the cause is named.
+      - name: Name a Swift package failure
+        if: failure()
+        run: |
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          triple=arm64-apple-ios17.0-simulator
+          for dir in target/aarch64-apple-ios-sim/debug/build/tauri-plugin-nocturne-*/*/out/swift-rs/*; do
+            [ -d "$dir" ] || continue
+            p=${dir##*/tauri-plugin-nocturne-}
+            echo "::group::swift build $p ($dir)"
+            if (cd "phone/plugins/$p/ios" && swift build --sdk "$sdk" -c release --arch arm64 \
+                --build-path "$GITHUB_WORKSPACE/$dir" -Xswiftc -sdk -Xswiftc "$sdk" \
+                -Xswiftc -target -Xswiftc "$triple" -Xcc "--target=$triple" -Xcxx "--target=$triple"); then
+              echo "$p builds on a second try"
+            else
+              echo "::error::swift build of $p exited with $?"
+            fi
+            echo "::endgroup::"
+          done
+          echo "::group::Swift crash reports"
+          find ~/Library/Logs/DiagnosticReports -iname '*swift*' -mmin -60 -print -exec head -80 {} \; || true
+          echo "::endgroup::"
+          echo "::group::Processes the system killed"
+          log show --last 60m --style compact --predicate \
+            'eventMessage CONTAINS[c] "memorystatus" OR eventMessage CONTAINS[c] "jetsam" OR (eventMessage CONTAINS[c] "swift" AND eventMessage CONTAINS[c] "kill")' \
+            | tail -100 || true
+          echo "::endgroup::"
 
   # The engine, the mind, the provider and the reader alone on the phone target, so a change to
   # them does not wait for the whole APK build above. The bundled SQLite is compiled by the NDK's
