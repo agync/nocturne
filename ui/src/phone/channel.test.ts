@@ -370,12 +370,17 @@ describe("revocation", () => {
       },
     };
     const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    let arrived = false;
     computer.handler = async (ctx) => {
-      if (ctx.request.call.cmd === "ask") await ctx.reply({ type: "askStarted", askId: "ask-1" });
-      else await computer.defaultHandler(ctx);
+      if (ctx.request.call.cmd === "ask") {
+        arrived = true;
+        await ctx.reply({ type: "askStarted", askId: "ask-1" });
+      } else await computer.defaultHandler(ctx);
     };
     const asked = engine.ask("When is it?", () => undefined);
-    await vi.waitFor(() => expect(computer.sessions.size).toBe(1));
+    // Waits for the ask itself, sent only once its open has finished. A session the computer has
+    // set up may still be opening; holding the record then stalls that open and the ask with it.
+    await vi.waitFor(() => expect(arrived).toBe(true));
     saves = 0;
     hold = new Promise((done) => {
       release = done;
