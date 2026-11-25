@@ -348,9 +348,16 @@ jobs:
           sign() { codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" "$@"; }
           is_macho() { file -b "$1" | grep -q 'Mach-O'; }
 
+          # Code belongs in Contents/MacOS, Helpers, Frameworks or PlugIns. In Resources codesign
+          # seals it as data, and a folder holding a program of its own name reads as a bundle.
+          while IFS= read -r -d '' f; do
+            if is_macho "$f"; then echo "code in Contents/Resources: ${f#"$app/"}" >&2; exit 1; fi
+          done < <(find "$app/Contents/Resources" -type f -print0)
+
           # Inside out: libraries and executables first, then the nested bundles they sit in,
           # deepest first, then the app. The engine's executables get the entitlement that lets
           # them load the backend libraries they fetch later, which carry another signature.
+          # lemond sits beside the main program in Contents/MacOS; its data stays in Resources.
           while IFS= read -r -d '' f; do
             is_macho "$f" || continue
             if file -b "$f" | grep -q 'executable'; then
