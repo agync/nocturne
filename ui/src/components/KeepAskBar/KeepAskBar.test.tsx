@@ -245,11 +245,13 @@ describe("KeepAskBar add a photo or file", () => {
     expect(add.nextElementSibling).toBe(screen.getByRole("button", { name: "Hold to talk" }));
   });
 
-  it("is a 44 px square, like the microphone", () => {
+  it("is the microphone's size, with a 44 px target", () => {
+    withPicker([], { onFiles: vi.fn(), onTalk: { start: vi.fn(), stop: vi.fn() } });
+    for (const name of ["Add a photo or file", "Hold to talk"]) {
+      expect(screen.getByRole("button", { name })).toHaveClass("hit");
+    }
     const css = readFileSync("src/components/KeepAskBar/KeepAskBar.module.css", "utf8");
-    expect(css).toMatch(
-      /\.mic,\s*\.attach \{[^}]*width: var\(--size-touch\);[^}]*height: var\(--size-touch\);/,
-    );
+    expect(css).toMatch(/\.mic,\s*\.attach \{[^}]*width: 2rem;[^}]*height: 2rem;/);
   });
 
   it("hands picked keys to onFiles and ignores an empty pick", async () => {

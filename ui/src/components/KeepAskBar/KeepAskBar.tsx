@@ -193,7 +193,7 @@ export function KeepAskBar({
         {onTalk ? (
           <button
             type="button"
-            className={styles.mic}
+            className={`${styles.mic} hit`}
             data-recording={recordingSeconds !== null}
             aria-label={t("bar.talk")}
             aria-pressed={recordingSeconds !== null}
@@ -239,7 +239,7 @@ function AddFileButton({ onFiles }: { onFiles: (paths: string[]) => void | Promi
   return (
     <button
       type="button"
-      className={styles.attach}
+      className={`${styles.attach} hit`}
       aria-label={t("capture.addFile")}
       title={t("capture.addFile")}
       onClick={() => void pick()}

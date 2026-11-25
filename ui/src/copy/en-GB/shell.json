@@ -36,7 +36,7 @@
   "bar.label": "Keep something, or ask",
   "bar.placeholder": "Keep something, or ask…",
   "bar.placeholder.narrow": "Keep or ask…",
-  "bar.dropHint": "or drop files anywhere",
+  "bar.dropHint": "Drop files anywhere to keep them",
   "bar.keep": "Keep",
   "bar.ask": "Ask",
   "bar.talk": "Hold to talk",
