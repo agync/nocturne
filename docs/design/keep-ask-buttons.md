@@ -2,7 +2,7 @@
 type: Design
 title: The buttons in the keep or ask bar
 description: Proposal to settle the add-a-file and hold-to-talk buttons inside the keep or ask bar, with measurements of what is off, two options with before and after captures, and a recommendation.
-status: draft
+status: stable
 tags: [proposal, ux, accessibility, desktop, layout, copy]
 ---
 
@@ -107,7 +107,11 @@ option's styles applied. Files are in `docs/design/mockups/keep-ask-buttons/`, n
 |---|---|---|
 | `bar.dropHint` | or drop files anywhere | Drop files anywhere to keep them |
 
-## Questions for the owner
+## Decision
+
+The owner chose **option A** and **the new words** beside the bar on 2026-11-25.
+
+## Questions the owner answered
 
 | Question | Options | Recommendation |
 |---|---|---|
