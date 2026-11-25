@@ -60,8 +60,10 @@ must not be cut without them:
 - `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` are secrets of an environment named
   `release-app`, not repository secrets. That environment deploys only from `main` and `v*`
   tags. `release-please.yml` and the plan, publish and finish jobs of `release.yml` run in it.
-- The `release-signing` environment has required reviewers, and holds every signing secret,
-  including the Flatpak key.
+- The `release-signing` environment has required reviewers, deploys only from `main` and `v*`
+  tags, and holds every signing secret, including the Flatpak key. The secrets are not
+  organisation or repository secrets: those reach any workflow on any branch, while an
+  environment's secrets reach only a job that passes the environment's rules.
 
 ## The first release
 
@@ -190,7 +192,9 @@ workflow does neither.
 ## Secrets
 
 Add these in the repository settings. The signing secrets belong in the protected
-`release-signing` environment, which needs a maintainer's approval for each run. Signing is turned
+`release-signing` environment, which needs a maintainer's approval for each run and deploys only
+from `main` and `v*` tags. They are not organisation or repository secrets, which any workflow on
+any branch can read. The release bot's secrets belong in `release-app`. Signing is turned
 on by repository variables, not by the presence of a secret: `MACOS_SIGNING`, `WINDOWS_SIGNING`,
 `ANDROID_SIGNING` and `IOS_SIGNING` set to `true`. When one is on, its signing job must succeed or
 nothing is attached (and the release is not published).
@@ -225,9 +229,9 @@ nothing is attached (and the release is not published).
 | `NOCTURNE_ANDROID_UPLOAD_KEYSTORE_PASSWORD` | `release-signing` | the keystore's password | as above |
 | `NOCTURNE_ANDROID_UPLOAD_KEY_ALIAS` | `release-signing` | the key's alias in that keystore | as above |
 | `NOCTURNE_ANDROID_UPLOAD_KEY_PASSWORD` | `release-signing` | the key's password (the keystore's, if they are the same) | as above |
-| `APP_STORE_CONNECT_API_KEY` | `release-signing` | optional: the App Store Connect API key, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8`; when unset the iPhone job uses `MACOS_NOTARY_API_KEY`, so one key with the App Manager role serves both | with neither set and `IOS_SIGNING` on, the iPhone job fails |
-| `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | optional: the key's id; falls back to `MACOS_NOTARY_API_KEY_ID` | as above |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | optional: the issuer id; falls back to `MACOS_NOTARY_API_ISSUER_ID` | as above |
+| `APP_STORE_CONNECT_API_KEY` | `release-signing` | the iPhone's own App Store Connect API key with the App Manager role, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8`; separate from the Mac notary key | with `IOS_SIGNING` on, the iPhone job fails |
+| `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | the iPhone key's id | as above |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | the issuer id | as above |
 | `APPLE_DEVELOPMENT_TEAM` | `release-signing` | the ten-character team id of the Apple Developer account | as above |
 
 To get them: make the Android upload key once with
@@ -256,16 +260,16 @@ needs `allow-jit`. The app has no updater, so there is no updater key. Steps for
 2. In Keychain Access, export the certificate with its private key as a `.p12` with a password.
    Encode it: `base64 -i cert.p12 | pbcopy`. The identity name is the certificate's common name,
    `Developer ID Application: <name> (<team id>)`.
-3. In App Store Connect, under Users and Access, Integrations, Team Keys, create a key with the
-   App Manager role, so the same key also uploads the iPhone app to TestFlight. Download the `.p8` once, and note the key id and the issuer id. Encode it:
+3. In App Store Connect, under Users and Access, Integrations, Team Keys, create a key for
+   notarisation. The iPhone does not share it: it has its own App Manager key (see Secrets).
+   Download the `.p8` once, and note the key id and the issuer id. Encode it:
    `base64 -i AuthKey_<id>.p8 | pbcopy`.
-4. Add these secrets to the `release-signing` environment, or as organisation secrets shared with
-   this repository: `MACOS_DEVELOPER_ID_CERTIFICATE`, `MACOS_DEVELOPER_ID_PASSWORD`,
+4. Add these secrets to the `release-signing` environment: `MACOS_DEVELOPER_ID_CERTIFICATE`, `MACOS_DEVELOPER_ID_PASSWORD`,
    `MACOS_NOTARY_API_KEY`, `MACOS_NOTARY_API_KEY_ID` and `MACOS_NOTARY_API_ISSUER_ID`. The identity
    is read from the certificate; `MACOS_DEVELOPER_ID_IDENTITY` is needed only when it holds more
    than one.
-5. On that environment, add required reviewers, and let it deploy from `main` (a dry run is
-   started from `main`).
+5. On that environment, add required reviewers, and let it deploy only from `main` and `v*` tags
+   (a dry run is started from `main`).
 6. Run the dry run: Actions, release, Run workflow, from `main`, with `tag` empty and `sign`
    ticked. It builds, then waits for a reviewer to approve `sign-macos`, signs and notarises, runs
    `check-macos` and keeps the signed image as the `desktop-macos-signed` artifact for 7 days. No
