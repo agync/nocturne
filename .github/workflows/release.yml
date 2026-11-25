@@ -273,7 +273,7 @@ jobs:
           NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          for need in DEVELOPER_ID_CERTIFICATE DEVELOPER_ID_PASSWORD DEVELOPER_ID_IDENTITY; do
+          for need in DEVELOPER_ID_CERTIFICATE DEVELOPER_ID_PASSWORD; do
             [ -n "${!need}" ] || { echo "MACOS_$need is not set" >&2; exit 1; }
           done
           keychain="$RUNNER_TEMP/build.keychain-db"
@@ -311,7 +311,17 @@ jobs:
           printf '%s' "$DEVELOPER_ID_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
           security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$keypass" "$keychain" > /dev/null
-          security find-identity -v -p codesigning "$keychain" | grep -qF -- "$DEVELOPER_ID_IDENTITY" \
+          # The identity is read from the certificate unless MACOS_DEVELOPER_ID_IDENTITY names it.
+          identities=$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p')
+          if [ -z "$DEVELOPER_ID_IDENTITY" ]; then
+            if [ "$(grep -c . <<< "$identities")" -ne 1 ]; then
+              echo "the certificate must hold exactly one Developer ID Application identity" >&2
+              exit 1
+            fi
+            DEVELOPER_ID_IDENTITY=$identities
+          fi
+          grep -qxF -- "$DEVELOPER_ID_IDENTITY" <<< "$identities" \
             || { echo "the certificate has no identity named like MACOS_DEVELOPER_ID_IDENTITY" >&2; exit 1; }
 
           # Submit a file, wait, and print the log of anything that is not accepted.
@@ -677,16 +687,16 @@ jobs:
       # altool looks for the key in this folder, by the key's id; the Tauri CLI reads the same file.
       - name: App Store Connect key
         env:
-          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY || secrets.MACOS_NOTARY_API_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           printf '%s' "$API_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
       - name: build and sign the app
         env:
-          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID || secrets.MACOS_NOTARY_API_ISSUER_ID }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
         run: |
           set -euo pipefail
@@ -712,8 +722,8 @@ jobs:
           rm "$RUNNER_TEMP/Info.plist"
       - name: upload to TestFlight
         env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID || secrets.MACOS_NOTARY_API_ISSUER_ID }}
         run: |
           set -euo pipefail
           xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
