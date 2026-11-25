@@ -22,6 +22,7 @@ screen follows, the data model, and how quality is measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
 - [Landing page, trust and timing copy](landing-trust-copy.md) - The approved words that tell a first reader it works on any schedule, never edits what they kept, and needs no tidying.
 - [Control chips and easier reading in setup](control-chips.md) - A named place or control shown in the copy with its own icon and words, a chevron on buttons that open more, and measurable reading rules for setup.
+- [The buttons in the keep or ask bar](keep-ask-buttons.md) - Proposal to settle the add-a-file and hold-to-talk buttons inside the keep or ask bar: what is off, measured, two options with before and after captures, and a recommendation.
 - [Keeping the next step in view](step-flow-actions.md) - The approved bar that keeps a step flow's main button in view, and lighter first steps for Online answers and Away from home.
 - [Setting up Nocturne's mind online](mind-online-setup.md) - Proposal for the phone's online mind and Online answers' Connect: the step's buttons pinned in view on every phone step flow, the model name chosen from the service's own list with typing kept, and honest reading on battery with Read now.
 - [Help with Nocturne, from the ask box](in-app-help.md) - The approved design for answering "how do I" questions from the guide that ships with Nocturne, with guide receipts, a Settings entry and a gate for each size of computer.
