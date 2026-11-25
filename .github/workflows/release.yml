@@ -253,7 +253,7 @@ jobs:
       && ((needs.plan.outputs.tag != '' && vars.MACOS_SIGNING == 'true')
       || (needs.plan.outputs.tag == '' && needs.plan.outputs.sign == 'true')) }}
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 180
     environment: release-signing
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -329,13 +329,18 @@ jobs:
           # Submit a file, wait, and print the log of anything that is not accepted.
           notarise() {
             local result id status
-            result=$(xcrun notarytool submit "$1" "${auth[@]}" --wait --timeout 60m --output-format json) || true
+            # A team's first submissions can sit in Apple's in-depth check for over an hour.
+            result=$(xcrun notarytool submit "$1" "${auth[@]}" --wait --timeout 80m --output-format json) || true
             echo "$result"
             id=$(jq -r '.id // empty' <<< "$result")
             status=$(jq -r '.status // empty' <<< "$result")
             if [ "$status" != Accepted ]; then
               echo "notarisation of $1 ended as '${status:-unknown}'" >&2
-              [ -z "$id" ] || xcrun notarytool log "$id" "${auth[@]}" >&2 || true
+              if [ -n "$id" ]; then
+                echo "submission $id; Apple's status now:" >&2
+                xcrun notarytool info "$id" "${auth[@]}" >&2 || true
+                xcrun notarytool log "$id" "${auth[@]}" >&2 || true
+              fi
               exit 1
             fi
           }

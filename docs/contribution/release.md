@@ -256,7 +256,10 @@ licence job also fails until `go_licenses_version` in `helpers.lock` is pinned.
 
 The workflow signs the app and the engine's executables inside out with the hardened runtime and a
 secure timestamp, notarises the app and then the disk image, staples both, and checks them with
-`spctl`. A rejected submission prints Apple's log in the job. Code sits only where Apple places it:
+`spctl`. Each submission waits up to 80 minutes, since a team's first submissions can sit in Apple's
+in-depth check for over an hour, and the job allows 180. A submission that is not accepted prints
+Apple's current status and log in the job; one still in progress may finish later, and a re-run
+then passes in minutes. Code sits only where Apple places it:
 `lemond` beside the main program in `Contents/MacOS`, the engine's data in
 `Contents/Resources/lemonade`, and the job stops if it finds a program in `Contents/Resources`. The engine's executables carry the
 `disable-library-validation` entitlement (`src-tauri/macos/Engine.entitlements.plist`) so they can
