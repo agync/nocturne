@@ -212,7 +212,7 @@ nothing is attached (and the release is not published).
 | `FLATPAK_GPG_PASSPHRASE` | `release-signing` | the key's passphrase, if it has one | signing fails for a protected key |
 | `MACOS_DEVELOPER_ID_CERTIFICATE` | `release-signing` | the Developer ID Application certificate, a base64 `.p12` | with `MACOS_SIGNING` on, the signing job fails |
 | `MACOS_DEVELOPER_ID_PASSWORD` | `release-signing` | the `.p12` password | as above |
-| `MACOS_DEVELOPER_ID_IDENTITY` | `release-signing` | the identity name, `Developer ID Application: <name> (<team>)` | as above |
+| `MACOS_DEVELOPER_ID_IDENTITY` | `release-signing` | optional: the identity name, `Developer ID Application: <name> (<team>)`; read from the certificate when unset | with several identities in the certificate and none named, the job fails |
 | `MACOS_NOTARY_API_KEY` | `release-signing` | the App Store Connect API key, the base64 of its `.p8` file; the documented way to notarise | the job falls back to the Apple ID secrets below |
 | `MACOS_NOTARY_API_KEY_ID` | `release-signing` | the key's id | with the API key set, the job fails |
 | `MACOS_NOTARY_API_ISSUER_ID` | `release-signing` | the issuer id shown above the team keys | as above |
@@ -225,9 +225,9 @@ nothing is attached (and the release is not published).
 | `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | `release-signing` | the keystore's password | as above |
 | `ANDROID_UPLOAD_KEY_ALIAS` | `release-signing` | the key's alias in that keystore | as above |
 | `ANDROID_UPLOAD_KEY_PASSWORD` | `release-signing` | the key's password (the keystore's, if they are the same) | as above |
-| `APP_STORE_CONNECT_API_KEY` | `release-signing` | the App Store Connect API key, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8` | with `IOS_SIGNING` on, the iPhone job fails |
-| `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | the key's id, shown beside it in App Store Connect | as above |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | the issuer id, shown above the list of keys | as above |
+| `APP_STORE_CONNECT_API_KEY` | `release-signing` | optional: the App Store Connect API key, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8`; when unset the iPhone job uses `MACOS_NOTARY_API_KEY`, so one key with the App Manager role serves both | with neither set and `IOS_SIGNING` on, the iPhone job fails |
+| `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | optional: the key's id; falls back to `MACOS_NOTARY_API_KEY_ID` | as above |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | optional: the issuer id; falls back to `MACOS_NOTARY_API_ISSUER_ID` | as above |
 | `APPLE_DEVELOPMENT_TEAM` | `release-signing` | the ten-character team id of the Apple Developer account | as above |
 
 To get them: make the Android upload key once with
@@ -257,11 +257,13 @@ needs `allow-jit`. The app has no updater, so there is no updater key. Steps for
    Encode it: `base64 -i cert.p12 | pbcopy`. The identity name is the certificate's common name,
    `Developer ID Application: <name> (<team id>)`.
 3. In App Store Connect, under Users and Access, Integrations, Team Keys, create a key with the
-   Developer role. Download the `.p8` once, and note the key id and the issuer id. Encode it:
+   App Manager role, so the same key also uploads the iPhone app to TestFlight. Download the `.p8` once, and note the key id and the issuer id. Encode it:
    `base64 -i AuthKey_<id>.p8 | pbcopy`.
-4. In the repository settings, add these secrets to the `release-signing` environment:
-   `MACOS_DEVELOPER_ID_CERTIFICATE`, `MACOS_DEVELOPER_ID_PASSWORD`, `MACOS_DEVELOPER_ID_IDENTITY`,
-   `MACOS_NOTARY_API_KEY`, `MACOS_NOTARY_API_KEY_ID` and `MACOS_NOTARY_API_ISSUER_ID`.
+4. Add these secrets to the `release-signing` environment, or as organisation secrets shared with
+   this repository: `MACOS_DEVELOPER_ID_CERTIFICATE`, `MACOS_DEVELOPER_ID_PASSWORD`,
+   `MACOS_NOTARY_API_KEY`, `MACOS_NOTARY_API_KEY_ID` and `MACOS_NOTARY_API_ISSUER_ID`. The identity
+   is read from the certificate; `MACOS_DEVELOPER_ID_IDENTITY` is needed only when it holds more
+   than one.
 5. On that environment, add required reviewers, and let it deploy from `main` (a dry run is
    started from `main`).
 6. Run the dry run: Actions, release, Run workflow, from `main`, with `tag` empty and `sign`
