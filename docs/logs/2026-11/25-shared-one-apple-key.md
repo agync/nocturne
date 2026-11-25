@@ -14,3 +14,5 @@ status: stable
 - The iPhone job uses `APP_STORE_CONNECT_API_*` when set, otherwise `MACOS_NOTARY_API_*`, so one key
   with the App Manager role notarises and uploads.
 - The runbook allows organisation secrets shared with the repository.
+- The Android upload key secrets are named `NOCTURNE_ANDROID_UPLOAD_*`: the key is Nocturne's own,
+  shared as organisation secrets with this repository only, while the Apple ones serve the team.
