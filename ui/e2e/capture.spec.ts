@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
@@ -205,14 +205,31 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+/** Whether a pointer `reach` px out from the centre, in each of the four directions, lands on it. */
+const reaches = (button: Locator, reach: number) =>
+  button.evaluate((el, d) => {
+    const r = el.getBoundingClientRect();
+    const [x, y] = [r.x + r.width / 2, r.y + r.height / 2];
+    const points: Array<[number, number]> = [
+      [x - d, y],
+      [x + d, y],
+      [x, y - d],
+      [x, y + d],
+    ];
+    return points.every(([px, py]) => el.contains(document.elementFromPoint(px, py)));
+  }, reach);
+
 test.describe("add a photo or file from the keep bar", () => {
   test("a chosen JPEG is kept and the toast says so", async ({ page }) => {
     await page.goto("/#/today");
     const add = page.getByRole("button", { name: "Add a photo or file" });
     await expect(add).toBeVisible();
-    const size = await add.boundingBox();
-    expect(Math.round(size?.width ?? 0)).toBe(44);
-    expect(Math.round(size?.height ?? 0)).toBe(44);
+    // The icon is 2rem; the target around it reaches 44 px, so a pointer 21 px out still lands.
+    for (const button of [add, page.getByRole("button", { name: "Hold to talk" })]) {
+      const size = await button.boundingBox();
+      expect(Math.round(size?.width ?? 0)).toBe(32);
+      expect(await reaches(button, 21)).toBe(true);
+    }
     const chooser = page.waitForEvent("filechooser");
     await add.click();
     await (await chooser).setFiles({
