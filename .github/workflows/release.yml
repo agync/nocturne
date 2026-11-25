@@ -687,16 +687,16 @@ jobs:
       # altool looks for the key in this folder, by the key's id; the Tauri CLI reads the same file.
       - name: App Store Connect key
         env:
-          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY || secrets.MACOS_NOTARY_API_KEY }}
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           printf '%s' "$API_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
       - name: build and sign the app
         env:
-          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID || secrets.MACOS_NOTARY_API_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
         run: |
           set -euo pipefail
@@ -722,8 +722,8 @@ jobs:
           rm "$RUNNER_TEMP/Info.plist"
       - name: upload to TestFlight
         env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID || secrets.MACOS_NOTARY_API_KEY_ID }}
-          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID || secrets.MACOS_NOTARY_API_ISSUER_ID }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
           set -euo pipefail
           xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
