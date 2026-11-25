@@ -75,6 +75,9 @@ final class Reading {
     pausedText = args.pausedText ?? pausedText
     let title = args.title ?? ""
     let text = args.text ?? ""
+    // iPhone's own progress is compiled in only with the iOS 26 SDK (Swift 6.2, Xcode 26); an
+    // older Xcode builds the short while alone.
+    #if compiler(>=6.2)
     if #available(iOS 26.0, *) {
       if let current = task as? BGContinuedProcessingTask {
         current.progress.totalUnitCount = Int64(args.count ?? 0)
@@ -90,6 +93,7 @@ final class Reading {
         return
       }
     }
+    #endif
     beginShortWhile()
   }
 
@@ -102,6 +106,7 @@ final class Reading {
     }
   }
 
+  #if compiler(>=6.2)
   /// Asks for the phone's own progress under a new name, with its launch handler registered for
   /// that name first, as BGTaskScheduler requires. False when iOS refused it.
   @available(iOS 26.0, *)
@@ -140,6 +145,7 @@ final class Reading {
       }
     }
   }
+  #endif
 
   /// The phone's own progress ended, by the person's Stop there or by iOS: told as a Stop.
   private func stoppedThere() {
@@ -167,9 +173,11 @@ final class Reading {
   }
 
   private func finish(success: Bool) {
+    #if compiler(>=6.2)
     if #available(iOS 26.0, *), let current = task as? BGContinuedProcessingTask {
       current.setTaskCompleted(success: success)
     }
+    #endif
     task = nil
     pending = false
     if background != .invalid {
