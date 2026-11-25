@@ -31,13 +31,14 @@ MAC_HOME_PATTERN = re.compile(rb"/Users/[^/\s]")
 APP_IDENTIFIER = "app.nocturne.desktop"
 # In a macOS app the engine is split the way Apple places code: lemond beside the main program
 # in Contents/MacOS, its data in Contents/Resources/lemonade, and a link from Contents/MacOS to
-# that data, since lemond looks for `resources` next to itself. Upstream's command-line client
-# is left out: the app never runs it, and beside a folder of its own name codesign reads that
-# folder as a bundle.
+# that data, since lemond looks for `resources` next to itself.
 MAC_LEMOND = os.path.join("Contents", "MacOS", "lemond")
 MAC_ENGINE_DATA = os.path.join("Contents", "Resources", "lemonade")
 MAC_ENGINE_LINK = os.path.join("Contents", "MacOS", "resources")
-MAC_LEFT_OUT = {"lemonade"}
+# Upstream's command-line client is left out of every package: the app never runs it, and in a
+# macOS app, beside a folder of its own name, codesign reads that folder as a bundle. The
+# manifest still lists it, since it records the archive as verified.
+LEFT_OUT = {"lemonade", "lemonade.exe"}
 MACHO_MAGIC = (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca")
 # The development-only real preview (the `preview` feature) and the experimental server (the
 # `server` feature, shipped only as a container image) are never in a desktop package: their
@@ -171,6 +172,8 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
                 report.ok("notices/BUNDLED-LIBRARIES.txt present")
             else:
                 report.fail("notices/BUNDLED-LIBRARIES.txt missing (the AppImage carries system libraries)")
+    if lemon_dir is not None:
+        check_client_left_out(rel, lemon_dir, report)
     if kind == "app" and lemon_dir is not None:
         check_app_engine(root, rel, lemon_dir, report)
     engine = set(engine_files(rel, kind, lemon_dir).values())
@@ -281,8 +284,7 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
 
     if manifest and lemon_dir is not None:
         want = read_manifest(manifest)
-        if kind == "app":
-            want = {name: digest for name, digest in want.items() if name not in MAC_LEFT_OUT}
+        want = {name: digest for name, digest in want.items() if name not in LEFT_OUT}
         have = {name: sha256(rel[r]) for name, r in engine_files(rel, kind, lemon_dir).items()}
         links = [
             os.path.relpath(r, lemon_dir)
@@ -316,6 +318,20 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
             report.ok(f"{kind} declares {', '.join(REQUIRED_DEPENDS[kind])}")
 
 
+def check_client_left_out(rel, lemon_dir, report):
+    """The engine's command-line client is in no package."""
+    client = [
+        r
+        for name in sorted(LEFT_OUT)
+        for r in (os.path.join(lemon_dir, name), os.path.join("Contents", "MacOS", name))
+        if r in rel
+    ]
+    if client:
+        report.fail(f"the engine's command-line client is in the package: {client}")
+    else:
+        report.ok("the engine's command-line client is left out")
+
+
 def check_app_engine(root, rel, lemon_dir, report):
     """Code only where Apple places it, no command-line client, and lemond's link to its data."""
     resources = os.path.join("Contents", "Resources") + os.sep
@@ -328,14 +344,6 @@ def check_app_engine(root, rel, lemon_dir, report):
         report.fail(f"code in Contents/Resources, where codesign seals it as data: {misplaced[:5]}")
     else:
         report.ok("no code in Contents/Resources")
-    client = [
-        r
-        for name in sorted(MAC_LEFT_OUT)
-        for r in (os.path.join(lemon_dir, name), os.path.join("Contents", "MacOS", name))
-        if r in rel
-    ]
-    if client:
-        report.fail(f"the engine's command-line client is in the app: {client}")
     data = os.path.join(lemon_dir, "resources")
     if not any(r.startswith(data + os.sep) for r in rel):
         return

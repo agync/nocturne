@@ -71,6 +71,8 @@ modules:
       - install -d /app/lib/Nocturne/lemonade
       - cp -a lemonade-bundle/. /app/lib/Nocturne/lemonade/
       - chmod 755 /app/lib/Nocturne/lemonade/lemond
+      # The app only starts lemond; upstream's command-line client is left out.
+      - rm -f /app/lib/Nocturne/lemonade/lemonade
       - cp -a notices /app/lib/Nocturne/notices
       - install -Dm644 LICENSE /app/lib/Nocturne/LICENSE
       - install -Dm644 flatpak/is.nocturne.Nocturne.desktop /app/share/applications/is.nocturne.Nocturne.desktop

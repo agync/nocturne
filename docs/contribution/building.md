@@ -256,7 +256,8 @@ The script works in this order:
    its sha256 against `lemonade.lock`, unpacks it into `target/package/lemonade/<platform>/`
    (refusing an archive with more than one top-level folder or any symlink) and writes a sha256
    manifest of every file. It never trusts the stamp `scripts/fetch-lemonade.sh` leaves in
-   `vendor/`.
+   `vendor/`. It then removes upstream's command-line client (`lemonade`, `lemonade.exe`), which
+   the app never runs; the package check expects it absent and ignores its manifest line.
 2. It builds the interface and writes the third-party notices.
 3. It runs the Tauri bundler from `src-tauri/` with `bundle/linux.json` merged over
    `tauri.conf.json`, and on aarch64 `bundle/linux-aarch64.json` after it, which points the
