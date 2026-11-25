@@ -307,7 +307,7 @@ describe("wide window", () => {
       await screen.findByRole("textbox", { name: "Keep something, or ask" }),
     ).toBeInTheDocument();
     expect(container.querySelector('[data-placement="top"]')).not.toBeNull();
-    expect(screen.getByText("or drop files anywhere")).toBeInTheDocument();
+    expect(screen.getByText("Drop files anywhere to keep them")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Menu/ })).toBeNull();
     expect(await screen.findByRole("complementary", { name: "Recently kept" })).toBeInTheDocument();
   });

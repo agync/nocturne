@@ -46,6 +46,7 @@
   gap: var(--s-4);
   padding: var(--s-4) 28px;
   border-bottom: 1px solid var(--rule);
+  container-type: inline-size;
 }
 
 .bar {
@@ -55,8 +56,17 @@
 }
 
 .dropHint {
+  flex: none;
   color: var(--ink3);
   font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* Only beside a bar at its full width: the hint never squeezes the field. */
+@container (max-width: 60rem) {
+  .dropHint {
+    display: none;
+  }
 }
 
 .content {
