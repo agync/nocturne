@@ -58,8 +58,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.8.0 # x-release-please-version
-        CFBundleVersion: "0.8.0" # x-release-please-version
+        CFBundleShortVersionString: 0.9.0 # x-release-please-version
+        CFBundleVersion: "0.9.0" # x-release-please-version
     entitlements:
       path: nocturne-phone_iOS/nocturne-phone_iOS.entitlements
       properties:
