@@ -441,8 +441,9 @@ Anyway in System Settings > Privacy & Security), or the mark is removed. Handing
 properly needs, as a decision for the owner:
 
 - an Apple Developer ID Application certificate (the paid Apple Developer Program);
-- signing the app and the engine's executables inside `Contents/Resources/lemonade/` with that
-  identity, `--options runtime` and `--timestamp` (the microphone entitlement is in
+- signing the app and the engine's `lemond` in `Contents/MacOS/` (its data stays in
+  `Contents/Resources/lemonade/`, linked from `Contents/MacOS/resources`) with that identity,
+  `--options runtime` and `--timestamp` (the microphone entitlement is in
   `src-tauri/macos/Entitlements.plist`), which `scripts/macos-app.sh --sign` does not do yet and
   the release workflow does when its signing secrets are set;
 - notarisation with `xcrun notarytool` and stapling the ticket to the disk image.

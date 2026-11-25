@@ -81,8 +81,10 @@ fn platform() -> &'static str {
 }
 
 /// Where the bundle is: the folder `NOCTURNE_LEMOND` names (or the folder of the file it
-/// names), then `lemonade` among the app's resources, then, in a debug build, the copy
-/// `scripts/fetch-lemonade.sh` leaves in the checkout.
+/// names), then, in a macOS app, `Contents/MacOS` beside the app's own program, then `lemonade`
+/// among the app's resources, then, in a debug build, the copy `scripts/fetch-lemonade.sh`
+/// leaves in the checkout. A macOS app keeps code out of `Contents/Resources`, as codesign
+/// requires; see `scripts/macos-app.sh`.
 pub fn find_bundle<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     let from_env = std::env::var_os(BUNDLE_ENV).map(PathBuf::from).map(|p| {
         if p.is_file() {
@@ -91,13 +93,17 @@ pub fn find_bundle<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
             p
         }
     });
+    let beside_app = cfg!(target_os = "macos")
+        .then(|| std::env::current_exe().ok())
+        .flatten()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
     let resources = app.path().resource_dir().ok().map(|d| d.join("lemonade"));
     let checkout = cfg!(debug_assertions).then(|| {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../vendor/lemonade")
             .join(platform())
     });
-    [from_env, resources, checkout]
+    [from_env, beside_app, resources, checkout]
         .into_iter()
         .flatten()
         .find(|dir| bundle::locate(dir).is_ok())

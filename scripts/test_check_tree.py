@@ -78,8 +78,10 @@ def make_app(root, **plist):
     res = os.path.join(root, "Contents/Resources")
     write(os.path.join(res, "icon.icns"), b"icns")
     write(os.path.join(res, "LICENSE"), "Apache")
-    write(os.path.join(res, "lemonade/lemond"), b"\xcf\xfa\xed\xfe\0engine", 0o755)
+    write(os.path.join(root, "Contents/MacOS/lemond"), b"\xcf\xfa\xed\xfe\0engine", 0o755)
     write(os.path.join(res, "lemonade/LICENSE"), "Apache")
+    write(os.path.join(res, "lemonade/resources/defaults.json"), "{}")
+    os.symlink("../Resources/lemonade/resources", os.path.join(root, "Contents/MacOS/resources"))
     write(os.path.join(res, "notices/THIRD-PARTY-NOTICES.txt"), "notices")
     return res
 
@@ -282,14 +284,41 @@ class AppBundles(unittest.TestCase):
         manifest = os.path.join(self.tmp, "m.manifest")
         digest = hashlib.sha256(b"\xcf\xfa\xed\xfe\0engine").hexdigest()
         other = hashlib.sha256(b"Apache").hexdigest()
+        empty = hashlib.sha256(b"{}").hexdigest()
+        client = hashlib.sha256(b"client").hexdigest()
         with open(manifest, "w") as handle:
-            handle.write(f"{digest}  ./lemond\n{other}  ./LICENSE\n")
+            handle.write(
+                f"{digest}  ./lemond\n{other}  ./LICENSE\n{empty}  ./resources/defaults.json\n{client}  ./lemonade\n"
+            )
         code, out = self.check("--manifest", manifest)
         self.assertEqual(code, 0, out)
-        write(os.path.join(res, "lemonade/lemond"), b"tampered", 0o755)
+        write(os.path.join(self.tmp, "Contents/MacOS/lemond"), b"tampered", 0o755)
         code, out = self.check("--manifest", manifest)
         self.assertEqual(code, 1)
         self.assertIn("changed lemond", out)
+        os.remove(os.path.join(res, "lemonade/resources/defaults.json"))
+        code, out = self.check("--manifest", manifest)
+        self.assertIn("missing resources/defaults.json", out)
+
+    def test_code_in_resources_and_the_client_fail(self):
+        res = make_app(self.tmp)
+        write(os.path.join(res, "lemonade/lemonade"), b"\xcf\xfa\xed\xfe\0client", 0o755)
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("code in Contents/Resources", out)
+        self.assertIn("command-line client is in the app", out)
+
+    def test_lemond_must_sit_in_macos_with_a_link_to_its_data(self):
+        res = make_app(self.tmp)
+        os.rename(os.path.join(self.tmp, "Contents/MacOS/lemond"), os.path.join(res, "lemonade/lemond"))
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("no Contents/MacOS/lemond", out)
+        os.rename(os.path.join(res, "lemonade/lemond"), os.path.join(self.tmp, "Contents/MacOS/lemond"))
+        os.remove(os.path.join(self.tmp, "Contents/MacOS/resources"))
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("must be a relative link", out)
 
 
 class Review(unittest.TestCase):

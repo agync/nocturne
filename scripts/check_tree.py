@@ -29,6 +29,16 @@ FORBIDDEN_PARTS = (".agents", "vendor/", "/home/")
 HOME_PATTERN = re.compile(rb"/home/")
 MAC_HOME_PATTERN = re.compile(rb"/Users/[^/\s]")
 APP_IDENTIFIER = "app.nocturne.desktop"
+# In a macOS app the engine is split the way Apple places code: lemond beside the main program
+# in Contents/MacOS, its data in Contents/Resources/lemonade, and a link from Contents/MacOS to
+# that data, since lemond looks for `resources` next to itself. Upstream's command-line client
+# is left out: the app never runs it, and beside a folder of its own name codesign reads that
+# folder as a bundle.
+MAC_LEMOND = os.path.join("Contents", "MacOS", "lemond")
+MAC_ENGINE_DATA = os.path.join("Contents", "Resources", "lemonade")
+MAC_ENGINE_LINK = os.path.join("Contents", "MacOS", "resources")
+MAC_LEFT_OUT = {"lemonade"}
+MACHO_MAGIC = (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca")
 # The development-only real preview (the `preview` feature) and the experimental server (the
 # `server` feature, shipped only as a container image) are never in a desktop package: their
 # binaries have these names, the preview prints the first marker, and their interfaces keep the
@@ -67,6 +77,24 @@ def sha256(path):
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def is_macho(path):
+    with open(path, "rb") as handle:
+        return handle.read(4) in MACHO_MAGIC
+
+
+def engine_files(rel, kind, lemon_dir):
+    """The engine's regular files in the package, by their path in the upstream archive."""
+    found = {}
+    if lemon_dir is None:
+        return found
+    for r, p in rel.items():
+        if r.startswith(lemon_dir + os.sep) and os.path.isfile(p) and not os.path.islink(p):
+            found[os.path.relpath(r, lemon_dir)] = r
+    if kind == "app" and MAC_LEMOND in rel:
+        found["lemond"] = MAC_LEMOND
+    return found
 
 
 def read_manifest(path):
@@ -110,12 +138,15 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
         else:
             report.fail("no usr/bin/nocturne binary")
 
-    lemond = [r for r in rel if r.endswith("lemonade/lemond")]
+    if kind == "app":
+        lemond = [MAC_LEMOND] if MAC_LEMOND in rel else []
+    else:
+        lemond = [r for r in rel if r.endswith("lemonade/lemond")]
     if not lemond:
-        report.fail("no lemonade/lemond in the package")
+        report.fail(f"no {MAC_LEMOND if kind == 'app' else 'lemonade/lemond'} in the package")
         lemon_dir = None
     else:
-        lemon_dir = os.path.dirname(lemond[0])
+        lemon_dir = MAC_ENGINE_DATA if kind == "app" else os.path.dirname(lemond[0])
         mode = os.stat(rel[lemond[0]]).st_mode
         if mode & 0o111 == 0o111:
             report.ok(f"lemond is executable: {lemond[0]}")
@@ -140,6 +171,9 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
                 report.ok("notices/BUNDLED-LIBRARIES.txt present")
             else:
                 report.fail("notices/BUNDLED-LIBRARIES.txt missing (the AppImage carries system libraries)")
+    if kind == "app" and lemon_dir is not None:
+        check_app_engine(root, rel, lemon_dir, report)
+    engine = set(engine_files(rel, kind, lemon_dir).values())
 
     desktops = [r for r in rel if r.endswith(".desktop")]
     if kind == "app":
@@ -187,7 +221,7 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
     for r, p in rel.items():
         if os.path.islink(p) or not os.path.isfile(p) or r in preview:
             continue
-        if lemon_dir and r.startswith(lemon_dir + os.sep):
+        if r in engine:
             continue
         with open(p, "rb") as handle:
             data = handle.read()
@@ -212,10 +246,9 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
         report.ok("no text file names a home directory")
 
     if kind == "app":
-        lemon_prefix = (lemon_dir + os.sep) if lemon_dir else None
         mac_leaks = []
         for r, p in rel.items():
-            if os.path.islink(p) or not os.path.isfile(p) or (lemon_prefix and r.startswith(lemon_prefix)):
+            if os.path.islink(p) or not os.path.isfile(p) or r in engine:
                 continue
             with open(p, "rb") as handle:
                 data = handle.read()
@@ -228,13 +261,12 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
 
     if builder_home:
         needle = builder_home.encode()
-        lemon_prefix = (lemon_dir + os.sep) if lemon_dir else None
         found = []
         for r, p in rel.items():
             if os.path.islink(p) or not os.path.isfile(p):
                 continue
             # The engine's files are verified byte for byte below and come from upstream.
-            if lemon_prefix and r.startswith(lemon_prefix):
+            if r in engine:
                 continue
             with open(p, "rb") as handle:
                 if needle in handle.read():
@@ -249,14 +281,14 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
 
     if manifest and lemon_dir is not None:
         want = read_manifest(manifest)
-        have, links = {}, []
-        for r, p in rel.items():
-            if not r.startswith(lemon_dir + os.sep):
-                continue
-            if os.path.islink(p):
-                links.append(os.path.relpath(r, lemon_dir))
-            elif os.path.isfile(p):
-                have[os.path.relpath(r, lemon_dir)] = sha256(p)
+        if kind == "app":
+            want = {name: digest for name, digest in want.items() if name not in MAC_LEFT_OUT}
+        have = {name: sha256(rel[r]) for name, r in engine_files(rel, kind, lemon_dir).items()}
+        links = [
+            os.path.relpath(r, lemon_dir)
+            for r, p in rel.items()
+            if r.startswith(lemon_dir + os.sep) and os.path.islink(p)
+        ]
         diffs = [f"symlink {name}" for name in sorted(links)]
         for name in sorted(set(want) | set(have)):
             if name not in have:
@@ -282,6 +314,37 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
             report.fail(f"{kind} does not declare: {missing}")
         else:
             report.ok(f"{kind} declares {', '.join(REQUIRED_DEPENDS[kind])}")
+
+
+def check_app_engine(root, rel, lemon_dir, report):
+    """Code only where Apple places it, no command-line client, and lemond's link to its data."""
+    resources = os.path.join("Contents", "Resources") + os.sep
+    misplaced = [
+        r
+        for r, p in rel.items()
+        if r.startswith(resources) and os.path.isfile(p) and not os.path.islink(p) and is_macho(p)
+    ]
+    if misplaced:
+        report.fail(f"code in Contents/Resources, where codesign seals it as data: {misplaced[:5]}")
+    else:
+        report.ok("no code in Contents/Resources")
+    client = [
+        r
+        for name in sorted(MAC_LEFT_OUT)
+        for r in (os.path.join(lemon_dir, name), os.path.join("Contents", "MacOS", name))
+        if r in rel
+    ]
+    if client:
+        report.fail(f"the engine's command-line client is in the app: {client}")
+    data = os.path.join(lemon_dir, "resources")
+    if not any(r.startswith(data + os.sep) for r in rel):
+        return
+    link = rel.get(MAC_ENGINE_LINK)
+    relative = link and os.path.islink(link) and not os.path.isabs(os.readlink(link))
+    if relative and os.path.realpath(link) == os.path.realpath(os.path.join(root, data)):
+        report.ok(f"{MAC_ENGINE_LINK} leads to {data}")
+    else:
+        report.fail(f"{MAC_ENGINE_LINK} must be a relative link to {data}, where lemond finds its data")
 
 
 def check_app_bundle(root, rel, version, report):

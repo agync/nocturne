@@ -12,6 +12,12 @@
 # them alone. Order matters: with --manifest the copied engine is checked against it BEFORE
 # signing, and the signature is verified AFTER. A Developer ID build re-signs the engine's
 # executables, which changes their bytes, so the manifest can only be checked before that.
+#
+# Code goes where Apple places it: lemond beside the main program in Contents/MacOS, the
+# engine's data in Contents/Resources/lemonade, and Contents/MacOS/resources a link to that
+# data, because lemond looks for `resources` next to itself. Upstream's command-line client
+# (`lemonade`) is left out: the app never runs it, and beside a folder of its own name codesign
+# reads that folder as a bundle.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -48,7 +54,20 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary" "$app/Contents/MacOS/$exe"
 chmod 755 "$app/Contents/MacOS/$exe"
 cp src-tauri/icons/icon.icns "$app/Contents/Resources/icon.icns"
-cp -R "$lemonade" "$app/Contents/Resources/lemonade"
+engine="$app/Contents/Resources/lemonade"
+mkdir -p "$engine"
+cp -R "$lemonade/." "$engine/"
+rm -f "$engine/.sha256" "$engine/lemonade"
+mv "$engine/lemond" "$app/Contents/MacOS/lemond"
+if [[ -d "$engine/resources" ]]; then
+    ln -s ../Resources/lemonade/resources "$app/Contents/MacOS/resources"
+fi
+while IFS= read -r -d '' f; do
+    if file -b "$f" | grep -q Mach-O; then
+        printf 'engine code with no place outside Contents/Resources: %s\n' "${f#"$app/"}" >&2
+        exit 1
+    fi
+done < <(find "$engine" -type f -print0)
 cp -R "$notices" "$app/Contents/Resources/notices"
 cp LICENSE "$app/Contents/Resources/LICENSE"
 
@@ -76,7 +95,10 @@ done
 plutil -lint "$info" > /dev/null
 
 if [[ -n "$manifest" ]]; then
-    sha256_manifest "$app/Contents/Resources/lemonade" | diff -q - "$manifest" > /dev/null \
+    # The same files as the verified archive, lemond back in its place and the client left out.
+    { sha256_manifest "$engine"; (cd "$app/Contents/MacOS" && "${sha256_tool[@]}" -- ./lemond); } \
+        | LC_ALL=C sort -k 2 \
+        | diff -q - <(grep -v '  \./lemonade$' "$manifest" | LC_ALL=C sort -k 2) > /dev/null \
         || { printf 'the engine in the app differs from %s; not signing\n' "$manifest" >&2; exit 1; }
 fi
 # No --deep to sign: it would re-sign the engine's executables and change their bytes. It stays
