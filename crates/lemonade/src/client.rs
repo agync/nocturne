@@ -156,18 +156,18 @@ impl Client {
 
     /// A client with no engine behind it yet; every call fails with `Unavailable`.
     pub(crate) fn detached(timeouts: Timeouts) -> Client {
-        let http = reqwest::Client::builder()
+        let http = crate::tls::builder()
             .connect_timeout(timeouts.connect)
             .timeout(timeouts.request)
             .no_proxy()
             .build()
             .expect("http client");
-        let stream_http = reqwest::Client::builder()
+        let stream_http = crate::tls::builder()
             .connect_timeout(timeouts.connect)
             .no_proxy()
             .build()
             .expect("http client");
-        let online_http = reqwest::Client::builder()
+        let online_http = crate::tls::builder()
             .connect_timeout(timeouts.connect)
             .timeout(timeouts.request)
             .redirect(reqwest::redirect::Policy::none())

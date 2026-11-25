@@ -235,7 +235,7 @@ impl Fake {
         Fake {
             child,
             port,
-            http: reqwest::Client::new(),
+            http: nocturne_lemonade::tls::client(),
             dirs,
             client: nocturne_lemonade::Client::new(port, "k3y"),
             admin: nocturne_lemonade::Admin::new(

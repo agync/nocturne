@@ -88,7 +88,7 @@ async fn raw_replies_are_traced_only_below_info() {
             tier,
         );
         let e = sup.client().endpoint().unwrap();
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .post(format!("http://127.0.0.1:{}/fake/script", e.port))
             .bearer_auth(e.key)
             .json(&json!({"chat": [

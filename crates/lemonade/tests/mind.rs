@@ -52,7 +52,7 @@ async fn rig() -> Rig {
 impl Rig {
     async fn call(&self, method: &str, path: &str, body: Value) -> Value {
         let e = self.sup.client().endpoint().unwrap();
-        let http = reqwest::Client::new();
+        let http = nocturne_lemonade::tls::client();
         let url = format!("http://127.0.0.1:{}{path}", e.port);
         let rb = if method == "POST" {
             http.post(url).json(&body)

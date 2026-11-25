@@ -355,7 +355,7 @@ mod online {
         );
         let online = Online { s, port };
         tauri::async_runtime::block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(online.s.url("/fake/script"))
                 .json(&json!({ "reply": reply }))
                 .send()
@@ -370,7 +370,7 @@ mod online {
         pub fn sent(&self) -> String {
             let all: Vec<serde_json::Value> =
                 self.port.own(tauri::async_runtime::block_on(async {
-                    reqwest::Client::new()
+                    nocturne_lemonade::tls::client()
                         .get(self.s.url("/fake/requests"))
                         .send()
                         .await

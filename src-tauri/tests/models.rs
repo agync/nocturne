@@ -207,7 +207,7 @@ impl Lab {
                 if let Some(client) = self.services.client().await
                     && let Some(endpoint) = client.endpoint()
                 {
-                    let sent = reqwest::Client::new()
+                    let sent = nocturne_lemonade::tls::client()
                         .get(format!("http://127.0.0.1:{}/fake/requests", endpoint.port))
                         .bearer_auth(&endpoint.key)
                         .send()

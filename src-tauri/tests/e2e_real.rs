@@ -1061,7 +1061,7 @@ fn model_overrides() -> Vec<(&'static str, String)> {
 
 fn post_json(url: &str, body: &Value) -> Result<Value, String> {
     block_on(async {
-        let r = reqwest::Client::new()
+        let r = nocturne_lemonade::tls::client()
             .post(url)
             .header("content-type", "application/json")
             .body(body.to_string())
@@ -1355,7 +1355,7 @@ fn the_whole_product_works_with_real_models() {
     );
     let origin_refused = block_on(async {
         let endpoint = services.client().await?.endpoint()?;
-        let response = reqwest::Client::new()
+        let response = nocturne_lemonade::tls::client()
             .get(format!("http://127.0.0.1:{}/v1/health", endpoint.port))
             .bearer_auth(&endpoint.key)
             .header("Origin", "https://evil.example")

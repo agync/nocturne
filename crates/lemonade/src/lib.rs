@@ -25,6 +25,7 @@ pub mod selection;
 pub mod setup;
 pub mod supervisor;
 pub mod tier;
+pub mod tls;
 
 pub use admin::Admin;
 pub use bundle::Dirs;

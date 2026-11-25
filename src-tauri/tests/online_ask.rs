@@ -53,7 +53,7 @@ fn lab() -> Lab {
 impl Lab {
     fn script(&self, body: Value) {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(self.s.url("/fake/script"))
                 .json(&body)
                 .send()
@@ -64,7 +64,7 @@ impl Lab {
 
     fn chats(&self) -> Vec<Value> {
         let all: Vec<Value> = self.port.own(block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(self.s.url("/fake/requests"))
                 .send()
                 .await
@@ -857,7 +857,7 @@ fn a_check_of_another_provider_never_carries_questions() {
     let b = StandIn::start(&fake_provider());
     let b_chats = || -> Vec<Value> {
         let all: Vec<Value> = l.port.own(block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(b.url("/fake/requests"))
                 .send()
                 .await
@@ -873,7 +873,7 @@ fn a_check_of_another_provider_never_carries_questions() {
     // A is slow, B's check is slow: there is a window with a question in flight.
     l.script(json!({"delay_ms": 4000}));
     block_on(async {
-        reqwest::Client::new()
+        nocturne_lemonade::tls::client()
             .post(b.url("/fake/script"))
             .json(&json!({"delay_ms": 3000}))
             .send()

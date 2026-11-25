@@ -142,7 +142,7 @@ pub(crate) fn client(no_proxy: bool, hosts: &[String]) -> Result<reqwest::Client
             attempt.error("a redirect that is not allowed")
         }
     });
-    let mut builder = reqwest::Client::builder()
+    let mut builder = nocturne_lemonade::tls::builder()
         .redirect(policy)
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(20))

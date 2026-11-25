@@ -27,7 +27,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 rusqlite = { version = "0.43", features = ["bundled"] }
 jiff = "1.0"
 sha2 = "0.11"
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "multipart"] }
+# The TLS provider is ring everywhere (see the rustls lines in the crates that make clients), so
+# the binary links one crypto stack, not ring and aws-lc-rs.
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider", "multipart"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tempfile = "3"
 tauri = "2"
 tauri-build = "2"

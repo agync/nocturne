@@ -280,7 +280,7 @@ fn lab(mind: Arc<dyn Mind>) -> Lab {
 impl Lab {
     fn script(&self, body: Value) {
         block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .post(self.s.url("/fake/script"))
                 .json(&body)
                 .send()
@@ -292,7 +292,7 @@ impl Lab {
     /// Questions sent, without the connection check's.
     fn questions(&self) -> Vec<Value> {
         let all: Vec<Value> = self.port.own(block_on(async {
-            reqwest::Client::new()
+            nocturne_lemonade::tls::client()
                 .get(self.s.url("/fake/requests"))
                 .send()
                 .await

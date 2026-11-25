@@ -51,7 +51,7 @@ fn refuses_any_address_but_loopback() {
 #[tokio::test]
 async fn answers_from_the_script_and_records_every_request() {
     let s = start();
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     let models: Value = http
         .get(format!("{}/v1/models", s.base))
         .bearer_auth("sk-test-key")
@@ -123,7 +123,7 @@ async fn answers_from_the_script_and_records_every_request() {
 #[tokio::test]
 async fn scripted_errors_echo_the_key_and_the_marker() {
     let s = start();
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     for status in [401u16, 402, 403, 404, 429, 500] {
         for multiline in [false, true] {
             http.post(format!("{}/fake/script", s.base))
@@ -174,7 +174,7 @@ async fn scripted_errors_echo_the_key_and_the_marker() {
 #[tokio::test]
 async fn a_stray_probe_from_another_program_is_not_recorded() {
     let s = start();
-    let http = reqwest::Client::new();
+    let http = nocturne_lemonade::tls::client();
     for agent in ["Go-http-client/1.1", "nocturne-test"] {
         let _ = http
             .get(format!("{}/", s.base))
