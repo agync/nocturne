@@ -28,6 +28,19 @@ async function fromWelcome(query = "") {
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 }
 
+/**
+ * The phone comes back online. The waiting screen listens for it in an effect that can run after
+ * its line shows, so it keeps saying so until the restore is asked for again.
+ */
+async function backOnline() {
+  const restores = () => scriptedBackup.calls.filter((c) => c === "backup_restore").length;
+  const before = restores();
+  await waitFor(() => {
+    window.dispatchEvent(new Event("online"));
+    expect(restores()).toBeGreaterThan(before);
+  });
+}
+
 function type(text: string) {
   fireEvent.change(screen.getByLabelText(/Your phrase|Recovery key/), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
@@ -195,7 +208,7 @@ describe("bringing back a backup onto an empty phone", () => {
       await screen.findByText("Waiting for Wi-Fi. It starts when this phone is on Wi-Fi."),
     ).toBeInTheDocument();
     scriptedBackup.wifi = true;
-    window.dispatchEvent(new Event("online"));
+    await backOnline();
     expect(
       await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
     ).toBeInTheDocument();
@@ -217,10 +230,8 @@ describe("bringing back a backup onto an empty phone", () => {
     type(SCRIPTED_PHRASE);
     fireEvent.click(await screen.findByRole("button", { name: "Go on" }));
     expect(await screen.findByText(/Waiting for the internet/)).toBeInTheDocument();
-    window.dispatchEvent(new Event("online"));
-    await waitFor(() =>
-      expect(scriptedBackup.calls.filter((c) => c === "backup_restore")).toHaveLength(2),
-    );
+    await backOnline();
+    expect(scriptedBackup.calls.filter((c) => c === "backup_restore")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Go on" })).toBeNull();
   });
 
@@ -248,7 +259,7 @@ describe("bringing back a backup onto an empty phone", () => {
       ),
     ).toBeInTheDocument();
     scriptedBackup.wifi = true;
-    window.dispatchEvent(new Event("online"));
+    await backOnline();
     expect(
       await screen.findByRole("heading", { name: "Your memory is back on this phone." }),
     ).toBeInTheDocument();
