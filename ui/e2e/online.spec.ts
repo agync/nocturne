@@ -241,6 +241,11 @@ test.describe("O2 to O6, setting up", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByLabel(/^Which one to use/)).toBeFocused();
     await page.keyboard.type("llama-3.3-70b-instruct");
+    // The service's list sits under the name, as the design draws it, and Check follows it.
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Choose from api.example.com’s list…" }),
+    ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Check" })).toBeFocused();
     await page.keyboard.press("Enter");
