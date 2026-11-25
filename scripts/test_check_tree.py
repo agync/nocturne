@@ -228,6 +228,25 @@ class FixtureTrees(unittest.TestCase):
         self.assertEqual(bad.returncode, 1)
         self.assertIn("changed resources/defaults.json", bad.stdout)
 
+    def test_the_client_is_left_out_of_a_package(self):
+        lib = make_tree(self.tmp)
+        manifest = os.path.join(self.tmp, "..", os.path.basename(self.tmp) + ".manifest")
+        self.addCleanup(lambda: os.path.exists(manifest) and os.remove(manifest))
+        entries = []
+        for rel in ("LICENSE", "lemond", "resources/defaults.json"):
+            with open(os.path.join(lib, "lemonade", rel), "rb") as handle:
+                entries.append(f"{hashlib.sha256(handle.read()).hexdigest()}  ./{rel}")
+        entries.append(f"{hashlib.sha256(b'client').hexdigest()}  ./lemonade")
+        with open(manifest, "w") as handle:
+            handle.write("\n".join(entries) + "\n")
+        command = [os.path.join(HERE, "check-package.sh"), "--manifest", manifest, self.tmp]
+        good = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(good.returncode, 0, good.stdout + good.stderr)
+        write(os.path.join(lib, "lemonade/lemonade"), b"\x7fELF\0client", 0o755)
+        bad = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(bad.returncode, 1)
+        self.assertIn("command-line client is in the package", bad.stdout)
+
 
 class AppBundles(unittest.TestCase):
     def setUp(self):
@@ -306,7 +325,7 @@ class AppBundles(unittest.TestCase):
         code, out = self.check()
         self.assertEqual(code, 1)
         self.assertIn("code in Contents/Resources", out)
-        self.assertIn("command-line client is in the app", out)
+        self.assertIn("command-line client is in the package", out)
 
     def test_lemond_must_sit_in_macos_with_a_link_to_its_data(self):
         res = make_app(self.tmp)

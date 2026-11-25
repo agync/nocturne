@@ -239,8 +239,11 @@ A package carries the program and the engine's bundle as one resource folder.
 A macOS app keeps code out of `Contents/Resources`, where codesign seals files as data and a folder
 holding a program of its own name reads as a bundle. `lemond` sits in `Contents/MacOS`, and
 `Contents/MacOS/resources` is a link to `Contents/Resources/lemonade/resources`, because `lemond`
-looks for its data next to itself. Upstream's command-line client, `lemonade`, which the app never
-runs, is left out of the macOS app.
+looks for its data next to itself.
+
+Upstream's command-line client, `lemonade` (`lemonade.exe` on Windows), which the app never runs,
+is left out of every package: `scripts/package.sh` removes it after checking the archive, the
+Flatpak manifest does the same, and `scripts/check_tree.py` fails a package that holds it.
 
 `lemond` binds loopback only, so nothing is exposed to other computers. See
 [Building and packaging](/contribution/building.md) and

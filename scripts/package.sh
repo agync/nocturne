@@ -163,6 +163,9 @@ cp -a "$inner/." "$pkg/lemonade/$platform/"
 rm -f "$pkg/lemonade/$platform/.sha256"
 [[ -f "$pkg/lemonade/$platform/lemond" ]] && chmod +x "$pkg/lemonade/$platform/lemond"
 sha256_manifest "$pkg/lemonade/$platform" > "$pkg/lemonade/$platform.manifest"
+# The app only starts lemond. Upstream's command-line client is verified above, then left out of
+# what is packaged; scripts/check_tree.py expects it absent.
+rm -f "$pkg/lemonade/$platform/lemonade" "$pkg/lemonade/$platform/lemonade.exe"
 say "lemonade manifest: $(wc -l < "$pkg/lemonade/$platform.manifest") files"
 
 if [[ "$kind" == macos ]] && ! command -v npm > /dev/null 2>&1; then
