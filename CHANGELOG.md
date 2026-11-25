@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1](https://github.com/agync/nocturne/compare/v0.9.0...v0.9.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **app:** keep engine code out of mac Resources ([a2b4387](https://github.com/agync/nocturne/commit/a2b4387493cf8372678d368929714e424d05b160))
+* **ui:** calm the keep-ask bar buttons ([e8db80a](https://github.com/agync/nocturne/commit/e8db80a31a1a826bd25d44db7c5e142e022e04a4))
+
+
+### Performance Improvements
+
+* **app:** link one crypto stack, ring ([8a1bc36](https://github.com/agync/nocturne/commit/8a1bc36c9da36e3c8c26c2024ab6f313f2cb500a))
+
 ## [0.9.0](https://github.com/agync/nocturne/compare/v0.8.0...v0.9.0) (2026-11-25)
 
 
