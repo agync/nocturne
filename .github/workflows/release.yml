@@ -595,10 +595,10 @@ jobs:
           path: in
       - name: sign with the upload key
         env:
-          UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEYSTORE: ${{ secrets.NOCTURNE_ANDROID_UPLOAD_KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.NOCTURNE_ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NOCTURNE_ANDROID_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.NOCTURNE_ANDROID_UPLOAD_KEY_PASSWORD }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
           set -euo pipefail

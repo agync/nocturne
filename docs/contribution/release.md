@@ -221,10 +221,10 @@ nothing is attached (and the release is not published).
 | `MACOS_NOTARY_APP_PASSWORD` | `release-signing` | fallback: an app-specific password for that Apple ID | as above |
 | `WINDOWS_CODE_SIGNING_CERTIFICATE` | `release-signing` | the code signing certificate, a base64 `.pfx` | with `WINDOWS_SIGNING` on, the signing job fails |
 | `WINDOWS_CODE_SIGNING_PASSWORD` | `release-signing` | the `.pfx` password | as above |
-| `ANDROID_UPLOAD_KEYSTORE` | `release-signing` | the upload keystore (an RSA key), a base64 file: `base64 -w0 upload.jks` | with `ANDROID_SIGNING` on, the signing job fails |
-| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | `release-signing` | the keystore's password | as above |
-| `ANDROID_UPLOAD_KEY_ALIAS` | `release-signing` | the key's alias in that keystore | as above |
-| `ANDROID_UPLOAD_KEY_PASSWORD` | `release-signing` | the key's password (the keystore's, if they are the same) | as above |
+| `NOCTURNE_ANDROID_UPLOAD_KEYSTORE` | `release-signing` | the upload keystore (an RSA key), a base64 file: `base64 -w0 upload.jks` | with `ANDROID_SIGNING` on, the signing job fails |
+| `NOCTURNE_ANDROID_UPLOAD_KEYSTORE_PASSWORD` | `release-signing` | the keystore's password | as above |
+| `NOCTURNE_ANDROID_UPLOAD_KEY_ALIAS` | `release-signing` | the key's alias in that keystore | as above |
+| `NOCTURNE_ANDROID_UPLOAD_KEY_PASSWORD` | `release-signing` | the key's password (the keystore's, if they are the same) | as above |
 | `APP_STORE_CONNECT_API_KEY` | `release-signing` | optional: the App Store Connect API key, the `.p8` file, base64: `base64 -w0 AuthKey_<id>.p8`; when unset the iPhone job uses `MACOS_NOTARY_API_KEY`, so one key with the App Manager role serves both | with neither set and `IOS_SIGNING` on, the iPhone job fails |
 | `APP_STORE_CONNECT_API_KEY_ID` | `release-signing` | optional: the key's id; falls back to `MACOS_NOTARY_API_KEY_ID` | as above |
 | `APP_STORE_CONNECT_API_ISSUER_ID` | `release-signing` | optional: the issuer id; falls back to `MACOS_NOTARY_API_ISSUER_ID` | as above |
