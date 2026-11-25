@@ -44,7 +44,7 @@ people never install or see a separate server.
 
 | Step | Mechanism |
 |---|---|
-| Find the bundle | `NOCTURNE_LEMOND` (a folder, or the `lemond` file in it), then `lemonade/` among the app's own resources, then, in a debug build only, `vendor/lemonade/<platform>` in the checkout |
+| Find the bundle | `NOCTURNE_LEMOND` (a folder, or the `lemond` file in it), then, in a macOS app, `Contents/MacOS` beside the app's own program, then `lemonade/` among the app's own resources, then, in a debug build only, `vendor/lemonade/<platform>` in the checkout |
 | Launch | `lemond` with a scrubbed environment, a random loopback port and a random key per launch; the port is drawn from below the ports systems lend to outgoing connections, so by default no connection is given it while the engine starts; the log says `the private engine <version> is ready on 127.0.0.1:<port>`. On Windows the environment also passes on what Windows sets for every program (`SystemRoot`, `ComSpec`, `PATHEXT` and the like) and `PATH` is the system's own folders. Before it listens the engine reads what the computer has, which on some laptops with two graphics takes over a minute at every start, so a start may take up to five minutes; a minute in, the log says it is still starting. A start that times out logs whether the engine ever listened, the processor time it used and the names of the programs it started that still run |
 | Isolation | Every working folder (`cache`, `config`, `models`, an owner-only `run`) is under `engine/` in the data folder, never beside the program, so a read-only install works; no discovery beacon. The engine's log, `lemond.log`, is in the app's `logs/` folder, which "Open logs" opens |
 | First run | `GET /v1/system-info` picks the hardware tier and backends; `POST /v1/install` and `POST /v1/pull` download with progress, the NPU runtime and its speech model only when they will be used |
@@ -234,6 +234,13 @@ A package carries the program and the engine's bundle as one resource folder.
 | deb, rpm | `/usr/bin/nocturne` | `/usr/lib/Nocturne/` (`lemonade/`, `notices/`, `LICENSE`) |
 | AppImage | `usr/bin/nocturne` in the image | `usr/lib/Nocturne/`, with the system libraries it needs in `usr/lib/` |
 | Windows | the install folder | `lemonade/`, `notices/`, `LICENSE` |
+| macOS app | `Contents/MacOS/Nocturne`, with `lemond` beside it | `Contents/Resources/` (`lemonade/` with the engine's data, `notices/`, `LICENSE`) |
+
+A macOS app keeps code out of `Contents/Resources`, where codesign seals files as data and a folder
+holding a program of its own name reads as a bundle. `lemond` sits in `Contents/MacOS`, and
+`Contents/MacOS/resources` is a link to `Contents/Resources/lemonade/resources`, because `lemond`
+looks for its data next to itself. Upstream's command-line client, `lemonade`, which the app never
+runs, is left out of the macOS app.
 
 `lemond` binds loopback only, so nothing is exposed to other computers. See
 [Building and packaging](/contribution/building.md) and
