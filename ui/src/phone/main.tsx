@@ -16,7 +16,7 @@ async function start() {
       ? await (await import("./testing/nativeMock")).nativeMockServices()
       : await loadServices();
   const root = document.getElementById("root");
-  if (services.platform.native) {
+  if (import.meta.env.VITE_PHONE_NATIVE !== "0" && services.platform.native) {
     const [{ NativeRoot }, { startInsets }, { startClock }] = await Promise.all([
       import("./native/NativeRoot"),
       import("./native/insets"),

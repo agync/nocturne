@@ -61,6 +61,9 @@ export default defineConfig(({ mode }) => {
     plugins: native ? [phoneDeck(), react()] : [phoneDeck(), react(), shellFiles()],
     define: {
       "import.meta.env.VITE_ENGINE": JSON.stringify(engine),
+      // The phone app's own screens run only in the phone app (`--mode native`) and the browser
+      // tests' build of it; the app the computer serves to paired phones never ships them.
+      "import.meta.env.VITE_PHONE_NATIVE": JSON.stringify(mode === "production" ? "0" : "1"),
       __APP_VERSION__: JSON.stringify(version),
     },
     build: {
