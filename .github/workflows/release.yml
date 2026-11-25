@@ -71,7 +71,7 @@ jobs:
   # What to build and where the files go, for both triggers. A hand run accepts only an existing
   # release tag. Every job checks out the commit resolved here, never a name.
   plan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     timeout-minutes: 15
     environment: release-app
     outputs:
@@ -788,8 +788,8 @@ jobs:
       && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success')
       && (vars.ANDROID_SIGNING != 'true' || needs.sign-android.result == 'success')
       && (vars.IOS_SIGNING != 'true' || needs.ios-testflight.result == 'success') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     environment: release-app
     permissions:
       contents: read
@@ -875,7 +875,7 @@ jobs:
       ${{ !cancelled() && needs.plan.outputs.tag != '' && needs.publish.result == 'success'
       && (needs.tailnet.result == 'success' || needs.tailnet.result == 'skipped')
       && (needs.flatpak.result == 'success' || needs.flatpak.result == 'skipped') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     timeout-minutes: 15
     environment: release-app
     permissions:

@@ -52,7 +52,8 @@ jobs:
   # Every job builds the commit resolved here, never a name. Publishing to stable needs a release
   # tag that points at that commit.
   resolve:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
     steps:
@@ -270,7 +271,8 @@ jobs:
   deploy:
     needs: site
     if: inputs.publish
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write

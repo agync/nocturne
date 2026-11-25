@@ -92,6 +92,13 @@ because release-please rewrites the body on every push. `CHANGELOG.md` keeps the
 | Most private helper | `tailnet.yml` | `scripts/build-tailnet.sh`, built twice | four binaries and the licence report | the two builds agree byte for byte |
 | Flatpak | `flatpak.yml` | AetherPak | the Flatpak repository | AetherPak's own checks |
 
+The jobs that only plan, move artifacts, check sums or call the GitHub API run on GitHub's small
+`ubuntu-slim` runner (1 vCPU, a container, a 15 minute job limit, no Docker daemon, no Android SDK
+or Java): the release `plan`, `publish` and `finish`, the Flatpak `resolve` and `deploy`, the
+Most private helper `reproduce` and `publish`, and the cache prune. Anything that builds, signs
+with the Android SDK or Java, or needs Flatpak or OSTree tools stays on a full Ubuntu 24.04 runner,
+as do the macOS and Windows jobs. A job moved to `ubuntu-slim` sets `timeout-minutes: 15`.
+
 ## Fixed download names
 
 The publish job also attaches a copy of each package under a fixed name, so
