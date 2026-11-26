@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.2](https://github.com/agync/nocturne/compare/v0.9.1...v0.9.2) (2026-11-26)
+
+
+### Bug Fixes
+
+* **phone:** add the Health write purpose ([0583887](https://github.com/agync/nocturne/commit/0583887057829a0d4c63797f43bd4fbe8927f893))
+* **phone:** keep reflective constructors in R8 ([ae828db](https://github.com/agync/nocturne/commit/ae828dbdafd1940c28a4d64a1ed3f974bd1feeee))
+
 ## [0.9.1](https://github.com/agync/nocturne/compare/v0.9.0...v0.9.1) (2026-11-25)
 
 
