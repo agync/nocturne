@@ -664,7 +664,7 @@ jobs:
   ios-testflight:
     needs: plan
     if: ${{ !cancelled() && needs.plan.outputs.tag != '' && vars.IOS_SIGNING == 'true' }}
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     environment: release-signing
     env:

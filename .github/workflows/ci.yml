@@ -764,7 +764,7 @@ jobs:
     name: ios
     needs: changes
     if: needs.changes.outputs.ios != 'false'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       # The Tauri CLI installs xcodegen and its tools with Homebrew; skip the update and the clean-up.
