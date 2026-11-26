@@ -159,7 +159,7 @@ jobs:
           name: flatpak-generated
           path: flatpak/generated
       - name: build
-        uses: aetherpak/actions/build@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        uses: aetherpak/actions/build@f1e1365d910e6a881073d417bc7d57cf8cfc3cf8 # v3.14.2
         with:
           config: flatpak/aetherpak.yaml
           app-id: is.nocturne.Nocturne
@@ -206,7 +206,7 @@ jobs:
         run: |
           [ -n "$GPG_KEY" ] || { echo "FLATPAK_GPG_PRIVATE_KEY is empty: refusing to publish unsigned" >&2; exit 1; }
       - name: sign and push the images
-        uses: aetherpak/actions/publish-oci@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        uses: aetherpak/actions/publish-oci@f1e1365d910e6a881073d417bc7d57cf8cfc3cf8 # v3.14.2
         with:
           registry: ghcr.io
           oci-repository: agync/nocturne-flatpak
@@ -246,7 +246,7 @@ jobs:
         run: |
           [ -n "$GPG_KEY" ] || { echo "FLATPAK_GPG_PRIVATE_KEY is empty: refusing to publish unsigned" >&2; exit 1; }
       - name: repository index
-        uses: aetherpak/actions/publish-site@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        uses: aetherpak/actions/publish-site@f1e1365d910e6a881073d417bc7d57cf8cfc3cf8 # v3.14.2
         with:
           config: flatpak/aetherpak.yaml
           records-dir: _records
