@@ -440,7 +440,8 @@ Check each rule again at submission; store rules change.
 | Health Connect: each kind read is declared, and only those kinds are asked for | The seven kinds, weight only when on; background reading only with [decision 2](phone-apps.md#decisions-for-the-owner) B, and readings older than 30 days with [decision H5](#decisions-for-the-owner) B and to read a restored phone's readings again, each an extra permission; the older readings permission is asked for with the kinds wherever Health Connect offers it |
 | Health Connect: a screen explaining how the app uses the readings, opened from Health Connect | The rationale screen above |
 | Google Play: the health apps declaration, saying what each kind is used for | The "Why it is in" column of [What Nocturne reads](#what-nocturne-reads) |
-| Apple: a Health purpose string for reading | "Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health." No write purpose string, because Nocturne never writes |
+| Apple: a Health purpose string for reading | "Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health." |
+| Apple: a Health purpose string for writing, which App Store Connect requires of every app with the Health entitlement, even one that only reads | "Nocturne never writes to Health. It only reads the kinds you choose." Nocturne never asks to write, so a person never sees it |
 | Apple: Health readings never used for advertising, never stored in iCloud, and a privacy policy | Nocturne has no advertising and no storage of its own beyond the person's computer; the privacy policy says so |
 
 ## Accessibility
@@ -499,6 +500,7 @@ Check each rule again at submission; store rules change.
 | Delete this day, group | "From Health" |
 | Source | "{device}, through Health on {phone}" |
 | iPhone purpose, Health | "Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health." |
+| iPhone purpose, Health writing | "Nocturne never writes to Health. It only reads the kinds you choose." |
 
 ## Out of scope
 
