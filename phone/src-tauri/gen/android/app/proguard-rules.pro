@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# R8 full mode (the default since AGP 8) drops constructors that no keep rule names, and these
+# classes are created by reflection through their no-argument constructor: WorkManager's Room
+# database and input mergers, and the ML Kit component registrars of the barcode scanner.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class * extends androidx.work.InputMerger { <init>(); }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
