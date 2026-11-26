@@ -52,6 +52,8 @@
 	<string>Nocturne reads your calendar so your computer can show what’s on today on your morning page. It never changes your calendar.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Nocturne never writes to Health. It only reads the kinds you choose.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it.</string>
 </dict>
