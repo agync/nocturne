@@ -172,7 +172,7 @@ jobs:
               echo "MACOS_NOTARY_API_KEY needs MACOS_NOTARY_API_KEY_ID and MACOS_NOTARY_API_ISSUER_ID" >&2
               exit 1
             fi
-            (umask 077; printf '%s' "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8")
+            (umask 077; case "$NOTARY_API_KEY" in *"BEGIN PRIVATE KEY"*) printf '%s\n' "$NOTARY_API_KEY" ;; *) printf '%s' "$NOTARY_API_KEY" | base64 --decode ;; esac > "$RUNNER_TEMP/AuthKey.p8")
             auth=(--key "$RUNNER_TEMP/AuthKey.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID")
           elif [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
             auth=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD")
