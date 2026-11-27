@@ -57,7 +57,7 @@
   "journal.look.alt": "The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath.",
   "journal.caption": "Today’s journal, and the day looked back on. From the app, with demo data.",
   "privacy.eyebrow": "What it promises",
-  "privacy.title": "Your life stays on your computer.",
+  "privacy.title": "Privacy policy · Nocturne",
   "privacy.body": "Out of the box, Nocturne goes online only for downloads you agree to: its mind at setup and any update you allow. Privacy in the app lists each one with the day and the size.",
   "promise.signin.term": "Nothing to sign in to",
   "promise.signin.detail": "No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose.",
@@ -212,5 +212,8 @@
   "js.windows": "This looks like a Windows computer, so its download comes first.",
   "js.linux": "This looks like a Linux computer, so its choices come first.",
   "js.linuxArm": "This looks like a Linux computer with an Arm chip, so its choices come first, Arm downloads first.",
-  "js.other": "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below."
+  "js.other": "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below.",
+  "foot.privacy": "Privacy policy",
+  "privacy.description": "How Nocturne treats what you keep: what stays on your devices, the few times anything leaves them, and your choices.",
+  "privacy.heading": "Privacy policy"
 }

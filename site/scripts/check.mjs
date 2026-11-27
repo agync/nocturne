@@ -29,6 +29,7 @@ const pages = [
   { name: "landing", path: "/", shoot: true },
   { name: "install", path: "/install", shoot: true },
   { name: "support", path: "/support", shoot: true },
+  { name: "privacy", path: "/privacy", shoot: true },
   { name: "docs-home", path: "/docs/", shoot: true },
   { name: "docs-concept", path: "/docs/design/concept.html", shoot: false },
   { name: "docs-install", path: "/docs/guide/install.html", shoot: false },
@@ -36,6 +37,7 @@ const pages = [
   { name: "landing-de", path: "/de/", shoot: true },
   { name: "install-de", path: "/de/install", shoot: true },
   { name: "support-de", path: "/de/support", shoot: true },
+  { name: "privacy-de", path: "/de/privacy", shoot: false },
   { name: "landing-fr", path: "/fr/", shoot: false },
   { name: "not-found-nl", path: "/nl/no-such-page", shoot: false },
 ];
