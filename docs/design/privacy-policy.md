@@ -36,9 +36,8 @@ page. They add one link each and change no other words.
 
 ## The public text
 
-The text below is what the page says, word for word. `PUBLISHER_NAME` is a placeholder the owner
-has not yet filled in ([question 1](#open-questions-for-the-owner)); the page is not published
-while it stands.
+The text below is what the page says, word for word. The maker and controller is the owner, by
+legal name, with hello@nocturne.is for requests ([question 1](#open-questions-for-the-owner)).
 
 ---
 
@@ -56,7 +55,7 @@ while it stands.
 >
 > ## Who we are
 >
-> Nocturne is free, open-source software made by **[PUBLISHER_NAME]** ("we" or "us"). It runs on
+> Nocturne is free, open-source software made by **Arun Babu Neelicattu** ("we" or "us"). It runs on
 > Linux, Mac and Windows computers, and on Android phones and iPhones.
 >
 > Nocturne does not send us what you keep, so we never see it. We cannot read it, sell it or share
@@ -337,7 +336,7 @@ while it stands.
 >
 > ## Data protection
 >
-> For this website, our Flatpak repository and emails you send us, **[PUBLISHER_NAME]** is the data
+> For this website, our Flatpak repository and emails you send us, **Arun Babu Neelicattu** is the data
 > controller. We rely on our legitimate interest in running the site and answering you. Cloudflare
 > and GitHub may handle requests outside the UK and the EEA. We keep your emails only as long as we
 > need to answer you. You can ask us to see, correct or erase an email you sent us, and you can
@@ -474,7 +473,7 @@ or section. Paths are from the repository root.
 
 | # | Question | Options | Recommendation |
 |---|---|---|---|
-| 1 | Who is named as the maker and data controller (`PUBLISHER_NAME`)? Google Play expects the developer named on the listing; data protection law expects the controller's identity and contact details, which some readers take to include a postal address | A: the owner's legal name. B: a company or trading name. C: "the Nocturne project" | **A or B, matching the store listings, with a postal or service address if the owner is willing.** C does not identify anyone. The page is not published while the placeholder stands |
+| 1 | Who is named as the maker and data controller? | Settled on 2026-11-27: the owner's legal name, with hello@nocturne.is as the contact. No postal address | None |
 | 2 | The App Store's guideline 5.1.3(ii) bars personal health information in iCloud. Raw readings stay out of the backup, and stored pages, reflections and recaps hold none. A person's own words about their health (a note, a journal entry, a memory read from it) are in the backup, and Apple's reviewer could read the rule as covering them | A: keep the owner's decision as it stands and explain it in the review notes: no HealthKit data is stored, only what the person wrote. B: on iPhone, back up to a file the person picks instead of iCloud. C: leave out memories and entries about health. C breaks the rule that Nocturne never judges what a person's data is about | **A.** It is true to the code and the decision. If Apple rejects it, B is the fallback; C is ruled out by the owner's rule of 2026-11-22 |
 | 3 | Android voice notes: the fallback reader may be the system's own service, which the code asks to work offline but cannot force | A: keep the fallback and say so (the text above). B: use only the strictly on-device reader and leave notes unread without it | **B.** "Never leaves the phone" can then be said on both phones, and it matches the iPhone |
 | 4 | Private on the computer | Settled on 2026-11-25: the computer sends private things with its own questions, as decision 0011 (amended 2026-11-23) says, and the text above says so. A paired phone's questions still leave them on the computer until that phone's change is built | None; reopen when a paired phone's private change ships ([When features change](#when-features-change)) |
