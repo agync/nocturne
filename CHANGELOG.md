@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/agync/nocturne/compare/v0.9.2...v0.10.0) (2026-11-27)
+
+
+### Features
+
+* **site:** add the privacy policy page ([bb56cff](https://github.com/agync/nocturne/commit/bb56cff0daade7c0619407df24b00dea665629f4))
+* **site:** link the privacy policy ([72e784c](https://github.com/agync/nocturne/commit/72e784c4432541a0ec55786e00b6dfa2245d2fb8))
+
+
+### Bug Fixes
+
+* **phone:** declare exempt encryption for iOS ([8b83fd0](https://github.com/agync/nocturne/commit/8b83fd03c3810cb8d0b45e4a42456cccb329dd46))
+
 ## [0.9.2](https://github.com/agync/nocturne/compare/v0.9.1...v0.9.2) (2026-11-26)
 
 
