@@ -214,6 +214,7 @@
   "js.linuxArm": "This looks like a Linux computer with an Arm chip, so its choices come first, Arm downloads first.",
   "js.other": "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below.",
   "foot.privacy": "Privacy policy",
+  "install.privacy": "Nocturne keeps what you give it on your own devices. <a href=\"{{p:/privacy}}\">Privacy policy</a>",
   "privacy.description": "How Nocturne treats what you keep: what stays on your devices, the few times anything leaves them, and your choices.",
   "privacy.heading": "Privacy policy"
 }

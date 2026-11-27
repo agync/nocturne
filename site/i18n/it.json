@@ -859,6 +859,10 @@
     "text": "Informativa sulla privacy",
     "from": "Privacy policy"
   },
+  "install.privacy": {
+    "text": "Nocturne conserva ciò che gli dai sui tuoi dispositivi. <a href=\"{{p:/privacy}}\">Informativa sulla privacy</a>",
+    "from": "Nocturne keeps what you give it on your own devices. <a href=\"{{p:/privacy}}\">Privacy policy</a>"
+  },
   "privacy.description": {
     "text": "Come Nocturne tratta ciò che conservi: cosa resta sui tuoi dispositivi, le poche volte in cui qualcosa ne esce e cosa decidi tu.",
     "from": "How Nocturne treats what you keep: what stays on your devices, the few times anything leaves them, and your choices."
