@@ -232,8 +232,8 @@
     "from": "What it promises"
   },
   "privacy.title": {
-    "text": "Dein Leben bleibt auf deinem Computer.",
-    "from": "Your life stays on your computer."
+    "text": "Datenschutzerklärung · Nocturne",
+    "from": "Privacy policy · Nocturne"
   },
   "privacy.body": {
     "text": "Ab Werk geht Nocturne nur für Downloads online, denen du zustimmst: sein Gehirn bei der Einrichtung und jedes Update, das du erlaubst. Unter Datenschutz (Privacy) in der App steht jeder einzelne mit Tag und Größe.",
@@ -854,5 +854,17 @@
   "js.other": {
     "text": "Nocturne ist eine Desktop-App für Mac-, Windows- und Linux-Computer. Öffne diese Seite auf dem Computer, auf dem du es nutzen willst, oder wähl unten einen aus.",
     "from": "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below."
+  },
+  "foot.privacy": {
+    "text": "Datenschutzerklärung",
+    "from": "Privacy policy"
+  },
+  "privacy.description": {
+    "text": "Wie Nocturne mit dem umgeht, was du festhältst: was auf deinen Geräten bleibt, die wenigen Fälle, in denen etwas sie verlässt, und was du entscheiden kannst.",
+    "from": "How Nocturne treats what you keep: what stays on your devices, the few times anything leaves them, and your choices."
+  },
+  "privacy.heading": {
+    "text": "Datenschutzerklärung",
+    "from": "Privacy policy"
   }
 }

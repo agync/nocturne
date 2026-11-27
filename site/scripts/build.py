@@ -9,7 +9,7 @@
         English lacks, and no string translated from English that has since changed.
 
     build.py assemble --site-url URL --render <render-out> --lock <lemonade.lock> <site> <dist>
-        Check the strings, write the landing, install, support and not-found pages once per language from
+        Check the strings, write the landing, install, support, privacy and not-found pages once per language from
         their templates, copy the assets, fill in the placeholders, add the rendered docs under
         docs/ with the site origin filled in, and write _headers with the hashes of the docs'
         inline scripts.
@@ -26,7 +26,7 @@ import shutil
 import sys
 import tomllib
 
-PAGES = {"index.html": "/", "install.html": "/install", "support.html": "/support", "404.html": "/"}
+PAGES = {"index.html": "/", "install.html": "/install", "support.html": "/support", "privacy.html": "/privacy", "404.html": "/"}
 STATIC = ("favicon.svg", "robots.txt")
 ICONS = ("favicon-32.png", "apple-touch-icon.png")
 INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)

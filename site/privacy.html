@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{t:privacy.title}}</title>
+<meta name="description" content="{{t:privacy.description}}">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="{{SITE_URL}}{{p:/privacy}}">
+{{alternates}}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="{{og_locale}}">
+{{og_alternates}}
+<meta property="og:title" content="{{t:privacy.title}}">
+<meta property="og:description" content="{{t:privacy.description}}">
+<meta property="og:url" content="{{SITE_URL}}{{p:/privacy}}">
+<meta property="og:image" content="{{SITE_URL}}/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{t:head.og.image.alt}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{SITE_URL}}/assets/img/og.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/site.css">
+<script src="/assets/js/theme.js"></script>
+{{suggest_script}}
+</head>
+<body>
+<a class="skip" href="#main">{{t:header.skip}}</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="{{p:/}}" aria-label="{{t:header.brand.aria}}">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="{{t:nav.aria}}">
+    <a class="nav-section" href="{{p:/}}#how">{{t:nav.how}}</a>
+    <a class="nav-section" href="{{p:/}}#privacy">{{t:nav.privacy}}</a>
+    <a class="nav-section" href="{{p:/}}#requirements">{{t:nav.requirements}}</a>
+    <a href="{{p:/install}}">{{t:nav.download}}</a>
+    <a href="/docs/"{{en_link}}>{{t:nav.docs}}{{en_mark}}</a>
+  </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="{{t:theme.aria}}">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="{{t:theme.system}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.system}}</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="{{t:theme.light}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.light}}</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="{{t:theme.dark}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">{{t:theme.dark}}</span></button>
+    </div>
+    {{lang_switch}}
+  </div>
+</header>
+
+<main id="main">
+
+<section class="support" aria-labelledby="privacy-title">
+  <h1 id="privacy-title">{{t:privacy.heading}}</h1>
+  <p class="lede" lang="en-GB">Effective 25 November 2026.</p>
+  {{note}}
+</section>
+
+<article class="policy" lang="en-GB">
+<h2>In short</h2>
+<ul>
+  <li>Nocturne keeps what you give it on your own computer or phone.</li>
+  <li>Nocturne sends us nothing. There is no account with us, and no analytics, ads, crash reports or tracking.</li>
+  <li>Nothing you kept leaves your device unless you turn on something that needs it. Each of those is off until you turn it on, and each sends only to a place you chose.</li>
+</ul>
+<h2>Who we are</h2>
+<p>Nocturne is free, open-source software made by <strong>Arun Babu Neelicattu</strong> ("we" or "us"). It runs on Linux, Mac and Windows computers, and on Android phones and iPhones.</p>
+<p>Nocturne does not send us what you keep, so we never see it. We cannot read it, sell it or share it, because we do not have it.</p>
+<h2>What Nocturne keeps, and where</h2>
+<p>Nocturne keeps what you give it, and what it works out from it:</p>
+<ul>
+  <li>the things you keep: notes you type or paste, photos, screenshots, voice notes, sound recordings and documents;</li>
+  <li>what it remembers from them, your morning pages and its answers to your questions;</li>
+  <li>your journal: daily entries, good things from your day, check-ins about how you feel, and the reflections and recaps Nocturne writes from them;</li>
+  <li>entries from your phone's calendar and readings from Apple Health or Health Connect, if you let your phone share them;</li>
+  <li>your settings, and small log files that record what Nocturne did, with counts and kinds of error, never what you kept.</li>
+</ul>
+<p>On a computer, all of this is in one folder on that computer. On a phone that keeps its own memory, it is in Nocturne's own storage on the phone. Nocturne keeps that storage out of the phone's own backup to iCloud or Google, and out of copying to a new phone. Removing the app removes it from the phone. If you turned on the nightly backup, a locked copy stays in your own iCloud or Google Drive until you delete it: see below.</p>
+<p>Memories you have not used fade after a time and are then set aside. The app calls this "let go". It is not deleting: you can bring them back until you delete them. You choose how long in Settings. Nocturne never deletes what you kept, your journal, your pages or what it remembers without you asking. It does clear its own records after a time: its log files, and its list of what was sent online after 90 days.</p>
+<h2>When something leaves your device</h2>
+<p>Once it is set up, Nocturne works without the internet. These are the only times anything goes out.</p>
+<h3>Downloads you agree to</h3>
+<p>To read, listen and speak on your computer, Nocturne needs some large files. In the advanced details of the app these are called models. Setup downloads them from Hugging Face and GitHub, where their makers publish them. Nocturne tells you the size first and downloads only after you agree. The same goes for anything you choose to add later, and for the connection part that Away from home needs. Those sites see your internet address and what you downloaded, as any website does. Nothing you kept is sent. Privacy, in the app, lists every download with its day and size.</p>
+<p>Nocturne does not check for updates by itself. You get Nocturne and its updates from where you installed it: an app store, our Flatpak repository or GitHub. Each of those sees what any download site sees.</p>
+<h3>Online answers, on a computer</h3>
+<p>This is off until you turn it on. You choose one provider of online answers, and give its address and your own key. Your agreement with that provider is your own.</p>
+<p>When you set it up, Nocturne checks the connection: it asks the provider for its list of models and sends one fixed test question. When you choose from the provider's list, Nocturne asks the provider for that list. These carry your key and nothing you kept.</p>
+<p>While it is on:</p>
+<ul>
+  <li>Each question you ask goes to your provider with today's date, the time and your time zone, and up to 24 short lines that help answer it, with their dates. They can come from anything Nocturne holds: what it remembers from your notes, photos, voice notes, recordings and documents, your calendar entries, and your journal entries, good things and check-ins.</li>
+  <li>When a question names a day or a time, such as "yesterday" or "last week", and a kind of health reading, such as sleep, steps or heart, the readings your phone shared for those days can go with it too.</li>
+  <li>Questions you ask from a paired phone go the same way, unless you turn that off. Things you marked private stay on the computer for those questions.</li>
+  <li>Each time Nocturne starts or restarts its engine, the engine asks your provider for its list of models. That request carries your key and nothing you kept.</li>
+  <li>Your photos, recordings and documents themselves are never sent, though what Nocturne remembers from them can be. The reflections and recaps Nocturne writes are never sent. Nor is anything you let go or asked Nocturne to forget.</li>
+</ul>
+<p>Marking something private stops it coming up on its own, for example in notifications. It does not keep it from your provider: a private thing can help answer a question you ask on the computer like anything else.</p>
+<p>Privacy, in the app, keeps a list of exactly what was sent, for 90 days.</p>
+<h3>An online mind, on a phone of its own</h3>
+<p>A phone with no computer can use an online provider you choose to read what you keep, write your morning page and the reflection on your day, and answer your questions. This is off until you turn it on. You give the provider's address and your own key. Recaps are written on the phone, without the provider.</p>
+<p>When you set it up, the phone checks the connection: it asks the provider for its list of models, or uses the list you just chose from, and sends one fixed test question. When you choose from the provider's list, the phone asks the provider for that list. These carry your key and nothing you kept. If the provider stops answering while the mind is on, the phone asks for that list again from time to time until it answers.</p>
+<p>While it is on, the phone sends that provider what each job needs to be done well:</p>
+<ul>
+  <li>each note, journal entry, good thing and calendar entry, to be read, and the words you added to a check-in;</li>
+  <li>each photo you keep;</li>
+  <li>each voice note or recording, as words when the phone has already turned it into words, and otherwise as sound, up to 25 MB;</li>
+  <li>each question, with today's date, the time and your time zone, and the lines that help answer it. When a question names a day or a time, or few lines match its words, the provider may ask to look further in what you kept: your calendar, your journal and check-ins for given days, your health readings, or a search with other words. The phone sends back what it finds, up to 60 lines for one question;</li>
+  <li>the lines your page and the reflection on your day are written from.</li>
+</ul>
+<p>When the phone sends words to be read, it adds the day they were kept and the names of people, places and things already in your memory. Documents stay on the phone. Things you marked private go too. Marking something private stops it coming up on its own; it does not hold it back from the provider you chose. Health readings go only with a question they help answer. Reflections and recaps are never sent. Nor is anything you let go or asked Nocturne to forget.</p>
+<p>The phone keeps a list of every request it made, for 90 days.</p>
+<h3>Nightly backup, on a phone of its own</h3>
+<p>This is off until you turn it on. Each night while the phone charges, Nocturne saves what changed to your own account. It does this over mobile data too, unless you turn on "Wi-Fi only". "Back up now" saves at once.</p>
+<ul>
+  <li>On iPhone, it goes to Nocturne's own space in your iCloud.</li>
+  <li>On Android, it goes to a folder called "Nocturne backup" in your Google Drive. You sign in with Google's own screens, and allow Nocturne to reach only the files it creates. It cannot see anything else in your Drive.</li>
+</ul>
+<p>The backup is locked with a phrase only you hold, and a recovery key if you make one. Apple, Google and we cannot open it. If you lose both, nobody can. Nocturne keeps the last seven nights. When you forget something for good, or delete everything, Nocturne removes it from the backup straight away when the phone is online, or the next time it is. When you turn the backup off you choose whether to keep it or delete it; while it is kept, forgetting still reaches it.</p>
+<p>Your health readings are not in the backup, nor in a backup file you save on a phone. The pages, reflections and recaps in it do not hold readings either: Nocturne adds readings beside them when you look. After a restore, Nocturne reads your readings again from Apple Health or Health Connect, if you allow it. Anything you wrote about your health yourself, in a note or your journal, is in the backup like everything else you kept.</p>
+<h3>Away from home</h3>
+<p>This is off until you turn it on. It lets your own paired phones reach your computer when you are out. You choose how they connect:</p>
+<ul>
+  <li><strong>Simple</strong> goes through Cloudflare. Cloudflare can see when your phone connects, its internet address and roughly where it is, a fixed number for each phone, and how much goes each way and when. If you use Nocturne in your phone's web browser rather than the phone app, Cloudflare also delivers that app's screens to the browser, and so could change them.</li>
+  <li><strong>Most private</strong> goes through your own Tailscale network. Tailscale can see your account, your devices, when they connect and roughly where, and carries the traffic when they cannot reach each other directly.</li>
+</ul>
+<p>Everything between your phone and your computer is locked so that only they can read it. Neither company can read what you ask, what you keep, or your answers and pages. The connection part also talks to its own company to stay connected.</p>
+<h3>Your phone and your computer</h3>
+<p>A phone paired with your computer sends it what you keep on the phone, and, if you allow, its calendar entries and health readings. The computer sends back your answers and pages. All of it is locked so that only your phone and your computer can read it, and it travels the way you chose for Away from home. When you move a phone's memory into a computer, it travels the same way.</p>
+<h2>What your phone asks to use</h2>
+<p>Your phone asks you before Nocturne can use each of these. Saying no turns off only the part that needs it.</p>
+<table>
+  <thead><tr><th scope="col">Permission</th><th scope="col">Why</th></tr></thead>
+  <tbody>
+    <tr><th scope="row">Camera</th><td>To scan the code on your computer's screen when you pair, and to take photos you choose to keep.</td></tr>
+    <tr><th scope="row">Microphone</th><td>To record voice notes you choose to keep, while you record. On Android the phone's speech reader also needs it to turn a kept voice note into words; while it checks it can read, the microphone may be open for a moment, and nothing from it is kept.</td></tr>
+    <tr><th scope="row">Speech recognition (iPhone)</th><td>To turn your voice notes into words on the iPhone, so you can find them.</td></tr>
+    <tr><th scope="row">Calendar</th><td>To read your calendar, so your page and journal can show what's on. Entries go to your paired computer if you pair one, and can go to your online provider with what it reads or a question they help answer. Nocturne never changes your calendar.</td></tr>
+    <tr><th scope="row">Apple Health or Health Connect</th><td>To read the kinds of reading you choose, to show them beside your journal and, for sleep, last night's sleep on your page, and to answer your questions about them. Readings go to your paired computer if you pair one, and can go to your online provider with a question they help answer. Nocturne never writes to Health.</td></tr>
+    <tr><th scope="row">Google Drive (Android)</th><td>Only if you turn on the nightly backup: to save, list, restore and delete your locked backup in the files Nocturne creates.</td></tr>
+    <tr><th scope="row">Notifications (Android)</th><td>Asked when you first tap Read now, to show how far reading has got, with Stop, while it reads in the background.</td></tr>
+    <tr><th scope="row">Local network (iPhone)</th><td>Only if you choose an online provider on your own home network, to reach it.</td></tr>
+    <tr><th scope="row">Internet (Android)</th><td>To reach your computer, your online provider if you choose one, and your Google Drive if you turn on the nightly backup.</td></tr>
+  </tbody>
+</table>
+<p>With an online mind turned on, an Android phone reads what you kept in the background while it charges. If you tap Read now, the phone also reads on battery, until it is done or you stop it. On Android it shows a notification with how far it has got and Stop. On iPhone it shows iPhone's own progress, or reads for a short while and then waits until you open Nocturne. Read now stops when the battery reaches 20 per cent or battery saving is on. Read anyway goes on, never below 5 per cent. These notifications never name what you kept.</p>
+<p>Turning voice notes into words happens on your phone. On iPhone it never leaves the phone. On Android Nocturne uses the phone's own on-device reader. Where a phone has none, Nocturne uses the phone's speech service, only for a language already installed on the phone, and asks it to work offline; Android does not force that service to stay offline. With an online mind on, a voice note the phone could not turn into words goes to your provider, as described above.</p>
+<p>To take a permission back: on Android, your calendar, the microphone and notifications in Settings, then Apps, then Nocturne, then Permissions, and Health in Health Connect, then App permissions, then Nocturne. On iPhone, your calendar, the microphone and speech recognition in Settings, then Nocturne, and Health in the Health app, then Sharing, then Apps, then Nocturne. You can also turn Calendar or Health off in This phone. Taking a permission back stops new reads. It does not delete what Nocturne already kept: see below.</p>
+<h2>Health information</h2>
+<p>If you allow it, Nocturne reads these from Apple Health or Health Connect: sleep, heart rate, resting heart rate, blood pressure, steps, workouts with their distance, and weight. It reads only the kinds you allow, and never writes, changes or deletes anything in Health.</p>
+<p>At first Nocturne reads the last 30 days. On Android, Nocturne asks to read readings older than that together with the other kinds, wherever Health Connect offers it. It reads up to a year back if you turn on "Also bring older readings", and as far back as your backup reached when it reads your readings again after a restore.</p>
+<ul>
+  <li>On a phone paired with a computer, readings go only to that computer, locked so only it can read them. If you turned on Online answers there, a reading can go to your provider with a question it helps answer, as described above.</li>
+  <li>On a phone of its own, readings stay in Nocturne's memory on the phone. If you turned on an online mind, a reading can go to your provider with a question it helps answer, as described above.</li>
+  <li>Readings go online only with a question you asked. They are never sent to be read, and never used to write your page, your reflections or your recaps. They are not in the nightly backup, nor in a backup file a phone saves.</li>
+  <li>Health information is never used for advertising and never sold. It goes nowhere but the places above. We never receive it.</li>
+</ul>
+<p>To delete readings Nocturne already kept: on a phone of its own, "Delete what was kept" in This phone; on a computer, "From your phones".</p>
+<h2>Google user data</h2>
+<p>Nocturne on Android uses Google Drive with access only to the files it creates. It uses that access only to save, list, restore and delete your own locked backup. Nocturne's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Nothing from your Drive is used for advertising, sold, read by people, or sent to us.</p>
+<h2>Seeing, exporting and deleting your data</h2>
+<p>Nocturne sends us nothing, so you never need to ask us to see or delete what you keep in it. You do it in Nocturne:</p>
+<ul>
+  <li><strong>See it.</strong> Everything Nocturne remembers leads back to what it came from. Privacy on a computer shows what was downloaded and what was sent online. This phone, on a phone, shows what was sent online.</li>
+  <li><strong>Take a copy.</strong> On a computer, Export everything writes readable files to a folder you choose. On a computer or a phone, a backup saves one locked file wherever you choose. A phone's backup file leaves health readings out.</li>
+  <li><strong>Let go and delete.</strong> You can let go of a thing, bring it back, or delete it for good. Deleting asks first.</li>
+  <li><strong>Delete everything.</strong> Removes everything you kept, your journal, what Nocturne remembers, your pages and your settings from that device, after you type the words it shows. It also forgets the key for your online provider and the list of what was sent online. On a computer it removes your paired phones. On a phone with a nightly backup, it deletes the backup too, at once when the phone is online, or the next time it is. What Nocturne downloaded to work, and its log files, stay until you remove Nocturne.</li>
+</ul>
+<h2>Copies held by others you chose</h2>
+<p>Nocturne cannot reach copies outside your devices, except your own nightly backup. Their own policies apply:</p>
+<ul>
+  <li><strong>Your online provider</strong> decides what it keeps of what you sent it, and for how long. Read its privacy policy before you choose it.</li>
+  <li><strong>iCloud and Google Drive</strong> hold your locked backup under Apple's and Google's terms. Turning off the backup lets you delete it, and Delete everything deletes it.</li>
+  <li><strong>Cloudflare and Tailscale</strong> see what is listed under Away from home, under their own terms.</li>
+  <li><strong>Anything you exported, printed or saved elsewhere</strong> is out of Nocturne's reach.</li>
+</ul>
+<h2>This website</h2>
+<p>This website has no cookies, no analytics, and no scripts or fonts from anyone else. Your browser remembers your choice of light or dark, and whether you closed the language line, in its own storage. That never leaves your browser. The site is hosted by Cloudflare, which handles each request and may keep standard records such as your internet address. Our Flatpak repository, flatpak.nocturne.is, is served by GitHub through Cloudflare, and the Flatpak itself comes from GitHub; your software centre checks there for updates. The other download links lead to GitHub, under GitHub's own terms.</p>
+<h2>Data protection</h2>
+<p>For this website, our Flatpak repository and emails you send us, <strong>Arun Babu Neelicattu</strong> is the data controller. We rely on our legitimate interest in running the site and answering you. Cloudflare and GitHub may handle requests outside the UK and the EEA. We keep your emails only as long as we need to answer you. You can ask us to see, correct or erase an email you sent us, and you can complain to the UK Information Commissioner's Office or the data protection authority where you live.</p>
+<h2>Children</h2>
+<p>Nocturne is not made for children under 13, or under 16 where the law sets that age. Since Nocturne sends us nothing, we do not know who uses it.</p>
+<h2>Changes to this policy</h2>
+<p>When Nocturne changes what it keeps or sends, this page changes with it, and the date at the top changes. Earlier versions stay in Nocturne's public source history.</p>
+<h2>Contact</h2>
+<p>Questions about this policy or your privacy: <a class="address" href="mailto:hello@nocturne.is">hello@nocturne.is</a>.</p>
+</article>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    {{t:foot.brand}}
+  </p>
+  <nav aria-label="{{t:foot.aria}}">
+    <a href="/docs/"{{en_link}}>{{t:foot.docs}}{{en_mark}}</a>
+    <a href="/docs/guide/your-data.html"{{en_link}}>{{t:foot.data}}{{en_mark}}</a>
+    <a href="{{p:/privacy}}">{{t:foot.privacy}}</a>
+    <a href="/docs/guide/install.html"{{en_link}}>{{t:foot.install}}{{en_mark}}</a>
+    <a href="{{p:/privacy}}">{{t:foot.support}}</a>
+    <a href="/assets/fonts/OFL.txt"{{en_link}}>{{t:foot.font}}{{en_mark}}</a>
+  </nav>
+  {{lang_foot}}
+</footer>
+
+</div>
+</body>
+</html>

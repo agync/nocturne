@@ -8,13 +8,13 @@ tags: [contribution, website, docs, cloudflare]
 
 # The website
 
-The public site is one directory of static files: a hand-written landing page, install page, support page
+The public site is one directory of static files: a hand-written landing page, install page, support page, privacy policy page
 and not-found page in six languages, and this docs bundle rendered under `/docs/` in English. Everything lives in `site/`, and nothing is deployed from this
 repository by a command. Publishing is the owner's decision.
 
 | Path | What it is |
 |---|---|
-| `site/index.html`, `site/install.html`, `site/support.html`, `site/404.html` | The templates of the landing, install, support and not-found pages: plain HTML with no inline script or style, each string named by an id |
+| `site/index.html`, `site/install.html`, `site/support.html`, `site/privacy.html`, `site/404.html` | The templates of the landing, install, support, privacy policy and not-found pages: plain HTML with no inline script or style, each string named by an id. The privacy policy text is English in the template, from `docs/design/privacy-policy.md`; its head and footer strings are translated |
 | `site/i18n/` | The words, one file per language, keyed by those ids (see [Languages](#languages)) |
 | `site/assets/` | The stylesheet, the theme switch, tour, install and language scripts, the self-hosted fonts, the screenshots and the Open Graph image |
 | `site/docs-theme/` | The okf-wiki theme for `/docs/`: the app's colours and faces, and a link back to the landing page |
@@ -32,7 +32,7 @@ make site SITE_URL=https://example.org     # the origin for the canonical and Op
 ```
 
 `SITE_URL` defaults to `https://nocturne.is`. `make site` renders `docs/` with okf-wiki, then
-writes the landing, install, support and not-found pages once per language into `site/dist/` (English at
+writes the landing, install, support, privacy and not-found pages once per language into `site/dist/` (English at
 the root, the others under `/de/`, `/fr/`, `/es/`, `/it/` and `/nl/`), copies the assets, fills in
 the site origin and the pinned Lemonade version from `lemonade.lock`, and writes
 `site/dist/_headers`.
@@ -60,7 +60,7 @@ make site/serve                            # http://127.0.0.1:4180 with the head
 make -C site check                         # axe, policy errors, 360 px, keyboard, screenshots
 ```
 
-The check runs axe on the landing page, the install page, the support page, their German and French copies and docs
+The check runs axe on the landing page, the install page, the support page, the privacy page, their German and French copies and docs
 pages in both themes at 1440 and 390 px, fails on any console or policy error and on sideways
 scrolling, tabs to the theme buttons, and confirms the theme chosen on the landing page carries
 into the docs. A few findings come from markup the renderer writes itself (linked section titles in
